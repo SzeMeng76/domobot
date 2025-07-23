@@ -15,7 +15,7 @@ Read this in other languages: [简体中文](./README.zh-CN.md)
   <img src="https://github.com/SzeMeng76/domobot/actions/workflows/docker-publish.yml/badge.svg" alt="GitHub Actions Workflow Status" />
 </p>
 
-This is a powerful, multi-functional Telegram bot featuring a comprehensive suite of tools for price lookups, administration, and more. The entire stack is containerized with Docker, MySQL, and Redis for easy, reliable deployment. Forked from the original [domoxiaojun/domoappbot](https://github.com/domoxiaojun/domoappbot) with significant feature enhancements, bug fixes, and a refactored architecture using MySQL and Redis.
+This is a powerful, multi-functional Telegram bot featuring a comprehensive suite of tools for price lookups, administration, and more. The entire stack is containerized with Docker, MySQL, and Redis for easy, reliable deployment. Forked from the original [domoxiaojun/domobot](https://github.com/domoxiaojun/domobot) with significant feature enhancements, bug fixes, and a refactored architecture using MySQL and Redis.
 
 ### ✨ Features
 
