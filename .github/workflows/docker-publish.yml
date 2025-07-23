@@ -1,84 +1,105 @@
+# 工作流程名称
 name: Docker Image CI
 
+# 触发条件
 on:
   push:
     tags:
       - 'v*.*.*'
   workflow_dispatch:
 
+# 定义一个 job
 jobs:
   build-and-push:
+    # 运行在最新的 ubuntu 系统上
     runs-on: ubuntu-latest
+    # 授予 job 的权限
     permissions:
       contents: read
       packages: write
 
+    # job 的执行步骤
     steps:
-    - name: Check out the repo
-      uses: actions/checkout@v4
+      # 第一步：拉取代码
+      - name: Check out the repo
+        uses: actions/checkout@v4
 
-    # 改进的版本提取逻辑
-    - name: Extract version
-      id: tag_version
-      run: |
-        if [[ $GITHUB_REF == refs/tags/* ]]; then
-          # 从标签提取版本号 (v1.0.0 -> 1.0.0)
-          VERSION=${GITHUB_REF#refs/tags/v}
+      # 第二步：提取版本号，并判断是否为正式发布
+      - name: Extract version and release status
+        id: extract_version
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+            echo "IS_RELEASE=true" >> $GITHUB_ENV
+          else
+            VERSION="dev-$(date +'%Y%m%d-%H%M%S')"
+            echo "IS_RELEASE=false" >> $GITHUB_ENV
+          fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "IS_RELEASE=true" >> $GITHUB_ENV
-        else
-          # 非标签触发，使用开发版本号
-          VERSION=dev-$(date +'%Y%m%d-%H%M%S')
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "IS_RELEASE=false" >> $GITHUB_ENV
-        fi
-        echo "Generated version: $VERSION"
+          echo "Version is: $VERSION"
 
-    - name: Set up QEMU
-      uses: docker/setup-qemu-action@v3
+      # 第三步：设置 Python 环境
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          # ✨ 注意：如果你的项目需要，请改成你自己的 Python 版本
+          python-version: '3.10' 
+      
+      # 第四步：安装 Python 依赖
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+ 
+      # 第五步：动态生成 Docker 镜像的标签 (已更新为总是包含 latest)
+      - name: Generate Docker tags
+        id: meta
+        run: |
+          # 强制将所有相关名称转为小写，以符合 Docker 命名规范
+          DOCKERHUB_USER_LOWER=$(echo "${{ secrets.DOCKERHUB_USERNAME }}" | tr '[:upper:]' '[:lower:]')
+          REPO_NAME_LOWER=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
+          GHCR_REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+          # 使用处理后的小写名称来定义镜像地址
+          DOCKER_IMAGE_DOCKERHUB="$DOCKERHUB_USER_LOWER/$REPO_NAME_LOWER"
+          DOCKER_IMAGE_GHCR="ghcr.io/$GHCR_REPO_LOWER"
+          
+          # 无论是不是正式版，都同时打上 a) 版本号标签 和 b) latest 标签
+          TAGS="$DOCKER_IMAGE_DOCKERHUB:latest,$DOCKER_IMAGE_DOCKERHUB:${{ env.VERSION }},$DOCKER_IMAGE_GHCR:latest,$DOCKER_IMAGE_GHCR:${{ env.VERSION }}"
+          
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+          echo "Generated tags: ${TAGS}"
 
-    - name: Log in to Docker Hub
-      uses: docker/login-action@v3
-      with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
+      # 第六步：设置 QEMU，用于多平台构建
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
-    - name: Log in to GitHub Container Registry
-      uses: docker/login-action@v3
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+      # 第七步：设置 Docker Buildx，新一代的构建工具
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-    # 为发布版本构建镜像
-    - name: Build and push release image
-      if: env.IS_RELEASE == 'true'
-      uses: docker/build-push-action@v6
-      with:
-        context: .
-        push: true
-        tags: |
-          domomido/appbot:${{ env.VERSION }}
-          domomido/appbot:latest
-          ghcr.io/${{ github.repository }}:${{ env.VERSION }}
-          ghcr.io/${{ github.repository }}:latest
-        platforms: linux/amd64,linux/arm64
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+      # 第八步：登录到 Docker Hub
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-    # 为开发版本构建镜像
-    - name: Build and push dev image
-      if: env.IS_RELEASE == 'false'
-      uses: docker/build-push-action@v6
-      with:
-        context: .
-        push: true
-        tags: |
-          domomido/appbot:${{ env.VERSION }}
-          ghcr.io/${{ github.repository }}:${{ env.VERSION }}
-        platforms: linux/amd64,linux/arm64
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+      # 第九步：登录到 GitHub Container Registry (GHCR)
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          
+      # 第十步：构建并推送 Docker 镜像
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
