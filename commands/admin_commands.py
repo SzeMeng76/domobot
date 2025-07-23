@@ -344,7 +344,7 @@ class AdminPanelHandler:
             text = f"{status_message}\n\n" + text
         # 修正排序与展示
         text += (
-            foldable_text_v2("\n".join([f"• `{a['user_id']}`" for a in sorted(admins, key=lambda a: a["user_id"])]))
+            "\n".join([f"• `{a['user_id']}`" for a in sorted(admins, key=lambda a: a["user_id"])])
             if admins
             else "📭 暂无管理员"
         )
