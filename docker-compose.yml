@@ -30,7 +30,7 @@ services:
   
   # 服务名称，可以自定义，这里我们叫它 appbot。
   appbot:
-    image: domomido/appbot:latest
+    image: szemeng76/domobot:latest
 
     # --- 容器配置 ---
     # 给容器一个固定的名字，方便管理。
@@ -58,8 +58,8 @@ services:
     # 将当前目录（.）挂载到容器内的 /app 目录。
     # 这意味着您在本地对代码的任何修改，都会立即反映在运行的容器中，
     # 无需重新构建镜像，极大地提高了开发效率。
-    volumes:
-      - .:/app
+    #volumes:
+    #  - .:/app
     
     # --- 网络配置 ---
     networks:
