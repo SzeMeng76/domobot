@@ -944,7 +944,6 @@ async def handle_app_id_query(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.info(f"缓存应用详情: App ID {app_id}, 国家: {countries_hash}")
 
         # 生成会话ID用于消息管理
-        import time
         session_id = f"app_id_query_{user_id}_{int(time.time())}"
         
         # 删除搜索进度消息，然后发送结果
