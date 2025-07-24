@@ -65,7 +65,7 @@ docker-compose down
 | --------------------------- | --------------------------------------------------------------------------- | ----------------------- |
 | `BOT_TOKEN`                 | **（必需）** 来自 @BotFather 的 Telegram Bot Token。                         |                         |
 | `SUPER_ADMIN_ID`            | **（必需）** 拥有所有权限的机器人主要所有者的用户ID。                       |                         |
-| `CMC_API_KEY`               | **（必需）** 用于加密货币查询的 CoinMarketCap API Key。                       |                         |
+| `CMC_API_KEY`               | **（可选）** CoinMarketCap的API Key，用于启用 `/crypto` 命令。                  |                         |
 | `QWEATHER_API_KEY`          | **（可选）** 和风天气的API Key，用于启用 `/tq` 命令。                       |                         |
 | `DB_HOST`                   | 数据库的主机名。**必须是 `mysql`**。                                        | `mysql`                 |
 | `DB_PORT`                   | 数据库的内部端口。                                                          | `3306`                  |
