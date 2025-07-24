@@ -95,32 +95,30 @@ docker-compose down
 1.  **主应用** (`main.py`): 处理异步初始化、依赖注入和生命周期管理。
 2.  **命令模块** (`commands/`): 每个服务都有自己的模块，通过工厂模式注册并进行权限控制。
 3.  **工具模块** (`utils/`):
-          - `config_manager.py`: 配置管理。
-          - `cache_manager.py`, `redis_cache_manager.py`: 缓存管理。
-          - `mysql_user_manager.py`: 用户和权限的数据库操作。
-          - `task_scheduler.py`, `redis_task_scheduler.py`: 任务调度。
-          - `permissions.py`: 权限系统。
+    - `config_manager.py`: 配置管理。
+    - `cache_manager.py`, `redis_cache_manager.py`: 缓存管理。
+    - `mysql_user_manager.py`: 用户和权限的数据库操作。
+    - `task_scheduler.py`, `redis_task_scheduler.py`: 任务调度。
+    - `permissions.py`: 权限系统。
 4.  **数据存储:**
-          - **Redis:** 用于缓存和消息删除调度。
-          - **MySQL:** 用于用户数据和权限管理。
+    - **Redis:** 用于缓存和消息删除调度。
+    - **MySQL:** 用于用户数据和权限管理。
 
 #### 关键设计模式
-
-  - **命令工厂:** 用于统一的命令注册和权限处理。
-  - **依赖注入:** 核心组件通过 `bot_data` 传递。
-  - **异步编程:** 完全支持所有I/O操作的 `async/await`。
-  - **基于装饰器的错误处理:** 统一处理命令的错误。
-  - **直接异步权限检查:** 复杂的适配器层已被移除，MySQL操作现在是直接异步的。
+- **命令工厂:** 用于统一的命令注册和权限处理。
+- **依赖注入:** 核心组件通过 `bot_data` 传递。
+- **异步编程:** 完全支持所有I/O操作的 `async/await`。
+- **基于装饰器的错误处理:** 统一处理命令的错误。
+- **直接异步权限检查:** 复杂的适配器层已被移除，MySQL操作现在是直接异步的。
 
 ### 🗄️ 数据库结构
-
-  - `users`: 用户基本信息
-  - `admin_permissions`: 管理员
-  - `super_admins`: 超级管理员
-  - `user_whitelist`: 用户白名单
-  - `group_whitelist`: 群组白名单
-  - `admin_logs`: 管理员操作日志
-  - `command_stats`: 命令使用统计
+- `users`: 用户基本信息
+- `admin_permissions`: 管理员
+- `super_admins`: 超级管理员
+- `user_whitelist`: 用户白名单
+- `group_whitelist`: 群组白名单
+- `admin_logs`: 管理员操作日志
+- `command_stats`: 命令使用统计
 
 数据库结构定义在 `database/init.sql` 中，并在应用首次运行时自动创建。
 
@@ -129,10 +127,9 @@ docker-compose down
 #### 架构优化
 
 项目已从SQLite兼容性适配器完全迁移到统一的 MySQL + Redis 架构：
-
-  - **直接异步权限检查:** `utils/permissions.py` 直接从 `context.bot_data['user_cache_manager']` 获取MySQL管理器。
-  - **统一数据存储:** 所有权限数据都存储在MySQL中，防止不一致。
-  - **性能提升:** 移除了同步到异步的复杂性，提高了响应速度。
+- **直接异步权限检查:** `utils/permissions.py` 直接从 `context.bot_data['user_cache_manager']` 获取MySQL管理器。
+- **统一数据存储:** 所有权限数据都存储在MySQL中，防止不一致。
+- **性能提升:** 移除了同步到异步的复杂性，提高了响应速度。
 
 #### 权限级别
 
@@ -145,12 +142,11 @@ docker-compose down
 #### 自定义脚本
 
 将Python脚本放置在 `custom_scripts/` 目录中，并设置 `LOAD_CUSTOM_SCRIPTS=true` 以自动加载它们。脚本可以访问：
-
-  - `application`: Telegram Application 实例。
-  - `cache_manager`: Redis 缓存管理器。
-  - `rate_converter`: 货币转换器。
-  - `user_cache_manager`: 用户缓存管理器。
-  - `stats_manager`: 统计管理器。
+- `application`: Telegram Application 实例。
+- `cache_manager`: Redis 缓存管理器。
+- `rate_converter`: 货币转换器。
+- `user_cache_manager`: 用户缓存管理器。
+- `stats_manager`: 统计管理器。
 
 #### 新命令开发
 
@@ -162,38 +158,33 @@ docker-compose down
 ### 📊 日志与监控
 
 #### 日志管理
-
-  - **日志文件:** `logs/bot-YYYY-MM-DD.log`
-  - **日志轮转:** 10MB 大小限制，保留5个备份。
-  - **日志级别:** 支持 `DEBUG`, `INFO`, `WARNING`, `ERROR`。
-  - **定期清理:** 通过 `cleanup_logs.py` 或计划任务执行。
+- **日志文件:** `logs/bot-YYYY-MM-DD.log`
+- **日志轮转:** 10MB 大小限制，保留5个备份。
+- **日志级别:** 支持 `DEBUG`, `INFO`, `WARNING`, `ERROR`。
+- **定期清理:** 通过 `cleanup_logs.py` 或计划任务执行。
 
 #### 监控功能
-
-  - 命令使用统计
-  - 用户活动监控
-  - 错误日志记录
-  - 性能指标收集
+- 命令使用统计
+- 用户活动监控
+- 错误日志记录
+- 性能指标收集
 
 ### ⚡ 性能优化
 
 #### 缓存策略
-
-  - **Redis缓存:** 用于高频数据，如价格信息和天气位置查询。
-  - **统一缓存管理:** 通过 `redis_cache_manager.py` 管理。
-  - **智能缓存:** 不同服务的缓存时长可配置。
+- **Redis缓存:** 用于高频数据，如价格信息和天气位置查询。
+- **统一缓存管理:** 通过 `redis_cache_manager.py` 管理。
+- **智能缓存:** 不同服务的缓存时长可配置。
 
 #### 任务调度
-
-  - **Redis任务调度器:** 支持计划性、周期性任务。
-  - **消息删除:** 自动清理临时消息。
-  - **缓存清理:** 定期清除过期缓存。
+- **Redis任务调度器:** 支持计划性、周期性任务。
+- **消息删除:** 自动清理临时消息。
+- **缓存清理:** 定期清除过期缓存。
 
 #### 连接管理
-
-  - **连接池:** 用于MySQL和Redis。
-  - **异步客户端:** 使用 `httpx` 进行异步HTTP请求。
-  - **优雅关闭:** 优雅地清理资源并关闭连接。
+- **连接池:** 用于MySQL和Redis。
+- **异步客户端:** 使用 `httpx` 进行异步HTTP请求。
+- **优雅关闭:** 优雅地清理资源并关闭连接。
 
 ### 💡 开发最佳实践
 
@@ -209,7 +200,6 @@ docker-compose down
 ### 🔍 故障排查
 
 #### 常见问题
-
 1.  **数据库连接失败:** 检查MySQL的配置和连接。
 2.  **Redis连接失败:** 检查Redis服务的状态。
 3.  **权限错误:** 确保用户在白名单或管理员列表中。
@@ -217,7 +207,6 @@ docker-compose down
 5.  **天气命令失败:** 请确保在 `.env` 文件中正确设置了 `QWEATHER_API_KEY`，并且该密钥是有效的。
 
 #### 调试技巧
-
 1.  设置 `LOG_LEVEL=DEBUG` 以获取详细日志。
 2.  使用 `docker-compose logs -f appbot` 查看实时日志。
 3.  检查Redis缓存状态。
@@ -226,24 +215,21 @@ docker-compose down
 ### 📜 架构迁移说明 (v2.0 - 最新)
 
 **移除的组件:**
-
-  - `utils/compatibility_adapters.py` - SQLite 兼容性适配器
-  - `utils/redis_mysql_adapters.py` - 混合适配器
-  - `utils/unified_database.py` - 统一的SQLite数据库
-  - 其他SQLite相关文件
+- `utils/compatibility_adapters.py` - SQLite 兼容性适配器
+- `utils/redis_mysql_adapters.py` - 混合适配器
+- `utils/unified_database.py` - 统一的SQLite数据库
+- 其他SQLite相关文件
 
 **架构优化:**
-
-  - 统一了基于 MySQL + Redis 的架构。
-  - 实现了直接的异步权限检查，移除了复杂的适配器层。
-  - 提升了性能和代码可维护性。
-  - 解决了一个白名单群组用户无法使用机器人的问题。
+- 统一了基于 MySQL + Redis 的架构。
+- 实现了直接的异步权限检查，移除了复杂的适配器层。
+- 提升了性能和代码可维护性。
+- 解决了一个白名单群组用户无法使用机器人的问题。
 
 **迁移要点:**
-
-  - 所有权限数据现在都存储在MySQL中。
-  - Redis用于缓存和消息删除调度。
-  - MySQL和Redis的连接详情必须在 `.env` 文件中配置。
+- 所有权限数据现在都存储在MySQL中。
+- Redis用于缓存和消息删除调度。
+- MySQL和Redis的连接详情必须在 `.env` 文件中配置。
 
 </details>
 
