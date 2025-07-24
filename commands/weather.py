@@ -39,6 +39,34 @@ WEATHER_ICONS = {
     '806': '🌫️', '807': '🌧️', '900': '🌪️', '901': '🌀', '999': '❓'
 }
 
+INDICES_EMOJI = {
+    "1": "🏃",  # 运动
+    "2": "🚗",  # 洗车
+    "3": "👕",  # 穿衣
+    "4": "🎣",  # 钓鱼
+    "5": "☀️",  # 紫外线
+    "6": "🏞️",  # 旅游
+    "7": "🤧",  # 过敏
+    "8": "😊",  # 舒适度
+    "9": "🤒",  # 感冒
+    "10": "🌫️", # 空气污染扩散
+    "11": "❄️", # 空调开启
+    "12": "🕶️", # 太阳镜
+    "13": "💄", # 化妆
+    "14": "👔", # 晾晒
+    "15": "🚦", # 交通
+    "16": "🧴", # 防晒
+}
+
+# 生活指数的逻辑分类
+CATEGORIES = {
+    "户外活动": ["1", "4", "6"],           # 运动, 钓鱼, 旅游
+    "出行建议": ["2", "15"],             # 洗车, 交通
+    "生活起居": ["3", "8", "11", "14"],   # 穿衣, 舒适度, 空调, 晾晒
+    "健康关注": ["7", "9", "10"],          # 过敏, 感冒, 空气污染扩散
+    "美妆护理": ["5", "12", "13", "16"],  # 紫外线, 太阳镜, 化妆, 防晒
+}
+
 async def _get_api_response(endpoint: str, params: Dict) -> Optional[Dict]:
     config = get_config()
     if not config.qweather_api_key:
@@ -235,11 +263,42 @@ def format_minutely_rainfall(rainfall_data: dict) -> str:
     return "\n".join(result)
 
 def format_indices_data(indices_data: dict) -> str:
-    result = ["\n*生活指数*"]
+    """
+    将生活指数数据格式化为详细的、按日期和类别分组的结构。
+    """
+    result = []
+    grouped_by_date = {}
+
+    # 1. 首先按日期将所有指数分组
     for index in indices_data.get("daily", []):
-        name = escape_markdown(index.get('name'), version=2)
-        category = escape_markdown(index.get('category'), version=2)
-        result.append(f"• *{name}*: {category}")
+        date = index.get("date")
+        if date not in grouped_by_date:
+            grouped_by_date[date] = []
+        grouped_by_date[date].append(index)
+    
+    # 2. 遍历每个日期，生成该日期的指数报告
+    for date, indices in sorted(grouped_by_date.items()):
+        date_str = escape_markdown(datetime.datetime.strptime(date, "%Y-%m-%d").strftime("%m-%d"), version=2)
+        result.append(f"\n📅 *{date_str} 天气生活指数*")
+
+        # 3. 遍历预设的分类，在当前日期的指数中查找并显示
+        for category_name, type_ids in CATEGORIES.items():
+            # 筛选出属于当前分类的指数
+            category_indices = [idx for idx in indices if idx.get("type") in type_ids]
+            
+            if category_indices:
+                result.append(f"\n*【{escape_markdown(category_name, version=2)}】*")
+                for index in category_indices:
+                    index_type = index.get("type")
+                    emoji = INDICES_EMOJI.get(index_type, "ℹ️") # 获取对应的Emoji
+                    name = escape_markdown(index.get('name', 'N/A'), version=2)
+                    level = escape_markdown(index.get('category', 'N/A'), version=2)
+                    text = escape_markdown(index.get('text', 'N/A'), version=2)
+                    
+                    # 构建最终的图文并茂格式
+                    result.append(f"{emoji} *{name}*: {level}")
+                    result.append(f"    ↳ {text}")
+
     return "\n".join(result)
 
 def format_air_quality(air_data: dict) -> str:
@@ -357,7 +416,7 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         days_param = "3d" if param.endswith("3") else "1d"
         data = await _get_api_response(f"indices/{days_param}", {"location": location_id, "type": "0"})
         if data:
-            result_text = f"🌍 *{safe_location_name}* "
+            result_text = f"🌍 *{safe_location_name}* 的天气指数预报："
             result_text += format_indices_data(data)
         else:
             result_text = f"❌ 获取 *{safe_location_name}* 的生活指数失败。"
