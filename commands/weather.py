@@ -1,4 +1,3 @@
-# commands/weather.py
 import datetime
 import jwt
 import urllib.parse
@@ -48,7 +47,7 @@ class JWTManager:
         
         config = get_config()
         if not all([config.qweather_kid, config.qweather_sub, config.qweather_private_key]):
-            logger.error("和风天气 API 配置不完整")
+            logging.error("和风天气 API 配置不完整")
             return ""
 
         try:
@@ -61,17 +60,17 @@ class JWTManager:
             
             JWTManager._cached_token = token
             JWTManager._expiry = exp
-            logger.debug("JWT 生成成功并缓存。")
+            logging.debug("JWT 生成成功并缓存。")
             return token
         except Exception as e:
-            logger.error(f"生成 JWT 时出错: {e}")
+            logging.error(f"生成 JWT 时出错: {e}")
             return ""
 
 async def get_location_id(location: str) -> Optional[str]:
     cache_key = f"weather_location_{location.lower()}"
     cached_id = await cache_manager.load_cache(cache_key, subdirectory="weather")
     if cached_id:
-        logger.info(f"使用缓存的位置ID: {location} -> {cached_id}")
+        logging.info(f"使用缓存的位置ID: {location} -> {cached_id}")
         return cached_id
 
     try:
@@ -85,10 +84,10 @@ async def get_location_id(location: str) -> Optional[str]:
             if data.get("code") == "200" and data.get("location"):
                 location_id = data["location"][0]["id"]
                 await cache_manager.save_cache(cache_key, location_id, subdirectory="weather")
-                logger.info(f"获取并缓存位置ID: {location} -> {location_id}")
+                logging.info(f"获取并缓存位置ID: {location} -> {location_id}")
                 return location_id
     except Exception as e:
-        logger.error(f"查询位置失败: {e}")
+        logging.error(f"查询位置失败: {e}")
     return None
 
 async def request_weather_api(endpoint: str, location_id: str) -> Optional[dict]:
@@ -101,17 +100,22 @@ async def request_weather_api(endpoint: str, location_id: str) -> Optional[dict]
         
         if response.status_code == 200:
             data = response.json()
-            return data if data.get("code") == "200" else None
+            if data.get("code") == "200":
+                return data
+            else:
+                logging.warning(f"天气 API 返回错误代码: {data.get('code')}")
+                return None
     except Exception as e:
-        logger.error(f"天气API请求失败: {e}")
+        logging.error(f"天气API请求失败: {e}")
     return None
 
 def format_realtime_weather(data: dict, location: str) -> str:
     now = data.get("now", {})
     weather_icon = WEATHER_ICONS.get(now.get("icon"), "❓")
     
+    # 和风天气返回的是 UTC 时间，我们需要转换为本地时间（比如北京时间）
     obs_time_utc = datetime.datetime.fromisoformat(now.get('obsTime', 'N/A').replace('Z', '+00:00'))
-    obs_time_local = obs_time_utc.astimezone(datetime.timezone(datetime.timedelta(hours=8)))
+    obs_time_local = obs_time_utc.astimezone(datetime.timezone(datetime.timedelta(hours=8))) # 假设为东八区
     
     text = f"🌍 **{location}** 的实时天气：\n\n"
     text += f"🕐 观测时间：{obs_time_local.strftime('%Y-%m-%d %H:%M')}\n"
@@ -143,14 +147,13 @@ HELP_TEXT = (
     "**天气查询帮助**\n\n"
     "`/weather [城市] [参数]`\n\n"
     "**参数说明:**\n"
-    "- `(无参数)`: 查询当天天气\n"
-    "- `3`: 查询未来3天天气 (1-7)\n"
+    "- `(无参数)`: 查询当天实时天气\n"
+    "- `3`: 查询未来3天天气 (支持1-7天)\n\n"
     "**示例:**\n"
     "- `/weather 北京`\n"
     "- `/weather 上海 3`"
 )
 
-@command_factory.register_command("weather", permission=Permission.USER, description="查询天气信息")
 async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message or not update.effective_chat:
         return
@@ -200,8 +203,10 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await message.edit_text("查询天数必须在 1-7 之间。")
         return
     except ValueError:
-        await message.edit_text("无效的参数。请输入城市和天数（1-7）。")
+        await message.edit_text(f"无效的参数 '{param}'。请参照 `/weather` 的帮助说明。")
         return
     except Exception as e:
-        logger.error(f"处理天气命令时出错: {e}")
+        logging.error(f"处理天气命令时出错: {e}")
         await message.edit_text("处理请求时发生未知错误。")
+
+command_factory.register_command("weather", weather_command, permission=Permission.USER, description="查询实时和多日天气预报")
