@@ -18,6 +18,7 @@ Read this in other languages: [简体中文](./README.zh-CN.md)
 ### 📝 Project Overview
 
 This is a Python-based, multi-functional Telegram bot with the following features:
+-   **🪙 Crypto Prices:** Look up real-time cryptocurrency prices with support for custom amounts and currency conversion, including 24h and 7d percentage changes.
 -   **NEW:** Detailed, multi-format weather forecasts (real-time, daily, hourly, minutely precipitation, and lifestyle indices).
 -   Real-time currency exchange rate conversion.
 -   Multi-region price comparison for Steam games.
@@ -61,6 +62,7 @@ All configurations are managed via the `.env` file. You must copy `.env.example`
 | --------------------------- | --------------------------------------------------------------------------- | ----------------------- |
 | `BOT_TOKEN`                 | **(Required)** Your Telegram Bot Token from @BotFather.                     |                         |
 | `SUPER_ADMIN_ID`            | **(Required)** The User ID of the main bot owner with all permissions.      |                         |
+| `CMC_API_KEY`               | **(Required)** Your API Key from CoinMarketCap for the crypto command.      |                         |
 | `QWEATHER_API_KEY`          | **(Optional)** API Key from HeFeng Weather for the `/tq` command.           |                         |
 | `DB_HOST`                   | Hostname for the database. **Must be `mysql`**.                             | `mysql`                 |
 | `DB_PORT`                   | The internal port for the database.                                         | `3306`                  |
