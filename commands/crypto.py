@@ -83,6 +83,9 @@ def format_crypto_data(data: Dict, symbol: str, amount: float, convert_currency:
 
     name = escape_markdown(coin_data.get("name", ""), version=2)
     lines = [f"🪙 *{escape_markdown(symbol_upper, version=2)} ({name}) 价格*"]
+
+    # ✨ 新增：我们需要一个变量来存储更新时间
+    last_updated_str = ""
     
     convert_currency_upper = convert_currency.upper()
     quote_data = coin_data.get("quote", {}).get(convert_currency_upper)
@@ -105,11 +108,28 @@ def format_crypto_data(data: Dict, symbol: str, amount: float, convert_currency:
         if change_7d is not None:
             emoji_7d = "📈" if change_7d >= 0 else "📉"
             lines.append(f"{emoji_7d} 7d变化: `{change_7d:+.2f}%`")
+
+        # ✨ 新增：获取并格式化更新时间
+        if not last_updated_str and quote_data.get("last_updated"):
+            try:
+                # 将ISO 8601格式的时间字符串转换为datetime对象
+                dt_utc = datetime.datetime.fromisoformat(quote_data["last_updated"].replace('Z', '+00:00'))
+                # 转换为北京时间 (UTC+8)
+                dt_beijing = dt_utc.astimezone(datetime.timezone(datetime.timedelta(hours=8)))
+                # 格式化为更易读的字符串
+                last_updated_str = escape_markdown(dt_beijing.strftime('%Y-%m-%d %H:%M:%S'), version=2)
+            except Exception as e:
+                logging.warning(f"解析 last_updated 时间戳失败: {e}")
         
     else:
         lines.append(f"`{escape_markdown(convert_currency_upper, version=2)}` 价格获取失败。")
 
-    lines.append("\n_数据来源: CoinMarketCap_")
+    # ✨ 修改：在数据来源后面加上时间
+    if last_updated_str:
+        lines.append(f"\n_数据来源: CoinMarketCap \\(更新于 {last_updated_str}\\)_")
+    else:
+        lines.append("\n_数据来源: CoinMarketCap_")
+        
     return "\n".join(lines)
 
 
