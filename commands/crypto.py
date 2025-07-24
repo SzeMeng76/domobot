@@ -118,7 +118,7 @@ def format_crypto_data(data: Dict, symbol: str, amount: float, convert_currency:
                 # 转换为北京时间 (UTC+8)
                 dt_beijing = dt_utc.astimezone(datetime.timezone(datetime.timedelta(hours=8)))
                 # 格式化为更易读的字符串
-                last_updated_str = escape_markdown(dt_beijing.strftime('%Y-%m-%d %H:%M:%S'), version=2)
+                last_updated_str = dt_beijing.strftime('%Y-%m-%d %H:%M:%S')
             except Exception as e:
                 logging.warning(f"解析 last_updated 时间戳失败: {e}")
         
@@ -127,7 +127,7 @@ def format_crypto_data(data: Dict, symbol: str, amount: float, convert_currency:
 
     # ✨ 修改：在数据来源后面加上时间
     if last_updated_str:
-        lines.append(f"\n_数据来源: CoinMarketCap \\(更新于 {last_updated_str}\\)_")
+        lines.append(f"\n_数据来源: CoinMarketCap (更新于 {last_updated_str})_")
     else:
         lines.append("\n_数据来源: CoinMarketCap_")
         
