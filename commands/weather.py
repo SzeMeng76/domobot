@@ -1,7 +1,7 @@
 import datetime
 import urllib.parse
 import logging
-from typing import Optional, List, Dict
+from typing import Optional, Tuple, Dict, List
 
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -24,7 +24,7 @@ def set_dependencies(c_manager, h_client):
 
 WEATHER_ICONS = {'100': '☀️', '101': '🌤️', '102': '☁️', '103': '🌥️', '104': '⛅', '150': '🍃', '300': '🌦️', '301': '🌧️', '302': '⛈️', '305': '🌧️', '306': '🌧️', '307': '⛈️', '309': '🌦️', '310': '🌧️', '311': '⛈️', '312': '⛈️', '313': '⛈️', '399': '🌨️', '400': '❄️', '401': '❄️', '402': '❄️', '403': '❄️', '404': '🌨️', '405': '❄️', '406': '❄️', '407': '❄️', '499': '❓', '501': '⛈️', '502': '⛈️', '900': '🌪️', '901': '🌀'}
 
-async def _get_api_response(endpoint: str, params: Dict) -> Optional[Dict]:
+async def _get_api_response(endpoint: str, params: dict) -> Optional[dict]:
     config = get_config()
     if not config.qweather_api_key:
         logging.error("和风天气 API Key 未配置")
@@ -32,11 +32,8 @@ async def _get_api_response(endpoint: str, params: Dict) -> Optional[Dict]:
     try:
         base_url = "https://api.qweather.com/v7/" if not endpoint.startswith("geo/") else "https://geoapi.qweather.com/v2/"
         api_endpoint = endpoint.replace("geo/", "")
-        
         all_params = {"key": config.qweather_api_key, "lang": "zh", **params}
-        
         response = await httpx_client.get(f"{base_url}{api_endpoint}", params=all_params, timeout=20)
-        
         if response.status_code == 200:
             data = response.json()
             if data.get("code") == "200":
@@ -50,7 +47,7 @@ async def _get_api_response(endpoint: str, params: Dict) -> Optional[Dict]:
         logging.error(f"和风天气 API ({endpoint}) 请求异常: {e}")
     return None
 
-async def get_location_id(location: str) -> Optional[Dict]:
+async def get_location_id(location: str) -> Optional[dict]:
     cache_key = f"weather_location_{location.lower()}"
     cached_data = await cache_manager.load_cache(cache_key, subdirectory="weather")
     if cached_data: return cached_data
@@ -62,7 +59,7 @@ async def get_location_id(location: str) -> Optional[Dict]:
         return location_data
     return None
 
-def parse_date_param(param: str) -> Tuple[str, Optional[datetime.date], Optional[datetime.date]]:
+def parse_date_param(param: str) -> tuple[str, Optional[datetime.date], Optional[datetime.date]]:
     today = datetime.date.today()
     if '-' in param:
         try:
@@ -93,7 +90,7 @@ def parse_date_param(param: str) -> Tuple[str, Optional[datetime.date], Optional
 
     return 'invalid', None, None
 
-def format_daily_weather(daily_data: List[Dict]) -> str:
+def format_daily_weather(daily_data: list[dict]) -> str:
     lines = []
     for day in daily_data:
         date_str = escape_markdown(datetime.datetime.strptime(day["fxDate"], "%Y-%m-%d").strftime("%m-%d"), version=2)
@@ -104,7 +101,7 @@ def format_daily_weather(daily_data: List[Dict]) -> str:
         lines.append(f"*{date_str}*: {icon} {text_day}, {temp_min}\\~{temp_max}°C")
     return "\n".join(lines)
 
-def format_hourly_weather(hourly_data: List[Dict]) -> str:
+def format_hourly_weather(hourly_data: list[dict]) -> str:
     result = ["\n*逐小时预报*"]
     for hour in hourly_data:
         time_str = escape_markdown(datetime.datetime.fromisoformat(hour.get("fxTime").replace('Z', '+00:00')).strftime('%H:%M'), version=2)
@@ -114,11 +111,11 @@ def format_hourly_weather(hourly_data: List[Dict]) -> str:
         result.append(f"`{time_str}`: {icon} {temp}°C, {text}")
     return "\n".join(result)
 
-def format_minutely_rainfall(rainfall_data: Dict) -> str:
+def format_minutely_rainfall(rainfall_data: dict) -> str:
     summary = escape_markdown(rainfall_data.get('summary', '暂无降水信息'), version=2)
     return f"\n*分钟级降水*: {summary}"
 
-def format_indices_data(indices_data: Dict) -> str:
+def format_indices_data(indices_data: dict) -> str:
     result = ["\n*生活指数*"]
     for index in indices_data.get("daily", []):
         name = escape_markdown(index.get('name'), version=2)
@@ -126,7 +123,7 @@ def format_indices_data(indices_data: Dict) -> str:
         result.append(f"• *{name}*: {category}")
     return "\n".join(result)
 
-def format_air_quality(air_data: Dict) -> str:
+def format_air_quality(air_data: dict) -> str:
     aqi_data = air_data.get('now', {})
     aqi = escape_markdown(aqi_data.get('aqi', 'N/A'), version=2)
     category = escape_markdown(aqi_data.get('category', 'N/A'), version=2)
@@ -171,8 +168,7 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     result_text = f"🌍 *{safe_location_name}*\n"
     
-    # --- Parameter Handling Logic ---
-    if not param: # Default case
+    if not param:
         realtime_data = await _get_api_response("weather/now", {"location": location_id})
         air_data = await _get_api_response("air/now", {"location": location_id})
         if realtime_data and realtime_data.get("now"):
@@ -201,7 +197,7 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if data: result_text += format_indices_data(data)
         else: result_text += f"\n❌ 获取 *{safe_location_name}* 的生活指数失败。"
     
-    else: # Date-related queries
+    else:
         query_type, date1, date2 = parse_date_param(param)
         if query_type == 'invalid':
             result_text = f"❌ 无效的参数: `{escape_markdown(param, version=2)}`。"
@@ -227,8 +223,7 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     await message.edit_text(result_text, parse_mode=ParseMode.MARKDOWN_V2, disable_web_page_preview=True)
 
-
-# --- ✨✨✨ 在文件最末尾，加上正确的“登记”代码 ✨✨✨ ---
+# 在文件末尾，用正确的方式注册命令
 command_factory.register_command(
     "tq",
     weather_command,
