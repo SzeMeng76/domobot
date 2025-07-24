@@ -293,7 +293,7 @@ def format_indices_data(indices_data: dict) -> str:
                     emoji = INDICES_EMOJI.get(index_type, "ℹ️") # 获取对应的Emoji
                     name = index.get('name', 'N/A')
                     level = index.get('category', 'N/A')
-                    text = (index.get('text', 'N/A')
+                    text = index.get('text', 'N/A')
                     
                     # 构建最终的图文并茂格式
                     result.append(f"{emoji} *{name}*: {level}")
