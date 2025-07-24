@@ -79,7 +79,7 @@ docker-compose down
   - 性能参数配置
 
 <details>
-<summary><b>📖 点击展开查看架构、技术细节与最佳实践\</b></summary>
+<summary><b>📖 点击展开查看架构、技术细节与最佳实践</b></summary>
 
 ### 🛠️ 架构概述
 
