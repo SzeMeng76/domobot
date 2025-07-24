@@ -409,7 +409,7 @@ COUNTRY_CODES_CN = {
 
 class SpotifyPriceBot(PriceQueryService):
     PRICE_URL = (
-        "https://raw.githubusercontent.com/domoxiaojun/spotify-prices/refs/heads/main/spotify_prices_cny_sorted.json"
+        "https://raw.githubusercontent.com/SzeMeng76/spotify-prices/refs/heads/main/spotify_prices_cny_sorted.json"
     )
 
     async def _fetch_data(self, context: ContextTypes.DEFAULT_TYPE) -> dict[str, Any] | None:
