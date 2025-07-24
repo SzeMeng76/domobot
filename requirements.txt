@@ -37,4 +37,3 @@ Babel>=2.14.0
 
 # Async File Operations
 aiofiles==23.2.1
-PyJWT
