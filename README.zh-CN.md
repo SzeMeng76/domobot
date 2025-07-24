@@ -1,33 +1,34 @@
 <div align="right">
 
-用其他语言阅读: [English](./README.md)
+阅读其他语言版本: [English](./README.md)
 
 </div>
 
 <div align="center">
 
 # DomoBot
-*一款强大的、多功能的 Telegram 机器人，用于价格查询等功能，并使用 Docker 容器化以便轻松部署。*
+*一个强大、多功能、支持价格查询、天气预报等的Telegram机器人，使用Docker容器化以便于部署。*
 
 </div>
 
 <p align="center">
-  <img src="https://github.com/SzeMeng76/domobot/actions/workflows/docker-publish.yml/badge.svg" alt="GitHub Actions Workflow Status" />
+  <img src="https://github.com/SzeMeng76/domobot/actions/workflows/docker-publish.yml/badge.svg" alt="GitHub Actions Workflow Status" />
 </p>
 
-### 📝 项目概述
+### 📝 项目概览
 
-这是一个基于 Python 的多功能 Telegram 价格查询机器人，支持以下功能：
--   汇率实时查询和转换
--   Steam 游戏价格多国对比
--   Netflix、Disney+、Spotify 等流媒体订阅价格查询
--   App Store、Google Play 应用价格查询
--   管理员权限系统和用户白名单管理
--   用户缓存管理和统计功能
+这是一款基于Python的、多功能的Telegram机器人，具备以下特性：
+-   **新增**：详细的多格式天气预报（支持实时天气、每日、每小时、分钟级降水及生活指数）。
+-   实时货币汇率转换。
+-   Steam游戏多区价格对比。
+-   流媒体服务（如 Netflix, Disney+, Spotify）的订阅价格查询。
+-   应用商店（App Store 和 Google Play）的应用价格查询。
+-   完善的管理员权限系统，支持用户/群组白名单。
+-   用户缓存及数据统计功能。
 
-### 🚀 开发环境设置
+### 🚀 快速开始
 
-#### 基础命令
+#### 基础命令 (本地开发)
 ```bash
 # 安装依赖
 pip install -r requirements.txt
@@ -42,217 +43,217 @@ python cleanup_logs.py
 #### Docker 部署 (推荐)
 
 ```bash
-# 使用 Docker Compose 启动
+# 使用 Docker Compose 启动所有服务
 docker-compose up -d
 
-# 查看日志
+# 查看机器人容器的日志
 docker-compose logs -f appbot
 
-# 停止服务
+# 停止所有服务
 docker-compose down
 ```
 
-### ⚙️ 配置管理
+### ⚙️ 配置 (`.env`)
 
-#### 环境变量
+所有配置都通过 `.env` 文件进行管理。你必须将 `.env.example` 复制为 `.env` 并填写所需的变量。
 
-所有配置均通过 `.env` 文件管理。请从 `.env.example` 复制创建 `.env` 文件并填入你的配置。
+| 变量                        | 描述                                                                        | 默认/示例               |
+| --------------------------- | --------------------------------------------------------------------------- | ----------------------- |
+| `BOT_TOKEN`                 | **（必需）** 来自 @BotFather 的 Telegram Bot Token。                         |                         |
+| `SUPER_ADMIN_ID`            | **（必需）** 拥有所有权限的机器人主要所有者的用户ID。                       |                         |
+| `QWEATHER_API_KEY`          | **（可选）** 和风天气的API Key，用于启用 `/tq` 命令。                       |                         |
+| `DB_HOST`                   | 数据库的主机名。**必须是 `mysql`**。                                        | `mysql`                 |
+| `DB_PORT`                   | 数据库的内部端口。                                                          | `3306`                  |
+| `DB_NAME`                   | 数据库的名称。必须与 `docker-compose.yml` 中的设置匹配。                    | `bot`                   |
+| `DB_USER`                   | 数据库的用户名。必须与 `docker-compose.yml` 中的设置匹配。                  | `bot`                   |
+| `DB_PASSWORD`               | **（必需）** 数据库的密码。必须与 `docker-compose.yml` 中的设置匹配。       | `your_mysql_password`   |
+| `REDIS_HOST`                | 缓存服务的主机名。**必须是 `redis`**。                                      | `redis`                 |
+| `REDIS_PORT`                | Redis 的内部端口。                                                          | `6379`                  |
+| `DELETE_USER_COMMANDS`      | 设为 `true` 以启用自动删除用户命令的功能。                                  | `true`                  |
+| `USER_COMMAND_DELETE_DELAY` | 删除用户命令前的延迟时间（秒）。使用 `0` 表示立即删除。                     | `5`                     |
+| `LOG_LEVEL`                 | 设置日志级别 (`DEBUG`, `INFO`, `WARNING`, `ERROR`)。                        | `INFO`                  |
+| `LOAD_CUSTOM_SCRIPTS`       | 设为 `true` 以启用从 `custom_scripts/` 目录加载脚本的功能。                 | `false`                 |
 
-| 变量                        | 描述                                                                    | 默认值/示例             |
-| --------------------------- | ----------------------------------------------------------------------- | ----------------------- |
-| `BOT_TOKEN`                 | **(必需)** 你的 Telegram Bot Token。                                    |                         |
-| `SUPER_ADMIN_ID`            | **(必需)** 主要机器人所有者的用户ID，拥有所有权限。                     |                         |
-| `DB_HOST`                   | 数据库的主机名。**必须为 `mysql`**。                                    | `mysql`                 |
-| `DB_PORT`                   | 数据库的内部端口。                                                      | `3306`                  |
-| `DB_NAME`                   | 数据库名称。必须与 `docker-compose.yml` 中的设置一致。                  | `bot`                   |
-| `DB_USER`                   | 数据库用户名。必须与 `docker-compose.yml` 中的设置一致。                | `bot`                   |
-| `DB_PASSWORD`               | **(必需)** 数据库密码。必须与 `docker-compose.yml` 中的设置一致。       | `your_mysql_password`   |
-| `REDIS_HOST`                | 缓存的主机名。**必须为 `redis`**。                                        | `redis`                 |
-| `REDIS_PORT`                | Redis 的内部端口。                                                      | `6379`                  |
-| `DELETE_USER_COMMANDS`      | 设置为 `true` 以启用用户命令的自动删除。                                  | `true`                  |
-| `USER_COMMAND_DELETE_DELAY` | 删除用户命令前的延迟（秒）。使用 `0` 表示立即删除。                 | `5`                     |
-| `LOG_LEVEL`                 | 设置日志级别 (`DEBUG`, `INFO`, `WARNING`, `ERROR`)。              | `INFO`                  |
-| `LOAD_CUSTOM_SCRIPTS`       | 设置为 `true` 以加载 `custom_scripts/` 目录下的脚本。                     | `false`                 |
+配置由 `utils/config_manager.py` 中的 `BotConfig` 类管理，该类支持设置缓存时长、自动删除开关、功能开关和性能参数。
 
 #### 配置文件
-配置通过 `utils/config_manager.py` 的 `BotConfig` 类管理，支持：
--   各服务缓存时长配置
--   消息自动删除配置
--   功能开关配置
--   性能参数配置
+
+配置由 `utils/config_manager.py` 中的 `BotConfig` 类管理，支持：
+
+  - 各项服务的缓存时长设置
+  - 消息自动删除设置
+  - 功能开关设置
+  - 性能参数设置
 
 <details>
-<summary><b>📖 点击展开查看架构、技术细节与最佳实践</b></summary>
+<summary><b>📖 点击展开以查看完整的架构、技术细节和最佳实践</b></summary>
 
-### 🛠️ 架构概述
+### 🛠️ 架构总览
 
 #### 核心组件
 
-1.  **主程序** (`main.py`): 负责异步初始化、依赖注入和应用生命周期管理。
-2.  **命令模块** (`commands/`): 每个服务都作为独立的模块，通过工厂模式进行统一注册和权限控制。
+1.  **主应用** (`main.py`): 处理异步初始化、依赖注入和生命周期管理。
+2.  **命令模块** (`commands/`): 每个服务都有自己的模块，通过工厂模式注册并进行权限控制。
 3.  **工具模块** (`utils/`):
-      - `config_manager.py`: 管理配置。
-      - `redis_cache_manager.py`: 使用 Redis 处理缓存。
-      - `mysql_user_manager.py`: 管理数据库交互。
-      - `task_scheduler.py`: 调度后台任务。
-      - `permissions.py`: 权限检查系统。
+          - `config_manager.py`: 配置管理。
+          - `cache_manager.py`, `redis_cache_manager.py`: 缓存管理。
+          - `mysql_user_manager.py`: 用户和权限的数据库操作。
+          - `task_scheduler.py`, `redis_task_scheduler.py`: 任务调度。
+          - `permissions.py`: 权限系统。
 4.  **数据存储:**
-      - **Redis:** 用于缓存和调度消息删除。
-      - **MySQL:** 用于持久化存储用户数据和权限。
+          - **Redis:** 用于缓存和消息删除调度。
+          - **MySQL:** 用于用户数据和权限管理。
 
 #### 关键设计模式
 
-  - **命令工厂模式**: 统一命令注册和权限管理
-  - **依赖注入**: 核心组件通过 `bot_data` 传递
-  - **异步编程**: 全面支持异步操作
-  - **错误处理**: 使用装饰器统一错误处理
-  - **直接异步权限检查**: 移除了复杂的适配器层，直接使用 MySQL 异步操作
+  - **命令工厂:** 用于统一的命令注册和权限处理。
+  - **依赖注入:** 核心组件通过 `bot_data` 传递。
+  - **异步编程:** 完全支持所有I/O操作的 `async/await`。
+  - **基于装饰器的错误处理:** 统一处理命令的错误。
+  - **直接异步权限检查:** 复杂的适配器层已被移除，MySQL操作现在是直接异步的。
 
 ### 🗄️ 数据库结构
 
-  - `users`: 用户基本信息
-  - `admin_permissions`: 管理员权限
-  - `super_admins`: 超级管理员
-  - `user_whitelist`: 用户白名单
-  - `group_whitelist`: 群组白名单
-  - `admin_logs`: 管理员操作日志
-  - `command_stats`: 命令使用统计
+  - `users`: 用户基本信息
+  - `admin_permissions`: 管理员
+  - `super_admins`: 超级管理员
+  - `user_whitelist`: 用户白名单
+  - `group_whitelist`: 群组白名单
+  - `admin_logs`: 管理员操作日志
+  - `command_stats`: 命令使用统计
 
-初始化脚本: `database/init.sql`
+数据库结构定义在 `database/init.sql` 中，并在应用首次运行时自动创建。
 
 ### 🔐 权限系统
 
 #### 架构优化
 
-项目已经完全移除了 SQLite 兼容性适配器，统一使用 MySQL + Redis 架构：
+项目已从SQLite兼容性适配器完全迁移到统一的 MySQL + Redis 架构：
 
-  - **直接异步权限检查**: `utils/permissions.py` 直接通过 `context.bot_data['user_cache_manager']` 获取 MySQL 管理器
-  - **统一数据存储**: 所有权限数据存储在 MySQL 中，避免了数据不一致问题
-  - **性能优化**: 移除了同步转异步的复杂性，提升了响应速度
+  - **直接异步权限检查:** `utils/permissions.py` 直接从 `context.bot_data['user_cache_manager']` 获取MySQL管理器。
+  - **统一数据存储:** 所有权限数据都存储在MySQL中，防止不一致。
+  - **性能提升:** 移除了同步到异步的复杂性，提高了响应速度。
 
 #### 权限级别
 
-1.  **超级管理员**: 通过环境变量 `SUPER_ADMIN_ID` 配置
-2.  **普通管理员**: 存储在 MySQL `admin_permissions` 表中
-3.  **白名单用户**: 私聊需要在 `user_whitelist` 表中，群聊需要群组在 `group_whitelist` 表中
+1.  **超级管理员:** 通过 `SUPER_ADMIN_ID` 环境变量配置。
+2.  **管理员:** 存储在MySQL的 `admin_permissions` 表中。
+3.  **白名单用户:** 在私聊 (`user_whitelist`) 或群聊 (`group_whitelist`) 中需要。
 
-### 🧩 扩展功能
+### 🧩 扩展机器人
 
 #### 自定义脚本
 
-在 `custom_scripts/` 目录放置 Python 脚本，设置 `LOAD_CUSTOM_SCRIPTS=true` 后自动加载。
-脚本可以访问：
+将Python脚本放置在 `custom_scripts/` 目录中，并设置 `LOAD_CUSTOM_SCRIPTS=true` 以自动加载它们。脚本可以访问：
 
-  - `application`: Telegram 应用实例
-  - `cache_manager`: Redis 缓存管理器
-  - `rate_converter`: 汇率转换器
-  - `user_cache_manager`: 用户缓存管理器
-  - `stats_manager`: 统计管理器
+  - `application`: Telegram Application 实例。
+  - `cache_manager`: Redis 缓存管理器。
+  - `rate_converter`: 货币转换器。
+  - `user_cache_manager`: 用户缓存管理器。
+  - `stats_manager`: 统计管理器。
 
-#### 命令开发
+#### 新命令开发
 
-1.  在 `commands/` 目录创建新模块
-2.  使用 `command_factory.register_command()` 注册命令
-3.  设置适当的权限级别
-4.  在 `main.py` 中注入必要的依赖
+1.  在 `commands/` 目录中创建一个新模块。
+2.  使用 `command_factory.register_command()` 注册新命令。
+3.  设置适当的权限级别。
+4.  在 `main.py` 中注入任何必要的依赖。
 
-### 📊 日志和监控
+### 📊 日志与监控
 
 #### 日志管理
 
-  - **日志文件：** `logs/bot-YYYY-MM-DD.log`
-  - **自动轮换：** 10MB 大小限制，保留 5 个备份
-  - **日志级别：** 支持 DEBUG、INFO、WARNING、ERROR
-  - **定期清理：** 通过 `cleanup_logs.py` 或定时任务
+  - **日志文件:** `logs/bot-YYYY-MM-DD.log`
+  - **日志轮转:** 10MB 大小限制，保留5个备份。
+  - **日志级别:** 支持 `DEBUG`, `INFO`, `WARNING`, `ERROR`。
+  - **定期清理:** 通过 `cleanup_logs.py` 或计划任务执行。
 
 #### 监控功能
 
-  - 命令使用统计
-  - 用户活跃度监控
-  - 错误日志记录
-  - 性能指标收集
+  - 命令使用统计
+  - 用户活动监控
+  - 错误日志记录
+  - 性能指标收集
 
 ### ⚡ 性能优化
 
 #### 缓存策略
 
-  - **Redis 缓存：** 用于高频访问数据和价格信息
-  - **统一缓存管理：** 通过 `redis_cache_manager.py` 统一管理
-  - **智能缓存：** 不同服务有不同的缓存时长配置
+  - **Redis缓存:** 用于高频数据，如价格信息和天气位置查询。
+  - **统一缓存管理:** 通过 `redis_cache_manager.py` 管理。
+  - **智能缓存:** 不同服务的缓存时长可配置。
 
 #### 任务调度
 
-  - **Redis 任务调度器：** 支持定时任务
-  - **消息删除调度：** 自动清理临时消息
-  - **缓存清理任务：** 定期清理过期缓存
+  - **Redis任务调度器:** 支持计划性、周期性任务。
+  - **消息删除:** 自动清理临时消息。
+  - **缓存清理:** 定期清除过期缓存。
 
 #### 连接管理
 
-  - **连接池：** MySQL 和 Redis 连接池
-  - **异步客户端：** httpx 异步 HTTP 客户端
-  - **资源清理：** 优雅关闭连接
+  - **连接池:** 用于MySQL和Redis。
+  - **异步客户端:** 使用 `httpx` 进行异步HTTP请求。
+  - **优雅关闭:** 优雅地清理资源并关闭连接。
 
 ### 💡 开发最佳实践
 
-1.  **错误处理**: 使用 `@with_error_handling` 装饰器
-2.  **日志记录**: 使用适当的日志级别
-3.  **权限检查**: 使用 `@require_permission(Permission.USER/ADMIN/SUPER_ADMIN)` 装饰器
-4.  **异步权限操作**: 通过 `context.bot_data['user_cache_manager']` 获取用户管理器
-5.  **缓存使用**: 合理使用 Redis 缓存避免重复请求
-6.  **异步编程**: 使用 `async/await` 处理所有 I/O 操作
-7.  **配置管理**: 通过环境变量管理配置
-8.  **数据库操作**: 使用参数化查询防止 SQL 注入
+1.  **错误处理:** 使用 `@with_error_handling` 装饰器。
+2.  **日志记录:** 使用适当的日志级别。
+3.  **权限检查:** 使用 `@require_permission(...)` 装饰器。
+4.  **异步权限:** 通过 `context.bot_data['user_cache_manager']` 获取用户管理器。
+5.  **缓存:** 使用Redis缓存以避免重复请求。
+6.  **异步代码:** 对所有I/O密集型操作使用 `async/await`。
+7.  **配置:** 通过环境变量管理所有设置。
+8.  **数据库查询:** 使用参数化查询以防止SQL注入。
 
-### 🔍 故障排除
+### 🔍 故障排查
 
 #### 常见问题
 
-1.  **数据库连接失败**: 检查 MySQL 配置和连接
-2.  **Redis 连接失败**: 检查 Redis 服务状态
-3.  **权限错误**: 确认用户在白名单或管理员列表中
-4.  **命令不响应**: 检查日志文件中的错误信息
+1.  **数据库连接失败:** 检查MySQL的配置和连接。
+2.  **Redis连接失败:** 检查Redis服务的状态。
+3.  **权限错误:** 确保用户在白名单或管理员列表中。
+4.  **命令无响应:** 检查日志文件以查找错误。
+5.  **天气命令失败:** 请确保在 `.env` 文件中正确设置了 `QWEATHER_API_KEY`，并且该密钥是有效的。
 
 #### 调试技巧
 
-1.  设置 `LOG_LEVEL=DEBUG` 获取详细日志
-2.  使用 `docker-compose logs -f appbot` 查看实时日志
-3.  检查 Redis 缓存状态
-4.  验证数据库表结构和数据
+1.  设置 `LOG_LEVEL=DEBUG` 以获取详细日志。
+2.  使用 `docker-compose logs -f appbot` 查看实时日志。
+3.  检查Redis缓存状态。
+4.  验证数据库表结构和数据。
 
-### 📜 架构迁移记录
+### 📜 架构迁移说明 (v2.0 - 最新)
 
-#### v2.0 架构统一 (最新)
+**移除的组件:**
 
-**已移除的组件:**
-
-  - `utils/compatibility_adapters.py` - SQLite 兼容性适配器
-  - `utils/redis_mysql_adapters.py` - 混合适配器
-  - `utils/unified_database.py` - SQLite 统一数据库
-  - `utils/deletion_task_manager.py` - 未使用的删除任务管理器
-  - 其他 SQLite 相关文件
+  - `utils/compatibility_adapters.py` - SQLite 兼容性适配器
+  - `utils/redis_mysql_adapters.py` - 混合适配器
+  - `utils/unified_database.py` - 统一的SQLite数据库
+  - 其他SQLite相关文件
 
 **架构优化:**
 
-  - 统一使用 MySQL + Redis 架构
-  - 直接异步权限检查，移除了复杂的适配器层
-  - 提升了性能和代码可维护性
-  - 解决了群组白名单用户无法使用机器人的问题
+  - 统一了基于 MySQL + Redis 的架构。
+  - 实现了直接的异步权限检查，移除了复杂的适配器层。
+  - 提升了性能和代码可维护性。
+  - 解决了一个白名单群组用户无法使用机器人的问题。
 
 **迁移要点:**
 
-  - 所有权限数据现在存储在 MySQL 中
-  - Redis 用于缓存和消息删除调度
-  - 环境变量中必须配置 MySQL 和 Redis 连接信息
+  - 所有权限数据现在都存储在MySQL中。
+  - Redis用于缓存和消息删除调度。
+  - MySQL和Redis的连接详情必须在 `.env` 文件中配置。
 
 </details>
 
 ### 🤝 贡献
 
-欢迎提交贡献、问题和功能请求。请随时查看 [Issues 页面](https://github.com/SzeMeng76/domobot/issues)。
+欢迎提交贡献、问题和功能请求。请随时查看 [问题页面](https://github.com/SzeMeng76/domobot/issues)。
 
 ### 许可证
 
-本项目采用 MIT 许可证。
+该项目根据 MIT 许可证授权。
 
 ```
 ```
