@@ -24,7 +24,8 @@ def set_dependencies(c_manager, h_client):
 
 WEATHER_ICONS = {'100': '☀️', '101': '🌤️', '102': '☁️', '103': '🌥️', '104': '⛅', '150': '🍃', '300': '🌦️', '301': '🌧️', '302': '⛈️', '305': '🌧️', '306': '🌧️', '307': '⛈️', '309': '🌦️', '310': '🌧️', '311': '⛈️', '312': '⛈️', '313': '⛈️', '399': '🌨️', '400': '❄️', '401': '❄️', '402': '❄️', '403': '❄️', '404': '🌨️', '405': '❄️', '406': '❄️', '407': '❄️', '499': '❓', '501': '⛈️', '502': '⛈️', '900': '🌪️', '901': '🌀'}
 
-async def _get_api_response(endpoint: str, params: dict) -> Optional[dict]:
+# --- Helper Functions ---
+async def _get_api_response(endpoint: str, params: Dict) -> Optional[Dict]:
     config = get_config()
     if not config.qweather_api_key:
         logging.error("和风天气 API Key 未配置")
@@ -32,8 +33,11 @@ async def _get_api_response(endpoint: str, params: dict) -> Optional[dict]:
     try:
         base_url = "https://api.qweather.com/v7/" if not endpoint.startswith("geo/") else "https://geoapi.qweather.com/v2/"
         api_endpoint = endpoint.replace("geo/", "")
+        
         all_params = {"key": config.qweather_api_key, "lang": "zh", **params}
+        
         response = await httpx_client.get(f"{base_url}{api_endpoint}", params=all_params, timeout=20)
+        
         if response.status_code == 200:
             data = response.json()
             if data.get("code") == "200":
@@ -47,7 +51,7 @@ async def _get_api_response(endpoint: str, params: dict) -> Optional[dict]:
         logging.error(f"和风天气 API ({endpoint}) 请求异常: {e}")
     return None
 
-async def get_location_id(location: str) -> Optional[dict]:
+async def get_location_id(location: str) -> Optional[Dict]:
     cache_key = f"weather_location_{location.lower()}"
     cached_data = await cache_manager.load_cache(cache_key, subdirectory="weather")
     if cached_data: return cached_data
@@ -59,7 +63,7 @@ async def get_location_id(location: str) -> Optional[dict]:
         return location_data
     return None
 
-def parse_date_param(param: str) -> tuple[str, Optional[datetime.date], Optional[datetime.date]]:
+def parse_date_param(param: str) -> Tuple[str, Optional[datetime.date], Optional[datetime.date]]:
     today = datetime.date.today()
     if '-' in param:
         try:
@@ -90,7 +94,7 @@ def parse_date_param(param: str) -> tuple[str, Optional[datetime.date], Optional
 
     return 'invalid', None, None
 
-def format_daily_weather(daily_data: list[dict]) -> str:
+def format_daily_weather(daily_data: List[Dict]) -> str:
     lines = []
     for day in daily_data:
         date_str = escape_markdown(datetime.datetime.strptime(day["fxDate"], "%Y-%m-%d").strftime("%m-%d"), version=2)
@@ -101,7 +105,7 @@ def format_daily_weather(daily_data: list[dict]) -> str:
         lines.append(f"*{date_str}*: {icon} {text_day}, {temp_min}\\~{temp_max}°C")
     return "\n".join(lines)
 
-def format_hourly_weather(hourly_data: list[dict]) -> str:
+def format_hourly_weather(hourly_data: List[Dict]) -> str:
     result = ["\n*逐小时预报*"]
     for hour in hourly_data:
         time_str = escape_markdown(datetime.datetime.fromisoformat(hour.get("fxTime").replace('Z', '+00:00')).strftime('%H:%M'), version=2)
@@ -111,11 +115,11 @@ def format_hourly_weather(hourly_data: list[dict]) -> str:
         result.append(f"`{time_str}`: {icon} {temp}°C, {text}")
     return "\n".join(result)
 
-def format_minutely_rainfall(rainfall_data: dict) -> str:
+def format_minutely_rainfall(rainfall_data: Dict) -> str:
     summary = escape_markdown(rainfall_data.get('summary', '暂无降水信息'), version=2)
     return f"\n*分钟级降水*: {summary}"
 
-def format_indices_data(indices_data: dict) -> str:
+def format_indices_data(indices_data: Dict) -> str:
     result = ["\n*生活指数*"]
     for index in indices_data.get("daily", []):
         name = escape_markdown(index.get('name'), version=2)
@@ -123,32 +127,31 @@ def format_indices_data(indices_data: dict) -> str:
         result.append(f"• *{name}*: {category}")
     return "\n".join(result)
 
-def format_air_quality(air_data: dict) -> str:
+def format_air_quality(air_data: Dict) -> str:
     aqi_data = air_data.get('now', {})
     aqi = escape_markdown(aqi_data.get('aqi', 'N/A'), version=2)
     category = escape_markdown(aqi_data.get('category', 'N/A'), version=2)
     return f"\n*空气质量*: {aqi} \\- {category}"
-
-HELP_TEXT = (
-    "*天气查询帮助* `(和风天气)`\n\n"
-    "`/tq [城市] [参数]`\n\n"
-    "**参数说明:**\n"
-    "• `(无)`: 当天天气和空气质量\n"
-    "• `数字(1-30)`: 未来指定天数天气\n"
-    "• `dayXX`: 指定日期天气\n"
-    "• `XX-YY`: 指定日期范围天气\n"
-    "• `[1-168]h`: 逐小时天气\n"
-    "• `降水`: 分钟级降水\n"
-    "• `指数`/`指数3`: 生活指数\n\n"
-    "**示例:** `/tq 北京`, `/tq 上海 3`, `/tq 广州 24h`"
-)
 
 async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message or not update.effective_chat: return
     await delete_user_command(context, update.effective_chat.id, update.message.message_id)
 
     if not context.args:
-        await send_message_with_auto_delete(context, update.effective_chat.id, HELP_TEXT, parse_mode=ParseMode.MARKDOWN_V2)
+        help_text = (
+            "*天气查询帮助* `(和风天气)`\n\n"
+            "`/tq [城市] [参数]`\n\n"
+            "**参数说明:**\n"
+            "• `(无)`: 当天天气和空气质量\n"
+            "• `数字(1-30)`: 未来指定天数天气\n"
+            "• `dayXX`: 指定日期天气\n"
+            "• `XX-YY`: 指定日期范围天气\n"
+            "• `[1-168]h`: 逐小时天气\n"
+            "• `降水`: 分钟级降水\n"
+            "• `指数`/`指数3`: 生活指数\n\n"
+            "**示例:** `/tq 北京`, `/tq 上海 3`, `/tq 广州 24h`"
+        )
+        await send_message_with_auto_delete(context, update.effective_chat.id, help_text, parse_mode=ParseMode.MARKDOWN_V2)
         return
 
     location = context.args[0]
@@ -168,7 +171,8 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     result_text = f"🌍 *{safe_location_name}*\n"
     
-    if not param:
+    # --- Parameter Handling Logic ---
+    if not param: # Default case
         realtime_data = await _get_api_response("weather/now", {"location": location_id})
         air_data = await _get_api_response("air/now", {"location": location_id})
         if realtime_data and realtime_data.get("now"):
@@ -192,12 +196,12 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         else: result_text += f"\n❌ 获取 *{safe_location_name}* 的分钟级降水失败。"
             
     elif param.startswith("指数"):
-        days = "3d" if param.endswith("3") else "1d"
-        data = await _get_api_response(f"indices/{days}", {"location": location_id, "type": "0"})
+        days_param = "3d" if param.endswith("3") else "1d"
+        data = await _get_api_response(f"indices/{days_param}", {"location": location_id, "type": "0"})
         if data: result_text += format_indices_data(data)
         else: result_text += f"\n❌ 获取 *{safe_location_name}* 的生活指数失败。"
     
-    else:
+    else: # Date-related queries
         query_type, date1, date2 = parse_date_param(param)
         if query_type == 'invalid':
             result_text = f"❌ 无效的参数: `{escape_markdown(param, version=2)}`。"
