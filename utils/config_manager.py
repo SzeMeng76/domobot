@@ -26,6 +26,10 @@ class BotConfig:
     webhook_key: str = ""
     webhook_cert: str = ""
 
+    qweather_kid: str = ""
+    qweather_sub: str = ""  # <--- 把这个新口袋加上！
+    qweather_private_key: str = ""
+
     # 基础配置
     bot_token: str = ""
     super_admin_id: int = 0
