@@ -171,15 +171,15 @@ def format_daily_weather(daily_data: list[dict]) -> str:
             # 注意：MarkdownV2 需要对 | ~ 等特殊字符进行转义
             daily_info = [
                 f"🗓 *{date_str} {moon_phase}*",
-                f"├─ 温度: {temp_min}\\~{temp_max}°C",
+                f"├─ 温度: {temp_min}~{temp_max}°C",
                 f"├─ 日间: {day_icon} {text_day}",
                 f"│   └─ {wind_dir_day} {wind_scale_day}级",
                 f"├─ 夜间: {night_icon} {text_night}",
                 f"│   └─ {wind_dir_night} {wind_scale_night}级",
                 f"└─ 详情:",
-                f"    💧 湿度: {humidity}% \\| ☔️ 降水: {precip}mm",
-                f"    🌅 日出: {sunrise} \\| 🌄 日落: {sunset}",
-                f"    👁️ 能见度: {vis}km \\| ☀️ UV指数: {uv_index}"
+                f"    💧 湿度: {humidity}% | ☔️ 降水: {precip}mm",
+                f"    🌅 日出: {sunrise} | 🌄 日落: {sunset}",
+                f"    👁️ 能见度: {vis}km | ☀️ UV指数: {uv_index}"
             ]
             
             result_lines.append("\n".join(daily_info))
@@ -203,8 +203,8 @@ def format_hourly_weather(hourly_data: list[dict]) -> str:
             temp = escape_markdown(hour.get('temp', 'N/A'), version=2)
             icon = WEATHER_ICONS.get(hour.get("icon"), "❓")
             text = escape_markdown(hour.get('text', 'N/A'), version=2)
-            wind_dir = escape_markdown(hour.get('windDir', 'N/A'), version=2)
-            wind_scale = escape_markdown(hour.get('windScale', 'N/A'), version=2)
+            wind_dir = hour.get('windDir', 'N/A')
+            wind_scale = hour.get('windScale', 'N/A')
             humidity = escape_markdown(hour.get('humidity', 'N/A'), version=2)
             # 和风天气API返回的pop是字符串"0"~"100"，直接用即可
             pop = escape_markdown(hour.get('pop', 'N/A'), version=2) 
@@ -214,7 +214,7 @@ def format_hourly_weather(hourly_data: list[dict]) -> str:
                 f"⏰ {time_str}",
                 f"🌡️ {temp}°C {icon} {text}",
                 f"💨 {wind_dir} {wind_scale}级",
-                f"💧 湿度: {humidity}% \\| ☔️ 降水概率: {pop}%",
+                f"💧 湿度: {humidity}% | ☔️ 降水概率: {pop}%",
                 "━━━━━━━━━━━━━━━━━━━━" # 分隔线
             ]
             result_lines.append("\n".join(hourly_info))
