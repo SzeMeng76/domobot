@@ -1,7 +1,7 @@
 import datetime
 import urllib.parse
 import logging
-from typing import Optional, List, Dict
+from typing import Optional, Tuple, Dict, List
 
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -127,7 +127,40 @@ def format_air_quality(air_data: dict) -> str:
     aqi_data = air_data.get('now', {})
     aqi = escape_markdown(aqi_data.get('aqi', 'N/A'), version=2)
     category = escape_markdown(aqi_data.get('category', 'N/A'), version=2)
-    return f"\n*空气质量*: {aqi} \\- {category}"
+    primary = escape_markdown(aqi_data.get('primary', 'NA'), version=2)
+    lines = [
+        f"\n🌫️ *空气质量*：{aqi} \\({category}\\)",
+        f"🔍 主要污染物：{primary}",
+        f"🌬️ PM2\\.5：{escape_markdown(aqi_data.get('pm2p5', 'N/A'), version=2)}μg/m³ \\| PM10：{escape_markdown(aqi_data.get('pm10', 'N/A'), version=2)}μg/m³",
+        f"🌡️ SO₂：{escape_markdown(aqi_data.get('so2', 'N/A'), version=2)}μg/m³ \\| NO₂：{escape_markdown(aqi_data.get('no2', 'N/A'), version=2)}μg/m³",
+        f"💨 CO：{escape_markdown(aqi_data.get('co', 'N/A'), version=2)}mg/m³ \\| O₃：{escape_markdown(aqi_data.get('o3', 'N/A'), version=2)}μg/m³"
+    ]
+    return "\n".join(lines)
+
+def format_realtime_weather(realtime_data: dict, location_name: str) -> str:
+    now = realtime_data.get("now", {})
+    icon = WEATHER_ICONS.get(now.get("icon"), "❓")
+    obs_time_str = "N/A"
+    try:
+        obs_time_utc = datetime.datetime.fromisoformat(now.get('obsTime', '').replace('Z', '+00:00'))
+        obs_time_local = obs_time_utc.astimezone(datetime.timezone(datetime.timedelta(hours=8)))
+        obs_time_str = escape_markdown(obs_time_local.strftime('%Y-%m-%d %H:%M'), version=2)
+    except: pass
+    lines = [
+        f"🌍 *{escape_markdown(location_name, version=2)}* 的实时天气：\n",
+        f"🕐 观测时间：{obs_time_str}",
+        f"🌤️ 天气：{icon} {escape_markdown(now.get('text', 'N/A'), version=2)}",
+        f"🌡️ 温度：{escape_markdown(now.get('temp', 'N/A'), version=2)}°C",
+        f"🌡️ 体感温度：{escape_markdown(now.get('feelsLike', 'N/A'), version=2)}°C",
+        f"💨 {escape_markdown(now.get('windDir', 'N/A'), version=2)} {escape_markdown(now.get('windScale', 'N/A'), version=2)}级 \\({escape_markdown(now.get('windSpeed', 'N/A'), version=2)}km/h\\)",
+        f"💧 相对湿度：{escape_markdown(now.get('humidity', 'N/A'), version=2)}%",
+        f"☔️ 降水量：{escape_markdown(now.get('precip', 'N/A'), version=2)}mm",
+        f"👀 能见度：{escape_markdown(now.get('vis', 'N/A'), version=2)}km",
+        f"☁️ 云量：{escape_markdown(now.get('cloud', 'N/A'), version=2)}%",
+        f"🌫️ 露点温度：{escape_markdown(now.get('dew', 'N/A'), version=2)}°C",
+        f"📈 气压：{escape_markdown(now.get('pressure', 'N/A'), version=2)}hPa"
+    ]
+    return "\n".join(lines)
 
 HELP_TEXT = (
     "*天气查询帮助* `(和风天气)`\n\n"
@@ -155,7 +188,6 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     param = context.args[1].lower() if len(context.args) > 1 else None
     
     safe_location = escape_markdown(location, version=2)
-    # ✨ 修复：转义静态文本中的 "..."
     message = await context.bot.send_message(chat_id=update.effective_chat.id, text=f"🔍 正在查询 *{safe_location}* 的天气\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
 
     location_data = await get_location_id(location)
@@ -167,36 +199,49 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     location_name = f"{location_data['name']}, {location_data['adm1']}"
     safe_location_name = escape_markdown(location_name, version=2)
 
-    result_text = f"🌍 *{safe_location_name}*\n"
+    result_text = ""
     
     if not param:
         realtime_data = await _get_api_response("weather/now", {"location": location_id})
         air_data = await _get_api_response("air/now", {"location": location_id})
-        if realtime_data and realtime_data.get("now"):
-            now = realtime_data["now"]; icon = WEATHER_ICONS.get(now.get("icon"), "❓")
-            result_text += f"*{icon} {escape_markdown(now.get('text', 'N/A'), version=2)}* "
-            result_text += f"🌡️ {escape_markdown(now.get('temp', 'N/A'), version=2)}°C \\(体感: {escape_markdown(now.get('feelsLike', 'N/A'), version=2)}°C\\)"
-        else: result_text += "\n❌ 获取实时天气失败。"
-        if air_data: result_text += format_air_quality(air_data)
-    
+        
+        if realtime_data:
+            result_text = format_realtime_weather(realtime_data, location_name)
+        else:
+            result_text = f"❌ 获取 *{safe_location_name}* 实时天气失败。\n"
+        
+        if air_data:
+            result_text += format_air_quality(air_data)
+        else:
+            result_text += f"\n*空气质量*: 获取失败"
+
     elif param.endswith('h') and param[:-1].isdigit() and 1 <= int(param[:-1]) <= 168:
         hours = int(param[:-1])
         endpoint = "weather/24h" if hours <= 24 else "weather/72h" if hours <= 72 else "weather/168h"
         data = await _get_api_response(endpoint, {"location": location_id})
-        if data and data.get("hourly"): result_text += format_hourly_weather(data["hourly"][:hours])
-        else: result_text += f"\n❌ 获取 *{safe_location_name}* 的逐小时天气失败。"
+        if data and data.get("hourly"):
+            result_text = f"🌍 *{safe_location_name}* 未来 {hours} 小时天气："
+            result_text += format_hourly_weather(data["hourly"][:hours])
+        else:
+            result_text = f"❌ 获取 *{safe_location_name}* 的逐小时天气失败。"
 
     elif param == "降水":
         coords = f"{location_data['lon']},{location_data['lat']}"
         data = await _get_api_response("minutely/5m", {"location": coords})
-        if data: result_text += format_minutely_rainfall(data)
-        else: result_text += f"\n❌ 获取 *{safe_location_name}* 的分钟级降水失败。"
+        if data:
+            result_text = f"🌍 *{safe_location_name}*"
+            result_text += format_minutely_rainfall(data)
+        else:
+            result_text = f"❌ 获取 *{safe_location_name}* 的分钟级降水失败。"
             
     elif param.startswith("指数"):
         days_param = "3d" if param.endswith("3") else "1d"
         data = await _get_api_response(f"indices/{days_param}", {"location": location_id, "type": "0"})
-        if data: result_text += format_indices_data(data)
-        else: result_text += f"\n❌ 获取 *{safe_location_name}* 的生活指数失败。"
+        if data:
+            result_text = f"🌍 *{safe_location_name}* "
+            result_text += format_indices_data(data)
+        else:
+            result_text = f"❌ 获取 *{safe_location_name}* 的生活指数失败。"
     
     else:
         query_type, date1, date2 = parse_date_param(param)
@@ -210,17 +255,17 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             data = await _get_api_response(endpoint, {"location": location_id})
             if data and data.get("daily"):
                 if query_type == 'specific_date':
-                    result_text += f"*{escape_markdown(date1.strftime('%m月%d日'), version=2)}* 天气预报：\n"
+                    result_text = f"🌍 *{escape_markdown(date1.strftime('%m月%d日'), version=2)}* 天气预报：\n\n"
                     daily_data = [d for d in data["daily"] if d["fxDate"] == date1.strftime("%Y-%m-%d")]
                 else:
                     start_str = date1.strftime('%m月%d日')
                     end_str = date2.strftime('%m月%d日')
                     title = f"未来 {(date2 - date1).days + 1} 天" if query_type == 'multiple_days' else f"{start_str}到{end_str}"
-                    result_text += f"*{escape_markdown(title, version=2)}* 天气预报：\n"
+                    result_text = f"🌍 *{escape_markdown(title, version=2)}* 天气预报：\n\n"
                     daily_data = [d for d in data["daily"] if date1 <= datetime.datetime.strptime(d["fxDate"], "%Y-%m-%d").date() <= date2]
                 result_text += format_daily_weather(daily_data)
             else:
-                result_text += f"\n❌ 获取 *{safe_location_name}* 的天气信息失败。"
+                result_text = f"\n❌ 获取 *{safe_location_name}* 的天气信息失败。"
 
     await message.edit_text(result_text, parse_mode=ParseMode.MARKDOWN_V2, disable_web_page_preview=True)
 
