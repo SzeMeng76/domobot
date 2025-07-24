@@ -446,7 +446,7 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 result_text = f"\n❌ 获取 *{safe_location_name}* 的天气信息失败。"
 
     await message.edit_text(
-    foldable_text_with_markdown_v2(result_text), # <--- 在这里把它包起来！
+    foldable_text_v2(result_text), # <--- 在这里把它包起来！
     parse_mode=ParseMode.MARKDOWN_V2, 
     disable_web_page_preview=True
 )
