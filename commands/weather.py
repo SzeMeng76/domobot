@@ -453,8 +453,8 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             context=context,
             chat_id=message.chat_id,
             message_id=message.message_id,
-            delay=delete_delay,
-            task_type="bot_message" # 明确任务类型
+            delay=delete_delay
+            # task_type 参数被正确地移除了
         )
 
 command_factory.register_command(
