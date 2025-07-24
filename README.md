@@ -18,14 +18,17 @@ Read this in other languages: [简体中文](./README.zh-CN.md)
 ### 📝 Project Overview
 
 This is a Python-based, multi-functional Telegram bot with the following features:
--   **🪙 Crypto Prices:** Look up real-time cryptocurrency prices with support for custom amounts and currency conversion, including 24h and 7d percentage changes.
--   **NEW:** Detailed, multi-format weather forecasts (real-time, daily, hourly, minutely precipitation, and lifestyle indices).
--   Real-time currency exchange rate conversion.
--   Multi-region price comparison for Steam games.
--   Subscription price lookup for streaming services like Netflix, Disney+, and Spotify.
--   Application price lookup for the App Store and Google Play.
--   A comprehensive admin permission system with user/group whitelisting.
--   User caching and statistics functionalities.
+
+### ✨ Features
+
+-   🪙 **Crypto Prices:** Look up real-time cryptocurrency prices with support for custom amounts and currency conversion, including 24h and 7d percentage changes.
+-   🌦️ **Weather Forecasts:** Detailed, multi-format weather forecasts (real-time, daily, hourly, minutely precipitation, and lifestyle indices).
+-   💱 **Currency Conversion:** Real-time exchange rate lookups.
+-   🎮 **Steam Prices:** Multi-region price comparison for Steam games.
+-   📺 **Streaming Prices:** Subscription price lookup for services like Netflix, Disney+, and Spotify.
+-   📱 **App Stores:** Application price lookup for the App Store and Google Play.
+-   🔐 **Admin System:** A comprehensive admin permission system with user/group whitelisting.
+-   📊 **User Caching & Stats:** Caching user data and command usage statistics.
 
 ### 🚀 Getting Started
 
