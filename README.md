@@ -56,18 +56,23 @@ docker-compose down
 
 All configurations are managed via the `.env` file. You must copy `.env.example` to `.env` and fill in the required variables.
 
-**Required Environment Variables:**
+| Variable                    | Description                                                                 | Default/Example         |
+| --------------------------- | --------------------------------------------------------------------------- | ----------------------- |
+| `BOT_TOKEN`                 | **(Required)** Your Telegram Bot Token from @BotFather.                     |                         |
+| `SUPER_ADMIN_ID`            | **(Required)** The User ID of the main bot owner with all permissions.      |                         |
+| `DB_HOST`                   | Hostname for the database. **Must be `mysql`**.                             | `mysql`                 |
+| `DB_PORT`                   | The internal port for the database.                                         | `3306`                  |
+| `DB_NAME`                   | The name of the database. Must match `docker-compose.yml`.                  | `bot`                   |
+| `DB_USER`                   | The username for the database. Must match `docker-compose.yml`.             | `bot`                   |
+| `DB_PASSWORD`               | **(Required)** The password for the database. Must match `docker-compose.yml`. | `your_mysql_password`   |
+| `REDIS_HOST`                | Hostname for the cache. **Must be `redis`**.                                | `redis`                 |
+| `REDIS_PORT`                | The internal port for Redis.                                                | `6379`                  |
+| `DELETE_USER_COMMANDS`      | Set to `true` to enable auto-deletion of user commands.                       | `true`                  |
+| `USER_COMMAND_DELETE_DELAY` | Delay in seconds before deleting a user's command. Use `0` for immediate deletion. | `5`                     |
+| `LOG_LEVEL`                 | Set the logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`).              | `INFO`                  |
+| `LOAD_CUSTOM_SCRIPTS`       | Set to `true` to enable loading scripts from the `custom_scripts/` directory. | `false`                 |
 
-  - `BOT_TOKEN`: Your Telegram Bot Token.
-  - `SUPER_ADMIN_ID`: The numeric User ID of the super administrator.
-  - `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`: MySQL database connection details.
-  - `REDIS_HOST`, `REDIS_PORT`: Redis connection details.
-
-**Optional Environment Variables:**
-
-  - `LOG_LEVEL`: Logging level (e.g., `DEBUG`, `INFO`). Default is `INFO`.
-  - `WEBHOOK_URL`: URL for running the bot in webhook mode.
-  - `LOAD_CUSTOM_SCRIPTS`: Set to `true` to enable loading custom scripts.
+The configuration is managed by the `BotConfig` class in `utils/config_manager.py`, which supports setting cache durations, auto-deletion toggles, feature flags, and performance parameters.
 
 <details>
 <summary><b>📖 Click to expand for Full Architecture, Technical Details, and Best Practices</b></summary>
