@@ -108,7 +108,7 @@ def format_air_quality(air_data: dict) -> str:
     aqi = air_data.get('now', {})
     return f"\n*空气质量*: {aqi.get('aqi', 'N/A')} - {escape_markdown(aqi.get('category', 'N/A'), version=2)}"
 
-@command_factory.register_command("tq", permission=Permission.USER, description="查询天气，例如 /tq 北京 或 /tq 上海 3")
+#@command_factory.register_command("tq", permission=Permission.USER, description="查询天气，例如 /tq 北京 或 /tq 上海 3")
 async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message or not update.effective_chat: return
     await delete_user_command(context, update.effective_chat.id, update.message.message_id)
@@ -201,3 +201,10 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         result_text = f"❌ 无效的参数: `{escape_markdown(param, version=2)}`。\n\n请查看 `/help tq`"
 
     await message.edit_text(result_text, parse_mode=ParseMode.MARKDOWN_V2)
+
+command_factory.register_command(
+    "tq",
+    weather_command,  # Pass the function as an argument here
+    permission=Permission.USER,
+    description="查询天气预报和空气质量"
+)
