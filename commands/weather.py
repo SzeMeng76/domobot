@@ -11,7 +11,7 @@ from telegram.helpers import escape_markdown
 from utils.command_factory import command_factory
 from utils.permissions import Permission
 from utils.config_manager import get_config
-from utils.message_manager import send_message_with_auto_delete, delete_user_command
+from utils.message_manager import send_message_with_auto_delete, delete_user_command, _schedule_deletion
 
 # 全局变量
 cache_manager = None
@@ -445,6 +445,17 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 result_text = f"\n❌ 获取 *{safe_location_name}* 的天气信息失败。"
 
     await message.edit_text(result_text, parse_mode=ParseMode.MARKDOWN_V2, disable_web_page_preview=True)
+
+    config = get_config()
+    delete_delay = config.auto_delete_delay
+    if delete_delay > 0:
+        await _schedule_deletion(
+            context=context,
+            chat_id=message.chat_id,
+            message_id=message.message_id,
+            delay=delete_delay,
+            task_type="bot_message" # 明确任务类型
+        )
 
 command_factory.register_command(
     "tq",
