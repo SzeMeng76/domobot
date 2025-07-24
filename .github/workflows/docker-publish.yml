@@ -6,6 +6,8 @@ on:
   push:
     tags:
       - 'v*.*.*'
+    branches:
+      - 'mydev' # 增加了这一行
   workflow_dispatch:
 
 # 定义一个 job
@@ -58,14 +60,21 @@ jobs:
           # 强制将所有相关名称转为小写，以符合 Docker 命名规范
           DOCKERHUB_USER_LOWER=$(echo "${{ secrets.DOCKERHUB_USERNAME }}" | tr '[:upper:]' '[:lower:]')
           REPO_NAME_LOWER=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
-          GHCR_REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-
-          # 使用处理后的小写名称来定义镜像地址
           DOCKER_IMAGE_DOCKERHUB="$DOCKERHUB_USER_LOWER/$REPO_NAME_LOWER"
+          GHCR_REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           DOCKER_IMAGE_GHCR="ghcr.io/$GHCR_REPO_LOWER"
-          
-          # 无论是不是正式版，都同时打上 a) 版本号标签 和 b) latest 标签
-          TAGS="$DOCKER_IMAGE_DOCKERHUB:latest,$DOCKER_IMAGE_DOCKERHUB:${{ env.VERSION }},$DOCKER_IMAGE_GHCR:latest,$DOCKER_IMAGE_GHCR:${{ env.VERSION }}"
+
+          # 新增的智能判断逻辑
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            # 如果是发布 (打tag)，就使用 latest 和版本号标签
+            echo "是正式发布，使用 latest 和版本号标签: ${{ env.VERSION }}"
+            TAGS="$DOCKER_IMAGE_DOCKERHUB:latest,$DOCKER_IMAGE_DOCKERHUB:${{ env.VERSION }},$DOCKER_IMAGE_GHCR:latest,$DOCKER_IMAGE_GHCR:${{ env.VERSION }}"
+          else
+            # 如果是推送到分支 (比如 mydev)，就使用分支名作为标签
+            BRANCH_NAME=${GITHUB_REF#refs/heads/}
+            echo "是开发分支推送，使用分支名 '${BRANCH_NAME}' 作为标签"
+            TAGS="$DOCKER_IMAGE_DOCKERHUB:${BRANCH_NAME},$DOCKER_IMAGE_GHCR:${BRANCH_NAME}"
+          fi
           
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
           echo "Generated tags: ${TAGS}"
