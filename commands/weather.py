@@ -234,15 +234,15 @@ def format_minutely_rainfall(rainfall_data: dict) -> str:
     result = []
 
     # 1. 添加摘要和主分隔线
-    summary = escape_markdown(rainfall_data.get('summary', '暂无降水信息'), version=2)
+    summary = rainfall_data.get('summary', '暂无降水信息')
     result.append(f"📝 {summary}")
     result.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
     # 2. 遍历每个时间点的数据并格式化
     for minute in rainfall_data.get("minutely", []):
         try:
-            time_str = escape_markdown(datetime.datetime.fromisoformat(minute.get("fxTime").replace('Z', '+00:00')).strftime('%H:%M'), version=2)
-            precip = escape_markdown(minute.get('precip', 'N/A'), version=2)
+            time_str = datetime.datetime.fromisoformat(minute.get("fxTime").replace('Z', '+00:00')).strftime('%H:%M'),
+            precip = minute.get('precip', 'N/A')
             
             precip_type_text = "雨" if minute.get("type") == "rain" else "雪"
             precip_type_icon = "🌧️" if minute.get("type") == "rain" else "❄️"
@@ -251,7 +251,7 @@ def format_minutely_rainfall(rainfall_data: dict) -> str:
             minute_info = (
                 f"\n⏰ {time_str}\n"
                 # ↓↓↓ 修正了这一行，为括号添加了转义符 \ ↓↓↓
-                f"💧 预计降水: {precip}mm \({precip_type_icon} {precip_type_text}\)\n"
+                f"💧 预计降水: {precip}mm ({precip_type_icon} {precip_type_text})\n"
                 "━━━━━━━━━━━━━━━━━━━━"
             )
             result.append(minute_info)
@@ -278,7 +278,7 @@ def format_indices_data(indices_data: dict) -> str:
     
     # 2. 遍历每个日期，生成该日期的指数报告
     for date, indices in sorted(grouped_by_date.items()):
-        date_str = escape_markdown(datetime.datetime.strptime(date, "%Y-%m-%d").strftime("%m-%d"), version=2)
+        date_str = datetime.datetime.strptime(date, "%Y-%m-%d").strftime("%m-%d")
         result.append(f"\n📅 *{date_str} 天气生活指数*")
 
         # 3. 遍历预设的分类，在当前日期的指数中查找并显示
@@ -291,9 +291,9 @@ def format_indices_data(indices_data: dict) -> str:
                 for index in category_indices:
                     index_type = index.get("type")
                     emoji = INDICES_EMOJI.get(index_type, "ℹ️") # 获取对应的Emoji
-                    name = escape_markdown(index.get('name', 'N/A'), version=2)
-                    level = escape_markdown(index.get('category', 'N/A'), version=2)
-                    text = escape_markdown(index.get('text', 'N/A'), version=2)
+                    name = index.get('name', 'N/A')
+                    level = index.get('category', 'N/A')
+                    text = (index.get('text', 'N/A')
                     
                     # 构建最终的图文并茂格式
                     result.append(f"{emoji} *{name}*: {level}")
