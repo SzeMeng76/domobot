@@ -248,7 +248,7 @@ docker-compose down
 
 ### 🤝 贡献
 
-欢迎提交贡献、问题和功能请求。请随时查看 [Issues 页面](https://www.google.com/search?q=https://github.com/SzeMeng76/domobot/issues)。
+欢迎提交贡献、问题和功能请求。请随时查看 [Issues 页面](https://github.com/SzeMeng76/domobot/issues)。
 
 ### 许可证
 
