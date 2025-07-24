@@ -11,7 +11,7 @@ from telegram.helpers import escape_markdown
 from utils.command_factory import command_factory
 from utils.permissions import Permission
 from utils.config_manager import get_config
-from utils.message_manager import send_message_with_auto_delete, delete_user_command, _schedule_deletion
+from utils.message_manager import send_message_with_auto_delete, delete_user_command
 
 # 全局变量
 cache_manager = None
@@ -446,20 +446,10 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     await message.edit_text(result_text, parse_mode=ParseMode.MARKDOWN_V2, disable_web_page_preview=True)
 
+    # 调度删除机器人回复消息，使用配置的延迟时间
+    from utils.message_manager import _schedule_deletion
     config = get_config()
-    # 使用你为机器人回复设定的通用延迟时间
-    delete_delay = config.auto_delete_delay 
-    if delete_delay > 0:
-        # 我们需要调用一个只负责调度的函数
-        # 根据你的项目架构，我们应该导入并使用 _schedule_deletion
-        from utils.message_manager import _schedule_deletion
-        await _schedule_deletion(
-            context=context,
-            chat_id=message.chat_id,
-            message_id=message.message_id,
-            delay=delete_delay,
-            task_type="bot_message"
-        )
+    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
 command_factory.register_command(
     "tq",
