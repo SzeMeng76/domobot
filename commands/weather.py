@@ -11,6 +11,7 @@ from telegram.helpers import escape_markdown
 from utils.command_factory import command_factory
 from utils.permissions import Permission
 from utils.config_manager import get_config
+from utils.formatter import foldable_text_v2, foldable_text_with_markdown_v2
 from utils.message_manager import send_message_with_auto_delete, delete_user_command
 
 # 全局变量
@@ -444,7 +445,11 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             else:
                 result_text = f"\n❌ 获取 *{safe_location_name}* 的天气信息失败。"
 
-    await message.edit_text(result_text, parse_mode=ParseMode.MARKDOWN_V2, disable_web_page_preview=True)
+    await message.edit_text(
+    foldable_text_with_markdown_v2(result_text), # <--- 在这里把它包起来！
+    parse_mode=ParseMode.MARKDOWN_V2, 
+    disable_web_page_preview=True
+)
 
     # 调度删除机器人回复消息，使用配置的延迟时间
     from utils.message_manager import _schedule_deletion
