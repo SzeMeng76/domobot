@@ -80,10 +80,10 @@ docker-compose down
 
 配置由 `utils/config_manager.py` 中的 `BotConfig` 类管理，支持：
 
-  - 各项服务的缓存时长设置
-  - 消息自动删除设置
-  - 功能开关设置
-  - 性能参数设置
+- 各项服务的缓存时长设置
+- 消息自动删除设置
+- 功能开关设置
+- 性能参数设置
 
 <details>
 <summary><b>📖 点击展开以查看完整的架构、技术细节和最佳实践</b></summary>
