@@ -301,13 +301,13 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             data = await _get_api_response(endpoint, {"location": location_id})
             if data and data.get("daily"):
                 if query_type == 'specific_date':
-                    result_text = f"🌍 *{escape_markdown(date1.strftime('%m月%d日'), version=2)}* 天气预报：\n\n"
+                    result_text = f"🌍 *{safe_location_name}* {escape_markdown(date1.strftime('%m月%d日'), version=2)} 天气预报：\n\n"
                     daily_data = [d for d in data["daily"] if d["fxDate"] == date1.strftime("%Y-%m-%d")]
                 else:
                     start_str = date1.strftime('%m月%d日')
                     end_str = date2.strftime('%m月%d日')
                     title = f"未来 {(date2 - date1).days + 1} 天" if query_type == 'multiple_days' else f"{start_str}到{end_str}"
-                    result_text = f"🌍 *{escape_markdown(title, version=2)}* 天气预报：\n\n"
+                    result_text = f"🌍 *{safe_location_name}* {escape_markdown(title, version=2)}天气预报：\n\n"
                     daily_data = [d for d in data["daily"] if date1 <= datetime.datetime.strptime(d["fxDate"], "%Y-%m-%d").date() <= date2]
                 result_text += format_daily_weather(daily_data)
             else:
