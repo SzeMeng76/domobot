@@ -101,6 +101,10 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Clean up Docker build cache
+        run: |
+          docker system prune -af
           
       # 第十步：构建并推送 Docker 镜像
       - name: Build and push Docker image
