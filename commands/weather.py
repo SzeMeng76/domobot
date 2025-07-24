@@ -447,14 +447,18 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await message.edit_text(result_text, parse_mode=ParseMode.MARKDOWN_V2, disable_web_page_preview=True)
 
     config = get_config()
-    delete_delay = config.auto_delete_delay
+    # 使用你为机器人回复设定的通用延迟时间
+    delete_delay = config.auto_delete_delay 
     if delete_delay > 0:
+        # 我们需要调用一个只负责调度的函数
+        # 根据你的项目架构，我们应该导入并使用 _schedule_deletion
+        from utils.message_manager import _schedule_deletion
         await _schedule_deletion(
             context=context,
             chat_id=message.chat_id,
             message_id=message.message_id,
-            delay=delete_delay
-            # task_type 参数被正确地移除了
+            delay=delete_delay,
+            task_type="bot_message"
         )
 
 command_factory.register_command(
