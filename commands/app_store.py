@@ -19,8 +19,9 @@ from utils.message_manager import (
     cancel_session_deletions,
     send_message_with_auto_delete,
     send_error,
-    send_help,
     send_success,
+    send_info,  # <--- 把它加进来！
+    send_help,
     delete_user_command,
     MessageType
 )
