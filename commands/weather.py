@@ -243,14 +243,14 @@ def format_minutely_rainfall(rainfall_data: dict) -> str:
             time_str = escape_markdown(datetime.datetime.fromisoformat(minute.get("fxTime").replace('Z', '+00:00')).strftime('%H:%M'), version=2)
             precip = escape_markdown(minute.get('precip', 'N/A'), version=2)
             
-            # 判断降水类型是雨还是雪
             precip_type_text = "雨" if minute.get("type") == "rain" else "雪"
             precip_type_icon = "🌧️" if minute.get("type") == "rain" else "❄️"
             
             # 构建单个时间点的信息块
             minute_info = (
                 f"\n⏰ {time_str}\n"
-                f"💧 预计降水: {precip}mm ({precip_type_icon} {precip_type_text})\n"
+                # ↓↓↓ 修正了这一行，为括号添加了转义符 \ ↓↓↓
+                f"💧 预计降水: {precip}mm \({precip_type_icon} {precip_type_text}\)\n"
                 "━━━━━━━━━━━━━━━━━━━━"
             )
             result.append(minute_info)
@@ -259,7 +259,6 @@ def format_minutely_rainfall(rainfall_data: dict) -> str:
             logging.error(f"格式化分钟级降水数据时出错: {e}")
             continue
 
-    # 将所有文本块连接成一个完整的字符串
     return "\n".join(result)
 
 def format_indices_data(indices_data: dict) -> str:
