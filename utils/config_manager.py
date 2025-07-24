@@ -23,6 +23,7 @@ class BotConfig:
     qweather_sub: str = ""
     qweather_private_key_b64: str = ""  # 我们从 .env 读取这个单行的
     qweather_private_key: str = ""      # 程序运行时使用这个组装好的
+    qweather_api_key: str = ""
     
     # Webhook 配置
     webhook_url: str = ""
@@ -287,6 +288,7 @@ class ConfigManager:
         self.config.qweather_kid = os.getenv("QWEATHER_KID", "")
         self.config.qweather_sub = os.getenv("QWEATHER_SUB", "")
         self.config.qweather_private_key_b64 = os.getenv("QWEATHER_PRIVATE_KEY_B64", "")
+        self.config.qweather_api_key = os.getenv("QWEATHER_API_KEY", "")
         # MySQL 配置
         self.config.db_host = os.getenv("DB_HOST", "localhost")
         self.config.db_port = int(os.getenv("DB_PORT", "3306"))
