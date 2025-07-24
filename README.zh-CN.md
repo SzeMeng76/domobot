@@ -240,6 +240,3 @@ docker-compose down
 ### 许可证
 
 该项目根据 MIT 许可证授权。
-
-```
-```
