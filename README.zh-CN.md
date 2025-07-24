@@ -56,27 +56,30 @@ docker-compose down
 
 #### 环境变量
 
-必需的环境变量：
+所有配置均通过 `.env` 文件管理。请从 `.env.example` 复制创建 `.env` 文件并填入你的配置。
 
-  - `BOT_TOKEN`: Telegram Bot Token
-  - `SUPER_ADMIN_ID`: 超级管理员 ID
-  - `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`: MySQL 数据库配置
-  - `REDIS_HOST`, `REDIS_PORT`: Redis 配置
-
-可选配置：
-
-  - `LOG_LEVEL`: 日志级别 (默认 INFO)
-  - `WEBHOOK_URL`: Webhook 模式 URL
-  - `LOAD_CUSTOM_SCRIPTS`: 启用自定义脚本
+| 变量                        | 描述                                                                    | 默认值/示例             |
+| --------------------------- | ----------------------------------------------------------------------- | ----------------------- |
+| `BOT_TOKEN`                 | **(必需)** 你的 Telegram Bot Token。                                    |                         |
+| `SUPER_ADMIN_ID`            | **(必需)** 主要机器人所有者的用户ID，拥有所有权限。                     |                         |
+| `DB_HOST`                   | 数据库的主机名。**必须为 `mysql`**。                                    | `mysql`                 |
+| `DB_PORT`                   | 数据库的内部端口。                                                      | `3306`                  |
+| `DB_NAME`                   | 数据库名称。必须与 `docker-compose.yml` 中的设置一致。                  | `bot`                   |
+| `DB_USER`                   | 数据库用户名。必须与 `docker-compose.yml` 中的设置一致。                | `bot`                   |
+| `DB_PASSWORD`               | **(必需)** 数据库密码。必须与 `docker-compose.yml` 中的设置一致。       | `your_mysql_password`   |
+| `REDIS_HOST`                | 缓存的主机名。**必须为 `redis`**。                                        | `redis`                 |
+| `REDIS_PORT`                | Redis 的内部端口。                                                      | `6379`                  |
+| `DELETE_USER_COMMANDS`      | 设置为 `true` 以启用用户命令的自动删除。                                  | `true`                  |
+| `USER_COMMAND_DELETE_DELAY` | 删除用户命令前的延迟（秒）。使用 `0` 表示立即删除。                 | `5`                     |
+| `LOG_LEVEL`                 | 设置日志级别 (`DEBUG`, `INFO`, `WARNING`, `ERROR`)。              | `INFO`                  |
+| `LOAD_CUSTOM_SCRIPTS`       | 设置为 `true` 以加载 `custom_scripts/` 目录下的脚本。                     | `false`                 |
 
 #### 配置文件
-
 配置通过 `utils/config_manager.py` 的 `BotConfig` 类管理，支持：
-
-  - 各服务缓存时长配置
-  - 消息自动删除配置
-  - 功能开关配置
-  - 性能参数配置
+-   各服务缓存时长配置
+-   消息自动删除配置
+-   功能开关配置
+-   性能参数配置
 
 <details>
 <summary><b>📖 点击展开查看架构、技术细节与最佳实践</b></summary>
