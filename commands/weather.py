@@ -91,15 +91,61 @@ def parse_date_param(param: str) -> tuple[str, Optional[datetime.date], Optional
     return 'invalid', None, None
 
 def format_daily_weather(daily_data: list[dict]) -> str:
-    lines = []
+    """
+    将每日天气数据格式化为详细的、类似代码1的树状结构。
+    使用 MarkdownV2 进行格式化。
+    """
+    result_lines = []
     for day in daily_data:
-        date_str = escape_markdown(datetime.datetime.strptime(day["fxDate"], "%Y-%m-%d").strftime("%m-%d"), version=2)
-        icon = WEATHER_ICONS.get(day["iconDay"], "❓")
-        text_day = escape_markdown(day.get('textDay', ''), version=2)
-        temp_min = escape_markdown(day.get('tempMin', ''), version=2)
-        temp_max = escape_markdown(day.get('tempMax', ''), version=2)
-        lines.append(f"*{date_str}*: {icon} {text_day}, {temp_min}\\~{temp_max}°C")
-    return "\n".join(lines)
+        try:
+            # --- 安全地获取并转义所有需要的数据 ---
+            date_obj = datetime.datetime.strptime(day.get("fxDate", ""), "%Y-%m-%d")
+            date_str = escape_markdown(date_obj.strftime("%m-%d"), version=2)
+            
+            moon_phase = escape_markdown(day.get('moonPhase', ''), version=2)
+            temp_min = escape_markdown(day.get('tempMin', 'N/A'), version=2)
+            temp_max = escape_markdown(day.get('tempMax', 'N/A'), version=2)
+            
+            day_icon = WEATHER_ICONS.get(day.get("iconDay"), "❓")
+            text_day = escape_markdown(day.get('textDay', 'N/A'), version=2)
+            wind_dir_day = escape_markdown(day.get('windDirDay', 'N/A'), version=2)
+            wind_scale_day = escape_markdown(day.get('windScaleDay', 'N/A'), version=2)
+            
+            night_icon = WEATHER_ICONS.get(day.get("iconNight"), "❓")
+            text_night = escape_markdown(day.get('textNight', 'N/A'), version=2)
+            wind_dir_night = escape_markdown(day.get('windDirNight', 'N/A'), version=2)
+            wind_scale_night = escape_markdown(day.get('windScaleNight', 'N/A'), version=2)
+            
+            humidity = escape_markdown(day.get('humidity', 'N/A'), version=2)
+            precip = escape_markdown(day.get('precip', 'N/A'), version=2)
+            sunrise = escape_markdown(day.get('sunrise', 'N/A'), version=2)
+            sunset = escape_markdown(day.get('sunset', 'N/A'), version=2)
+            vis = escape_markdown(day.get('vis', 'N/A'), version=2)
+            uv_index = escape_markdown(day.get('uvIndex', 'N/A'), version=2)
+
+            # --- 构建格式化字符串列表 ---
+            # 注意：MarkdownV2 需要对 | ~ 等特殊字符进行转义
+            daily_info = [
+                f"🗓 *{date_str} {moon_phase}*",
+                f"├─ 温度: {temp_min}\\~{temp_max}°C",
+                f"├─ 日间: {day_icon} {text_day}",
+                f"│   └─ {wind_dir_day} {wind_scale_day}级",
+                f"├─ 夜间: {night_icon} {text_night}",
+                f"│   └─ {wind_dir_night} {wind_scale_night}级",
+                f"└─ 详情:",
+                f"    💧 湿度: {humidity}% \\| ☔️ 降水: {precip}mm",
+                f"    🌅 日出: {sunrise} \\| 🌄 日落: {sunset}",
+                f"    👁️ 能见度: {vis}km \\| ☀️ UV指数: {uv_index}"
+            ]
+            
+            result_lines.append("\n".join(daily_info))
+
+        except Exception as e:
+            logging.error(f"格式化单日天气数据时出错: {e}")
+            continue
+            
+    # 每天的预报之间用两个换行符隔开，以获得更好的视觉间距
+    return "\n\n".join(result_lines)
 
 def format_hourly_weather(hourly_data: list[dict]) -> str:
     result = ["\n*逐小时预报*"]
