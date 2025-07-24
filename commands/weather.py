@@ -199,8 +199,40 @@ def format_hourly_weather(hourly_data: list[dict]) -> str:
     return "\n".join(result_lines)
 
 def format_minutely_rainfall(rainfall_data: dict) -> str:
+    """
+    将分钟级降水数据格式化为包含摘要和详细时间点的列表。
+    """
+    result = []
+
+    # 1. 添加摘要和主分隔线
     summary = escape_markdown(rainfall_data.get('summary', '暂无降水信息'), version=2)
-    return f"\n*分钟级降水*: {summary}"
+    result.append(f"📝 {summary}")
+    result.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+    # 2. 遍历每个时间点的数据并格式化
+    for minute in rainfall_data.get("minutely", []):
+        try:
+            time_str = escape_markdown(datetime.datetime.fromisoformat(minute.get("fxTime").replace('Z', '+00:00')).strftime('%H:%M'), version=2)
+            precip = escape_markdown(minute.get('precip', 'N/A'), version=2)
+            
+            # 判断降水类型是雨还是雪
+            precip_type_text = "雨" if minute.get("type") == "rain" else "雪"
+            precip_type_icon = "🌧️" if minute.get("type") == "rain" else "❄️"
+            
+            # 构建单个时间点的信息块
+            minute_info = (
+                f"\n⏰ {time_str}\n"
+                f"💧 预计降水: {precip}mm ({precip_type_icon} {precip_type_text})\n"
+                "━━━━━━━━━━━━━━━━━━━━"
+            )
+            result.append(minute_info)
+
+        except Exception as e:
+            logging.error(f"格式化分钟级降水数据时出错: {e}")
+            continue
+
+    # 将所有文本块连接成一个完整的字符串
+    return "\n".join(result)
 
 def format_indices_data(indices_data: dict) -> str:
     result = ["\n*生活指数*"]
@@ -316,7 +348,7 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         coords = f"{location_data['lon']},{location_data['lat']}"
         data = await _get_api_response("minutely/5m", {"location": coords})
         if data:
-            result_text = f"🌍 *{safe_location_name}*"
+            result_text = f"🌍 *{safe_location_name}* 未来2小时分钟级降水预报：\n"
             result_text += format_minutely_rainfall(data)
         else:
             result_text = f"❌ 获取 *{safe_location_name}* 的分钟级降水失败。"
