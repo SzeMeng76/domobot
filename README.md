@@ -69,8 +69,8 @@ All configurations are managed via the `.env` file. You must copy `.env.example`
   - `WEBHOOK_URL`: URL for running the bot in webhook mode.
   - `LOAD_CUSTOM_SCRIPTS`: Set to `true` to enable loading custom scripts.
 
-\<details\>
-\<summary\>\<b\>📖 Click to expand for Full Architecture, Technical Details, and Best Practices\</b\>\</summary\>
+<details>
+<summary><b>📖 Click to expand for Full Architecture, Technical Details, and Best Practices</b></summary>
 
 ### 🛠️ Architecture Overview
 
@@ -228,7 +228,7 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
   - Redis is used for caching and message deletion scheduling.
   - MySQL and Redis connection details must be configured in the `.env` file.
 
-\</details\>
+</details>
 
 ### 🤝 Contributing
 
