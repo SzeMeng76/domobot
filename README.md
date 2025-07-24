@@ -74,6 +74,15 @@ All configurations are managed via the `.env` file. You must copy `.env.example`
 
 The configuration is managed by the `BotConfig` class in `utils/config_manager.py`, which supports setting cache durations, auto-deletion toggles, feature flags, and performance parameters.
 
+#### Configuration File
+
+Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, which supports:
+
+  - Cache duration settings for various services
+  - Message auto-deletion settings
+  - Feature flag settings
+  - Performance parameter settings
+
 <details>
 <summary><b>📖 Click to expand for Full Architecture, Technical Details, and Best Practices</b></summary>
 
