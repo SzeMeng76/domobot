@@ -21,9 +21,9 @@ class BotConfig:
     # 新增和风天气配置
     qweather_kid: str = ""
     qweather_sub: str = ""
-    qweather_private_key: str = "-----BEGIN PRIVATE KEY-----
+    qweather_private_key: str = """-----BEGIN PRIVATE KEY-----
 MC4CAQAwBQYDK2VwBCIEIHZh2LJE5vhrMhRKbZMkwfFnEPlYaZZLmgk2V4nrFI+1
------END PRIVATE KEY-----"
+-----END PRIVATE KEY-----"""
     
     # Webhook 配置
     webhook_url: str = ""
