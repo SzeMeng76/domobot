@@ -65,7 +65,7 @@ All configurations are managed via the `.env` file. You must copy `.env.example`
 | --------------------------- | --------------------------------------------------------------------------- | ----------------------- |
 | `BOT_TOKEN`                 | **(Required)** Your Telegram Bot Token from @BotFather.                     |                         |
 | `SUPER_ADMIN_ID`            | **(Required)** The User ID of the main bot owner with all permissions.      |                         |
-| `CMC_API_KEY`               | **(Required)** Your API Key from CoinMarketCap for the crypto command.      |                         |
+| `CMC_API_KEY`               | **(Optional)** API Key from CoinMarketCap for the `/crypto` command.        |                         |
 | `QWEATHER_API_KEY`          | **(Optional)** API Key from HeFeng Weather for the `/tq` command.           |                         |
 | `DB_HOST`                   | Hostname for the database. **Must be `mysql`**.                             | `mysql`                 |
 | `DB_PORT`                   | The internal port for the database.                                         | `3306`                  |
