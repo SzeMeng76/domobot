@@ -144,28 +144,28 @@ def format_daily_weather(daily_data: list[dict]) -> str:
         try:
             # --- 安全地获取并转义所有需要的数据 ---
             date_obj = datetime.datetime.strptime(day.get("fxDate", ""), "%Y-%m-%d")
-            date_str = escape_markdown(date_obj.strftime("%m-%d"), version=2)
+            date_str = date_obj.strftime("%m-%d")
             
-            moon_phase = escape_markdown(day.get('moonPhase', ''), version=2)
+            moon_phase = day.get('moonPhase', '')
             temp_min = day.get('tempMin', 'N/A')
             temp_max = day.get('tempMax', 'N/A')
             
             day_icon = WEATHER_ICONS.get(day.get("iconDay"), "❓")
             text_day = day.get('textDay', 'N/A')
-            wind_dir_day = escape_markdown(day.get('windDirDay', 'N/A'), version=2)
-            wind_scale_day = escape_markdown(day.get('windScaleDay', 'N/A'), version=2)
+            wind_dir_day = day.get('windDirDay', 'N/A')
+            wind_scale_day = day.get('windScaleDay', 'N/A')
             
             night_icon = WEATHER_ICONS.get(day.get("iconNight"), "❓")
-            text_night = escape_markdown(day.get('textNight', 'N/A'), version=2)
-            wind_dir_night = escape_markdown(day.get('windDirNight', 'N/A'), version=2)
-            wind_scale_night = escape_markdown(day.get('windScaleNight', 'N/A'), version=2)
+            text_night = day.get('textNight', 'N/A')
+            wind_dir_night = day.get('windDirNight', 'N/A')
+            wind_scale_night = day.get('windScaleNight', 'N/A')
             
-            humidity = escape_markdown(day.get('humidity', 'N/A'), version=2)
-            precip = escape_markdown(day.get('precip', 'N/A'), version=2)
-            sunrise = escape_markdown(day.get('sunrise', 'N/A'), version=2)
-            sunset = escape_markdown(day.get('sunset', 'N/A'), version=2)
-            vis = escape_markdown(day.get('vis', 'N/A'), version=2)
-            uv_index = escape_markdown(day.get('uvIndex', 'N/A'), version=2)
+            humidity = day.get('humidity', 'N/A')
+            precip = day.get('precip', 'N/A')
+            sunrise = day.get('sunrise', 'N/A')
+            sunset = day.get('sunset', 'N/A')
+            vis = day.get('vis', 'N/A')
+            uv_index = day.get('uvIndex', 'N/A')
 
             # --- 构建格式化字符串列表 ---
             # 注意：MarkdownV2 需要对 | ~ 等特殊字符进行转义
@@ -303,9 +303,9 @@ def format_indices_data(indices_data: dict) -> str:
 
 def format_air_quality(air_data: dict) -> str:
     aqi_data = air_data.get('now', {})
-    aqi = escape_markdown(aqi_data.get('aqi', 'N/A'), version=2)
-    category = escape_markdown(aqi_data.get('category', 'N/A'), version=2)
-    primary = escape_markdown(aqi_data.get('primary', 'NA'), version=2)
+    aqi = aqi_data.get('aqi', 'N/A')
+    category = aqi_data.get('category', 'N/A')
+    primary = aqi_data.get('primary', 'NA')
     lines = [
         f"\n🌫️ *空气质量*：{aqi} ({category})",
         f"🔍 主要污染物：{primary}",
@@ -324,68 +324,6 @@ def format_realtime_weather(realtime_data: dict, location_name: str) -> str:
         obs_time_local = obs_time_utc.astimezone(datetime.timezone(datetime.timedelta(hours=8)))
         obs_time_str = obs_time_local.strftime('%Y-%m-%d %H:%M')
     except: pass
-    lines = [
-Minion
-Custom Gem
-
-Show thinking
-Poopaye! 你又发现了！我们太“小心”了，给香蕉包了两层皮！😂
-
-问题分析 (双重“消毒”)
-这个问题的原因是，我们做了两次“消毒”（Markdown转义）工作。
-
-第一次消毒：在 format_realtime_weather 和 format_air_quality 这些函数里，我们很勤快地把 - 变成了 \-，把 . 变成了 \.。
-
-第二次消毒：然后，在最后一步，我们又把这个已经很安全的文本，放进了 foldable_text_with_markdown_v2 这个“超级消毒机”里。这个消毒机又把 \ 变成了 \\，所以最后你就看到了那些多余的 \ 符号。
-
-解决方案：只包一层皮！
-解决方法很简单：我们只需要在一个地方进行消毒。既然 foldable_text_with_markdown_v2 会在最后统一处理，我们就把之前在各个 format_... 函数里加的所有 escape_markdown 都去掉！
-
-为了让你方便，我已经帮你把整个 weather.py 文件里所有多余的 escape_markdown 都删掉了。你只需要用下面的完整代码替换就行。
-
-Python
-
-import datetime
-import urllib.parse
-import logging
-from typing import Optional, Tuple, Dict, List
-
-from telegram import Update
-from telegram.ext import ContextTypes
-from telegram.constants import ParseMode
-# ✨ 我们不再需要手动转义，所以可以从 telegram.helpers 删掉 escape_markdown
-# from telegram.helpers import escape_markdown
-
-from utils.command_factory import command_factory
-from utils.permissions import Permission
-from utils.config_manager import get_config
-from utils.formatter import foldable_text_with_markdown_v2 # ✨ 我们只用这个
-from utils.message_manager import send_message_with_auto_delete, delete_user_command, _schedule_deletion
-
-# ... (文件前面所有内容，直到 format_daily_weather 函数，都保持不变) ...
-
-def format_daily_weather(daily_data: list[dict]) -> str:
-    lines = []
-    for day in daily_data:
-        date_str = datetime.datetime.strptime(day["fxDate"], "%Y-%m-%d").strftime("%m-%d")
-        icon = WEATHER_ICONS.get(day["iconDay"], "❓")
-        text_day = day.get('textDay', '')
-        temp_min = day.get('tempMin', '')
-        temp_max = day.get('tempMax', '')
-        # ✨ 去掉了 escape_markdown ✨
-        lines.append(f"*{date_str}*: {icon} {text_day}, {temp_min}~{temp_max}°C")
-    return "\n".join(lines)
-
-def format_realtime_weather(realtime_data: dict, location_name: str) -> str:
-    now = realtime_data.get("now", {})
-    icon = WEATHER_ICONS.get(now.get("icon"), "❓")
-    obs_time_str = "N/A"
-    try:
-        obs_time_utc = datetime.datetime.fromisoformat(now.get('obsTime', '').replace('Z', '+00:00'))
-        obs_time_local = obs_time_utc.astimezone(datetime.timezone(datetime.timedelta(hours=8)))
-        obs_time_str = obs_time_local.strftime('%Y-%m-%d %H:%M')
-    except: pass
-    # ✨ 所有 escape_markdown 都被移除了 ✨
     lines = [
         f"🌍 *{location_name}* 的实时天气：\n",
         f"🕐 观测时间：{obs_time_str}",
@@ -508,7 +446,7 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 result_text = f"\n❌ 获取 *{safe_location_name}* 的天气信息失败。"
 
     await message.edit_text(
-    foldable_text_v2(result_text), # <--- 在这里把它包起来！
+    foldable_text_with_markdown_v2(result_text), # <--- 在这里把它包起来！
     parse_mode=ParseMode.MARKDOWN_V2, 
     disable_web_page_preview=True
 )
