@@ -10,7 +10,7 @@ from utils.command_factory import command_factory
 from utils.permissions import Permission
 from utils.config_manager import get_config
 from utils.formatter import foldable_text_v2, foldable_text_with_markdown_v2
-from utils.message_manager import send_message_with_auto_delete, delete_user_command
+from utils.message_manager import send_message_with_auto_delete, delete_user_command, _schedule_deletion
 
 # 全局变量
 cache_manager = None
@@ -44,7 +44,6 @@ async def get_crypto_price(symbol: str, convert_currency: str) -> Optional[Dict]
         if response.status_code == 200:
             data = response.json()
             if data.get("status", {}).get("error_code") == 0 and data.get("data"):
-                # 使用你项目里正确的 save_cache 格式
                 await cache_manager.save_cache(cache_key, data, subdirectory="crypto")
                 return data
             else:
@@ -55,11 +54,11 @@ async def get_crypto_price(symbol: str, convert_currency: str) -> Optional[Dict]
         logging.error(f"CMC API 请求异常: {e}")
     return None
 
-def format_crypto_data(data: Dict, symbol: str, convert_currency: str) -> str:
+def format_crypto_data(data: Dict, symbol: str, amount: float, convert_currency: str) -> str:
     """格式化加密货币数据（更健壮的版本）"""
     symbol_upper = symbol.upper()
     
-    # --- ✨✨✨ 这是新的、更健壮的逻辑 ✨✨✨ ---
+    # --- 你的健壮逻辑，保持不变 ---
     data_map = data.get("data")
     if not data_map:
         return f"❌ API 响应中未找到 'data' 字段。"
@@ -90,10 +89,12 @@ def format_crypto_data(data: Dict, symbol: str, convert_currency: str) -> str:
     
     if quote_data and quote_data.get("price") is not None:
         price = quote_data.get("price")
-        decimals = 4 if price < 1 else 2
-        lines.append(f"`1 {escape_markdown(symbol_upper, version=2)}` = `{price:,.{decimals}f} {escape_markdown(convert_currency_upper, version=2)}`")
+        # ✨ 修改点：使用传入的 amount 计算总价
+        total = price * amount
+        decimals = 4 if total < 1 else 2
+        # ✨ 修改点：显示传入的 amount
+        lines.append(f"`{amount:g} {escape_markdown(symbol_upper, version=2)}` = `{total:,.{decimals}f} {escape_markdown(convert_currency_upper, version=2)}`")
 
-        # ✨✨✨ 修复：把变化率代码从 else 移到这里！ ✨✨✨
         change_24h = quote_data.get("percent_change_24h")
         change_7d = quote_data.get("percent_change_7d")
 
@@ -112,7 +113,6 @@ def format_crypto_data(data: Dict, symbol: str, convert_currency: str) -> str:
     return "\n".join(lines)
 
 
-#@command_factory.register_command("crypto", permission=Permission.USER, description="查询加密货币价格，例如 /crypto btc 或 /crypto eth usd")
 async def crypto_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message or not update.effective_chat: return
     await delete_user_command(context, update.effective_chat.id, update.message.message_id)
@@ -120,18 +120,32 @@ async def crypto_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not context.args:
         help_text = (
             "*加密货币查询帮助*\n\n"
-            "`/crypto [币种] [目标货币]`\n\n"
+            "`/crypto [币种] [数量] [目标货币]`\n\n"
             "**示例:**\n"
-            "• `/crypto btc` \\- 查询BTC对CNY的价格\n"
-            "• `/crypto eth usd` \\- 查询ETH对USD的价格"
+            "• `/crypto btc` \\- 查询1个BTC对CNY的价格\n"
+            "• `/crypto btc 0\\.5` \\- 查询0\\.5个BTC对CNY的价格\n"
+            "• `/crypto eth usd` \\- 查询1个ETH对USD的价格\n"
+            "• `/crypto eth 0\\.5 usd` \\- 查询0\\.5个ETH对USD的价格"
         )
         await send_message_with_auto_delete(context, update.effective_chat.id, help_text, parse_mode=ParseMode.MARKDOWN_V2)
         return
 
+    # ✨ 修改点：更智能的参数解析，支持数量
     symbol = context.args[0]
+    amount = 1.0
     convert_currency = "CNY"
+    
     if len(context.args) > 1:
-        convert_currency = context.args[1]
+        # 检查第二个参数是数量还是货币
+        try:
+            amount = float(context.args[1])
+            # 如果成功，第三个参数（如果存在）就是货币
+            if len(context.args) > 2:
+                convert_currency = context.args[2]
+        except ValueError:
+            # 如果失败，说明第二个参数是货币
+            amount = 1.0
+            convert_currency = context.args[1]
 
     safe_symbol = escape_markdown(symbol, version=2)
     message = await context.bot.send_message(chat_id=update.effective_chat.id, text=f"🔍 正在查询 *{safe_symbol}* 的价格\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
@@ -139,24 +153,23 @@ async def crypto_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     data = await get_crypto_price(symbol, convert_currency)
     
     if data:
-        result_text = format_crypto_data(data, symbol, convert_currency)
+        result_text = format_crypto_data(data, symbol, amount, convert_currency)
     else:
         result_text = f"❌ 无法获取 *{safe_symbol}* 的价格数据，请检查币种或目标货币名称是否正确。"
 
     await message.edit_text(
-    foldable_text_with_markdown_v2(result_text), # <--- 在这里把它包起来！
-    parse_mode=ParseMode.MARKDOWN_V2, 
-    disable_web_page_preview=True
-)
+        foldable_text_with_markdown_v2(result_text),
+        parse_mode=ParseMode.MARKDOWN_V2, 
+        disable_web_page_preview=True
+    )
 
-    # 调度删除机器人回复消息，使用配置的延迟时间
-    from utils.message_manager import _schedule_deletion
     config = get_config()
-    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
+    if config.auto_delete_delay > 0:
+        await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
 command_factory.register_command(
     "crypto",
     crypto_command,
     permission=Permission.USER,
-    description="查询加密货币价格，例如 /crypto btc 或 /crypto eth usd"
+    description="查询加密货币价格，例如 /crypto btc 0.5 usd"
 )
