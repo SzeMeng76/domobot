@@ -19,10 +19,6 @@ class BotConfig:
     """机器人配置类"""
 
     # 新增和风天气配置
-    qweather_kid: str = ""
-    qweather_sub: str = ""
-    qweather_private_key_b64: str = ""  # 我们从 .env 读取这个单行的
-    qweather_private_key: str = ""      # 程序运行时使用这个组装好的
     qweather_api_key: str = ""
     
     # Webhook 配置
@@ -165,16 +161,6 @@ class ConfigManager:
 
             # 加载环境变量
             self._load_from_environment()
-            # --- ✨✨✨ 3. 在这里加上自动组装钥匙的逻辑 ✨✨✨ ---
-            if self.config.qweather_private_key_b64:
-                key_content = self.config.qweather_private_key_b64
-                self.config.qweather_private_key = (
-                    "-----BEGIN PRIVATE KEY-----\n"
-                    f"{key_content}\n"
-                    "-----END PRIVATE KEY-----"
-                )
-                logger.info("✅ 成功从 QWEATHER_PRIVATE_KEY_B64 组装了完整的私钥。")
-            # --- 组装逻辑结束 ---
             # 验证配置
             self._validate_config()
 
@@ -289,9 +275,6 @@ class ConfigManager:
         self.config.redis_health_check_interval = int(os.getenv("REDIS_HEALTH_CHECK_INTERVAL", "30"))
         # --- ✨✨✨ 2. 在这里加上读取天气配置的代码 ✨✨✨ ---
         # 和风天气 API 配置
-        self.config.qweather_kid = os.getenv("QWEATHER_KID", "")
-        self.config.qweather_sub = os.getenv("QWEATHER_SUB", "")
-        self.config.qweather_private_key_b64 = os.getenv("QWEATHER_PRIVATE_KEY_B64", "")
         self.config.qweather_api_key = os.getenv("QWEATHER_API_KEY", "")
         # MySQL 配置
         self.config.db_host = os.getenv("DB_HOST", "localhost")
