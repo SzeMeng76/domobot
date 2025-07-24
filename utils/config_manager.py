@@ -18,6 +18,11 @@ logger = logging.getLogger(__name__)
 class BotConfig:
     """机器人配置类"""
 
+    # 新增和风天气配置
+    qweather_kid: str = ""
+    qweather_sub: str = ""
+    qweather_private_key: str = ""
+    
     # Webhook 配置
     webhook_url: str = ""
     webhook_listen: str = "0.0.0.0"
