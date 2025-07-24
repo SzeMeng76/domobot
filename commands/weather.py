@@ -163,14 +163,40 @@ def format_daily_weather(daily_data: list[dict]) -> str:
     return "\n\n".join(result_lines)
 
 def format_hourly_weather(hourly_data: list[dict]) -> str:
-    result = ["\n*逐小时预报*"]
+    """
+    将逐小时天气数据格式化为详细的、类似代码1的多行卡片结构。
+    """
+    result_lines = []
     for hour in hourly_data:
-        time_str = escape_markdown(datetime.datetime.fromisoformat(hour.get("fxTime").replace('Z', '+00:00')).strftime('%H:%M'), version=2)
-        icon = WEATHER_ICONS.get(hour.get("icon"), "❓")
-        temp = escape_markdown(hour.get('temp'), version=2)
-        text = escape_markdown(hour.get('text'), version=2)
-        result.append(f"`{time_str}`: {icon} {temp}°C, {text}")
-    return "\n".join(result)
+        try:
+            # --- 安全地获取并转义所有需要的数据 ---
+            time_str = escape_markdown(datetime.datetime.fromisoformat(hour.get("fxTime").replace('Z', '+00:00')).strftime('%H:%M'), version=2)
+            temp = escape_markdown(hour.get('temp', 'N/A'), version=2)
+            icon = WEATHER_ICONS.get(hour.get("icon"), "❓")
+            text = escape_markdown(hour.get('text', 'N/A'), version=2)
+            wind_dir = escape_markdown(hour.get('windDir', 'N/A'), version=2)
+            wind_scale = escape_markdown(hour.get('windScale', 'N/A'), version=2)
+            humidity = escape_markdown(hour.get('humidity', 'N/A'), version=2)
+            # 和风天气API返回的pop是字符串"0"~"100"，直接用即可
+            pop = escape_markdown(hour.get('pop', 'N/A'), version=2) 
+            
+            # --- 构建单个小时的格式化文本 ---
+            hourly_info = [
+                f"⏰ {time_str}",
+                f"🌡️ {temp}°C {icon} {text}",
+                f"💨 {wind_dir} {wind_scale}级",
+                f"💧 湿度: {humidity}% \\| ☔️ 降水概率: {pop}%",
+                "━━━━━━━━━━━━━━━━━━━━" # 分隔线
+            ]
+            result_lines.append("\n".join(hourly_info))
+
+        except Exception as e:
+            # 如果单条数据处理失败，记录日志并跳过，不影响其他数据显示
+            logging.error(f"格式化单小时天气数据时出错: {e}")
+            continue
+            
+    # 将每个小时的文本块用换行符连接起来
+    return "\n".join(result_lines)
 
 def format_minutely_rainfall(rainfall_data: dict) -> str:
     summary = escape_markdown(rainfall_data.get('summary', '暂无降水信息'), version=2)
@@ -281,7 +307,7 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         endpoint = "weather/24h" if hours <= 24 else "weather/72h" if hours <= 72 else "weather/168h"
         data = await _get_api_response(endpoint, {"location": location_id})
         if data and data.get("hourly"):
-            result_text = f"🌍 *{safe_location_name}* 未来 {hours} 小时天气："
+            result_text = f"🌍 *{safe_location_name}* 未来 {hours} 小时天气预报：\n\n"
             result_text += format_hourly_weather(data["hourly"][:hours])
         else:
             result_text = f"❌ 获取 *{safe_location_name}* 的逐小时天气失败。"
