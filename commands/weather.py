@@ -241,7 +241,7 @@ def format_minutely_rainfall(rainfall_data: dict) -> str:
     # 2. 遍历每个时间点的数据并格式化
     for minute in rainfall_data.get("minutely", []):
         try:
-            time_str = datetime.datetime.fromisoformat(minute.get("fxTime").replace('Z', '+00:00')).strftime('%H:%M'),
+            time_str = datetime.datetime.fromisoformat(minute.get("fxTime").replace('Z', '+00:00')).strftime('%H:%M')
             precip = minute.get('precip', 'N/A')
             
             precip_type_text = "雨" if minute.get("type") == "rain" else "雪"
