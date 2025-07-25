@@ -202,6 +202,7 @@ async def crypto_clean_cache_command(update: Update, context: ContextTypes.DEFAU
         logger.error(f"Error clearing Crypto cache: {e}")
         error_message = f"❌ 清理加密货币缓存时发生错误: {e!s}"
         await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        await delete_user_command(context, update.effective_chat.id, update.message.message_id)
         return
 
 command_factory.register_command(
