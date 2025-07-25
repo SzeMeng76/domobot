@@ -21,6 +21,7 @@ class BotConfig:
     # 新增和风天气配置
     qweather_api_key: str = ""
     cmc_api_key: str = ""
+    bin_api_key: str = ""
     
     # Webhook 配置
     webhook_url: str = ""
@@ -276,6 +277,7 @@ class ConfigManager:
         # 和风天气 API 配置
         self.config.qweather_api_key = os.getenv("QWEATHER_API_KEY", "")
         self.config.cmc_api_key = os.getenv("CMC_API_KEY", "")
+        self.config.bin_api_key = os.getenv("BIN_API_KEY", "")
         # MySQL 配置
         self.config.db_host = os.getenv("DB_HOST", "localhost")
         self.config.db_port = int(os.getenv("DB_PORT", "3306"))
