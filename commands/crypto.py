@@ -11,7 +11,7 @@ from utils.command_factory import command_factory
 from utils.permissions import Permission
 from utils.config_manager import get_config
 from utils.formatter import foldable_text_v2, foldable_text_with_markdown_v2
-from utils.message_manager import send_message_with_auto_delete, delete_user_command, _schedule_deletion
+from utils.message_manager import send_message_with_auto_delete, delete_user_command, _schedule_deletion, send_error, send_success, send_help
 
 # 全局变量
 cache_manager = None
