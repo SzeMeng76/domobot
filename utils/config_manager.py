@@ -13,7 +13,6 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
-@dataclass
 class BotConfig:
     """机器人配置类"""
 
