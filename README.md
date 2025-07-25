@@ -12,7 +12,7 @@ Read this in other languages: [简体中文](./README.zh-CN.md)
 </div>
 
 <p align="center">
-  <img src="https://github.com/SzeMeng76/domobot/actions/workflows/docker-publish.yml/badge.svg" alt="GitHub Actions Workflow Status" />
+  <img src="https://github.com/SzeMeng76/domobot/actions/workflows/docker-publish.yml/badge.svg" alt="GitHub Actions Workflow Status" />
 </p>
 
 ### 📝 Project Overview
@@ -22,6 +22,7 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 ### ✨ Features
 
 -   🪙 **Crypto Prices:** Look up real-time cryptocurrency prices with support for custom amounts and currency conversion, including 24h and 7d percentage changes.
+-   💳 **BIN Lookup:** Query credit card BIN (Bank Identification Number) information including card brand, type, issuing bank, and country details.
 -   🌦️ **Weather Forecasts:** Detailed, multi-format weather forecasts (real-time, daily, hourly, minutely precipitation, and lifestyle indices).
 -   💱 **Currency Conversion:** Real-time exchange rate lookups.
 -   🎮 **Steam Prices:** Multi-region price comparison for Steam games.
@@ -66,6 +67,7 @@ All configurations are managed via the `.env` file. You must copy `.env.example`
 | `BOT_TOKEN`                 | **(Required)** Your Telegram Bot Token from @BotFather.                     |                         |
 | `SUPER_ADMIN_ID`            | **(Required)** The User ID of the main bot owner with all permissions.      |                         |
 | `CMC_API_KEY`               | **(Optional)** API Key from CoinMarketCap for the `/crypto` command.        |                         |
+| `BIN_API_KEY`               | **(Optional)** API Key from DY.AX for the `/bin` command.                   |                         |
 | `QWEATHER_API_KEY`          | **(Optional)** API Key from HeFeng Weather for the `/tq` command.           |                         |
 | `DB_HOST`                   | Hostname for the database. **Must be `mysql`**.                             | `mysql`                 |
 | `DB_PORT`                   | The internal port for the database.                                         | `3306`                  |
@@ -89,6 +91,44 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 - Message auto-deletion settings
 - Feature flag settings
 - Performance parameter settings
+
+### 🎯 Command Examples
+
+#### BIN Lookup Commands
+```bash
+# Basic BIN query
+/bin 123456
+
+# Query longer BIN
+/bin 12345678
+
+# Admin cache management
+/bin_cleancache
+```
+
+#### Other Popular Commands
+```bash
+# Cryptocurrency prices
+/crypto btc
+/crypto eth 0.5 usd
+
+# Currency conversion
+/rate USD 100
+/rate EUR JPY 50
+
+# Weather forecasts
+/tq Beijing
+/tq Tokyo 7
+
+# Steam game prices
+/steam Cyberpunk
+/steam "Red Dead" US
+
+# Streaming service prices
+/nf
+/ds US
+/sp
+```
 
 <details>
 <summary><b>📖 Click to expand for Full Architecture, Technical Details, and Best Practices</b></summary>
@@ -220,6 +260,7 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 3.  **Permission Errors:** Ensure the user is in the whitelist or admin list.
 4.  **Commands Not Responding:** Check the log file for errors.
 5.  **Weather Command Fails:** Ensure the `QWEATHER_API_KEY` is set correctly in your `.env` file and that it's a valid key.
+6.  **BIN Lookup Fails:** Ensure the `BIN_API_KEY` is set correctly in your `.env` file and that you have sufficient API quota.
 
 #### Debugging Tips
 
@@ -250,7 +291,25 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 - Redis is used for caching and message deletion scheduling.
 - MySQL and Redis connection details must be configured in the `.env` file.
 
+### 🆕 Recent Updates
+
+#### BIN Lookup Feature (Latest)
+- **New `/bin` command** for credit card BIN information lookup
+- **Comprehensive data display** including card brand, type, issuing bank, and country
+- **Smart caching system** for improved performance
+- **Admin cache management** with `/bin_cleancache` command
+- **Chinese localization support** for card brands and countries
+- **Environment variable configuration** via `BIN_API_KEY`
+
 </details>
+
+### 📚 API Dependencies
+
+- **CoinMarketCap API:** For cryptocurrency price data
+- **DY.AX BIN API:** For credit card BIN information lookup
+- **HeFeng Weather API:** For weather forecast data
+- **Steam API:** For game pricing information
+- **Various streaming service APIs:** For subscription pricing
 
 ### 🤝 Contributing
 
