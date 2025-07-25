@@ -102,11 +102,14 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - `/add <用户ID>`: (或回复消息) 添加用户到白名单。
 - `/addgroup`: (在群组中) 添加当前群组到白名单。
 
-
 🧹 *缓存管理*
 - `/rate_cleancache`: 清理汇率缓存。
 - `/crypto_cleancache`: 清理加密货币缓存。
 - `/bin_cleancache`: 清理BIN查询缓存。
+- `/tq_cleancache`: 清理天气查询缓存。
+- `/tq_cleanlocation`: 清理天气位置缓存。
+- `/tq_cleanforecast`: 清理天气预报缓存。
+- `/tq_cleanrealtime`: 清理实时天气缓存。
 - `/nf_cleancache`: 清理Netflix缓存。
 - `/ds_cleancache`: 清理Disney+缓存。
 - `/sp_cleancache`: 清理Spotify缓存。
