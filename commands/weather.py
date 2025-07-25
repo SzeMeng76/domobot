@@ -461,11 +461,16 @@ async def tq_clean_cache_command(update: Update, context: ContextTypes.DEFAULT_T
     if not update.message or not update.effective_chat:
         return
     try:
-        # 清理天气相关的所有缓存
-        await context.bot_data["cache_manager"].clear_cache(
-            subdirectory="weather", 
-            key_prefix="weather_location_"
-        )
+        # 清理所有天气相关缓存
+        prefixes = [
+            "weather_location_", "weather_realtime_", "weather_forecast_",
+            "weather_hourly_", "weather_air_", "weather_indices_", "weather_minutely_"
+        ]
+        for prefix in prefixes:
+            await context.bot_data["cache_manager"].clear_cache(
+                subdirectory="weather", 
+                key_prefix=prefix
+            )
         success_message = "✅ 天气查询缓存已清理。"
         await send_success(context, update.effective_chat.id, foldable_text_v2(success_message), parse_mode="MarkdownV2")
         await delete_user_command(context, update.effective_chat.id, update.message.message_id)
@@ -476,6 +481,65 @@ async def tq_clean_cache_command(update: Update, context: ContextTypes.DEFAULT_T
         await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
         await delete_user_command(context, update.effective_chat.id, update.message.message_id)
         return
+
+# 新增专门的分类清理命令
+async def tq_clean_location_cache_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """清理天气位置缓存"""
+    if not update.message or not update.effective_chat:
+        return
+    try:
+        await context.bot_data["cache_manager"].clear_cache(
+            subdirectory="weather", 
+            key_prefix="weather_location_"
+        )
+        success_message = "✅ 天气位置缓存已清理。"
+        await send_success(context, update.effective_chat.id, foldable_text_v2(success_message), parse_mode="MarkdownV2")
+        await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    except Exception as e:
+        logging.error(f"Error clearing weather location cache: {e}")
+        error_message = f"❌ 清理天气位置缓存时发生错误: {e!s}"
+        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+
+async def tq_clean_forecast_cache_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """清理天气预报缓存"""
+    if not update.message or not update.effective_chat:
+        return
+    try:
+        prefixes = ["weather_forecast_", "weather_hourly_"]
+        for prefix in prefixes:
+            await context.bot_data["cache_manager"].clear_cache(
+                subdirectory="weather", 
+                key_prefix=prefix
+            )
+        success_message = "✅ 天气预报缓存已清理。"
+        await send_success(context, update.effective_chat.id, foldable_text_v2(success_message), parse_mode="MarkdownV2")
+        await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    except Exception as e:
+        logging.error(f"Error clearing weather forecast cache: {e}")
+        error_message = f"❌ 清理天气预报缓存时发生错误: {e!s}"
+        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+
+async def tq_clean_realtime_cache_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """清理实时天气缓存"""
+    if not update.message or not update.effective_chat:
+        return
+    try:
+        prefixes = ["weather_realtime_", "weather_air_", "weather_minutely_"]
+        for prefix in prefixes:
+            await context.bot_data["cache_manager"].clear_cache(
+                subdirectory="weather", 
+                key_prefix=prefix
+            )
+        success_message = "✅ 实时天气缓存已清理。"
+        await send_success(context, update.effective_chat.id, foldable_text_v2(success_message), parse_mode="MarkdownV2")
+        await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    except Exception as e:
+        logging.error(f"Error clearing weather realtime cache: {e}")
+        error_message = f"❌ 清理实时天气缓存时发生错误: {e!s}"
+        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        await delete_user_command(context, update.effective_chat.id, update.message.message_id)
         
 command_factory.register_command(
     "tq",
@@ -488,4 +552,25 @@ command_factory.register_command(
     tq_clean_cache_command, 
     permission=Permission.ADMIN, 
     description="清理天气查询缓存"
+)
+
+command_factory.register_command(
+    "tq_cleanlocation", 
+    tq_clean_location_cache_command, 
+    permission=Permission.ADMIN, 
+    description="清理天气位置缓存"
+)
+
+command_factory.register_command(
+    "tq_cleanforecast", 
+    tq_clean_forecast_cache_command, 
+    permission=Permission.ADMIN, 
+    description="清理天气预报缓存"
+)
+
+command_factory.register_command(
+    "tq_cleanrealtime", 
+    tq_clean_realtime_cache_command, 
+    permission=Permission.ADMIN, 
+    description="清理实时天气缓存"
 )
