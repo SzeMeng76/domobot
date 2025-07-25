@@ -203,6 +203,7 @@ class ConfigManager:
         self.config.google_play_search_cache_duration = int(os.getenv("GOOGLE_PLAY_SEARCH_CACHE_DURATION", "43200"))
         self.config.steam_cache_duration = int(os.getenv("STEAM_CACHE_DURATION", "259200"))
         self.config.netflix_cache_duration = int(os.getenv("NETFLIX_CACHE_DURATION", "86400"))
+        self.config.crypto_cache_duration = int(os.getenv("CRYPTO_CACHE_DURATION", "60"))
 
         # 定时清理配置
         self.config.spotify_weekly_cleanup = os.getenv("SPOTIFY_WEEKLY_CLEANUP", "False").lower() == "true"
