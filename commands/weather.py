@@ -12,7 +12,7 @@ from utils.command_factory import command_factory
 from utils.permissions import Permission
 from utils.config_manager import get_config
 from utils.formatter import foldable_text_v2, foldable_text_with_markdown_v2
-from utils.message_manager import send_message_with_auto_delete, delete_user_command
+from utils.message_manager import send_message_with_auto_delete, delete_user_command, send_error, send_success
 
 # 全局变量
 cache_manager = None
@@ -456,9 +456,36 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
+async def tq_clean_cache_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """处理 /tq_cleancache 命令以清理天气查询相关缓存"""
+    if not update.message or not update.effective_chat:
+        return
+    try:
+        # 清理天气相关的所有缓存
+        await context.bot_data["cache_manager"].clear_cache(
+            subdirectory="weather", 
+            key_prefix="weather_location_"
+        )
+        success_message = "✅ 天气查询缓存已清理。"
+        await send_success(context, update.effective_chat.id, foldable_text_v2(success_message), parse_mode="MarkdownV2")
+        await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+        return
+    except Exception as e:
+        logging.error(f"Error clearing weather cache: {e}")
+        error_message = f"❌ 清理天气缓存时发生错误: {e!s}"
+        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+        return
+        
 command_factory.register_command(
     "tq",
     weather_command,
     permission=Permission.USER,
     description="查询天气预报，支持多日、小时、指数等"
+)
+command_factory.register_command(
+    "tq_cleancache", 
+    tq_clean_cache_command, 
+    permission=Permission.ADMIN, 
+    description="清理天气查询缓存"
 )
