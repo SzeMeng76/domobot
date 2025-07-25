@@ -39,6 +39,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - `/crypto <币种> <数量>`: 查询指定数量的加密货币价格。
 - `/crypto <币种> <数量> <货币>`: 查询对指定货币的价格。
 
+💳 *信用卡BIN查询*
+- `/bin <BIN号码>`: 查询信用卡BIN信息 (卡头6\\-8位数字)。
+- 支持查询卡片品牌、类型、发卡银行、国家等信息。
+- 例如: `/bin 123456`, `/bin 12345678`。
+
 🌦️ *天气查询*
 - `/tq <城市>`: 查询城市的实时天气和空气质量。
 - `/tq <城市> <天数>`: 查询未来多日天气 (最多7天)。
@@ -71,9 +76,17 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - 支持数学表达式计算，如 `/rate USD 1+1*2`。
 
 ⚡ *快速开始:*
+- `/rate USD 100`: 查询100美元兑人民币汇率。
+- `/crypto btc`: 查询比特币价格。
+- `/bin 123456`: 查询信用卡BIN信息。
+- `/tq 北京`: 查询北京天气。
+- `/steam 赛博朋克`: 查询《赛博朋克2077》价格。
 - `/nf`: 查看Netflix全球价格排名。
-- `/steam 赛博朋克`: 查询《赛博朋克2077》的价格。
-- `/rate`: 查看汇率转换的详细帮助。
+- `/ds`: 查看Disney\\+全球价格排名。
+- `/sp`: 查看Spotify全球价格排名。
+- `/app 微信`: 搜索App Store应用。
+- `/gp WeChat`: 搜索Google Play应用。
+- `/aps iCloud`: 查询iCloud全球价格。
 - `/id`: 获取用户或群组的ID信息。
 
 🔄 *消息管理:*
@@ -92,6 +105,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 🧹 *缓存管理*
 - `/rate_cleancache`: 清理汇率缓存。
+- `/crypto_cleancache`: 清理加密货币缓存。
+- `/bin_cleancache`: 清理BIN查询缓存。
 - `/nf_cleancache`: 清理Netflix缓存。
 - `/ds_cleancache`: 清理Disney+缓存。
 - `/sp_cleancache`: 清理Spotify缓存。
@@ -152,10 +167,14 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 🎯 *这个机器人可以帮你:*
 - 💱 查询实时汇率并进行货币转换
+- 🪙 查询加密货币价格和市场数据
+- 💳 查询信用卡BIN信息和发卡银行
+- 🌦️ 查询全球城市天气和空气质量
 - 🎮 查询Steam游戏在全球各国的价格
-- 📺 查询Netflix、Disney+等流媒体订阅价格
+- 📺 查询Netflix、Disney+、Spotify等流媒体订阅价格
 - 📱 查询App Store和Google Play应用价格
 - 🍎 查询Apple各项服务的全球定价
+- 🆔 获取用户和群组的ID信息
 
 💡 *快速开始:*
 发送 `/help` 查看详细使用指南
@@ -170,6 +189,10 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 ✅ 实时汇率自动转换为人民币
 ✅ 智能缓存，查询速度快
 ✅ 支持中文国家名称输入
+✅ 信用卡BIN信息详细查询
+✅ 加密货币实时价格和涨跌幅
+✅ 多日天气预报和空气质量
+✅ 数学表达式计算支持
 
 开始探索吧! 🎉"""
 
