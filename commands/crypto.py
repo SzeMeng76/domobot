@@ -188,9 +188,27 @@ async def crypto_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if config.auto_delete_delay > 0:
         await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
+async def crypto_clean_cache_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handles the /crypto_cleancache command to clear Apple Services related caches."""
+    if not update.message or not update.effective_chat:
+        return
+    try:
+        context.bot_data["cache_manager"].clear_cache(subdirectory="crypto")
+        success_message = "✅ 加密货币价格缓存已清理。"
+        await send_success(context, update.effective_chat.id, foldable_text_v2(success_message), parse_mode="MarkdownV2")
+        return
+    except Exception as e:
+        logger.error(f"Error clearing Crypto cache: {e}")
+        error_message = f"❌ 清理加密货币缓存时发生错误: {e!s}"
+        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        return
+
 command_factory.register_command(
     "crypto",
     crypto_command,
     permission=Permission.USER,
     description="查询加密货币价格，例如 /crypto btc 0.5 usd"
+)
+command_factory.register_command(
+    "crypto_cleancache", crypto_clean_cache_command, permission=Permission.ADMIN, description="清理加密货币缓存"
 )
