@@ -25,6 +25,7 @@ def set_dependencies(c_manager, h_client):
 # BIN查询API配置
 BIN_API_URL = "https://api.dy.ax/v1/finance/bin"
 COUNTRY_DATA_URL = "https://raw.githubusercontent.com/umpirsky/country-list/master/data/zh_CN/country.json"
+CURRENCY_DATA_URL = "https://raw.githubusercontent.com/umpirsky/currency-list/refs/heads/master/data/zh_CN/currency.json"
 
 class BINMapping:
     """映射类，用于转换API返回的英文值为中文显示"""
@@ -59,6 +60,26 @@ async def get_country_data() -> Dict:
             logging.warning(f"获取国家数据失败: HTTP {response.status_code}")
     except Exception as e:
         logging.error(f"获取国家数据异常: {e}")
+    return {}
+
+async def get_currency_data() -> Dict:
+    """获取货币数据映射，并缓存结果"""
+    cache_key = "currency_data"
+    cached_data = await cache_manager.load_cache(cache_key, subdirectory="bin")
+    if cached_data:
+        logging.info("使用缓存的货币数据")
+        return cached_data
+
+    try:
+        response = await httpx_client.get(CURRENCY_DATA_URL, timeout=20)
+        if response.status_code == 200:
+            data = response.json()
+            await cache_manager.save_cache(cache_key, data, subdirectory="bin")
+            return data
+        else:
+            logging.warning(f"获取货币数据失败: HTTP {response.status_code}")
+    except Exception as e:
+        logging.error(f"获取货币数据异常: {e}")
     return {}
 
 async def get_bin_info(bin_number: str) -> Optional[Dict]:
@@ -98,7 +119,7 @@ async def get_bin_info(bin_number: str) -> Optional[Dict]:
         logging.error(f"BIN API 请求异常: {e}")
     return None
 
-def format_bin_data(bin_number: str, data: Dict, country_data: Dict) -> str:
+def format_bin_data(bin_number: str, data: Dict, country_data: Dict, currency_data: Dict) -> str:
     """格式化BIN数据"""
     bin_data = data.get("data", {})
     safe_bin = escape_markdown(bin_number, version=2)
@@ -137,6 +158,15 @@ def format_bin_data(bin_number: str, data: Dict, country_data: Dict) -> str:
     if country:
         safe_country = escape_markdown(country, version=2)
         lines.append(f"🗺 国家: `{safe_country}`")
+    
+    # 货币信息
+    currency_code = bin_data.get("currency_code", "")
+    if currency_code:
+        currency_name = currency_code  # 默认显示货币代码
+        if currency_code in currency_data:
+            currency_name = currency_data[currency_code]
+        safe_currency = escape_markdown(currency_name, version=2)
+        lines.append(f"💸 货币: `{safe_currency}`")
     
     # 发卡银行
     issuer = bin_data.get("issuer", "")
@@ -201,12 +231,13 @@ async def bin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         parse_mode=ParseMode.MARKDOWN_V2
     )
 
-    # 获取BIN信息和国家数据
+    # 获取BIN信息、国家数据和货币数据
     bin_data = await get_bin_info(bin_number)
     country_data = await get_country_data()
+    currency_data = await get_currency_data()
     
     if bin_data:
-        result_text = format_bin_data(bin_number, bin_data, country_data)
+        result_text = format_bin_data(bin_number, bin_data, country_data, currency_data)
     else:
         config = get_config()
         if not config.bin_api_key:
@@ -231,6 +262,7 @@ async def bin_clean_cache_command(update: Update, context: ContextTypes.DEFAULT_
     try:
         await context.bot_data["cache_manager"].clear_cache(subdirectory="bin", key_prefix="bin_")
         await context.bot_data["cache_manager"].clear_cache(subdirectory="bin", key_prefix="country_")
+        await context.bot_data["cache_manager"].clear_cache(subdirectory="bin", key_prefix="currency_")
         success_message = "✅ BIN查询缓存已清理。"
         await send_success(context, update.effective_chat.id, foldable_text_v2(success_message), parse_mode="MarkdownV2")
         await delete_user_command(context, update.effective_chat.id, update.message.message_id)
