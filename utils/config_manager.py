@@ -53,6 +53,7 @@ class BotConfig:
     google_play_search_cache_duration: int = 43200  # 12小时
     steam_cache_duration: int = 259200  # 3天
     netflix_cache_duration: int = 86400  # 24小时
+    crypto_cache_duration: int = 60  # 1分钟
     spotify_cache_duration: int = 86400 * 8  # 8天，配合周日清理
     disney_cache_duration: int = 86400 * 8  # 8天，配合周日清理
 
