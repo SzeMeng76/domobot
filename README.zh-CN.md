@@ -12,7 +12,7 @@
 </div>
 
 <p align="center">
-  <img src="https://github.com/SzeMeng76/domobot/actions/workflows/docker-publish.yml/badge.svg" alt="GitHub Actions Workflow Status" />
+  <img src="https://github.com/SzeMeng76/domobot/actions/workflows/docker-publish.yml/badge.svg" alt="GitHub Actions Workflow Status" />
 </p>
 
 ### 📝 项目概览
@@ -22,6 +22,7 @@
 ### ✨ 功能特性
 
 -   🪙 **加密货币价格:** 查询实时加密货币价格，支持自定义数量和货币转换，并显示 24 小时和 7 天的价格变化率。
+-   💳 **BIN查询:** 查询信用卡BIN（银行识别号）信息，包括卡片品牌、类型、发卡银行和国家等详细信息。
 -   🌦️ **天气预报:** 提供详细、多格式的天气预报（实时、多日、每小时、分钟级降水和生活指数）。
 -   💱 **汇率转换:** 实时汇率查询。
 -   🎮 **Steam 价格:** Steam 游戏多区域价格对比。
@@ -66,6 +67,7 @@ docker-compose down
 | `BOT_TOKEN`                 | **（必需）** 来自 @BotFather 的 Telegram Bot Token。                         |                         |
 | `SUPER_ADMIN_ID`            | **（必需）** 拥有所有权限的机器人主要所有者的用户ID。                       |                         |
 | `CMC_API_KEY`               | **（可选）** CoinMarketCap的API Key，用于启用 `/crypto` 命令。                  |                         |
+| `BIN_API_KEY`               | **（可选）** DY.AX的API Key，用于启用 `/bin` 命令。                         |                         |
 | `QWEATHER_API_KEY`          | **（可选）** 和风天气的API Key，用于启用 `/tq` 命令。                       |                         |
 | `DB_HOST`                   | 数据库的主机名。**必须是 `mysql`**。                                        | `mysql`                 |
 | `DB_PORT`                   | 数据库的内部端口。                                                          | `3306`                  |
@@ -89,6 +91,51 @@ docker-compose down
 - 消息自动删除设置
 - 功能开关设置
 - 性能参数设置
+
+### 🎯 命令示例
+
+#### BIN查询命令
+```bash
+# 基础BIN查询
+/bin 123456
+
+# 查询较长的BIN
+/bin 12345678
+
+# 管理员缓存管理
+/bin_cleancache
+```
+
+#### 其他热门命令
+```bash
+# 加密货币价格
+/crypto btc
+/crypto eth 0.5 usd
+
+# 汇率转换
+/rate USD 100
+/rate EUR JPY 50
+
+# 天气预报
+/tq 北京
+/tq 东京 7
+
+# Steam游戏价格
+/steam 赛博朋克
+/steam "荒野大镖客" US
+
+# 流媒体服务价格
+/nf
+/ds US
+/sp
+
+# 应用商店
+/app 微信
+/gp WeChat
+
+# Apple服务
+/aps iCloud
+```
 
 <details>
 <summary><b>📖 点击展开以查看完整的架构、技术细节和最佳实践</b></summary>
@@ -210,6 +257,7 @@ docker-compose down
 3.  **权限错误:** 确保用户在白名单或管理员列表中。
 4.  **命令无响应:** 检查日志文件以查找错误。
 5.  **天气命令失败:** 请确保在 `.env` 文件中正确设置了 `QWEATHER_API_KEY`，并且该密钥是有效的。
+6.  **BIN查询失败:** 请确保在 `.env` 文件中正确设置了 `BIN_API_KEY`，并且你的API配额充足。
 
 #### 调试技巧
 1.  设置 `LOG_LEVEL=DEBUG` 以获取详细日志。
@@ -236,7 +284,25 @@ docker-compose down
 - Redis用于缓存和消息删除调度。
 - MySQL和Redis的连接详情必须在 `.env` 文件中配置。
 
+### 🆕 最新更新
+
+#### BIN查询功能 (最新版本)
+- **新增 `/bin` 命令** 用于信用卡BIN信息查询
+- **全面的数据展示** 包括卡片品牌、类型、发卡银行和国家
+- **智能缓存系统** 提升性能表现
+- **管理员缓存管理** 通过 `/bin_cleancache` 命令
+- **中文本地化支持** 卡片品牌和国家名称中文显示
+- **环境变量配置** 通过 `BIN_API_KEY` 进行配置
+
 </details>
+
+### 📚 API依赖
+
+- **CoinMarketCap API:** 用于加密货币价格数据
+- **DY.AX BIN API:** 用于信用卡BIN信息查询
+- **和风天气API:** 用于天气预报数据
+- **Steam API:** 用于游戏价格信息
+- **各种流媒体服务API:** 用于订阅价格查询
 
 ### 🤝 贡献
 
