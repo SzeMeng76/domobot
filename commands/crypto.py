@@ -193,7 +193,8 @@ async def crypto_clean_cache_command(update: Update, context: ContextTypes.DEFAU
     if not update.message or not update.effective_chat:
         return
     try:
-        context.bot_data["cache_manager"].clear_cache(subdirectory="crypto")
+        context.bot_data["cache_manager"].clear_cache(subdirectory="crypto", 
+        key_prefix="crypto_")
         success_message = "✅ 加密货币价格缓存已清理。"
         await send_success(context, update.effective_chat.id, foldable_text_v2(success_message), parse_mode="MarkdownV2")
         return
