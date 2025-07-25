@@ -8,6 +8,7 @@ on:
       - 'v*.*.*'
     branches:
       - 'mydev' # 增加了这一行
+      - 'main' # 增加了这一行      
   workflow_dispatch:
 
 # 定义一个 job
