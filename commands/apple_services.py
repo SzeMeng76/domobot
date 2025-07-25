@@ -502,11 +502,13 @@ async def apple_services_clean_cache_command(update: Update, context: ContextTyp
         context.bot_data["cache_manager"].clear_cache(subdirectory="apple_services")
         success_message = "✅ Apple 服务价格缓存已清理。"
         await send_success(context, update.effective_chat.id, foldable_text_v2(success_message), parse_mode="MarkdownV2")
+        await delete_user_command(context, update.effective_chat.id, update.message.message_id)
         return
     except Exception as e:
         logger.error(f"Error clearing Apple Services cache: {e}")
         error_message = f"❌ 清理Apple Services缓存时发生错误: {e!s}"
         await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        await delete_user_command(context, update.effective_chat.id, update.message.message_id)
         return
 
 
