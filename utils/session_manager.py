@@ -6,21 +6,20 @@
 import logging
 import threading
 import time
-from dataclasses import dataclass
 from typing import Any
 
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
 class SessionData:
     """会话数据"""
 
-    data: dict[str, Any]
-    created_at: float
-    last_accessed: float
-    session_type: str = "default"
+    def __init__(self, data: dict[str, Any], created_at: float, last_accessed: float, session_type: str = "default"):
+        self.data = data
+        self.created_at = created_at
+        self.last_accessed = last_accessed
+        self.session_type = session_type
 
 
 class SessionManager:
