@@ -163,31 +163,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
 
     user = update.effective_user
-    user_permission = await get_user_permission(update, context)
-    
-    # 检查用户是否在白名单中
-    # 正确的权限检查：只有当 user_permission 为 None 时才表示没有权限
-    if user_permission is None:
-        # 非白名单用户的错误提示
-        error_text = f"""❌ *访问被拒绝*
 
-你好 {user.first_name}！
-
-🔒 *此机器人暂时不对外公开使用。*
-
-💡 *这是一个私人价格查询机器人，目前仅限授权用户使用。*
-
-📝 *如果你需要类似功能，可以考虑:*
-- 使用其他公开的汇率查询机器人
-- 访问相关官方网站查询价格信息
-
-感谢你的理解！🙏"""
-        
-        await send_help(context, update.message.chat_id, foldable_text_with_markdown_v2(error_text), parse_mode="MarkdownV2")
-        await delete_user_command(context, update.message.chat_id, update.message.message_id)
-        return
-
-    # 原来的欢迎消息（白名单用户）
     welcome_text = f"""👋 *欢迎使用多功能价格查询机器人!*
 
 你好 {user.first_name}!
@@ -231,7 +207,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 command_factory.register_command(
     "start",
     start_command,
-    permission=Permission.NONE,  # 使用新的 Permission.NONE
+    permission=Permission.USER,
     description="开始使用机器人",
     use_retry=False,
     use_rate_limit=False,
