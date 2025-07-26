@@ -88,23 +88,23 @@ def require_permission(permission: Permission):
                     }
 
                     # 使用自动删除功能发送权限错误消息
-                    from utils.message_manager import send_and_auto_delete
+                    from utils.message_manager import send_error, delete_user_command
 
                     if update.message:
-                        await send_and_auto_delete(
+                        await send_error(
                             context=context,
                             chat_id=update.effective_chat.id,
-                            text=f"❌ **权限不足**\n\n{permission_msg[permission]}",
-                            delay=config.auto_delete_delay,
-                            command_message_id=update.message.message_id if config.delete_user_commands else None,
+                            text=f"**访问被拒绝**\n\n{error_message}",
                             parse_mode="Markdown",
                         )
+                        # 删除用户的命令消息
+                        if config.delete_user_commands:
+                            await delete_user_command(context, update.effective_chat.id, update.message.message_id)
                     elif update.callback_query and update.callback_query.message:
-                        await send_and_auto_delete(
+                        await send_error(
                             context=context,
                             chat_id=update.effective_chat.id,
-                            text=f"❌ **权限不足**\n\n{permission_msg[permission]}",
-                            delay=config.auto_delete_delay,
+                            text=f"**访问被拒绝**\n\n{error_message}",
                             parse_mode="Markdown",
                         )
                     return
