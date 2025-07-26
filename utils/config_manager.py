@@ -13,6 +13,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+@dataclass
 class BotConfig:
     """机器人配置类"""
 
@@ -87,6 +88,7 @@ class BotConfig:
             "apple_services_enabled": True,
             "rate_conversion_enabled": True,
         }
+    )
 
         # UI 配置
         self.folding_threshold = 15  # 消息折叠阈值（行数），超过此行数的消息将被折叠显示
