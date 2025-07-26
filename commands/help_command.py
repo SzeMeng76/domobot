@@ -173,14 +173,13 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 你好 {user.first_name}！
 
-🚫 *你当前没有使用此机器人的权限。*
+🔒 *此机器人暂时不对外公开使用。*
 
-📞 *如需申请使用权限，请联系机器人管理员。*
+💡 *这是一个私人价格查询机器人，目前仅限授权用户使用。*
 
-💡 *提供以下信息可以加快审核:*
-- 用户ID: `{user.id}`
-- 用户名: @{user.username if user.username else '无'}
-- 姓名: {user.full_name}
+📝 *如果你需要类似功能，可以考虑:*
+- 使用其他公开的汇率查询机器人
+- 访问相关官方网站查询价格信息
 
 感谢你的理解！🙏"""
         
