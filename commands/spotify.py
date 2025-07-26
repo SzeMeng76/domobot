@@ -501,10 +501,12 @@ class SpotifyPriceBot(PriceQueryService):
 
         # Plan name translation mapping
         plan_names = {
-            "Premium Individual": "个人版",
-            "Premium Student": "学生版",
-            "Premium Duo": "双人版",
-            "Premium Family": "家庭版",
+            "Premium Individual": "个人版 (Premium Individual)",
+            "Premium Student": "学生版 (Premium Student)",
+            "Premium Duo": "双人版 (Premium Duo)",
+            "Premium Family": "家庭版 (Premium Family)",
+            "Premium Basic": "基础版 (Premium Basic)",
+            "Premium Lite": "轻量版 (Premium Lite)",
         }
 
         for i, plan in enumerate(plans):

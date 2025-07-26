@@ -82,7 +82,7 @@ def format_crypto_data(data: Dict, symbol: str, amount: float, convert_currency:
         return f"❌ 解析到的 `{escape_markdown(symbol_upper, version=2)}` 数据不是有效格式。"
     # --- 逻辑结束 ---
 
-    name = escape_markdown(coin_data.get("name", ""), version=2)
+    name = coin_data.get("name", "")  # 移除 escape_markdown
     lines = [f"🪙 *{escape_markdown(symbol_upper, version=2)} ({name}) 价格*"]
 
     # ✨ 新增：我们需要一个变量来存储更新时间
