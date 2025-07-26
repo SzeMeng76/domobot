@@ -80,12 +80,15 @@ def require_permission(permission: Permission):
                 elif chat_type == "private":
                     has_permission = await user_manager.is_whitelisted(user_id)
 
+
                 if not has_permission:
-                    permission_msg = {
-                        Permission.SUPER_ADMIN: "此命令仅限超级管理员使用。",
-                        Permission.ADMIN: "此命令仅限管理员使用。",
-                        Permission.USER: "你没有使用此机器人的权限。\n请联系管理员申请权限。",
-                    }
+                    # 🔧 根据权限级别给出不同的错误提示
+                    if permission == Permission.SUPER_ADMIN:
+                        error_message = "此命令仅限超级管理员使用。"
+                    elif permission == Permission.ADMIN:
+                        error_message = "此命令仅限管理员使用。"
+                    elif permission == Permission.USER:   
+                        error_message = "🔒 此机器人暂时不对外公开使用。\n\n💡 这是一个私人价格查询机器人，目前仅限授权用户使用。\n\n📝 如果你需要类似功能，可以考虑使用其他公开的汇率查询机器人或访问相关官方网站查询价格信息。\n\n感谢你的理解！🙏"
 
                     # 使用自动删除功能发送权限错误消息
                     from utils.message_manager import send_error, delete_user_command
