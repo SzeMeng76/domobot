@@ -505,6 +505,8 @@ class SpotifyPriceBot(PriceQueryService):
             "Premium Student": "学生版",
             "Premium Duo": "双人版",
             "Premium Family": "家庭版",
+            "Premium Basic": "基础版",
+            "Premium Lite": "轻量版",
         }
 
         for i, plan in enumerate(plans):
