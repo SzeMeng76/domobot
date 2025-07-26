@@ -156,7 +156,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await delete_user_command(context, update.message.chat_id, update.message.message_id)
 
 
-
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理/start命令"""
     # 添加 null 检查
@@ -164,31 +163,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
 
     user = update.effective_user
-    user_permission = await get_user_permission(update, context)
-    
-    # 检查用户是否在白名单中
-    if user_permission.value < Permission.USER.value:
-        # 非白名单用户的错误提示
-        error_text = f"""❌ *访问被拒绝*
 
-你好 {user.first_name}！
-
-🚫 *你当前没有使用此机器人的权限。*
-
-📞 *如需申请使用权限，请联系机器人管理员。*
-
-💡 *提供以下信息可以加快审核:*
-- 用户ID: `{user.id}`
-- 用户名: @{user.username if user.username else '无'}
-- 姓名: {user.full_name}
-
-感谢你的理解！🙏"""
-        
-        await send_help(context, update.message.chat_id, foldable_text_with_markdown_v2(error_text), parse_mode="MarkdownV2")
-        await delete_user_command(context, update.message.chat_id, update.message.message_id)
-        return
-
-    # 原来的欢迎消息（白名单用户）
     welcome_text = f"""👋 *欢迎使用多功能价格查询机器人!*
 
 你好 {user.first_name}!
@@ -232,7 +207,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 command_factory.register_command(
     "start",
     start_command,
-    permission=Permission.NONE,  # 使用新的 Permission.NONE
+    permission=Permission.USER,
     description="开始使用机器人",
     use_retry=False,
     use_rate_limit=False,
