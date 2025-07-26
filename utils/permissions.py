@@ -21,6 +21,7 @@ config = get_config()
 class Permission(Enum):
     """权限等级枚举"""
 
+    NONE = "none"  # 新增：无权限要求，所有人都可以使用 
     USER = "user"
     ADMIN = "admin"
     SUPER_ADMIN = "super_admin"
@@ -37,6 +38,18 @@ def require_permission(permission: Permission):
     def decorator(func):
         @functools.wraps(func)
         async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            # 如果权限要求是 NONE，直接执行函数，不进行权限检查
+            if permission == Permission.NONE:
+                try:
+                    return await func(update, context)
+                except Exception as e:
+                    logger.error(f"Error in {func.__name__}: {e}", exc_info=True)
+                    await context.bot.send_message(
+                        chat_id=update.effective_chat.id,
+                        text="❌ 处理请求时发生错误，请稍后重试。\n如果问题持续存在，请联系管理员。",
+                    )
+                return
+                            
             user_id = update.effective_user.id
             chat_type = update.effective_chat.type
 
