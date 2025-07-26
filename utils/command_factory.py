@@ -136,7 +136,16 @@ class CommandFactory:
 
     def _has_permission(self, user_permission: Permission, required_permission: Permission) -> bool:
         """检查用户是否有足够权限"""
-        permission_levels = {Permission.USER: 1, Permission.ADMIN: 2, Permission.SUPER_ADMIN: 3}
+        # 如果要求的权限是 NONE，所有人都有权限
+        if required_permission == Permission.NONE:
+            return True
+            
+        permission_levels = {
+            Permission.NONE: 0,     # 新增
+            Permission.USER: 1, 
+            Permission.ADMIN: 2, 
+            Permission.SUPER_ADMIN: 3
+        }
 
         user_level = permission_levels.get(user_permission, 0)
         required_level = permission_levels.get(required_permission, 1)
