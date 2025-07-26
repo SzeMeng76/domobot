@@ -156,7 +156,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await delete_user_command(context, update.message.chat_id, update.message.message_id)
 
 
-
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理/start命令"""
     # 添加 null 检查
@@ -167,7 +166,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     user_permission = await get_user_permission(update, context)
     
     # 检查用户是否在白名单中
-    if user_permission.value < Permission.USER.value:
+    # user_permission 为 None 或权限不足都表示用户没有使用权限
+    if not user_permission or user_permission.value < Permission.USER.value:
         # 非白名单用户的错误提示
         error_text = f"""❌ *访问被拒绝*
 
