@@ -166,8 +166,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     user_permission = await get_user_permission(update, context)
     
     # 检查用户是否在白名单中
-    # user_permission 为 None 或权限不足都表示用户没有使用权限
-    if not user_permission or user_permission.value < Permission.USER.value:
+    # 正确的权限检查：只有当 user_permission 为 None 时才表示没有权限
+    if user_permission is None:
         # 非白名单用户的错误提示
         error_text = f"""❌ *访问被拒绝*
 
