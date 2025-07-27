@@ -320,34 +320,81 @@ async def setup_application(application: Application, config) -> None:
     logger.info("✅ 用户缓存处理器设置完成")
 
     # ========================================
-    # 第六步：设置机器人命令菜单
+    # 第六步：设置机器人命令菜单（分权限显示）
     # ========================================
-    logger.info(" 设置机器人命令菜单...")
+    logger.info("📱 设置机器人命令菜单...")
 
-    # 获取所有权限级别的命令
+    # 获取不同权限级别的命令
+    none_commands = command_factory.get_command_list(Permission.NONE)
     user_commands = command_factory.get_command_list(Permission.USER)
     admin_commands = command_factory.get_command_list(Permission.ADMIN)
     super_admin_commands = command_factory.get_command_list(Permission.SUPER_ADMIN)
 
-    # 合并所有命令（超级管理员能看到所有命令）
-    all_commands = {}
-    all_commands.update(user_commands)
-    all_commands.update(admin_commands)
-    all_commands.update(super_admin_commands)
-
-    # 手动添加由ConversationHandler处理的admin命令
-    all_commands["admin"] = "打开管理员面板"
-
-    # 创建机器人命令列表
-    bot_commands = [BotCommand(command, description) for command, description in all_commands.items()]
-
     try:
-        await application.bot.set_my_commands(bot_commands)
+        # 默认命令菜单（给非白名单用户显示基础命令）
+        basic_commands = {}
+        basic_commands.update(none_commands)
+        basic_bot_commands = [BotCommand(command, description) for command, description in basic_commands.items()]
+        await application.bot.set_my_commands(basic_bot_commands)
+        
+        # 准备白名单用户命令菜单（基础命令 + 用户命令）
+        user_level_commands = {}
+        user_level_commands.update(none_commands)
+        user_level_commands.update(user_commands)
+        user_bot_commands = [BotCommand(command, description) for command, description in user_level_commands.items()]
+        
+        # 准备管理员完整命令菜单
+        all_commands = {}
+        all_commands.update(none_commands)
+        all_commands.update(user_commands)
+        all_commands.update(admin_commands)
+        all_commands.update(super_admin_commands)
+        # 手动添加由ConversationHandler处理的admin命令
+        all_commands["admin"] = "打开管理员面板"
+        
+        full_bot_commands = [BotCommand(command, description) for command, description in all_commands.items()]
+        
+        from telegram import BotCommandScopeChat
+        
+        user_manager = application.bot_data.get("user_cache_manager")
+        if user_manager:
+            try:
+                # 为白名单用户设置用户级命令菜单
+                whitelist_users = await user_manager.get_whitelisted_users()
+                for user_id in whitelist_users:
+                    if user_id != config.super_admin_id:  # 超级管理员后面单独设置
+                        await application.bot.set_my_commands(
+                            user_bot_commands,
+                            scope=BotCommandScopeChat(chat_id=user_id)
+                        )
+                
+                # 为管理员设置完整命令菜单
+                admin_list = await user_manager.get_all_admins()
+                for admin_id in admin_list:
+                    await application.bot.set_my_commands(
+                        full_bot_commands,
+                        scope=BotCommandScopeChat(chat_id=admin_id)
+                    )
+                
+                # 为超级管理员设置完整命令菜单
+                if config.super_admin_id:
+                    await application.bot.set_my_commands(
+                        full_bot_commands,
+                        scope=BotCommandScopeChat(chat_id=config.super_admin_id)
+                    )
+                
+                logger.info(f"👥 已为 {len(whitelist_users)} 位白名单用户设置用户级命令菜单")
+                logger.info(f"🔧 已为 {len(admin_list) + (1 if config.super_admin_id else 0)} 位管理员设置完整命令菜单")
+                
+            except Exception as e:
+                logger.warning(f"⚠️ 为用户设置命令菜单时出错: {e}")
+        
         logger.info("✅ 命令菜单设置完成:")
-        logger.info(f" 用户命令: {len(user_commands)} 条")
-        logger.info(f"‍ 管理员命令: {len(admin_commands)} 条")
-        logger.info(f" 超级管理员命令: {len(super_admin_commands)} 条")
-        logger.info(f" 总计: {len(bot_commands)} 条命令")
+        logger.info(f"🌐 默认显示基础命令: {len(basic_commands)} 条")
+        logger.info(f"👥 白名单用户显示: {len(user_level_commands)} 条")
+        logger.info(f"🔧 管理员显示全部命令: {len(all_commands)} 条")
+        logger.info("ℹ️ 用户权限在运行时检查")
+        
     except Exception as e:
         logger.error(f"❌ 设置机器人命令菜单失败: {e}")
 
@@ -520,3 +567,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
