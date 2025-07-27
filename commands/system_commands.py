@@ -64,6 +64,20 @@ async def get_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await delete_user_command(context, chat.id, message.message_id)
 
 
+def escape_markdown(text):
+    """转义Markdown特殊字符"""
+    if not text:
+        return text
+    
+    # Telegram Markdown特殊字符
+    special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    
+    for char in special_chars:
+        text = text.replace(char, f'\\{char}')
+    
+    return text
+
+
 def extract_field(text, field_name):
     """从文本中提取特定字段的值，处理富文本和emoji字符"""
     if not text:
@@ -249,7 +263,7 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     reply_text = "请稍等，正在查询用户信息..."
-    sent_message = await context.bot.send_message(chat_id=chat.id, text=reply_text)
+    sent_message = await send_search_result(context, chat.id, reply_text)
 
     try:
         target_user = None
@@ -286,6 +300,9 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                          "• 回复用户消息后发送 `/id`",
                     parse_mode="Markdown"
                 )
+                # 调度删除机器人回复消息
+                from utils.message_manager import _schedule_deletion
+                await _schedule_deletion(context, chat.id, sent_message.message_id, 180)
                 return
 
         # 如果没有获取到任何用户信息
@@ -298,6 +315,9 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                      "• 直接使用数字ID: `/when 123456789`\n\n"
                      "💡 如需获取用户ID，可使用 `/id` 命令"
             )
+            # 调度删除机器人回复消息
+            from utils.message_manager import _schedule_deletion
+            await _schedule_deletion(context, chat.id, sent_message.message_id, 180)
             return
 
         # 获取用户信息（如果有的话）
@@ -313,6 +333,10 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             full_name = "无法获取"
             info_note = "\n⚠️ *说明*: 由于隐私设置或API限制，无法获取详细用户信息"
 
+        # 转义Markdown特殊字符
+        safe_username = escape_markdown(username)
+        safe_full_name = escape_markdown(full_name)
+
         # 估算注册日期
         estimated_date = estimate_account_creation_date(target_user_id)
         formatted_date = estimated_date.strftime("%Y年%m月%d日")
@@ -320,10 +344,21 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 计算账号年龄
         from datetime import datetime
         now = datetime.now()
-        age_days = (now - estimated_date).days
-        years = age_days // 365
-        months = (age_days % 365) // 30
         
+        # 计算年月差
+        years = now.year - estimated_date.year
+        months = now.month - estimated_date.month
+        
+        # 如果当前日期小于注册日期，月份需要减1
+        if now.day < estimated_date.day:
+            months -= 1
+        
+        # 如果月份为负，从年份借位
+        if months < 0:
+            years -= 1
+            months += 12
+        
+        # 格式化年龄显示
         if years > 0:
             age_str = f"{years}年{months}月"
         else:
@@ -335,8 +370,8 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 构建结果
         result_text = (
             f"🔍 *用户信息查询*\n\n"
-            f"🏷️ *昵称*：{full_name}\n"
-            f"📛 *用户名*：@{username}\n"
+            f"🏷️ *昵称*：{safe_full_name}\n"
+            f"📛 *用户名*：@{safe_username}\n"
             f"👤 *用户ID*: `{target_user_id}`\n"
             f"📅 *估算注册日期*：{formatted_date}\n"
             f"⏰ *账号年龄*：{age_str}\n"
@@ -352,12 +387,19 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
 
+        # 调度删除机器人回复消息
+        from utils.message_manager import _schedule_deletion
+        await _schedule_deletion(context, chat.id, sent_message.message_id, 180)  # 3分钟后删除结果
+
     except Exception as e:
         await context.bot.edit_message_text(
             chat_id=chat.id,
             message_id=sent_message.message_id,
             text=f"查询失败: {str(e)}"
         )
+        # 调度删除错误消息
+        from utils.message_manager import _schedule_deletion
+        await _schedule_deletion(context, chat.id, sent_message.message_id, 5)  # 5秒后删除错误
 
     await delete_user_command(context, chat.id, message.message_id)
 
