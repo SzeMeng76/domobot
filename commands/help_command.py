@@ -282,12 +282,13 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 🔄 *消息管理:*
 - 所有回复消息会自动删除以保持群聊整洁。
 - 支持按钮交互，避免重复输入命令。"""
-    # 添加管理员功能说明（如果用户有相应权限）
-    if user_permission and user_permission.value >= Permission.ADMIN.value:
-        help_text += admin_help_text
+        
+        # 添加管理员功能说明（如果用户有相应权限）
+        if user_permission and user_permission.value >= Permission.ADMIN.value:
+            help_text += admin_help_text
 
-    if user_permission and user_permission.value >= Permission.SUPER_ADMIN.value:
-        help_text += super_admin_help_text
+        if user_permission and user_permission.value >= Permission.SUPER_ADMIN.value:
+            help_text += super_admin_help_text
 
     # 根据用户权限添加不同的联系信息
     if user_permission == Permission.NONE:
@@ -406,6 +407,3 @@ command_factory.register_command(
 command_factory.register_command(
     "help", help_command, permission=Permission.NONE, description="显示帮助信息", use_retry=False, use_rate_limit=False
 )
-
-
-
