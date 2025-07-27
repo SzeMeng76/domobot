@@ -204,7 +204,7 @@ def determine_level_by_date(creation_date):
 async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     查询用户的详细信息（基于ID估算注册日期）
-    支持: /when @username 或 /when 123456789 或回复消息
+    支持: /when 123456789 或回复消息使用 /when
     """
     message = update.effective_message
     chat = update.effective_chat
@@ -225,37 +225,33 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             target_user = message.reply_to_message.from_user
             target_user_id = target_user.id
             
-        # 方法2: 检查是否有参数（用户名或ID）
+        # 方法2: 检查是否有数字ID参数
         elif context.args:
             param = context.args[0].strip()
             
-            # 尝试解析为数字ID
+            # 只支持数字ID查询
             if param.isdigit():
                 target_user_id = int(param)
                 try:
-                    # 尝试通过ID获取用户信息
+                    # 尝试通过ID获取用户信息（通常会失败，但不影响功能）
                     target_user = await context.bot.get_chat(target_user_id)
                 except Exception:
-                    # 如果获取失败，仍然可以用ID查询（只是信息少一些）
+                    # 获取失败很正常，我们仍然可以基于ID估算注册日期
                     pass
-                    
-            # 处理用户名
             else:
-                username = param
-                if username.startswith("@"):
-                    username = username[1:]
-                    
-                try:
-                    # 尝试通过用户名获取用户信息
-                    target_user = await context.bot.get_chat(f"@{username}")
-                    target_user_id = target_user.id
-                except Exception:
-                    await context.bot.edit_message_text(
-                        chat_id=chat.id,
-                        message_id=sent_message.message_id,
-                        text=f"❌ 无法找到用户 @{username}\n可能原因：用户不存在、未设置用户名或隐私设置限制"
-                    )
-                    return
+                await context.bot.edit_message_text(
+                    chat_id=chat.id,
+                    message_id=sent_message.message_id,
+                    text="❌ 不支持用户名查询\n\n"
+                         "✅ *支持的查询方式*:\n"
+                         "• 回复某个用户的消息后使用 `/when`\n"
+                         "• 直接使用数字ID: `/when 123456789`\n\n"
+                         "💡 *获取用户ID方法*:\n"
+                         "• 让用户私聊机器人发送 `/id`\n"
+                         "• 回复用户消息后发送 `/id`",
+                    parse_mode="Markdown"
+                )
+                return
 
         # 如果没有获取到任何用户信息
         if not target_user_id:
@@ -263,9 +259,9 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 chat_id=chat.id,
                 message_id=sent_message.message_id,
                 text="请使用以下方式查询用户信息：\n"
-                     "• 回复某个用户的消息后使用 /when\n"
-                     "• 直接使用 /when @username\n"
-                     "• 直接使用 /when 123456789（用户ID）"
+                     "• 回复某个用户的消息后使用 `/when`\n"
+                     "• 直接使用数字ID: `/when 123456789`\n\n"
+                     "💡 如需获取用户ID，可使用 `/id` 命令"
             )
             return
 
@@ -330,4 +326,4 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # 注册命令
 command_factory.register_command("id", get_id_command, permission=Permission.USER, description="获取用户或群组的ID")
-command_factory.register_command("when", when_command, permission=Permission.USER, description="查询用户详细信息（支持@用户名或数字ID）")
+command_factory.register_command("when", when_command, permission=Permission.USER, description="查询用户详细信息（支持数字ID或回复消息）")
