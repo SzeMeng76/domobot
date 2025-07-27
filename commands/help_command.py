@@ -22,6 +22,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not update.message:
         return
 
+    # 立即删除用户命令（与其他命令保持一致）
+    await delete_user_command(context, update.message.chat_id, update.message.message_id)
+
     user_permission = await get_user_permission(update, context)
 
     help_text = """🤖 *多功能价格查询机器人*
@@ -65,6 +68,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - `/gp <应用名>`: 搜索Google Play应用。
 - `/aps <服务> [国家代码]`: 查询Apple服务价格 (服务: `iCloud`, `AppleOne`, `AppleMusic`)。
 
+👤 *用户信息查询*
+- `/when <用户ID>`: 根据用户ID估算Telegram注册日期和账号年龄。
+- `/when` (回复消息): 查询被回复用户的注册信息。
+- `/id`: 获取当前用户或群组的ID信息。
+- `/id` (回复消息): 获取被回复用户的详细ID信息。
+
 🌍 *支持的国家/地区示例:*
 `US`(美国), `CN`(中国), `TR`(土耳其), `NG`(尼日利亚), `IN`(印度), `MY`(马来西亚), `JP`(日本), `GB`(英国), `DE`(德国) 等。
 
@@ -87,6 +96,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - `/app 微信`: 搜索App Store应用。
 - `/gp WeChat`: 搜索Google Play应用。
 - `/aps iCloud`: 查询iCloud全球价格。
+- `/when 123456789`: 查询用户注册日期和账号年龄。
 - `/id`: 获取用户或群组的ID信息。
 
 🔄 *消息管理:*
@@ -153,7 +163,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 如需申请使用权限或遇到问题，请联系机器人管理员。"""
 
     await send_help(context, update.message.chat_id, foldable_text_with_markdown_v2(help_text), parse_mode="MarkdownV2")
-    await delete_user_command(context, update.message.chat_id, update.message.message_id)
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -161,6 +170,9 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     # 添加 null 检查
     if not update.message or not update.effective_user:
         return
+
+    # 立即删除用户命令（与其他命令保持一致）
+    await delete_user_command(context, update.message.chat_id, update.message.message_id)
 
     user = update.effective_user
 
@@ -177,6 +189,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 - 📺 查询Netflix、Disney+、Spotify等流媒体订阅价格
 - 📱 查询App Store和Google Play应用价格
 - 🍎 查询Apple各项服务的全球定价
+- 👤 查询Telegram用户注册日期和账号年龄
 - 🆔 获取用户和群组的ID信息
 
 💡 *快速开始:*
@@ -200,7 +213,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 开始探索吧! 🎉"""
 
     await send_help(context, update.message.chat_id, foldable_text_with_markdown_v2(welcome_text), parse_mode="MarkdownV2")
-    await delete_user_command(context, update.message.chat_id, update.message.message_id)
 
 
 # Register commands
