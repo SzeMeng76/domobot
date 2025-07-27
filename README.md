@@ -9,6 +9,15 @@ Read this in other languages: [简体中文](./README.zh-CN.md)
 # DomoBot
 *A powerful, multi-functional Telegram bot for price lookups, weather forecasts, and more, containerized with Docker for easy deployment.*
 
+## 🚀 Try it now: [@mengpricebot](https://t.me/mengpricebot)
+
+**Public features available to all users:**
+- 📺 **Streaming Prices:** Netflix, Disney+, Spotify pricing across global regions
+- 👤 **User Information:** Telegram registration dates, account age, and ID lookup
+- 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/when`, `/id`
+
+*Advanced features (crypto, weather, Steam prices, etc.) require whitelist access.*
+
 </div>
 
 <p align="center">
@@ -352,4 +361,5 @@ Contributions, issues, and feature requests are welcome. Feel free to check the 
 ### License
 
 This project is licensed under the MIT License.
+
 

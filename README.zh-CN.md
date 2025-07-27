@@ -9,6 +9,15 @@
 # DomoBot
 *一个强大、多功能、支持价格查询、天气预报等的Telegram机器人，使用Docker容器化以便于部署。*
 
+## 🚀 立即试用: [@mengpricebot](https://t.me/mengpricebot)
+
+**所有用户可用的公开功能:**
+- 📺 **流媒体价格:** Netflix、Disney+、Spotify全球各地区订阅价格查询
+- 👤 **用户信息:** Telegram注册日期、账号年龄和ID查询
+- 🆔 **快速命令:** `/nf`, `/ds`, `/sp`, `/when`, `/id`
+
+*高级功能（加密货币、天气、Steam价格等）需要白名单权限。*
+
 </div>
 
 <p align="center">
@@ -338,4 +347,5 @@ docker-compose down
 ### 许可证
 
 该项目根据 MIT 许可证授权。
+
 
