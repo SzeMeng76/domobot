@@ -386,7 +386,17 @@ async def setup_application(application: Application, config) -> None:
                         scope=BotCommandScopeChat(chat_id=config.super_admin_id)
                     )
                 
+                # 为白名单群组设置群组级命令菜单
+                whitelist_groups = await user_manager.get_whitelisted_groups()
+                for group in whitelist_groups:
+                    group_id = group['group_id']
+                    await application.bot.set_my_commands(
+                        user_bot_commands,  # 群组显示用户级命令（不包含管理员命令）
+                        scope=BotCommandScopeChat(chat_id=group_id)
+                    )
+                
                 logger.info(f"👥 已为 {len(whitelist_users)} 位白名单用户设置用户级命令菜单")
+                logger.info(f"👥 已为 {len(whitelist_groups)} 个白名单群组设置群组级命令菜单")
                 logger.info(f"🔧 已为 {len(admin_list) + (1 if config.super_admin_id else 0)} 位管理员设置完整命令菜单")
                 
             except Exception as e:
@@ -570,5 +580,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 

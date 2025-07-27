@@ -24,7 +24,85 @@ from utils.message_manager import (
     _schedule_deletion,
 )
 from utils.permissions import Permission
+from telegram import BotCommand, BotCommandScopeChat
 # 已移除 tasks、scripts、logs 命令（旧系统遗留功能）
+
+
+async def update_user_command_menu(user_id: int, context: ContextTypes.DEFAULT_TYPE, is_whitelist: bool = False, is_admin: bool = False) -> None:
+    """更新用户的命令菜单"""
+    try:
+        from utils.command_factory import command_factory
+        from utils.config_manager import get_config
+        
+        config = get_config()
+        
+        # 获取不同权限级别的命令
+        none_commands = command_factory.get_command_list(Permission.NONE)
+        user_commands = command_factory.get_command_list(Permission.USER)
+        admin_commands = command_factory.get_command_list(Permission.ADMIN)
+        super_admin_commands = command_factory.get_command_list(Permission.SUPER_ADMIN)
+        
+        if is_admin or user_id == config.super_admin_id:
+            # 管理员：显示所有命令
+            all_commands = {}
+            all_commands.update(none_commands)
+            all_commands.update(user_commands)
+            all_commands.update(admin_commands)
+            all_commands.update(super_admin_commands)
+            all_commands["admin"] = "打开管理员面板"
+            bot_commands = [BotCommand(command, description) for command, description in all_commands.items()]
+        elif is_whitelist:
+            # 白名单用户：显示基础+用户命令
+            user_level_commands = {}
+            user_level_commands.update(none_commands)
+            user_level_commands.update(user_commands)
+            bot_commands = [BotCommand(command, description) for command, description in user_level_commands.items()]
+        else:
+            # 非白名单用户：只显示基础命令
+            bot_commands = [BotCommand(command, description) for command, description in none_commands.items()]
+        
+        # 设置用户特定的命令菜单
+        await context.bot.set_my_commands(
+            bot_commands,
+            scope=BotCommandScopeChat(chat_id=user_id)
+        )
+        
+        logger.info(f"已更新用户 {user_id} 的命令菜单，权限：{'管理员' if is_admin else ('白名单' if is_whitelist else '基础')}")
+        
+    except Exception as e:
+        logger.error(f"更新用户 {user_id} 命令菜单失败: {e}")
+
+
+async def update_group_command_menu(group_id: int, context: ContextTypes.DEFAULT_TYPE, is_whitelisted: bool = False) -> None:
+    """更新群组的命令菜单"""
+    try:
+        from utils.command_factory import command_factory
+        from telegram import BotCommandScopeChat
+        
+        # 获取不同权限级别的命令
+        none_commands = command_factory.get_command_list(Permission.NONE)
+        user_commands = command_factory.get_command_list(Permission.USER)
+        
+        if is_whitelisted:
+            # 白名单群组：显示基础+用户命令（但不包含管理员命令）
+            group_commands = {}
+            group_commands.update(none_commands)
+            group_commands.update(user_commands)
+            bot_commands = [BotCommand(command, description) for command, description in group_commands.items()]
+        else:
+            # 非白名单群组：只显示基础命令
+            bot_commands = [BotCommand(command, description) for command, description in none_commands.items()]
+        
+        # 设置群组特定的命令菜单
+        await context.bot.set_my_commands(
+            bot_commands,
+            scope=BotCommandScopeChat(chat_id=group_id)
+        )
+        
+        logger.info(f"已更新群组 {group_id} 的命令菜单，状态：{'白名单' if is_whitelisted else '非白名单'}")
+        
+    except Exception as e:
+        logger.error(f"更新群组 {group_id} 命令菜单失败: {e}")
 
 
 logger = logging.getLogger(__name__)
@@ -109,6 +187,12 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     if await user_manager.add_to_whitelist(target_user_id, user_id):
         reply_text = f"✅ 用户 `{target_user_id}` 已成功添加到白名单。"
+        # 添加用户后更新命令菜单
+        try:
+            is_admin = await user_manager.is_admin(target_user_id)
+            await update_user_command_menu(target_user_id, context, is_whitelist=True, is_admin=is_admin)
+        except Exception as e:
+            logger.warning(f"更新用户 {target_user_id} 命令菜单失败: {e}")
     else:
         reply_text = f"❌ 添加失败，用户 `{target_user_id}` 可能已在白名单中。"
 
@@ -179,6 +263,11 @@ async def addgroup_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     if await user_manager.add_group_to_whitelist(target_group_id, group_title or f"群组 {target_group_id}", user_id):
         reply_text = f"✅ 群组 *{group_title or f'群组 {target_group_id}'}* (`{target_group_id}`) 已成功添加到白名单。"
+        # 添加群组后更新群组命令菜单
+        try:
+            await update_group_command_menu(target_group_id, context, is_whitelisted=True)
+        except Exception as e:
+            logger.warning(f"更新群组 {target_group_id} 命令菜单失败: {e}")
     else:
         reply_text = f"❌ 添加失败，群组 `{target_group_id}` 可能已在白名单中。"
 
@@ -445,7 +534,12 @@ class AdminPanelHandler:
             return ConversationHandler.END
 
         async def add_func(user_id):
-            return await user_manager.add_to_whitelist(user_id, u.effective_user.id)
+            success = await user_manager.add_to_whitelist(user_id, u.effective_user.id)
+            if success:
+                # 添加用户后更新命令菜单
+                is_admin = await user_manager.is_admin(user_id)
+                await update_user_command_menu(user_id, c, is_whitelist=True, is_admin=is_admin)
+            return success
 
         return await self._handle_modification(u, c, add_func, "成功添加", "添加失败", "用户")
 
@@ -455,7 +549,12 @@ class AdminPanelHandler:
             return ConversationHandler.END
 
         async def remove_func(user_id):
-            return await user_manager.remove_from_whitelist(user_id)
+            success = await user_manager.remove_from_whitelist(user_id)
+            if success:
+                # 移除用户后更新命令菜单
+                is_admin = await user_manager.is_admin(user_id)
+                await update_user_command_menu(user_id, c, is_whitelist=False, is_admin=is_admin)
+            return success
 
         return await self._handle_modification(u, c, remove_func, "成功移除", "移除失败", "用户")
 
@@ -465,7 +564,11 @@ class AdminPanelHandler:
             return ConversationHandler.END
 
         async def add_func(group_id):
-            return await user_manager.add_group_to_whitelist(group_id, f"Group {group_id}", u.effective_user.id)
+            success = await user_manager.add_group_to_whitelist(group_id, f"Group {group_id}", u.effective_user.id)
+            if success:
+                # 添加群组后更新群组命令菜单
+                await update_group_command_menu(group_id, c, is_whitelisted=True)
+            return success
 
         return await self._handle_modification(u, c, add_func, "成功添加", "添加失败", "群组")
 
@@ -475,7 +578,11 @@ class AdminPanelHandler:
             return ConversationHandler.END
 
         async def remove_func(group_id):
-            return await user_manager.remove_group_from_whitelist(group_id)
+            success = await user_manager.remove_group_from_whitelist(group_id)
+            if success:
+                # 移除群组后更新群组命令菜单
+                await update_group_command_menu(group_id, c, is_whitelisted=False)
+            return success
 
         return await self._handle_modification(u, c, remove_func, "成功移除", "移除失败", "群组")
 
@@ -485,7 +592,12 @@ class AdminPanelHandler:
             return ConversationHandler.END
 
         async def add_func(admin_id):
-            return await user_manager.add_admin(admin_id, u.effective_user.id)
+            success = await user_manager.add_admin(admin_id, u.effective_user.id)
+            if success:
+                # 添加管理员后更新命令菜单
+                is_whitelist = await user_manager.is_whitelisted(admin_id)
+                await update_user_command_menu(admin_id, c, is_whitelist=is_whitelist, is_admin=True)
+            return success
 
         return await self._handle_modification(u, c, add_func, "成功添加", "添加失败", "管理员")
 
@@ -495,7 +607,12 @@ class AdminPanelHandler:
             return ConversationHandler.END
 
         async def remove_func(admin_id):
-            return await user_manager.remove_admin(admin_id)
+            success = await user_manager.remove_admin(admin_id)
+            if success:
+                # 移除管理员后更新命令菜单
+                is_whitelist = await user_manager.is_whitelisted(admin_id)
+                await update_user_command_menu(admin_id, c, is_whitelist=is_whitelist, is_admin=False)
+            return success
 
         return await self._handle_modification(u, c, remove_func, "成功移除", "移除失败", "管理员")
 
@@ -690,3 +807,4 @@ command_factory.register_command(
 )
 # admin命令由ConversationHandler处理，不需要在这里注册
 # command_factory.register_command("admin", admin_command_placeholder, permission=Permission.ADMIN, description="打开管理员面板")
+
