@@ -82,6 +82,7 @@ docker-compose down
 | `CMC_API_KEY`               | **（可选）** CoinMarketCap的API Key，用于启用 `/crypto` 命令。                  |                         |
 | `BIN_API_KEY`               | **（可选）** DY.AX的API Key，用于启用 `/bin` 命令。                         |                         |
 | `QWEATHER_API_KEY`          | **（可选）** 和风天气的API Key，用于启用 `/tq` 命令。                       |                         |
+| `EXCHANGE_RATE_API_KEYS`    | **（可选）** openexchangerates.org的API Key，用于启用 `/rate` 命令。多个密钥用逗号分隔。 |                         |
 | `DB_HOST`                   | 数据库的主机名。**必须是 `mysql`**。                                        | `mysql`                 |
 | `DB_PORT`                   | 数据库的内部端口。                                                          | `3306`                  |
 | `DB_NAME`                   | 数据库的名称。必须与 `docker-compose.yml` 中的设置匹配。                    | `bot`                   |
