@@ -30,7 +30,7 @@ services:
   
   # 服务名称，可以自定义，这里我们叫它 appbot。
   appbot:
-    image: szemeng76/domobot:latest
+    image: szemeng76/domobot:latest #szemeng76/domobot:main latest:稳定版 main:最新功能版
 
     # --- 容器配置 ---
     # 给容器一个固定的名字，方便管理。
