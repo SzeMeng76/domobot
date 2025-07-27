@@ -81,16 +81,19 @@ logger.info("=" * 50)
 # 导入命令模块
 # ========================================
 from commands import (
+    admin_commands,
     app_store,
     apple_services,
+    bin,
+    crypto,
     disney_plus,
     google_play,
+    help_command,
     netflix,
     spotify,
     steam,
+    system_commands,
     weather,
-    crypto,
-    bin,
 )
 from commands.rate_command import set_rate_converter
 from handlers.user_cache_handler import setup_user_cache_handler  # 新增：导入用户缓存处理器
@@ -567,4 +570,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
