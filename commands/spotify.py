@@ -850,7 +850,7 @@ async def spotify_clean_cache_command(update: Update, context: ContextTypes.DEFA
 sp_command = spotify_command
 
 # Register commands
-command_factory.register_command("sp", sp_command, permission=Permission.USER, description="Spotify订阅价格查询")
+command_factory.register_command("sp", sp_command, permission=Permission.NONE, description="Spotify订阅价格查询")
 command_factory.register_command(
     "sp_cleancache", spotify_clean_cache_command, permission=Permission.ADMIN, description="清理Spotify缓存"
 )
