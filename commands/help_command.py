@@ -367,3 +367,4 @@ command_factory.register_command(
     "help", help_command, permission=Permission.NONE, description="显示帮助信息", use_retry=False, use_rate_limit=False
 )
 
+

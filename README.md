@@ -23,6 +23,7 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 
 -   🪙 **Crypto Prices:** Look up real-time cryptocurrency prices with support for custom amounts and currency conversion, including 24h and 7d percentage changes.
 -   💳 **BIN Lookup:** Query credit card BIN (Bank Identification Number) information including card brand, type, issuing bank, and country details.
+-   👤 **User Information:** Check Telegram user registration dates and account age with `/when` command using advanced ID-based estimation.
 -   🌦️ **Weather Forecasts:** Detailed, multi-format weather forecasts (real-time, daily, hourly, minutely precipitation, and lifestyle indices).
 -   💱 **Currency Conversion:** Real-time exchange rate lookups.
 -   🎮 **Steam Prices:** Multi-region price comparison for Steam games.
@@ -111,6 +112,14 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 # Cryptocurrency prices
 /crypto btc
 /crypto eth 0.5 usd
+
+# User information lookup
+/when 123456789
+/when  # Reply to a user's message
+
+# Get user/group IDs
+/id
+/id  # Reply to a message
 
 # Currency conversion
 /rate USD 100
@@ -293,7 +302,16 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 
 ### 🆕 Recent Updates
 
-#### BIN Lookup Feature (Latest)
+#### User Information Lookup Feature (Latest)
+- **New `/when` command** for Telegram user registration date estimation
+- **Intelligent ID-based algorithm** using linear interpolation with real-world data points
+- **Multiple query methods** supporting both direct ID input and reply-to-message
+- **User classification system** categorizing users by account age (新兵蛋子, 不如老兵, 老兵, etc.)
+- **Markdown safety features** with proper special character escaping
+- **Accurate age calculation** using year/month difference logic
+- **Enhanced `/id` command** for getting user and group IDs
+
+#### BIN Lookup Feature
 - **New `/bin` command** for credit card BIN information lookup
 - **Comprehensive data display** including card brand, type, issuing bank, and country
 - **Smart caching system** for improved performance
