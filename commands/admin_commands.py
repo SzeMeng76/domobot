@@ -434,6 +434,9 @@ class AdminPanelHandler:
                     context=context,
                 )
 
+        # 不要直接结束对话，让用户可以继续使用admin命令
+        # 清理临时数据但保持ConversationHandler活跃
+        context.user_data.pop("admin_query", None)
         return ConversationHandler.END
 
     async def handle_add_user(self, u, c):
@@ -632,26 +635,32 @@ class AdminPanelHandler:
                 AWAITING_USER_ID_TO_ADD: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_add_user),
                     CallbackQueryHandler(self.cancel_input, pattern="^cancel_input$"),
+                    CommandHandler("admin", self.show_main_panel),  # 允许重新启动admin
                 ],
                 AWAITING_USER_ID_TO_REMOVE: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_remove_user),
                     CallbackQueryHandler(self.cancel_input, pattern="^cancel_input$"),
+                    CommandHandler("admin", self.show_main_panel),  # 允许重新启动admin
                 ],
                 AWAITING_GROUP_ID_TO_ADD: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_add_group),
                     CallbackQueryHandler(self.cancel_input, pattern="^cancel_input$"),
+                    CommandHandler("admin", self.show_main_panel),  # 允许重新启动admin
                 ],
                 AWAITING_GROUP_ID_TO_REMOVE: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_remove_group),
                     CallbackQueryHandler(self.cancel_input, pattern="^cancel_input$"),
+                    CommandHandler("admin", self.show_main_panel),  # 允许重新启动admin
                 ],
                 AWAITING_ADMIN_ID_TO_ADD: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_add_admin),
                     CallbackQueryHandler(self.cancel_input, pattern="^cancel_input$"),
+                    CommandHandler("admin", self.show_main_panel),  # 允许重新启动admin
                 ],
                 AWAITING_ADMIN_ID_TO_REMOVE: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_remove_admin),
                     CallbackQueryHandler(self.cancel_input, pattern="^cancel_input$"),
+                    CommandHandler("admin", self.show_main_panel),  # 允许重新启动admin
                 ],
             },
             fallbacks=[CommandHandler("cancel", self.cancel_and_back)],
