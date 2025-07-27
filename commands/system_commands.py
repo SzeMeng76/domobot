@@ -262,6 +262,9 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not message or not chat or not user:
         return
 
+    # 立即删除用户命令（与其他命令保持一致）
+    await delete_user_command(context, chat.id, message.message_id)
+
     reply_text = "请稍等，正在查询用户信息..."
     sent_message = await send_search_result(context, chat.id, reply_text)
 
@@ -400,8 +403,6 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 调度删除错误消息
         from utils.message_manager import _schedule_deletion
         await _schedule_deletion(context, chat.id, sent_message.message_id, 5)  # 5秒后删除错误
-
-    await delete_user_command(context, chat.id, message.message_id)
 
 
 # 注册命令
