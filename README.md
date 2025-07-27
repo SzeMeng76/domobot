@@ -11,10 +11,13 @@ Read this in other languages: [简体中文](./README.zh-CN.md)
 
 ## 🚀 Try it now: [@mengpricebot](https://t.me/mengpricebot)
 
-**Public features available to all users:**
+**🎉 Free for Everyone - Add to Any Group!**
+
+**Public features available to all users and groups:**
 - 📺 **Streaming Prices:** Netflix, Disney+, Spotify pricing across global regions
 - 👤 **User Information:** Telegram registration dates, account age, and ID lookup
 - 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/when`, `/id`
+- 👥 **Group Friendly:** Works in any Telegram group without requiring whitelist approval
 
 *Advanced features (crypto, weather, Steam prices, etc.) require whitelist access.*
 
@@ -104,7 +107,7 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 
 ### 🎯 Command Examples
 
-#### Public Commands (Available to All Users)
+#### Public Commands (Available to All Users & Groups)
 ```bash
 # Streaming service prices
 /nf          # Netflix global pricing
@@ -208,7 +211,7 @@ The project has been fully migrated away from SQLite compatibility adapters to a
 
 #### Permission Levels
 
-1.  **Public Access:** All users can access streaming service pricing (`/nf`, `/ds`, `/sp`) and user information commands (`/when`, `/id`).
+1.  **Public Access:** All users and groups (whitelisted or not) can access streaming service pricing (`/nf`, `/ds`, `/sp`) and user information commands (`/when`, `/id`). Simply add the bot to any group to enable these features.
 2.  **Whitelist Access:** Required for advanced features like crypto prices, currency conversion, weather forecasts, Steam prices, BIN lookup, and app store queries. *Whitelist applications are currently closed - future paid service plans may be available.*
 3.  **Admin:** Stored in the MySQL `admin_permissions` table.
 4.  **Super Admin:** Configured via the `SUPER_ADMIN_ID` environment variable.
@@ -322,7 +325,8 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 ### 🆕 Recent Updates
 
 #### Role-Based Access Control (Latest)
-- **Public Feature Access:** Non-whitelist users can now use streaming service pricing and user information commands
+- **Universal Public Access:** All users and groups can use streaming service pricing and user information commands without any restrictions
+- **Group Integration:** Add the bot to any Telegram group to enable public features for all members
 - **Enhanced Help System:** Different help content displayed based on user permission level
 - **Improved User Experience:** Clear distinction between free and premium features
 - **Whitelist Policy Update:** Applications currently closed, future paid service plans under consideration
@@ -361,5 +365,3 @@ Contributions, issues, and feature requests are welcome. Feel free to check the 
 ### License
 
 This project is licensed under the MIT License.
-
-
