@@ -204,6 +204,7 @@ def determine_level_by_date(creation_date):
 async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     查询用户的详细信息（基于ID估算注册日期）
+    支持: /when @username 或 /when 123456789 或回复消息
     """
     message = update.effective_message
     chat = update.effective_chat
@@ -217,37 +218,70 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         target_user = None
-        target_username = None
-
-        # 检查是否有回复的消息
+        target_user_id = None
+        
+        # 方法1: 检查是否有回复的消息
         if message.reply_to_message and message.reply_to_message.from_user:
             target_user = message.reply_to_message.from_user
-            target_username = target_user.username
-        # 检查是否有参数
+            target_user_id = target_user.id
+            
+        # 方法2: 检查是否有参数（用户名或ID）
         elif context.args:
-            username_param = context.args[0]
-            if username_param.startswith("@"):
-                target_username = username_param[1:]
+            param = context.args[0].strip()
+            
+            # 尝试解析为数字ID
+            if param.isdigit():
+                target_user_id = int(param)
+                try:
+                    # 尝试通过ID获取用户信息
+                    target_user = await context.bot.get_chat(target_user_id)
+                except Exception:
+                    # 如果获取失败，仍然可以用ID查询（只是信息少一些）
+                    pass
+                    
+            # 处理用户名
             else:
-                target_username = username_param
+                username = param
+                if username.startswith("@"):
+                    username = username[1:]
+                    
+                try:
+                    # 尝试通过用户名获取用户信息
+                    target_user = await context.bot.get_chat(f"@{username}")
+                    target_user_id = target_user.id
+                except Exception:
+                    await context.bot.edit_message_text(
+                        chat_id=chat.id,
+                        message_id=sent_message.message_id,
+                        text=f"❌ 无法找到用户 @{username}\n可能原因：用户不存在、未设置用户名或隐私设置限制"
+                    )
+                    return
 
-        if not target_user:
+        # 如果没有获取到任何用户信息
+        if not target_user_id:
             await context.bot.edit_message_text(
                 chat_id=chat.id,
                 message_id=sent_message.message_id,
-                text="请回复一个用户的消息来查询信息"
+                text="请使用以下方式查询用户信息：\n"
+                     "• 回复某个用户的消息后使用 /when\n"
+                     "• 直接使用 /when @username\n"
+                     "• 直接使用 /when 123456789（用户ID）"
             )
             return
 
-        # 获取用户信息
-        user_id = target_user.id
-        username = target_user.username or "未设置"
-        first_name = target_user.first_name or ""
-        last_name = target_user.last_name or ""
-        full_name = f"{first_name} {last_name}".strip()
+        # 获取用户信息（如果有的话）
+        if target_user:
+            username = target_user.username or "未设置"
+            first_name = getattr(target_user, 'first_name', '') or ""
+            last_name = getattr(target_user, 'last_name', '') or ""
+            full_name = f"{first_name} {last_name}".strip() or "未知"
+        else:
+            # 只有ID的情况
+            username = "未知"
+            full_name = "未知"
 
         # 估算注册日期
-        estimated_date = estimate_account_creation_date(user_id)
+        estimated_date = estimate_account_creation_date(target_user_id)
         formatted_date = estimated_date.strftime("%Y年%m月%d日")
         
         # 计算账号年龄
@@ -270,7 +304,7 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🔍 *用户信息查询*\n\n"
             f"🏷️ *昵称*：{full_name}\n"
             f"📛 *用户名*：@{username}\n"
-            f"👤 *用户ID*: `{user_id}`\n"
+            f"👤 *用户ID*: `{target_user_id}`\n"
             f"📅 *估算注册日期*：{formatted_date}\n"
             f"⏰ *账号年龄*：{age_str}\n"
             f"🏆 *级别*：{level}\n\n"
@@ -296,4 +330,4 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # 注册命令
 command_factory.register_command("id", get_id_command, permission=Permission.USER, description="获取用户或群组的ID")
-command_factory.register_command("when", when_command, permission=Permission.USER, description="查询用户的详细信息")
+command_factory.register_command("when", when_command, permission=Permission.USER, description="查询用户详细信息（支持@用户名或数字ID）")
