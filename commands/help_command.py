@@ -94,7 +94,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - `/tq 北京`: 查询北京天气。
 - `/steam 赛博朋克`: 查询《赛博朋克2077》价格。
 - `/nf`: 查看Netflix全球价格排名。
-- `/ds`: 查看Disney\\+全球价格排名。
+- `/ds`: 查看Disney+全球价格排名。
 - `/sp`: 查看Spotify全球价格排名。
 - `/app 微信`: 搜索App Store应用。
 - `/gp WeChat`: 搜索Google Play应用。
@@ -184,7 +184,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 ⚡ *快速开始:*
 - `/nf`: 查看Netflix全球价格排名。
-- `/ds`: 查看Disney\\+全球价格排名。
+- `/ds`: 查看Disney+全球价格排名。
 - `/sp`: 查看Spotify全球价格排名。
 - `/when 123456789`: 查询用户注册日期和账号年龄。
 - `/id`: 获取用户或群组的ID信息。
@@ -271,7 +271,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - `/tq 北京`: 查询北京天气。
 - `/steam 赛博朋克`: 查询《赛博朋克2077》价格。
 - `/nf`: 查看Netflix全球价格排名。
-- `/ds`: 查看Disney\\+全球价格排名。
+- `/ds`: 查看Disney+全球价格排名。
 - `/sp`: 查看Spotify全球价格排名。
 - `/app 微信`: 搜索App Store应用。
 - `/gp WeChat`: 搜索Google Play应用。
@@ -312,8 +312,44 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await delete_user_command(context, update.message.chat_id, update.message.message_id)
 
     user = update.effective_user
+    
+    # 获取用户权限
+    user_permission = await get_user_permission(update, context)
+    if user_permission is None:
+        user_permission = Permission.NONE
 
-    welcome_text = f"""👋 *欢迎使用多功能价格查询机器人!*
+    # 根据用户权限显示不同的欢迎信息
+    if user_permission == Permission.NONE:
+        # 非白名单用户 - 只显示可用功能
+        welcome_text = f"""👋 *欢迎使用多功能价格查询机器人!*
+
+你好 {user.first_name}!
+
+🎯 *你可以使用这些功能:*
+- 📺 查询Netflix、Disney+、Spotify等流媒体订阅价格
+- 👤 查询Telegram用户注册日期和账号年龄
+- 🆔 获取用户和群组的ID信息
+
+💡 *快速开始:*
+发送 `/help` 查看详细使用指南
+
+🚀 *试试这些命令:*
+- `/nf`: 查看Netflix全球价格
+- `/ds`: 查看Disney+全球价格  
+- `/sp`: 查看Spotify全球价格
+- `/id`: 获取你的用户ID
+- `/when`: 查询账号注册时间
+
+🌟 *功能亮点:*
+✅ 支持40+国家和地区查询
+✅ 实时汇率自动转换为人民币
+✅ 智能缓存，查询速度快
+✅ 支持中文国家名称输入
+
+开始探索吧! 🎉"""
+    else:
+        # 白名单用户 - 显示完整功能
+        welcome_text = f"""👋 *欢迎使用多功能价格查询机器人!*
 
 你好 {user.first_name}!
 
@@ -333,6 +369,10 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 发送 `/help` 查看详细使用指南
 
 🚀 *试试这些命令:*
+- `/rate USD 100`: 查询100美元兑人民币汇率
+- `/crypto btc`: 查询比特币价格
+- `/tq 北京`: 查询北京天气
+- `/steam 赛博朋克`: 查询游戏价格
 - `/nf`: 查看Netflix全球价格
 - `/ds`: 查看Disney+全球价格  
 - `/sp`: 查看Spotify全球价格
@@ -366,5 +406,6 @@ command_factory.register_command(
 command_factory.register_command(
     "help", help_command, permission=Permission.NONE, description="显示帮助信息", use_retry=False, use_rate_limit=False
 )
+
 
 

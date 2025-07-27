@@ -21,14 +21,14 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 
 ### ✨ Features
 
--   🪙 **Crypto Prices:** Look up real-time cryptocurrency prices with support for custom amounts and currency conversion, including 24h and 7d percentage changes.
--   💳 **BIN Lookup:** Query credit card BIN (Bank Identification Number) information including card brand, type, issuing bank, and country details.
--   👤 **User Information:** Check Telegram user registration dates and account age with `/when` command using advanced ID-based estimation.
--   🌦️ **Weather Forecasts:** Detailed, multi-format weather forecasts (real-time, daily, hourly, minutely precipitation, and lifestyle indices).
--   💱 **Currency Conversion:** Real-time exchange rate lookups.
--   🎮 **Steam Prices:** Multi-region price comparison for Steam games.
--   📺 **Streaming Prices:** Subscription price lookup for services like Netflix, Disney+, and Spotify.
--   📱 **App Stores:** Application price lookup for the App Store and Google Play.
+-   📺 **Public Streaming Prices:** Available to all users - query subscription prices for Netflix, Disney+, and Spotify across global regions.
+-   👤 **Public User Information:** Available to all users - check Telegram user registration dates, account age, and get user/group IDs.
+-   🪙 **Crypto Prices:** Look up real-time cryptocurrency prices with support for custom amounts and currency conversion, including 24h and 7d percentage changes. *(Whitelist required)*
+-   💳 **BIN Lookup:** Query credit card BIN (Bank Identification Number) information including card brand, type, issuing bank, and country details. *(Whitelist required)*
+-   🌦️ **Weather Forecasts:** Detailed, multi-format weather forecasts (real-time, daily, hourly, minutely precipitation, and lifestyle indices). *(Whitelist required)*
+-   💱 **Currency Conversion:** Real-time exchange rate lookups. *(Whitelist required)*
+-   🎮 **Steam Prices:** Multi-region price comparison for Steam games. *(Whitelist required)*
+-   📱 **App Stores:** Application price lookup for the App Store and Google Play. *(Whitelist required)*
 -   🔐 **Admin System:** A comprehensive admin permission system with user/group whitelisting.
 -   📊 **User Caching & Stats:** Caching user data and command usage statistics.
 
@@ -95,31 +95,29 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 
 ### 🎯 Command Examples
 
-#### BIN Lookup Commands
+#### Public Commands (Available to All Users)
 ```bash
-# Basic BIN query
-/bin 123456
-
-# Query longer BIN
-/bin 12345678
-
-# Admin cache management
-/bin_cleancache
-```
-
-#### Other Popular Commands
-```bash
-# Cryptocurrency prices
-/crypto btc
-/crypto eth 0.5 usd
+# Streaming service prices
+/nf          # Netflix global pricing
+/ds US       # Disney+ pricing in US
+/sp          # Spotify global pricing
 
 # User information lookup
 /when 123456789
-/when  # Reply to a user's message
+/when        # Reply to a user's message
+/id          # Get user/group IDs
+/id          # Reply to a message
+```
 
-# Get user/group IDs
-/id
-/id  # Reply to a message
+#### Whitelist-Only Commands
+```bash
+# BIN lookup
+/bin 123456
+/bin 12345678
+
+# Cryptocurrency prices
+/crypto btc
+/crypto eth 0.5 usd
 
 # Currency conversion
 /rate USD 100
@@ -133,10 +131,21 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /steam Cyberpunk
 /steam "Red Dead" US
 
-# Streaming service prices
-/nf
-/ds US
-/sp
+# App stores
+/app WeChat
+/gp WhatsApp
+
+# Apple services
+/aps iCloud
+```
+
+#### Admin Commands
+```bash
+# Admin cache management
+/bin_cleancache
+/crypto_cleancache
+/rate_cleancache
+# ... other cache management commands
 ```
 
 <details>
@@ -190,9 +199,10 @@ The project has been fully migrated away from SQLite compatibility adapters to a
 
 #### Permission Levels
 
-1.  **Super Admin:** Configured via the `SUPER_ADMIN_ID` environment variable.
-2.  **Admin:** Stored in the MySQL `admin_permissions` table.
-3.  **Whitelisted User:** Required for private chats (`user_whitelist`) or group chats (`group_whitelist`).
+1.  **Public Access:** All users can access streaming service pricing (`/nf`, `/ds`, `/sp`) and user information commands (`/when`, `/id`).
+2.  **Whitelist Access:** Required for advanced features like crypto prices, currency conversion, weather forecasts, Steam prices, BIN lookup, and app store queries. *Whitelist applications are currently closed - future paid service plans may be available.*
+3.  **Admin:** Stored in the MySQL `admin_permissions` table.
+4.  **Super Admin:** Configured via the `SUPER_ADMIN_ID` environment variable.
 
 ### 🧩 Extending the Bot
 
@@ -302,7 +312,13 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 
 ### 🆕 Recent Updates
 
-#### User Information Lookup Feature (Latest)
+#### Role-Based Access Control (Latest)
+- **Public Feature Access:** Non-whitelist users can now use streaming service pricing and user information commands
+- **Enhanced Help System:** Different help content displayed based on user permission level
+- **Improved User Experience:** Clear distinction between free and premium features
+- **Whitelist Policy Update:** Applications currently closed, future paid service plans under consideration
+
+#### User Information Lookup Feature
 - **New `/when` command** for Telegram user registration date estimation
 - **Intelligent ID-based algorithm** using linear interpolation with real-world data points
 - **Multiple query methods** supporting both direct ID input and reply-to-message
@@ -336,3 +352,4 @@ Contributions, issues, and feature requests are welcome. Feel free to check the 
 ### License
 
 This project is licensed under the MIT License.
+
