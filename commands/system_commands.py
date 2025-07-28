@@ -769,7 +769,7 @@ async def clean_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 立即删除用户命令
     await delete_user_command(context, chat.id, message.message_id)
 
-    reply_text = "正在准备清理缓存..."
+    reply_text = "正在执行缓存清理..."
     sent_message = await send_search_result(context, chat.id, reply_text)
 
     try:
@@ -841,16 +841,20 @@ async def clean_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     return
                 
-                # 确认清理
-                confirm_text = (
-                    f"⚠️ **确认清理操作**\n\n"
-                    f"📊 **清理统计**：\n"
-                    f"• 当前总用户数：{before_count}\n"
-                    f"• 将清理：{old_count} 个用户（{days_ago}天前）\n"
-                    f"• 清理后剩余：{before_count - old_count} 个用户\n\n"
-                    f"**清理条件**：最后活跃时间早于 {days_ago} 天前\n\n"
-                    f"⚠️ **此操作不可逆**，请确认是否继续？\n"
-                    f"回复 `confirm` 确认清理"
+                # 执行按时间清理
+                await cursor.execute(
+                    "DELETE FROM users WHERE last_seen < DATE_SUB(NOW(), INTERVAL %s DAY)",
+                    (days_ago,)
+                )
+                affected_rows = cursor.rowcount
+                
+                result_text = (
+                    f"✅ **ID缓存清理完成**\n\n"
+                    f"📊 **清理结果**：\n"
+                    f"• 清理前：{before_count} 个用户\n"
+                    f"• 已清理：{affected_rows} 个用户（{days_ago}天前）\n"
+                    f"• 剩余：{before_count - affected_rows} 个用户\n\n"
+                    f"🎯 **操作类型**：按时间清理"
                 )
             else:
                 # 全部清理
@@ -862,125 +866,17 @@ async def clean_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     return
                 
-                confirm_text = (
-                    f"⚠️ **确认清理操作**\n\n"
-                    f"📊 **清理统计**：\n"
-                    f"• 当前总用户数：{before_count}\n"
-                    f"• 将清理：**全部用户缓存**\n"
-                    f"• 清理后剩余：0 个用户\n\n"
-                    f"⚠️ **危险操作**：将删除所有用户缓存数据！\n"
-                    f"⚠️ **此操作不可逆**，请确认是否继续？\n"
-                    f"回复 `CONFIRM_DELETE_ALL` 确认清理"
-                )
-
-        await context.bot.edit_message_text(
-            chat_id=chat.id,
-            message_id=sent_message.message_id,
-            text=confirm_text,
-            parse_mode="Markdown"
-        )
-
-        # 等待用户确认
-        def check_confirmation(update_inner):
-            return (
-                update_inner.message and 
-                update_inner.message.from_user.id == user.id and
-                update_inner.message.chat.id == chat.id
-            )
-
-        # 等待确认消息
-        from telegram.ext import ConversationHandler
-        import asyncio
-        
-        try:
-            # 简单的确认机制：等待用户下一条消息
-            await context.bot.edit_message_text(
-                chat_id=chat.id,
-                message_id=sent_message.message_id,
-                text=confirm_text + f"\n\n⏰ 等待确认中...\n请在30秒内回复确认信息",
-                parse_mode="Markdown"
-            )
-            
-            # 调度删除确认消息
-            from utils.message_manager import _schedule_deletion
-            await _schedule_deletion(context, chat.id, sent_message.message_id, 30)
-            
-        except Exception as e:
-            await context.bot.edit_message_text(
-                chat_id=chat.id,
-                message_id=sent_message.message_id,
-                text=f"清理操作准备失败: {str(e)}"
-            )
-
-    except Exception as e:
-        await context.bot.edit_message_text(
-            chat_id=chat.id,
-            message_id=sent_message.message_id,
-            text=f"缓存清理失败: {str(e)}"
-        )
-        # 调度删除错误消息
-        from utils.message_manager import _schedule_deletion
-        await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
-
-
-async def confirm_cache_cleanup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    确认缓存清理操作
-    """
-    message = update.effective_message
-    chat = update.effective_chat
-    user = update.effective_user
-
-    if not message or not chat or not user:
-        return
-
-    # 检查确认消息内容
-    text = message.text.strip() if message.text else ""
-    
-    if text not in ["confirm", "CONFIRM_DELETE_ALL"]:
-        return  # 不是确认消息，忽略
-
-    # 立即删除用户确认命令
-    await delete_user_command(context, chat.id, message.message_id)
-
-    reply_text = "正在执行清理操作，请稍候..."
-    sent_message = await send_search_result(context, chat.id, reply_text)
-
-    try:
-        # 获取用户缓存管理器
-        user_cache_manager = context.bot_data.get("user_cache_manager")
-        
-        if not user_cache_manager or not hasattr(user_cache_manager, 'get_cursor'):
-            await context.bot.edit_message_text(
-                chat_id=chat.id,
-                message_id=sent_message.message_id,
-                text="❌ 缓存管理器不可用"
-            )
-            return
-
-        async with user_cache_manager.get_cursor() as cursor:
-            # 获取清理前统计
-            await cursor.execute("SELECT COUNT(*) as total FROM users")
-            before_count = (await cursor.fetchone())['total']
-            
-            if text == "CONFIRM_DELETE_ALL":
-                # 清理所有缓存
+                # 执行全部清理
                 await cursor.execute("DELETE FROM users")
                 affected_rows = cursor.rowcount
                 
                 result_text = (
-                    f"✅ **缓存清理完成**\n\n"
+                    f"✅ **ID缓存清理完成**\n\n"
                     f"📊 **清理结果**：\n"
                     f"• 清理前：{before_count} 个用户\n"
                     f"• 已清理：{affected_rows} 个用户\n"
                     f"• 剩余：0 个用户\n\n"
-                    f"🎯 **操作类型**：清理全部缓存"
-                )
-            elif text == "confirm":
-                # 这里需要从之前的上下文获取天数，简化处理：提示用户重新执行命令
-                result_text = (
-                    f"❌ **确认失败**\n\n"
-                    f"无法确定清理参数，请重新执行 `/cleanid` 命令"
+                    f"🎯 **操作类型**：全部清理"
                 )
 
         await context.bot.edit_message_text(
@@ -998,8 +894,11 @@ async def confirm_cache_cleanup_command(update: Update, context: ContextTypes.DE
         await context.bot.edit_message_text(
             chat_id=chat.id,
             message_id=sent_message.message_id,
-            text=f"执行清理失败: {str(e)}"
+            text=f"缓存清理失败: {str(e)}"
         )
+        # 调度删除错误消息
+        from utils.message_manager import _schedule_deletion
+        await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
 
 
 # 注册命令
