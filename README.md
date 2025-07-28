@@ -83,6 +83,8 @@ All configurations are managed via the `.env` file. You must copy `.env.example`
 | `BIN_API_KEY`               | **(Optional)** API Key from DY.AX for the `/bin` command.                   |                         |
 | `QWEATHER_API_KEY`          | **(Optional)** API Key from HeFeng Weather for the `/tq` command.           |                         |
 | `EXCHANGE_RATE_API_KEYS`    | **(Optional)** API Keys from openexchangerates.org for the `/rate` command. Multiple keys separated by commas. |                         |
+| `ENABLE_USER_CACHE`         | **(Optional)** Enable user caching system (`true`/`false`).                 | `false`                 |
+| `USER_CACHE_GROUP_IDS`      | **(Optional)** Comma-separated group IDs to monitor for user caching. Leave empty to disable caching. | (empty)                 |
 | `DB_HOST`                   | Hostname for the database. **Must be `mysql`**.                             | `mysql`                 |
 | `DB_PORT`                   | The internal port for the database.                                         | `3306`                  |
 | `DB_NAME`                   | The name of the database. Must match `docker-compose.yml`.                  | `bot`                   |
@@ -116,10 +118,12 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /sp          # Spotify global pricing
 
 # User information lookup
-/when 123456789
-/when        # Reply to a user's message
-/id          # Get user/group IDs
-/id          # Reply to a message
+/when 123456789           # Query by user ID
+/when @username           # Query by username
+/when username            # Query by username (without @)
+/when                     # Reply to a user's message
+/id                       # Get user/group IDs
+/id                       # Reply to a message
 ```
 
 #### Whitelist-Only Commands
@@ -154,7 +158,15 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 
 #### Admin Commands
 ```bash
-# Admin cache management
+# User cache management
+/cache                    # View user cache status and statistics
+/cache username           # Check if specific user is cached
+/cache @username          # Check if specific user is cached
+/cache 123456789          # Check if specific user ID is cached
+/cleanid                  # Clean all user ID cache
+/cleanid 30               # Clean user cache older than 30 days
+
+# Other cache management
 /bin_cleancache
 /crypto_cleancache
 /rate_cleancache
@@ -333,13 +345,22 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 - **Whitelist Policy Update:** Applications currently closed, future paid service plans under consideration
 
 #### User Information Lookup Feature
-- **New `/when` command** for Telegram user registration date estimation
+- **Enhanced `/when` command** with username support for Telegram user registration date estimation
+- **Multiple query methods** supporting direct ID input, username lookup (@username or username), and reply-to-message
 - **Intelligent ID-based algorithm** using linear interpolation with real-world data points
-- **Multiple query methods** supporting both direct ID input and reply-to-message
 - **User classification system** categorizing users by account age (新兵蛋子, 不如老兵, 老兵, etc.)
 - **Markdown safety features** with proper special character escaping
 - **Accurate age calculation** using year/month difference logic
 - **Enhanced `/id` command** for getting user and group IDs
+- **User caching system** for improved username-to-ID resolution performance
+
+#### User Cache Management System
+- **New user caching infrastructure** with MySQL storage and Redis performance optimization
+- **Configurable group monitoring** via `ENABLE_USER_CACHE` and `USER_CACHE_GROUP_IDS` settings
+- **Admin cache debugging** with `/cache` command for viewing cache statistics and user lookup
+- **Flexible cache cleanup** with `/cleanid` command supporting time-based and complete cleanup
+- **Automatic user data collection** from monitored group messages for username-to-ID mapping
+- **Enhanced username support** in `/when` command leveraging cached user data
 
 #### BIN Lookup Feature
 - **New `/bin` command** for credit card BIN information lookup
