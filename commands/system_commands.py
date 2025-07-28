@@ -675,7 +675,7 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                 if hasattr(user_cache_manager, 'get_cursor'):
                     try:
                         async with user_cache_manager.get_cursor() as cursor:
-                            # 优化：使用一个查询获取多个统计信息
+                            # 优化：使用一个查询获取多个统计信息，并处理空值
                             await cursor.execute("""
                                 SELECT 
                                     COUNT(*) as total_users,
@@ -685,19 +685,28 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                             stats_result = await cursor.fetchone()
                             
                             if stats_result:
-                                total_users = stats_result['total_users']
-                                with_username = stats_result['with_username']
+                                total_users = stats_result['total_users'] or 0
+                                with_username = stats_result['with_username'] or 0
                                 
                                 result_text += f"• *总用户数*: {total_users}\n"
                                 result_text += f"• *有用户名用户*: {with_username}\n"
-                                result_text += f"• *无用户名用户*: {total_users - with_username}\n"
+                                result_text += f"• *无用户名用户*: {max(0, total_users - with_username)}\n"
+                            else:
+                                result_text += f"• *总用户数*: 0\n"
+                                result_text += f"• *有用户名用户*: 0\n"
+                                result_text += f"• *无用户名用户*: 0\n"
                             
                             # 显示最近的几个用户名（用于测试）
-                            await cursor.execute("SELECT username FROM users WHERE username IS NOT NULL AND username != '' ORDER BY last_seen DESC LIMIT 5")
-                            recent_users = await cursor.fetchall()
-                            if recent_users:
-                                usernames = [user['username'] for user in recent_users]
-                                result_text += f"• *最近用户名*: {', '.join(usernames)}\n"
+                            if stats_result and (stats_result['total_users'] or 0) > 0:
+                                await cursor.execute("SELECT username FROM users WHERE username IS NOT NULL AND username != '' ORDER BY last_seen DESC LIMIT 5")
+                                recent_users = await cursor.fetchall()
+                                if recent_users:
+                                    usernames = [user['username'] for user in recent_users]
+                                    result_text += f"• *最近用户名*: {', '.join(usernames)}\n"
+                                else:
+                                    result_text += f"• *最近用户名*: 暂无有用户名的用户\n"
+                            else:
+                                result_text += f"• *最近用户名*: 缓存为空\n"
                     except Exception as db_e:
                         result_text += f"• *数据库查询错误*: {str(db_e)}\n"
                 else:
@@ -822,7 +831,8 @@ async def clean_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         async with user_cache_manager.get_cursor() as cursor:
             # 先获取清理前的统计
             await cursor.execute("SELECT COUNT(*) as total FROM users")
-            before_count = (await cursor.fetchone())['total']
+            before_result = await cursor.fetchone()
+            before_count = (before_result['total'] if before_result else 0) or 0
             
             if days_ago:
                 # 按时间清理
@@ -830,7 +840,8 @@ async def clean_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "SELECT COUNT(*) as old_count FROM users WHERE last_seen < DATE_SUB(NOW(), INTERVAL %s DAY)",
                     (days_ago,)
                 )
-                old_count = (await cursor.fetchone())['old_count']
+                old_result = await cursor.fetchone()
+                old_count = (old_result['old_count'] if old_result else 0) or 0
                 
                 if old_count == 0:
                     await context.bot.edit_message_text(
@@ -846,14 +857,15 @@ async def clean_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "DELETE FROM users WHERE last_seen < DATE_SUB(NOW(), INTERVAL %s DAY)",
                     (days_ago,)
                 )
-                affected_rows = cursor.rowcount
+                affected_rows = cursor.rowcount or 0
+                remaining_count = max(0, before_count - affected_rows)
                 
                 result_text = (
                     f"✅ **ID缓存清理完成**\n\n"
                     f"📊 **清理结果**：\n"
                     f"• 清理前：{before_count} 个用户\n"
                     f"• 已清理：{affected_rows} 个用户（{days_ago}天前）\n"
-                    f"• 剩余：{before_count - affected_rows} 个用户\n\n"
+                    f"• 剩余：{remaining_count} 个用户\n\n"
                     f"🎯 **操作类型**：按时间清理"
                 )
             else:
@@ -868,7 +880,7 @@ async def clean_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 # 执行全部清理
                 await cursor.execute("DELETE FROM users")
-                affected_rows = cursor.rowcount
+                affected_rows = cursor.rowcount or 0
                 
                 result_text = (
                     f"✅ **ID缓存清理完成**\n\n"
