@@ -757,5 +757,5 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 # 注册命令
 command_factory.register_command("id", get_id_command, permission=Permission.NONE, description="获取用户或群组的ID")
 command_factory.register_command("when", when_command, permission=Permission.NONE, description="查询用户详细信息（支持数字ID、用户名或回复消息）")
-command_factory.register_command("cache", cache_debug_command, permission=Permission.NONE, description="查看用户缓存状态（调试用）")
+command_factory.register_command("cache", cache_debug_command, permission=Permission.ADMIN, description="查看用户缓存状态（管理员专用）")
 
