@@ -413,7 +413,7 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # 只有ID的情况
             username = "无法获取"
             full_name = "无法获取"
-            info_note = "\n⚠️ *说明*: 由于隐私设置或API限制，无法获取详细用户信息"
+            info_note = "\n⚠️ *说明*: 由于用户隐私设置或非Premium会员限制，无法通过ID获取用户名和昵称信息。只有Premium会员或与机器人有过交互的用户才能显示详细信息。"
 
         # 转义Markdown特殊字符
         safe_username = escape_markdown(username)
@@ -449,18 +449,30 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 确定级别
         level = determine_level_by_date(estimated_date)
 
-        # 构建结果
-        result_text = (
-            f"🔍 *用户信息查询*\n\n"
-            f"🏷️ *昵称*：{safe_full_name}\n"
-            f"📛 *用户名*：@{safe_username}\n"
-            f"👤 *用户ID*: `{target_user_id}`\n"
-            f"📅 *估算注册日期*：{formatted_date}\n"
-            f"⏰ *账号年龄*：{age_str}\n"
-            f"🏆 *级别*：{level}"
-            f"{info_note}\n\n"
-            f"⚠️ *注意*: 注册日期为基于用户ID的估算值，仅供参考"
-        )
+        # 构建结果 - 根据是否能获取到用户信息调整显示格式
+        if target_user and username != "无法获取":
+            # 能获取到用户信息的完整显示
+            result_text = (
+                f"🔍 *用户信息查询*\n\n"
+                f"🏷️ *昵称*：{safe_full_name}\n"
+                f"📛 *用户名*：@{safe_username}\n"
+                f"👤 *用户ID*: `{target_user_id}`\n"
+                f"📅 *估算注册日期*：{formatted_date}\n"
+                f"⏰ *账号年龄*：{age_str}\n"
+                f"🏆 *级别*：{level}\n\n"
+                f"⚠️ *注意*: 注册日期为基于用户ID的估算值，仅供参考"
+            )
+        else:
+            # 无法获取用户信息的简化显示
+            result_text = (
+                f"🔍 *用户信息查询*\n\n"
+                f"👤 *用户ID*: `{target_user_id}`\n"
+                f"📅 *估算注册日期*：{formatted_date}\n"
+                f"⏰ *账号年龄*：{age_str}\n"
+                f"🏆 *级别*：{level}"
+                f"{info_note}\n\n"
+                f"⚠️ *注意*: 注册日期为基于用户ID的估算值，仅供参考"
+            )
 
         await context.bot.edit_message_text(
             chat_id=chat.id,
