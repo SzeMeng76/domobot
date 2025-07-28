@@ -83,6 +83,8 @@ docker-compose down
 | `BIN_API_KEY`               | **（可选）** DY.AX的API Key，用于启用 `/bin` 命令。                         |                         |
 | `QWEATHER_API_KEY`          | **（可选）** 和风天气的API Key，用于启用 `/tq` 命令。                       |                         |
 | `EXCHANGE_RATE_API_KEYS`    | **（可选）** openexchangerates.org的API Key，用于启用 `/rate` 命令。多个密钥用逗号分隔。 |                         |
+| `ENABLE_USER_CACHE`         | **（可选）** 启用用户缓存系统 (`true`/`false`)。                            | `false`                 |
+| `USER_CACHE_GROUP_IDS`      | **（可选）** 用逗号分隔的群组ID，用于监控用户缓存。留空则禁用缓存。           | (空)                    |
 | `DB_HOST`                   | 数据库的主机名。**必须是 `mysql`**。                                        | `mysql`                 |
 | `DB_PORT`                   | 数据库的内部端口。                                                          | `3306`                  |
 | `DB_NAME`                   | 数据库的名称。必须与 `docker-compose.yml` 中的设置匹配。                    | `bot`                   |
@@ -116,10 +118,12 @@ docker-compose down
 /sp          # Spotify全球价格
 
 # 用户信息查询
-/when 123456789
-/when        # 回复用户消息后使用
-/id          # 获取用户/群组ID
-/id          # 回复消息后使用
+/when 123456789           # 通过用户ID查询
+/when @username           # 通过用户名查询
+/when username            # 通过用户名查询（不带@）
+/when                     # 回复用户消息后使用
+/id                       # 获取用户/群组ID
+/id                       # 回复消息后使用
 ```
 
 #### 白名单专享命令
@@ -154,7 +158,15 @@ docker-compose down
 
 #### 管理员命令
 ```bash
-# 管理员缓存管理
+# 用户缓存管理
+/cache                    # 查看用户缓存状态和统计信息
+/cache username           # 检查特定用户是否已缓存
+/cache @username          # 检查特定用户是否已缓存
+/cache 123456789          # 检查特定用户ID是否已缓存
+/cleanid                  # 清理所有用户ID缓存
+/cleanid 30               # 清理30天前的用户缓存
+
+# 其他缓存管理
 /bin_cleancache
 /crypto_cleancache
 /rate_cleancache
@@ -319,13 +331,22 @@ docker-compose down
 - **白名单政策更新:** 申请目前暂不开放，未来考虑推出付费服务计划
 
 #### 用户信息查询功能
-- **新增 `/when` 命令** 用于Telegram用户注册日期估算
+- **增强 `/when` 命令** 支持用户名查询的Telegram用户注册日期估算
+- **多种查询方式** 支持直接ID输入、用户名查询（@username或username）和回复消息查询
 - **智能ID算法** 使用线性插值结合真实数据点进行估算
-- **多种查询方式** 支持直接ID输入和回复消息查询
 - **用户分级系统** 根据账号年龄分类用户（新兵蛋子、不如老兵、老兵等）
 - **Markdown安全特性** 包含特殊字符转义功能
 - **精确年龄计算** 使用年月差值计算逻辑
 - **增强 `/id` 命令** 用于获取用户和群组ID
+- **用户缓存系统** 提升用户名到ID解析的性能
+
+#### 用户缓存管理系统
+- **全新用户缓存基础设施** 采用MySQL存储和Redis性能优化
+- **可配置的群组监控** 通过 `ENABLE_USER_CACHE` 和 `USER_CACHE_GROUP_IDS` 设置
+- **管理员缓存调试** 使用 `/cache` 命令查看缓存统计和用户查询
+- **灵活的缓存清理** 使用 `/cleanid` 命令支持基于时间和完全清理
+- **自动用户数据收集** 从监控群组消息中自动收集用户名到ID的映射
+- **增强的用户名支持** 在 `/when` 命令中利用缓存用户数据
 
 #### BIN查询功能
 - **新增 `/bin` 命令** 用于信用卡BIN信息查询
