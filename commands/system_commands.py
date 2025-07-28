@@ -11,6 +11,15 @@ from utils.message_manager import delete_user_command, send_search_result
 from utils.permissions import Permission
 
 
+class CachedUser:
+    """用于构建缓存用户对象的辅助类"""
+    def __init__(self, data):
+        self.id = data.get("user_id")
+        self.username = data.get("username")
+        self.first_name = data.get("first_name", "")
+        self.last_name = data.get("last_name", "")
+
+
 async def get_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     获取用户、群组或回复目标的ID。
@@ -380,12 +389,6 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     if cached_user:
                         target_user_id = cached_user.get("user_id")
                         # 从缓存中构建用户对象信息
-                        class CachedUser:
-                            def __init__(self, data):
-                                self.id = data.get("user_id")
-                                self.username = data.get("username")
-                                self.first_name = data.get("first_name", "")
-                                self.last_name = data.get("last_name", "")
                         target_user = CachedUser(cached_user)
                     else:
                         await context.bot.edit_message_text(
@@ -425,12 +428,6 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     if cached_user:
                         target_user_id = cached_user.get("user_id")
                         # 从缓存中构建用户对象信息
-                        class CachedUser:
-                            def __init__(self, data):
-                                self.id = data.get("user_id")
-                                self.username = data.get("username")
-                                self.first_name = data.get("first_name", "")
-                                self.last_name = data.get("last_name", "")
                         target_user = CachedUser(cached_user)
                     else:
                         await context.bot.edit_message_text(
@@ -661,34 +658,74 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                     result_text += f"📛 *用户名*: @{username}\n"
                     result_text += f"❌ *缓存状态*: 未找到"
         else:
-            # 显示缓存概览
+            # 显示缓存概览和配置信息
             try:
-                # 尝试获取缓存统计信息
-                cache_stats = {}
-                if hasattr(user_cache_manager, 'get_cache_stats'):
-                    cache_stats = await user_cache_manager.get_cache_stats()
-                elif hasattr(user_cache_manager, 'cache') and hasattr(user_cache_manager.cache, '__len__'):
-                    cache_stats['total_users'] = len(user_cache_manager.cache)
-                
                 result_text = f"📊 *用户缓存概览*\n\n"
                 
-                if cache_stats:
-                    for key, value in cache_stats.items():
-                        key_cn = {
-                            'total_users': '总用户数',
-                            'with_username': '有用户名用户',
-                            'without_username': '无用户名用户',
-                            'last_updated': '最后更新'
-                        }.get(key, key)
-                        result_text += f"• *{key_cn}*: {value}\n"
+                # 检查缓存管理器类型
+                cache_type = type(user_cache_manager).__name__
+                result_text += f"• *缓存类型*: {cache_type}\n"
+                
+                # 检查连接状态
+                if hasattr(user_cache_manager, '_connected'):
+                    connection_status = "已连接" if user_cache_manager._connected else "未连接"
+                    result_text += f"• *连接状态*: {connection_status}\n"
+                
+                # 尝试获取缓存统计信息
+                if hasattr(user_cache_manager, 'get_cursor'):
+                    try:
+                        async with user_cache_manager.get_cursor() as cursor:
+                            # 优化：使用一个查询获取多个统计信息
+                            await cursor.execute("""
+                                SELECT 
+                                    COUNT(*) as total_users,
+                                    SUM(CASE WHEN username IS NOT NULL AND username != '' THEN 1 ELSE 0 END) as with_username
+                                FROM users
+                            """)
+                            stats_result = await cursor.fetchone()
+                            
+                            if stats_result:
+                                total_users = stats_result['total_users']
+                                with_username = stats_result['with_username']
+                                
+                                result_text += f"• *总用户数*: {total_users}\n"
+                                result_text += f"• *有用户名用户*: {with_username}\n"
+                                result_text += f"• *无用户名用户*: {total_users - with_username}\n"
+                            
+                            # 显示最近的几个用户名（用于测试）
+                            await cursor.execute("SELECT username FROM users WHERE username IS NOT NULL AND username != '' ORDER BY last_seen DESC LIMIT 5")
+                            recent_users = await cursor.fetchall()
+                            if recent_users:
+                                usernames = [user['username'] for user in recent_users]
+                                result_text += f"• *最近用户名*: {', '.join(usernames)}\n"
+                    except Exception as db_e:
+                        result_text += f"• *数据库查询错误*: {str(db_e)}\n"
                 else:
                     result_text += "• *状态*: 缓存管理器已启用\n"
                     result_text += "• *详情*: 无法获取详细统计信息\n"
+                
+                # 显示配置信息
+                try:
+                    from utils.config_manager import get_config
+                    config = get_config()
+                    result_text += f"\n⚙️ *缓存配置*:\n"
+                    result_text += f"• *启用状态*: {'是' if config.enable_user_cache else '否'}\n"
+                    if hasattr(config, 'user_cache_group_ids') and config.user_cache_group_ids:
+                        result_text += f"• *监听群组*: {len(config.user_cache_group_ids)} 个\n"
+                        result_text += f"• *群组ID*: {config.user_cache_group_ids}\n"
+                    else:
+                        result_text += f"• *监听群组*: 未配置 ❌\n"
+                except Exception as config_e:
+                    result_text += f"\n⚙️ *配置错误*: {str(config_e)}\n"
                 
                 result_text += f"\n💡 *使用方法*:\n"
                 result_text += f"• `/cache username` - 查询特定用户名\n"
                 result_text += f"• `/cache @username` - 查询特定用户名\n"
                 result_text += f"• `/cache 123456789` - 查询特定ID\n"
+                
+                result_text += f"\n📝 *缓存说明*:\n"
+                result_text += f"• 只有在配置的监听群组中发过消息的用户才会被缓存\n"
+                result_text += f"• 如果监听群组未配置，缓存功能将不工作\n"
                 
             except Exception as e:
                 result_text = f"📊 *用户缓存概览*\n\n"
