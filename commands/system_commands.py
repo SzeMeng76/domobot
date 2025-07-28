@@ -170,7 +170,6 @@ def estimate_account_creation_date(user_id):
         (7679610, datetime(2013, 12, 31)),             # 2013年末
         (10858037, datetime(2014, 1, 26)),             # ✅ 真实数据点
         (15835244, datetime(2014, 2, 21)),             # 2014年初
-        (39242066, datetime(2014, 3, 13)),             # ✅ 真实数据点        
         (39525684, datetime(2014, 3, 16)),             # ✅ 真实数据点
         (44634663, datetime(2014, 5, 6)),              # 2014年中
         (54135846, datetime(2014, 9, 10)),             # ✅ 真实数据点
@@ -181,7 +180,6 @@ def estimate_account_creation_date(user_id):
         (278683524, datetime(2016, 9, 9)),             # ✅ 真实数据点
         (309232988, datetime(2016, 12, 20)),           # ✅ 真实数据点
         (334215373, datetime(2017, 1, 31)),            # ✅ 真实数据点
-        (391423707, datetime(2017, 6, 26)),            # ✅ 真实数据点
         (446378169, datetime(2017, 10, 8)),            # ✅ 真实数据点
         (462075301, datetime(2017, 11, 1)),            # ✅ 真实数据点
         (474530520, datetime(2017, 11, 19)),           # ✅ 真实数据点
@@ -334,7 +332,7 @@ def determine_level_by_date(creation_date):
 async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     查询用户的详细信息（基于ID估算注册日期）
-    支持: /when 123456789 或回复消息使用 /when
+    支持: /when 123456789 或 /when @username 或回复消息使用 /when
     """
     message = update.effective_message
     chat = update.effective_chat
@@ -353,16 +351,19 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         target_user = None
         target_user_id = None
         
+        # 获取用户缓存管理器
+        user_cache_manager = context.bot_data.get("user_cache_manager")
+        
         # 方法1: 检查是否有回复的消息
         if message.reply_to_message and message.reply_to_message.from_user:
             target_user = message.reply_to_message.from_user
             target_user_id = target_user.id
             
-        # 方法2: 检查是否有数字ID参数
+        # 方法2: 检查是否有参数
         elif context.args:
             param = context.args[0].strip()
             
-            # 只支持数字ID查询
+            # 处理数字ID
             if param.isdigit():
                 target_user_id = int(param)
                 try:
@@ -371,14 +372,103 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 except Exception:
                     # 获取失败很正常，我们仍然可以基于ID估算注册日期
                     pass
+            # 处理@用户名
+            elif param.startswith("@"):
+                username = param[1:]  # 去掉@符号
+                if user_cache_manager:
+                    cached_user = await user_cache_manager.get_user_by_username(username)
+                    if cached_user:
+                        target_user_id = cached_user.get("user_id")
+                        # 从缓存中构建用户对象信息
+                        class CachedUser:
+                            def __init__(self, data):
+                                self.id = data.get("user_id")
+                                self.username = data.get("username")
+                                self.first_name = data.get("first_name", "")
+                                self.last_name = data.get("last_name", "")
+                        target_user = CachedUser(cached_user)
+                    else:
+                        await context.bot.edit_message_text(
+                            chat_id=chat.id,
+                            message_id=sent_message.message_id,
+                            text=f"❌ 缓存中未找到用户 @{username}\n\n"
+                                 "💡 *可能原因*:\n"
+                                 "• 用户未在监控群组中发过消息\n"
+                                 "• 用户名拼写错误\n"
+                                 "• 用户缓存中暂无此用户信息\n\n"
+                                 "✅ *建议*:\n"
+                                 "• 让用户在群内发一条消息后再试\n"
+                                 "• 使用数字ID查询: `/when 123456789`\n"
+                                 "• 回复用户消息后使用 `/when`",
+                            parse_mode="Markdown"
+                        )
+                        # 调度删除机器人回复消息
+                        from utils.message_manager import _schedule_deletion
+                        await _schedule_deletion(context, chat.id, sent_message.message_id, 180)
+                        return
+                else:
+                    await context.bot.edit_message_text(
+                        chat_id=chat.id,
+                        message_id=sent_message.message_id,
+                        text="❌ 用户缓存管理器未启用\n\n"
+                             "无法使用用户名查询功能，请使用数字ID查询",
+                        parse_mode="Markdown"
+                    )
+                    # 调度删除机器人回复消息
+                    from utils.message_manager import _schedule_deletion
+                    await _schedule_deletion(context, chat.id, sent_message.message_id, 180)
+                    return
+            # 处理纯用户名（不带@）
+            elif not param.isdigit() and param.isalnum():
+                if user_cache_manager:
+                    cached_user = await user_cache_manager.get_user_by_username(param)
+                    if cached_user:
+                        target_user_id = cached_user.get("user_id")
+                        # 从缓存中构建用户对象信息
+                        class CachedUser:
+                            def __init__(self, data):
+                                self.id = data.get("user_id")
+                                self.username = data.get("username")
+                                self.first_name = data.get("first_name", "")
+                                self.last_name = data.get("last_name", "")
+                        target_user = CachedUser(cached_user)
+                    else:
+                        await context.bot.edit_message_text(
+                            chat_id=chat.id,
+                            message_id=sent_message.message_id,
+                            text=f"❌ 缓存中未找到用户 {param}\n\n"
+                                 "💡 *提示*: 用户名查询支持以下格式:\n"
+                                 "• `/when @username`\n"
+                                 "• `/when username`\n"
+                                 "• `/when 123456789` (数字ID)\n\n"
+                                 "如果用户名查询失败，建议使用数字ID查询",
+                            parse_mode="Markdown"
+                        )
+                        # 调度删除机器人回复消息
+                        from utils.message_manager import _schedule_deletion
+                        await _schedule_deletion(context, chat.id, sent_message.message_id, 180)
+                        return
+                else:
+                    await context.bot.edit_message_text(
+                        chat_id=chat.id,
+                        message_id=sent_message.message_id,
+                        text="❌ 用户缓存管理器未启用\n\n"
+                             "无法使用用户名查询功能，请使用数字ID查询",
+                        parse_mode="Markdown"
+                    )
+                    # 调度删除机器人回复消息
+                    from utils.message_manager import _schedule_deletion
+                    await _schedule_deletion(context, chat.id, sent_message.message_id, 180)
+                    return
             else:
                 await context.bot.edit_message_text(
                     chat_id=chat.id,
                     message_id=sent_message.message_id,
-                    text="❌ 不支持用户名查询\n\n"
+                    text="❌ 不支持的查询格式\n\n"
                          "✅ *支持的查询方式*:\n"
                          "• 回复某个用户的消息后使用 `/when`\n"
-                         "• 直接使用数字ID: `/when 123456789`\n\n"
+                         "• 使用数字ID: `/when 123456789`\n"
+                         "• 使用用户名: `/when @username` 或 `/when username`\n\n"
                          "💡 *获取用户ID方法*:\n"
                          "• 让用户私聊机器人发送 `/id`\n"
                          "• 回复用户消息后发送 `/id`",
@@ -396,7 +486,8 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 message_id=sent_message.message_id,
                 text="请使用以下方式查询用户信息：\n"
                      "• 回复某个用户的消息后使用 `/when`\n"
-                     "• 直接使用数字ID: `/when 123456789`\n\n"
+                     "• 使用数字ID: `/when 123456789`\n"
+                     "• 使用用户名: `/when @username` 或 `/when username`\n\n"
                      "💡 如需获取用户ID，可使用 `/id` 命令"
             )
             # 调度删除机器人回复消息
@@ -500,5 +591,5 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # 注册命令
 command_factory.register_command("id", get_id_command, permission=Permission.NONE, description="获取用户或群组的ID")
-command_factory.register_command("when", when_command, permission=Permission.NONE, description="查询用户详细信息（支持数字ID或回复消息）")
+command_factory.register_command("when", when_command, permission=Permission.NONE, description="查询用户详细信息（支持数字ID、用户名或回复消息）")
 
