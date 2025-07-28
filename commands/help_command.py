@@ -372,11 +372,17 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 🚀 *试试这些命令:*
 - `/rate USD 100`: 查询100美元兑人民币汇率
 - `/crypto btc`: 查询比特币价格
+- `/bin 123456`: 查询信用卡BIN信息
 - `/tq 北京`: 查询北京天气
 - `/steam 赛博朋克`: 查询游戏价格
+- `/steamb Half-Life`: 查询Steam捆绑包
+- `/steams 动作`: 综合搜索游戏
 - `/nf`: 查看Netflix全球价格
 - `/ds`: 查看Disney+全球价格  
 - `/sp`: 查看Spotify全球价格
+- `/app 微信`: 搜索App Store应用
+- `/gp WeChat`: 搜索Google Play应用
+- `/aps iCloud`: 查询Apple服务价格
 - `/id`: 获取你的用户ID
 - `/when`: 查询账号注册时间
 
