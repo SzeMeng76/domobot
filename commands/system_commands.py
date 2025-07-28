@@ -589,7 +589,136 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await _schedule_deletion(context, chat.id, sent_message.message_id, 5)  # 5秒后删除错误
 
 
+async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    查看用户缓存状态和内容（调试用）
+    支持: /cache 或 /cache username 或 /cache 123456789
+    """
+    message = update.effective_message
+    chat = update.effective_chat
+    user = update.effective_user
+
+    if not message or not chat or not user:
+        return
+
+    # 立即删除用户命令
+    await delete_user_command(context, chat.id, message.message_id)
+
+    reply_text = "正在查询缓存信息..."
+    sent_message = await send_search_result(context, chat.id, reply_text)
+
+    try:
+        # 获取用户缓存管理器
+        user_cache_manager = context.bot_data.get("user_cache_manager")
+        
+        if not user_cache_manager:
+            await context.bot.edit_message_text(
+                chat_id=chat.id,
+                message_id=sent_message.message_id,
+                text="❌ 用户缓存管理器未启用"
+            )
+            return
+
+        # 如果有参数，查询特定用户
+        if context.args:
+            param = context.args[0].strip()
+            result_text = f"🔍 *缓存查询结果*\n\n"
+            
+            if param.isdigit():
+                # 通过ID查询
+                user_id = int(param)
+                cached_user = await user_cache_manager.get_user_by_id(user_id) if hasattr(user_cache_manager, 'get_user_by_id') else None
+                
+                if cached_user:
+                    username = cached_user.get("username", "无")
+                    first_name = cached_user.get("first_name", "")
+                    last_name = cached_user.get("last_name", "")
+                    full_name = f"{first_name} {last_name}".strip() or "无"
+                    
+                    result_text += f"👤 *用户ID*: `{user_id}`\n"
+                    result_text += f"📛 *用户名*: {username}\n"
+                    result_text += f"🏷️ *昵称*: {escape_markdown(full_name)}\n"
+                    result_text += f"✅ *缓存状态*: 已缓存"
+                else:
+                    result_text += f"👤 *用户ID*: `{user_id}`\n"
+                    result_text += f"❌ *缓存状态*: 未找到"
+            else:
+                # 通过用户名查询
+                username = param.lstrip("@")  # 去掉可能的@符号
+                cached_user = await user_cache_manager.get_user_by_username(username)
+                
+                if cached_user:
+                    user_id = cached_user.get("user_id")
+                    first_name = cached_user.get("first_name", "")
+                    last_name = cached_user.get("last_name", "")
+                    full_name = f"{first_name} {last_name}".strip() or "无"
+                    
+                    result_text += f"📛 *用户名*: @{username}\n"
+                    result_text += f"👤 *用户ID*: `{user_id}`\n"
+                    result_text += f"🏷️ *昵称*: {escape_markdown(full_name)}\n"
+                    result_text += f"✅ *缓存状态*: 已缓存"
+                else:
+                    result_text += f"📛 *用户名*: @{username}\n"
+                    result_text += f"❌ *缓存状态*: 未找到"
+        else:
+            # 显示缓存概览
+            try:
+                # 尝试获取缓存统计信息
+                cache_stats = {}
+                if hasattr(user_cache_manager, 'get_cache_stats'):
+                    cache_stats = await user_cache_manager.get_cache_stats()
+                elif hasattr(user_cache_manager, 'cache') and hasattr(user_cache_manager.cache, '__len__'):
+                    cache_stats['total_users'] = len(user_cache_manager.cache)
+                
+                result_text = f"📊 *用户缓存概览*\n\n"
+                
+                if cache_stats:
+                    for key, value in cache_stats.items():
+                        key_cn = {
+                            'total_users': '总用户数',
+                            'with_username': '有用户名用户',
+                            'without_username': '无用户名用户',
+                            'last_updated': '最后更新'
+                        }.get(key, key)
+                        result_text += f"• *{key_cn}*: {value}\n"
+                else:
+                    result_text += "• *状态*: 缓存管理器已启用\n"
+                    result_text += "• *详情*: 无法获取详细统计信息\n"
+                
+                result_text += f"\n💡 *使用方法*:\n"
+                result_text += f"• `/cache username` - 查询特定用户名\n"
+                result_text += f"• `/cache @username` - 查询特定用户名\n"
+                result_text += f"• `/cache 123456789` - 查询特定ID\n"
+                
+            except Exception as e:
+                result_text = f"📊 *用户缓存概览*\n\n"
+                result_text += f"• *状态*: 缓存管理器已启用\n"
+                result_text += f"• *错误*: 无法获取详细信息 ({str(e)})\n"
+
+        await context.bot.edit_message_text(
+            chat_id=chat.id,
+            message_id=sent_message.message_id,
+            text=result_text,
+            parse_mode="Markdown"
+        )
+
+        # 调度删除机器人回复消息
+        from utils.message_manager import _schedule_deletion
+        await _schedule_deletion(context, chat.id, sent_message.message_id, 180)
+
+    except Exception as e:
+        await context.bot.edit_message_text(
+            chat_id=chat.id,
+            message_id=sent_message.message_id,
+            text=f"查询缓存失败: {str(e)}"
+        )
+        # 调度删除错误消息
+        from utils.message_manager import _schedule_deletion
+        await _schedule_deletion(context, chat.id, sent_message.message_id, 5)
+
+
 # 注册命令
 command_factory.register_command("id", get_id_command, permission=Permission.NONE, description="获取用户或群组的ID")
 command_factory.register_command("when", when_command, permission=Permission.NONE, description="查询用户详细信息（支持数字ID、用户名或回复消息）")
+command_factory.register_command("cache", cache_debug_command, permission=Permission.NONE, description="查看用户缓存状态（调试用）")
 
