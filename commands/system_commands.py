@@ -1021,8 +1021,13 @@ async def add_point_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data_file.parent.mkdir(exist_ok=True)
         
         # 保存数据
-        with open(data_file, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
+        try:
+            with open(data_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=4)
+            print(f"✅ 数据已保存到: {data_file}")
+        except Exception as save_error:
+            print(f"❌ 保存数据失败: {save_error}")
+            raise save_error
             
         # 强制重新加载数据
         loader.reload()
@@ -1149,8 +1154,13 @@ async def remove_point_command(update: Update, context: ContextTypes.DEFAULT_TYP
         data["last_updated"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
         
         # 保存数据
-        with open(data_file, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
+        try:
+            with open(data_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=4)
+            print(f"✅ 数据已保存到: {data_file}")
+        except Exception as save_error:
+            print(f"❌ 保存数据失败: {save_error}")
+            raise save_error
             
         # 强制重新加载数据
         loader.reload()
