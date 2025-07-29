@@ -158,6 +158,11 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 
 #### Admin Commands
 ```bash
+# Data Points Management
+/listpoints [limit]              # List known data points (default 10, with statistics)
+/addpoint <user_id> <date> [note] # Add new data point (format: YYYY-MM-DD)
+/removepoint <user_id>           # Remove specified data point
+
 # User cache management
 /cache                    # View user cache status and statistics (shows user count, table size, etc.)
 /cache username           # Check if specific user is cached
@@ -336,6 +341,13 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 - MySQL and Redis connection details must be configured in the `.env` file.
 
 ### 🆕 Recent Updates
+
+#### Data Points Management System (Latest Feature)
+- **JSON Storage Architecture:** Replaced hardcoded data points with flexible JSON file storage system
+- **Real-time Statistics Display:** Shows statistics for total, verified, and estimated data points
+- **Dynamic Management Features:** Support for adding, removing, and viewing data points via Telegram commands
+- **Docker Volume Persistence:** Ensures data integrity across container restarts
+- **Backward Compatibility:** Fully compatible with existing estimation algorithms, no migration required
 
 #### Role-Based Access Control (Latest)
 - **Universal Public Access:** All users and groups can use streaming service pricing and user information commands without any restrictions
