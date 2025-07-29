@@ -74,9 +74,12 @@ async def get_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def escape_markdown(text):
-    """转义Markdown特殊字符"""
+    """转义Markdown特殊字符，安全处理Unicode字符"""
     if not text:
-        return text
+        return ""
+    
+    # 确保输入是字符串
+    text = str(text)
     
     # Telegram Markdown特殊字符
     special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
@@ -88,9 +91,12 @@ def escape_markdown(text):
 
 
 def escape_markdown_v2(text):
-    """转义MarkdownV2特殊字符"""
+    """转义MarkdownV2特殊字符，安全处理Unicode字符"""
     if not text:
-        return text
+        return ""
+    
+    # 确保输入是字符串
+    text = str(text)
     
     # MarkdownV2需要转义的字符
     special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!', '\\']
@@ -101,18 +107,51 @@ def escape_markdown_v2(text):
     return text
 
 
+def safe_format_username(username):
+    """安全格式化用户名，避免Markdown解析错误"""
+    if not username or username == "无法获取":
+        return "无法获取"
+    
+    # 移除或替换可能引起问题的字符
+    safe_username = str(username)
+    
+    # 如果包含非ASCII字符，使用代码块格式
+    try:
+        safe_username.encode('ascii')
+        # 纯ASCII，可以安全转义
+        return escape_markdown(safe_username)
+    except UnicodeEncodeError:
+        # 包含非ASCII字符，使用代码块避免解析问题
+        return f"`{username}`"
+
+
 async def send_message_with_fallback(context, chat_id, text, parse_mode="Markdown", fallback_text=None):
     """
     发送消息，如果失败则使用简化的纯文本fallback
+    增强了对Unicode字符的处理
     """
     from utils.message_manager import send_search_result
     
-    # 尝试发送原始消息
-    sent_message = await send_search_result(context, chat_id, text, parse_mode=parse_mode)
-    if sent_message:
-        return sent_message
+    # 第一次尝试：发送原始消息
+    try:
+        sent_message = await send_search_result(context, chat_id, text, parse_mode=parse_mode)
+        if sent_message:
+            return sent_message
+    except Exception as e:
+        logger.debug(f"第一次发送失败: {e}")
     
-    # 如果失败，使用fallback文本或简化版本
+    # 第二次尝试：如果是MarkdownV2，改用Markdown
+    if parse_mode == "MarkdownV2":
+        try:
+            # 简化MarkdownV2为普通Markdown
+            simplified_text = text.replace('\\', '')  # 移除转义符
+            sent_message = await send_search_result(context, chat_id, simplified_text, parse_mode="Markdown")
+            if sent_message:
+                return sent_message
+        except Exception as e:
+            logger.debug(f"Markdown降级发送失败: {e}")
+    
+    # 第三次尝试：使用fallback文本或创建简化版本
     if not fallback_text:
         # 移除所有Markdown格式，创建简化版本
         fallback_text = text
@@ -123,22 +162,25 @@ async def send_message_with_fallback(context, chat_id, text, parse_mode="Markdow
         fallback_text = re.sub(r'`(.*?)`', r'\1', fallback_text)        # 移除代码格式
         fallback_text = re.sub(r'\\(.)', r'\1', fallback_text)          # 移除转义字符
     
-    # 尝试发送纯文本版本
+    # 第四次尝试：发送纯文本版本
     try:
         fallback_message = await context.bot.send_message(
             chat_id=chat_id,
             text=fallback_text
         )
         return fallback_message
-    except Exception:
+    except Exception as e:
+        logger.debug(f"纯文本发送失败: {e}")
+        
         # 最后的fallback：发送通用错误消息
         try:
             error_message = await context.bot.send_message(
                 chat_id=chat_id,
-                text="❌ 消息发送失败，请稍后重试"
+                text="❌ 消息发送失败，用户名包含特殊字符"
             )
             return error_message
         except Exception:
+            logger.error("所有发送尝试均失败")
             return None
 
 
@@ -466,8 +508,8 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             info_note = "\n⚠️ *说明*: 由于用户隐私设置或非Premium会员限制，无法通过ID获取用户名和昵称信息。只有Premium会员或与机器人有过交互的用户才能显示详细信息。"
 
         # 转义Markdown特殊字符
-        safe_username = escape_markdown(username)
-        safe_full_name = escape_markdown(full_name)
+        safe_username = safe_format_username(username)
+        safe_full_name = safe_format_username(full_name)
 
         # 估算注册日期
         estimated_date = estimate_account_creation_date(target_user_id)
@@ -593,8 +635,8 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                     full_name = f"{first_name} {last_name}".strip() or "无"
                     
                     result_text += f"👤 *用户ID*: `{user_id}`\n"
-                    result_text += f"📛 *用户名*: {escape_markdown(username)}\n"
-                    result_text += f"🏷️ *昵称*: {escape_markdown(full_name)}\n"
+                    result_text += f"📛 *用户名*: {safe_format_username(username)}\n"
+                    result_text += f"🏷️ *昵称*: {safe_format_username(full_name)}\n"
                     result_text += f"✅ *缓存状态*: 已缓存"
                 else:
                     result_text += f"👤 *用户ID*: `{user_id}`\n"
@@ -610,12 +652,12 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                     last_name = cached_user.get("last_name", "")
                     full_name = f"{first_name} {last_name}".strip() or "无"
                     
-                    result_text += f"📛 *用户名*: @{escape_markdown(username)}\n"
+                    result_text += f"📛 *用户名*: @{safe_format_username(username)}\n"
                     result_text += f"👤 *用户ID*: `{user_id}`\n"
-                    result_text += f"🏷️ *昵称*: {escape_markdown(full_name)}\n"
+                    result_text += f"🏷️ *昵称*: {safe_format_username(full_name)}\n"
                     result_text += f"✅ *缓存状态*: 已缓存"
                 else:
-                    result_text += f"📛 *用户名*: @{escape_markdown(username)}\n"
+                    result_text += f"📛 *用户名*: @{safe_format_username(username)}\n"
                     result_text += f"❌ *缓存状态*: 未找到"
         else:
             # 显示缓存概览和配置信息
@@ -691,14 +733,14 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                                 await cursor.execute("SELECT username FROM users WHERE username IS NOT NULL AND username != '' ORDER BY last_seen DESC LIMIT 5")
                                 recent_users = await cursor.fetchall()
                                 if recent_users:
-                                    usernames = [escape_markdown(user['username']) for user in recent_users]
+                                    usernames = [safe_format_username(user['username']) for user in recent_users]
                                     result_text += f"• *最近用户名*: {', '.join(usernames)}\n"
                                 else:
                                     result_text += f"• *最近用户名*: 暂无有用户名的用户\n"
                             else:
                                 result_text += f"• *最近用户名*: 缓存为空\n"
                     except Exception as db_e:
-                        result_text += f"• *数据库查询错误*: {escape_markdown(str(db_e))}\n"
+                        result_text += f"• *数据库查询错误*: {safe_format_username(str(db_e))}\n"
                 else:
                     result_text += "• *状态*: 缓存管理器已启用\n"
                     result_text += "• *详情*: 无法获取详细统计信息\n"
@@ -715,7 +757,7 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                     else:
                         result_text += f"• *监听模式*: 所有群组 (已启用)\n"
                 except Exception as config_e:
-                    result_text += f"\n⚙️ *配置错误*: {escape_markdown(str(config_e))}\n"
+                    result_text += f"\n⚙️ *配置错误*: {safe_format_username(str(config_e))}\n"
                 
                 result_text += f"\n💡 *使用方法*:\n"
                 result_text += f"• `/cache username` - 查询特定用户名\n"
@@ -731,7 +773,7 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             except Exception as e:
                 result_text = f"📊 *用户缓存概览*\n\n"
                 result_text += f"• *状态*: 缓存管理器已启用\n"
-                result_text += f"• *错误*: 无法获取详细信息 ({escape_markdown(str(e))})\n"
+                result_text += f"• *错误*: 无法获取详细信息 ({safe_format_username(str(e))})\n"
 
         await context.bot.edit_message_text(
             chat_id=chat.id,
@@ -748,7 +790,7 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         await context.bot.edit_message_text(
             chat_id=chat.id,
             message_id=sent_message.message_id,
-            text=f"查询缓存失败: {escape_markdown(str(e))}"
+            text=f"查询缓存失败: {safe_format_username(str(e))}"
         )
         # 调度删除错误消息
         from utils.message_manager import _schedule_deletion
