@@ -227,6 +227,19 @@ def estimate_account_creation_date(user_id):
     # 从JSON文件加载已知数据点
     known_points = load_known_points()
     
+    # 调试：检查特定用户ID的数据点
+    debug_id = 620973285
+    for user_id, date in known_points:
+        if user_id == debug_id:
+            print(f"🔍 调试: 找到ID {debug_id} -> {date}")
+            break
+    else:
+        print(f"🔍 调试: 未找到ID {debug_id}")
+    
+    # 显示数据点范围用于调试
+    if known_points:
+        print(f"🔍 调试: 数据点范围 {known_points[0][0]} ~ {known_points[-1][0]}, 总计 {len(known_points)} 个")
+    
     # 数据已在加载器中按ID排序，确保插值算法正确工作
     
     # 线性插值估算
@@ -235,10 +248,16 @@ def estimate_account_creation_date(user_id):
         id2, date2 = known_points[i + 1]
         
         if id1 <= user_id <= id2:
+            # 调试输出
+            print(f"🔍 调试: ID {user_id} 在区间 [{id1}, {id2}] 内")
+            print(f"🔍 调试: 日期区间 [{date1}, {date2}]")
+            
             # 线性插值计算
             ratio = (user_id - id1) / (id2 - id1)
             time_diff = date2 - date1
             estimated_date = date1 + timedelta(seconds=time_diff.total_seconds() * ratio)
+            
+            print(f"🔍 调试: 插值比例 {ratio:.4f}, 估算日期 {estimated_date}")
             return estimated_date
     
     # 处理边界情况
