@@ -1277,7 +1277,7 @@ async def list_points_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                     text = text.replace(char, f'\\{char}')
                 return text
                 
-            reply_text += f"{i:>2}\\. `{user_id:<11}` {date} *{escape_markdown_v2(note)}*\n"
+            reply_text += f"{i:>2}\\. `{user_id:<11}` {escape_markdown_v2(date)} *{escape_markdown_v2(note)}*\n"
             
         if total_points > limit:
             reply_text += f"\n\\.\\.\\. 还有 {total_points - limit} 个数据点\n"
