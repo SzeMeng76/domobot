@@ -1210,8 +1210,8 @@ async def list_points_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             reply_text += f"使用 `/listpoints {total_points}` 查看全部"
             
         reply_text += f"\n\n💡 **管理命令**:\n"
-        reply_text += f"• `/addpoint <id> <date> [note]` \\- 添加数据点\n"
-        reply_text += f"• `/removepoint <id>` \\- 删除数据点"
+        reply_text += f"• `/addpoint \\<id\\> \\<date\\> \\[note\\]` \\- 添加数据点\n"
+        reply_text += f"• `/removepoint \\<id\\>` \\- 删除数据点"
         
         sent_message = await send_search_result(context, chat.id, reply_text, parse_mode="MarkdownV2")
         from utils.message_manager import _schedule_deletion
