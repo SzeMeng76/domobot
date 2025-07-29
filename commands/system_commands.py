@@ -689,8 +689,8 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                             # 获取数据库大小信息
                             await cursor.execute("""
                                 SELECT 
-                                    ROUND(SUM(data_length + index_length) / 1024, 2) as size_kb,
-                                    ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) as size_mb
+                                    ROUND(SUM(data_length + index_length) / 1024, 3) as size_kb,
+                                    ROUND(SUM(data_length + index_length) / 1024 / 1024, 3) as size_mb
                                 FROM information_schema.tables 
                                 WHERE table_schema = DATABASE()
                                 AND table_name IN ('users', 'admin_permissions', 'super_admins', 'user_whitelist', 'group_whitelist', 'command_stats', 'admin_logs')
@@ -710,9 +710,16 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                                     size_kb = size_result['size_kb'] or 0
                                     size_mb = size_result['size_mb'] or 0
                                     if size_mb >= 1:
-                                        result_text += f"• *数据大小*: {size_mb} MB\n"
+                                        result_text += f"• *数据大小*: {size_mb} MB"
                                     else:
-                                        result_text += f"• *数据大小*: {size_kb} KB\n"
+                                        result_text += f"• *数据大小*: {size_kb} KB"
+                                    
+                                    # 添加平均每用户数据量
+                                    if total_users > 0:
+                                        avg_kb_per_user = size_kb / total_users
+                                        result_text += f" (平均 {avg_kb_per_user:.1f} KB/用户)\n"
+                                    else:
+                                        result_text += "\n"
                                 else:
                                     result_text += f"• *数据大小*: < 1 KB\n"
                             else:
@@ -748,27 +755,7 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                     if hasattr(config, 'user_cache_group_ids') and config.user_cache_group_ids:
                         result_text += f"• *监听模式*: 指定群组 ({len(config.user_cache_group_ids)} 个)\n"
                     else:
-                        # 查询实际监听的群组数量
-                        try:
-                            if hasattr(user_cache_manager, 'get_cursor'):
-                                async with user_cache_manager.get_cursor() as cursor:
-                                    # 查询有多少个不同的群组有命令记录
-                                    await cursor.execute("""
-                                        SELECT COUNT(DISTINCT chat_id) as command_group_count 
-                                        FROM command_stats 
-                                        WHERE chat_type IN ('supergroup', 'group')
-                                    """)
-                                    command_result = await cursor.fetchone()
-                                    command_count = (command_result['command_group_count'] if command_result else 0) or 0
-                                    
-                                    if command_count > 0:
-                                        result_text += f"• *监听模式*: 所有群组 (有命令使用: {command_count} 个)\n"
-                                    else:
-                                        result_text += f"• *监听模式*: 所有群组 (已启用，等待群组活动)\n"
-                            else:
-                                result_text += f"• *监听模式*: 所有群组 (已启用)\n"
-                        except Exception:
-                            result_text += f"• *监听模式*: 所有群组 (已启用)\n"
+                        result_text += f"• *监听模式*: 所有群组 (已启用)\n"
                 except Exception as config_e:
                     result_text += f"\n⚙️ *配置错误*: {escape_markdown(str(config_e))}\n"
                 
