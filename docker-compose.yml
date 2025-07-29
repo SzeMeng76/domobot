@@ -55,11 +55,9 @@ services:
       - "8443:8443"
       
     # --- 卷（目录）映射 ---
-    # 将当前目录（.）挂载到容器内的 /app 目录。
-    # 这意味着您在本地对代码的任何修改，都会立即反映在运行的容器中，
-    # 无需重新构建镜像，极大地提高了开发效率。
-    #volumes:
-    #  - .:/app
+    # 挂载数据目录以支持本地JSON数据存储
+    volumes:
+      - ./data:/app/data
     
     # --- 网络配置 ---
     networks:
@@ -79,3 +77,4 @@ networks:
 volumes:
   mysql_data:
   redis_data:
+

@@ -164,120 +164,15 @@ def determine_level(years):
 def estimate_account_creation_date(user_id):
     """
     基于用户ID估算Telegram账号创建日期
-    使用真实用户数据校准的算法
+    使用从JSON文件加载的真实用户数据校准的算法
     """
     from datetime import datetime, timedelta
+    from utils.known_points_loader import load_known_points
     
-    # 基于真实SmartUtilBot查询结果的已知数据点
-    # 这些是经过验证的准确映射
-    known_points = [
-        (1, datetime(2013, 8, 14)),                    # Telegram创始人
-        (39, datetime(2013, 8, 14)),                   # 早期用户
-        (777000, datetime(2015, 7, 1)),                # 早期bot时期
-        (2768409, datetime(2013, 11, 1)),              # 2013年末用户
-        (3957805, datetime(2013, 11, 15)),             # ✅ 真实数据点
-        (7679610, datetime(2013, 12, 31)),             # 2013年末
-        (10858037, datetime(2014, 1, 26)),             # ✅ 真实数据点
-        (15835244, datetime(2014, 2, 21)),             # 2014年初
-        (39242066, datetime(2014, 3, 13)),             # ✅ 真实数据点   
-        (39525684, datetime(2014, 3, 16)),             # ✅ 真实数据点
-        (44634663, datetime(2014, 5, 6)),              # 2014年中
-        (54135846, datetime(2014, 9, 10)),             # ✅ 真实数据点
-        (75053905, datetime(2014, 12, 7)),             # ✅ 真实数据点
-        (80139402, datetime(2015, 2, 26)),             # 2015年初
-        (133275940, datetime(2015, 11, 30)),           # 2015年末
-        (234886189, datetime(2016, 7, 3)),             # ✅ 真实数据点
-        (278683524, datetime(2016, 9, 9)),             # ✅ 真实数据点
-        (309232988, datetime(2016, 12, 20)),           # ✅ 真实数据点
-        (334215373, datetime(2017, 1, 31)),            # ✅ 真实数据点
-        (391423707, datetime(2017, 6, 26)),            # ✅ 真实数据点
-        (446378169, datetime(2017, 10, 8)),            # ✅ 真实数据点
-        (462075301, datetime(2017, 11, 1)),            # ✅ 真实数据点
-        (474530520, datetime(2017, 11, 19)),           # ✅ 真实数据点
-        (480648715, datetime(2017, 11, 29)),           # ✅ 真实数据点
-        (554653093, datetime(2018, 3, 20)),            # ✅ 真实数据点
-        (620973285, datetime(2018, 6, 24)),            # ✅ 真实数据点1
-        (626524659, datetime(2018, 6, 27)),            # ✅ 真实数据点
-        (658502219, datetime(2018, 7, 15)),            # ✅ 真实数据点
-        (693772643, datetime(2018, 8, 30)),            # ✅ 真实数据点
-        (694669879, datetime(2018, 9, 2)),             # ✅ 真实数据点
-        (715914969, datetime(2018, 10, 30)),           # ✅ 真实数据点23
-        (722887698, datetime(2018, 11, 19)),           # ✅ 真实数据点
-        (729200182, datetime(2018, 12, 1)),            # ✅ 真实数据点
-        (723490460, datetime(2018, 11, 20)),           # ✅ 真实数据点
-        (829504754, datetime(2019, 1, 9)),             # ✅ 真实数据点
-        (893199737, datetime(2019, 5, 14)),            # ✅ 真实数据点
-        (927869116, datetime(2019, 12, 29)),           # ✅ 真实数据点
-        (937572116, datetime(2020, 2, 15)),            # ✅ 真实数据点
-        (1086886247, datetime(2020, 2, 22)),           # ✅ 真实数据点8
-        (1096626991, datetime(2020, 2, 29)),           # ✅ 真实数据点9
-        (1111558803, datetime(2020, 3, 12)),           # ✅ 真实数据点17
-        (1157119153, datetime(2020, 4, 23)),           # ✅ 真实数据点
-        (1183889270, datetime(2020, 5, 30)),           # ✅ 真实数据点
-        (1212910191, datetime(2020, 7, 9)),            # ✅ 真实数据点
-        (1229365969, datetime(2020, 7, 31)),           # ✅ 真实数据点
-        (1262948436, datetime(2020, 8, 10)),           # ✅ 真实数据点
-        (1266389330, datetime(2020, 8, 11)),           # ✅ 真实数据点
-        (1285142377, datetime(2020, 8, 17)),           # ✅ 真实数据点
-        (1293446607, datetime(2020, 8, 19)),           # ✅ 真实数据点
-        (1310788969, datetime(2020, 8, 24)),           # ✅ 真实数据点
-        (1364368401, datetime(2020, 9, 10)),           # ✅ 真实数据点4
-        (1476361738, datetime(2020, 11, 5)),           # ✅ 真实数据点
-        (1493092549, datetime(2020, 11, 14)),          # ✅ 真实数据点
-        (1520415315, datetime(2020, 11, 29)),          # ✅ 真实数据点15
-        (1523368916, datetime(2020, 12, 1)),           # ✅ 真实数据点
-        (1606154208, datetime(2021, 1, 15)),           # ✅ 真实数据点18
-        (1659206651, datetime(2021, 2, 13)),           # ✅ 真实数据点
-        (1791306977, datetime(2021, 5, 22)),           # ✅ 真实数据点2
-        (1918002642, datetime(2021, 6, 30)),           # ✅ 真实数据点
-        (1955860134, datetime(2021, 8, 22)),           # ✅ 真实数据点
-        (1978440017, datetime(2021, 10, 10)),          # ✅ 真实数据点13
-        (2143348318, datetime(2021, 11, 21)),          # ✅ 真实数据点12
-        (597485629, datetime(2022, 1, 7)),             # 2022年初
-        (5189189426, datetime(2022, 4, 2)),            # ✅ 真实数据点
-        (5200884983, datetime(2022, 4, 11)),           # ✅ 真实数据点
-        (5213669212, datetime(2022, 4, 21)),           # ✅ 真实数据点7
-        (5235138802, datetime(2022, 5, 8)),            # ✅ 真实数据点5
-        (5274132863, datetime(2022, 6, 7)),            # ✅ 真实数据点
-        (5370825396, datetime(2022, 6, 16)),           # ✅ 真实数据点10
-        (5374581898, datetime(2022, 7, 4)),            # ✅ 真实数据点6
-        (5734051339, datetime(2022, 10, 20)),          # ✅ 真实数据点
-        (5851203976, datetime(2022, 11, 29)),          # ✅ 真实数据点
-        (5895507833, datetime(2022, 12, 14)),          # ✅ 真实数据点
-        (5912906831, datetime(2022, 12, 20)),          # ✅ 真实数据点
-        (5993720903, datetime(2023, 1, 17)),           # ✅ 真实数据点
-        (6095955229, datetime(2023, 2, 12)),           # ✅ 真实数据点19
-        (6194878274, datetime(2023, 3, 28)),           # ✅ 真实数据点
-        (6319592207, datetime(2023, 5, 10)),           # ✅ 真实数据点
-        (6339365540, datetime(2023, 5, 17)),           # ✅ 真实数据点
-        (6401621907, datetime(2023, 6, 8)),            # ✅ 真实数据点
-        (6415978351, datetime(2023, 6, 13)),           # ✅ 真实数据点
-        (6447125502, datetime(2023, 6, 23)),           # ✅ 真实数据点
-        (6521937258, datetime(2023, 7, 19)),           # ✅ 真实数据点11
-        (6537156348, datetime(2023, 7, 24)),           # ✅ 真实数据点14
-        (6674181048, datetime(2023, 9, 10)),           # ✅ 真实数据点20
-        (6682531113, datetime(2023, 9, 13)),           # ✅ 真实数据点
-        (6730424291, datetime(2023, 9, 29)),           # ✅ 真实数据点
-        (6735663275, datetime(2023, 10, 1)),           # ✅ 真实数据点
-        (6744518680, datetime(2023, 10, 4)),           # ✅ 真实数据点22
-        (6837664773, datetime(2023, 10, 31)),          # ✅ 真实数据点
-        (6866965606, datetime(2023, 11, 4)),           # ✅ 真实数据点
-        (6909981199, datetime(2023, 11, 22)),          # ✅ 真实数据点
-        (6922417356, datetime(2023, 11, 27)),          # ✅ 真实数据点
-        (6955835113, datetime(2023, 11, 28)),          # ✅ 真实数据点
-        (7012919391, datetime(2023, 11, 28)),          # ✅ 真实数据点
-        (7389983013, datetime(2023, 11, 28)),          # ✅ 真实数据点16
-        (7759732696, datetime(2023, 11, 28)),          # ✅ 真实数据点3
-        (8085405606, datetime(2023, 11, 28)),          # ✅ 真实数据点21
-        (8144601656, datetime(2023, 11, 28)),          # ✅ 真实数据点24
-        (8157605095, datetime(2023, 11, 28)),          # ✅ 真实数据点
-        (8234513817, datetime(2023, 11, 28)),          # ✅ 真实数据点
-        (820674839, datetime(2024, 9, 2)),             # 2024年秋
-        (9000000000, datetime(2024, 12, 1)),           # 预估高ID
-    ]
+    # 从JSON文件加载已知数据点
+    known_points = load_known_points()
     
-    # 按ID排序确保正确的插值
-    known_points.sort(key=lambda x: x[0])
+    # 数据已在加载器中按ID排序，确保插值算法正确工作
     
     # 线性插值估算
     for i in range(len(known_points) - 1):
@@ -947,9 +842,385 @@ async def clean_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
 
 
+async def add_point_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    添加已知数据点命令（管理员专用）
+    使用方法: /addpoint <user_id> <date> [note]
+    示例: /addpoint 123456789 2024-01-15 新验证用户
+    """
+    message = update.effective_message
+    chat = update.effective_chat
+    user = update.effective_user
+    
+    if not message or not chat or not user:
+        return
+        
+    # 立即删除用户命令
+    await delete_user_command(context, chat.id, message.message_id)
+    
+    # 检查参数
+    if not context.args or len(context.args) < 2:
+        reply_text = (
+            "❌ **参数不足**\n\n"
+            "**使用方法:**\n"
+            "`/addpoint <user_id> <date> [note]`\n\n"
+            "**示例:**\n"
+            "• `/addpoint 123456789 2024-01-15`\n"
+            "• `/addpoint 123456789 2024-01-15 新验证用户`\n\n"
+            "**说明:**\n"
+            "• user_id: 用户的数字ID\n"
+            "• date: 日期格式 YYYY-MM-DD\n" 
+            "• note: 可选备注信息"
+        )
+        sent_message = await send_search_result(context, chat.id, reply_text, parse_mode="Markdown")
+        from utils.message_manager import _schedule_deletion
+        await _schedule_deletion(context, chat.id, sent_message.message_id, 30)
+        return
+        
+    try:
+        user_id_str = context.args[0]
+        date_str = context.args[1]
+        note = " ".join(context.args[2:]) if len(context.args) > 2 else "✅ 真实数据点"
+        
+        # 验证用户ID
+        try:
+            user_id = int(user_id_str)
+        except ValueError:
+            sent_message = await send_search_result(
+                context, chat.id, 
+                "❌ 用户ID必须是数字", 
+                parse_mode="Markdown"
+            )
+            from utils.message_manager import _schedule_deletion
+            await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
+            return
+            
+        # 验证日期格式
+        try:
+            from datetime import datetime
+            datetime.strptime(date_str, "%Y-%m-%d")
+        except ValueError:
+            sent_message = await send_search_result(
+                context, chat.id,
+                "❌ 日期格式错误，请使用 YYYY-MM-DD 格式\n\n例如: 2024-01-15",
+                parse_mode="Markdown"
+            )
+            from utils.message_manager import _schedule_deletion
+            await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
+            return
+            
+        # 加载现有数据
+        import json
+        from pathlib import Path
+        from utils.known_points_loader import get_known_points_loader
+        
+        loader = get_known_points_loader()
+        data_file = Path("data/known_points.json")
+        
+        if data_file.exists():
+            with open(data_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        else:
+            data = {
+                "version": "1.0",
+                "description": "基于真实SmartUtilBot查询结果的已知数据点映射表",
+                "last_updated": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "known_points": []
+            }
+            
+        points = data.get("known_points", [])
+        
+        # 检查是否已存在
+        for point in points:
+            if point["user_id"] == user_id:
+                sent_message = await send_search_result(
+                    context, chat.id,
+                    f"❌ 用户ID `{user_id}` 已存在\n\n"
+                    f"现有记录: {point['date']} - {point.get('note', '无备注')}",
+                    parse_mode="Markdown"
+                )
+                from utils.message_manager import _schedule_deletion
+                await _schedule_deletion(context, chat.id, sent_message.message_id, 15)
+                return
+                
+        # 添加新数据点
+        new_point = {
+            "user_id": user_id,
+            "date": date_str,
+            "note": note
+        }
+        
+        points.append(new_point)
+        data["known_points"] = points
+        data["last_updated"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
+        
+        # 确保目录存在
+        data_file.parent.mkdir(exist_ok=True)
+        
+        # 保存数据
+        with open(data_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+            
+        # 强制重新加载数据
+        loader.reload()
+        
+        reply_text = (
+            f"✅ **数据点添加成功**\n\n"
+            f"👤 **用户ID**: `{user_id}`\n"
+            f"📅 **日期**: {date_str}\n"
+            f"📝 **备注**: {escape_markdown(note)}\n\n"
+            f"📊 **当前总数据点**: {len(points)}"
+        )
+        
+        sent_message = await send_search_result(context, chat.id, reply_text, parse_mode="Markdown")
+        from utils.message_manager import _schedule_deletion
+        await _schedule_deletion(context, chat.id, sent_message.message_id, 60)
+        
+    except Exception as e:
+        sent_message = await send_search_result(
+            context, chat.id,
+            f"❌ 添加数据点失败: {str(e)}",
+            parse_mode="Markdown"
+        )
+        from utils.message_manager import _schedule_deletion
+        await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
+
+
+async def remove_point_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    删除已知数据点命令（管理员专用）
+    使用方法: /removepoint <user_id>
+    """
+    message = update.effective_message
+    chat = update.effective_chat
+    user = update.effective_user
+    
+    if not message or not chat or not user:
+        return
+        
+    # 立即删除用户命令
+    await delete_user_command(context, chat.id, message.message_id)
+    
+    # 检查参数
+    if not context.args:
+        reply_text = (
+            "❌ **参数不足**\n\n"
+            "**使用方法:**\n"
+            "`/removepoint <user_id>`\n\n"
+            "**示例:**\n"
+            "`/removepoint 123456789`"
+        )
+        sent_message = await send_search_result(context, chat.id, reply_text, parse_mode="Markdown")
+        from utils.message_manager import _schedule_deletion
+        await _schedule_deletion(context, chat.id, sent_message.message_id, 20)
+        return
+        
+    try:
+        user_id_str = context.args[0]
+        
+        # 验证用户ID
+        try:
+            user_id = int(user_id_str)
+        except ValueError:
+            sent_message = await send_search_result(
+                context, chat.id,
+                "❌ 用户ID必须是数字",
+                parse_mode="Markdown"
+            )
+            from utils.message_manager import _schedule_deletion
+            await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
+            return
+            
+        # 加载现有数据
+        import json
+        from pathlib import Path
+        from utils.known_points_loader import get_known_points_loader
+        
+        loader = get_known_points_loader()
+        data_file = Path("data/known_points.json")
+        
+        if not data_file.exists():
+            sent_message = await send_search_result(
+                context, chat.id,
+                "❌ 数据文件不存在，无数据点可删除",
+                parse_mode="Markdown"
+            )
+            from utils.message_manager import _schedule_deletion
+            await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
+            return
+            
+        with open(data_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            
+        points = data.get("known_points", [])
+        original_length = len(points)
+        
+        # 找到要删除的点
+        removed_point = None
+        for point in points:
+            if point["user_id"] == user_id:
+                removed_point = point
+                break
+                
+        if not removed_point:
+            sent_message = await send_search_result(
+                context, chat.id,
+                f"❌ 未找到用户ID `{user_id}` 的数据点",
+                parse_mode="Markdown"
+            )
+            from utils.message_manager import _schedule_deletion
+            await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
+            return
+            
+        # 删除数据点
+        points = [p for p in points if p["user_id"] != user_id]
+        data["known_points"] = points
+        
+        from datetime import datetime
+        data["last_updated"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
+        
+        # 保存数据
+        with open(data_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+            
+        # 强制重新加载数据
+        loader.reload()
+        
+        reply_text = (
+            f"✅ **数据点删除成功**\n\n"
+            f"👤 **用户ID**: `{user_id}`\n"
+            f"📅 **原日期**: {removed_point['date']}\n"
+            f"📝 **原备注**: {escape_markdown(removed_point.get('note', '无'))}\n\n"
+            f"📊 **剩余数据点**: {len(points)}"
+        )
+        
+        sent_message = await send_search_result(context, chat.id, reply_text, parse_mode="Markdown")
+        from utils.message_manager import _schedule_deletion
+        await _schedule_deletion(context, chat.id, sent_message.message_id, 60)
+        
+    except Exception as e:
+        sent_message = await send_search_result(
+            context, chat.id,
+            f"❌ 删除数据点失败: {str(e)}",
+            parse_mode="Markdown"
+        )
+        from utils.message_manager import _schedule_deletion
+        await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
+
+
+async def list_points_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    列出已知数据点命令（管理员专用）
+    使用方法: /listpoints [limit]
+    """
+    message = update.effective_message
+    chat = update.effective_chat
+    user = update.effective_user
+    
+    if not message or not chat or not user:
+        return
+        
+    # 立即删除用户命令
+    await delete_user_command(context, chat.id, message.message_id)
+    
+    try:
+        # 解析限制参数
+        limit = 10  # 默认显示10个
+        if context.args:
+            try:
+                limit = int(context.args[0])
+                if limit <= 0:
+                    limit = 10
+                elif limit > 50:  # 最多显示50个，避免消息过长
+                    limit = 50
+            except ValueError:
+                pass
+                
+        # 加载数据
+        import json
+        from pathlib import Path
+        
+        data_file = Path("data/known_points.json")
+        
+        if not data_file.exists():
+            sent_message = await send_search_result(
+                context, chat.id,
+                "❌ 数据文件不存在，暂无数据点",
+                parse_mode="Markdown"
+            )
+            from utils.message_manager import _schedule_deletion
+            await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
+            return
+            
+        with open(data_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            
+        points = data.get("known_points", [])
+        
+        if not points:
+            sent_message = await send_search_result(
+                context, chat.id,
+                "📝 暂无数据点",
+                parse_mode="Markdown"
+            )
+            from utils.message_manager import _schedule_deletion
+            await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
+            return
+            
+        # 按user_id排序
+        points.sort(key=lambda x: x["user_id"])
+        
+        # 统计信息
+        total_points = len(points)
+        verified_count = sum(1 for p in points if "✅" in p.get("note", ""))
+        
+        # 构建显示文本
+        reply_text = f"📊 **已知数据点列表**\n\n"
+        reply_text += f"📈 **统计**: 总数 {total_points} | 已验证 {verified_count} | 估算 {total_points - verified_count}\n\n"
+        
+        display_points = points[:limit]
+        
+        for i, point in enumerate(display_points, 1):
+            user_id = point["user_id"]
+            date = point["date"] 
+            note = point.get("note", "无备注")
+            
+            # 截断过长的备注
+            if len(note) > 15:
+                note = note[:15] + "..."
+                
+            reply_text += f"{i:>2}\\. `{user_id:<11}` {date} *{escape_markdown(note)}*\n"
+            
+        if total_points > limit:
+            reply_text += f"\n\\.\\.\\. 还有 {total_points - limit} 个数据点\n"
+            reply_text += f"使用 `/listpoints {total_points}` 查看全部"
+            
+        reply_text += f"\n\n💡 **管理命令**:\n"
+        reply_text += f"• `/addpoint <id> <date> [note]` \\- 添加数据点\n"
+        reply_text += f"• `/removepoint <id>` \\- 删除数据点"
+        
+        sent_message = await send_search_result(context, chat.id, reply_text, parse_mode="MarkdownV2")
+        from utils.message_manager import _schedule_deletion
+        await _schedule_deletion(context, chat.id, sent_message.message_id, 120)
+        
+    except Exception as e:
+        sent_message = await send_search_result(
+            context, chat.id,
+            f"❌ 获取数据点列表失败: {str(e)}",
+            parse_mode="Markdown"
+        )
+        from utils.message_manager import _schedule_deletion
+        await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
+
+
 # 注册命令
 command_factory.register_command("id", get_id_command, permission=Permission.NONE, description="获取用户或群组的ID")
 command_factory.register_command("when", when_command, permission=Permission.NONE, description="查询用户详细信息（支持数字ID、用户名或回复消息）")
 command_factory.register_command("cache", cache_debug_command, permission=Permission.ADMIN, description="查看用户缓存状态（管理员专用）")
 command_factory.register_command("cleanid", clean_id_command, permission=Permission.ADMIN, description="清理用户ID缓存（管理员专用）")
+command_factory.register_command("addpoint", add_point_command, permission=Permission.ADMIN, description="添加已知数据点（管理员专用）")
+command_factory.register_command("removepoint", remove_point_command, permission=Permission.ADMIN, description="删除已知数据点（管理员专用）")
+command_factory.register_command("listpoints", list_points_command, permission=Permission.ADMIN, description="列出已知数据点（管理员专用）")
+
+
 
