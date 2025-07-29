@@ -1269,6 +1269,13 @@ async def list_points_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             # 截断过长的备注
             if len(note) > 15:
                 note = note[:15] + "..."
+            
+            # 简单转义MarkdownV2特殊字符
+            def escape_markdown_v2(text):
+                chars_to_escape = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+                for char in chars_to_escape:
+                    text = text.replace(char, f'\\{char}')
+                return text
                 
             reply_text += f"{i:>2}\\. `{user_id:<11}` {date} *{escape_markdown_v2(note)}*\n"
             
