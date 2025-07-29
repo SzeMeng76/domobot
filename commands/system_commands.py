@@ -752,40 +752,23 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                         try:
                             if hasattr(user_cache_manager, 'get_cursor'):
                                 async with user_cache_manager.get_cursor() as cursor:
-                                    # 查询有多少个不同的群组有命令记录（活跃群组）
+                                    # 查询有多少个不同的群组有命令记录
                                     await cursor.execute("""
-                                        SELECT COUNT(DISTINCT chat_id) as active_group_count 
+                                        SELECT COUNT(DISTINCT chat_id) as command_group_count 
                                         FROM command_stats 
                                         WHERE chat_type IN ('supergroup', 'group')
                                     """)
-                                    active_result = await cursor.fetchone()
-                                    active_count = (active_result['active_group_count'] if active_result else 0) or 0
+                                    command_result = await cursor.fetchone()
+                                    command_count = (command_result['command_group_count'] if command_result else 0) or 0
                                     
-                                    # 查询总的群组数量（如果有group_whitelist表的话）
-                                    try:
-                                        await cursor.execute("SELECT COUNT(*) as total_groups FROM group_whitelist")
-                                        total_result = await cursor.fetchone()
-                                        total_count = (total_result['total_groups'] if total_result else 0) or 0
-                                        
-                                        if total_count > 0:
-                                            if active_count > 0:
-                                                result_text += f"• *监听模式*: 所有群组 (总计: {total_count} 个, 使用命令: {active_count} 个)\n"
-                                            else:
-                                                result_text += f"• *监听模式*: 所有群组 (总计: {total_count} 个, 暂无命令使用)\n"
-                                        elif active_count > 0:
-                                            result_text += f"• *监听模式*: 所有群组 (使用命令: {active_count} 个)\n"
-                                        else:
-                                            result_text += f"• *监听模式*: 所有群组 (已启用用户缓存)\n"
-                                    except Exception:
-                                        # 如果没有group_whitelist表，只显示活跃群组
-                                        if active_count > 0:
-                                            result_text += f"• *监听模式*: 所有群组 (使用命令: {active_count} 个)\n"
-                                        else:
-                                            result_text += f"• *监听模式*: 所有群组 (已启用用户缓存)\n"
+                                    if command_count > 0:
+                                        result_text += f"• *监听模式*: 所有群组 (有命令使用: {command_count} 个)\n"
+                                    else:
+                                        result_text += f"• *监听模式*: 所有群组 (已启用，等待群组活动)\n"
                             else:
-                                result_text += f"• *监听模式*: 所有群组\n"
+                                result_text += f"• *监听模式*: 所有群组 (已启用)\n"
                         except Exception:
-                            result_text += f"• *监听模式*: 所有群组\n"
+                            result_text += f"• *监听模式*: 所有群组 (已启用)\n"
                 except Exception as config_e:
                     result_text += f"\n⚙️ *配置错误*: {escape_markdown(str(config_e))}\n"
                 
