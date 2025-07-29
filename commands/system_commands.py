@@ -4,7 +4,7 @@ import asyncio
 from datetime import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
-import requests
+import httpx
 import json
 
 from utils.command_factory import command_factory
@@ -23,47 +23,48 @@ async def create_telegraph_page(title, content):
     创建Telegraph页面
     """
     try:
-        # 创建Telegraph账户（每次都创建新的，避免token管理问题）
-        account_data = {
-            "short_name": "MengBot",
-            "author_name": "MengBot",
-            "author_url": "https://t.me/mengpricebot"
-        }
-        
-        response = requests.post(f"{TELEGRAPH_API_URL}/createAccount", data=account_data)
-        if response.status_code != 200:
-            return None
-            
-        account_info = response.json()
-        if not account_info.get("ok"):
-            return None
-            
-        access_token = account_info["result"]["access_token"]
-        
-        # 创建页面内容
-        page_content = [
-            {
-                "tag": "p",
-                "children": [content]
+        async with httpx.AsyncClient() as client:
+            # 创建Telegraph账户（每次都创建新的，避免token管理问题）
+            account_data = {
+                "short_name": "MengBot",
+                "author_name": "MengBot",
+                "author_url": "https://t.me/mengpricebot"
             }
-        ]
-        
-        page_data = {
-            "access_token": access_token,
-            "title": title,
-            "content": json.dumps(page_content),
-            "return_content": "true"
-        }
-        
-        response = requests.post(f"{TELEGRAPH_API_URL}/createPage", data=page_data)
-        if response.status_code != 200:
-            return None
             
-        page_info = response.json()
-        if not page_info.get("ok"):
-            return None
+            response = await client.post(f"{TELEGRAPH_API_URL}/createAccount", data=account_data)
+            if response.status_code != 200:
+                return None
+                
+            account_info = response.json()
+            if not account_info.get("ok"):
+                return None
+                
+            access_token = account_info["result"]["access_token"]
             
-        return page_info["result"]["url"]
+            # 创建页面内容
+            page_content = [
+                {
+                    "tag": "p",
+                    "children": [content]
+                }
+            ]
+            
+            page_data = {
+                "access_token": access_token,
+                "title": title,
+                "content": json.dumps(page_content),
+                "return_content": "true"
+            }
+            
+            response = await client.post(f"{TELEGRAPH_API_URL}/createPage", data=page_data)
+            if response.status_code != 200:
+                return None
+                
+            page_info = response.json()
+            if not page_info.get("ok"):
+                return None
+                
+            return page_info["result"]["url"]
         
     except Exception as e:
         print(f"创建Telegraph页面失败: {e}")
