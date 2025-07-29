@@ -139,7 +139,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 🔧 *数据点管理*
 - `/addpoint <用户ID> <日期> [备注]`: 添加已知数据点（优化注册日期估算）。
 - `/removepoint <用户ID>`: 删除指定的已知数据点。
-- `/listpoints [数量]`: 列出已知数据点（默认显示10个，可指定数量）。
+- `/listpoints [数量]`: 列出已知数据点（默认显示10个，支持显示所有数据，长列表自动折叠）。
 
 💡 *管理技巧:*
 - 管理面板支持批量操作和实时刷新。
