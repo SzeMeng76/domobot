@@ -686,6 +686,17 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                             """)
                             stats_result = await cursor.fetchone()
                             
+                            # 获取数据库大小信息
+                            await cursor.execute("""
+                                SELECT 
+                                    ROUND(SUM(data_length + index_length) / 1024, 2) as size_kb,
+                                    ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) as size_mb
+                                FROM information_schema.tables 
+                                WHERE table_schema = DATABASE()
+                                AND table_name IN ('users', 'admin_permissions', 'super_admins', 'user_whitelist', 'group_whitelist', 'command_stats', 'admin_logs')
+                            """)
+                            size_result = await cursor.fetchone()
+                            
                             if stats_result:
                                 total_users = stats_result['total_users'] or 0
                                 with_username = stats_result['with_username'] or 0
@@ -693,10 +704,22 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                                 result_text += f"• *总用户数*: {total_users}\n"
                                 result_text += f"• *有用户名用户*: {with_username}\n"
                                 result_text += f"• *无用户名用户*: {max(0, total_users - with_username)}\n"
+                                
+                                # 添加数据大小信息
+                                if size_result and size_result['size_kb']:
+                                    size_kb = size_result['size_kb'] or 0
+                                    size_mb = size_result['size_mb'] or 0
+                                    if size_mb >= 1:
+                                        result_text += f"• *数据大小*: {size_mb} MB\n"
+                                    else:
+                                        result_text += f"• *数据大小*: {size_kb} KB\n"
+                                else:
+                                    result_text += f"• *数据大小*: < 1 KB\n"
                             else:
                                 result_text += f"• *总用户数*: 0\n"
                                 result_text += f"• *有用户名用户*: 0\n"
                                 result_text += f"• *无用户名用户*: 0\n"
+                                result_text += f"• *数据大小*: < 1 KB\n"
                             
                             # 显示最近的几个用户名（用于测试）
                             if stats_result and (stats_result['total_users'] or 0) > 0:
@@ -723,7 +746,6 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                     result_text += f"• *启用状态*: {'是' if config.enable_user_cache else '否'}\n"
                     if hasattr(config, 'user_cache_group_ids') and config.user_cache_group_ids:
                         result_text += f"• *监听群组*: {len(config.user_cache_group_ids)} 个\n"
-                        result_text += f"• *群组ID*: {escape_markdown(str(config.user_cache_group_ids))}\n"
                     else:
                         result_text += f"• *监听群组*: 未配置 ❌\n"
                 except Exception as config_e:
@@ -737,6 +759,8 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                 result_text += f"\n📝 *缓存说明*:\n"
                 result_text += f"• 只有在配置的监听群组中发过消息的用户才会被缓存\n"
                 result_text += f"• 如果监听群组未配置，缓存功能将不工作\n"
+                result_text += f"• 当数据大小超过 10MB 时建议使用 `/cleanid` 清理缓存\n"
+                result_text += f"• 使用 `/cleanid 30` 可清理30天前的旧数据\n"
                 
             except Exception as e:
                 result_text = f"📊 *用户缓存概览*\n\n"
