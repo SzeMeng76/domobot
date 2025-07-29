@@ -84,7 +84,7 @@ docker-compose down
 | `QWEATHER_API_KEY`          | **（可选）** 和风天气的API Key，用于启用 `/tq` 命令。                       |                         |
 | `EXCHANGE_RATE_API_KEYS`    | **（可选）** openexchangerates.org的API Key，用于启用 `/rate` 命令。多个密钥用逗号分隔。 |                         |
 | `ENABLE_USER_CACHE`         | **（可选）** 启用用户缓存系统 (`true`/`false`)。                            | `false`                 |
-| `USER_CACHE_GROUP_IDS`      | **（可选）** 用逗号分隔的群组ID，用于监控用户缓存。留空则禁用缓存。           | (空)                    |
+| `USER_CACHE_GROUP_IDS`      | **（可选）** 用逗号分隔的群组ID，用于监控用户缓存。**留空则监听所有**机器人加入的群组。 | (空 - 监听所有群组)    |
 | `DB_HOST`                   | 数据库的主机名。**必须是 `mysql`**。                                        | `mysql`                 |
 | `DB_PORT`                   | 数据库的内部端口。                                                          | `3306`                  |
 | `DB_NAME`                   | 数据库的名称。必须与 `docker-compose.yml` 中的设置匹配。                    | `bot`                   |
@@ -159,7 +159,7 @@ docker-compose down
 #### 管理员命令
 ```bash
 # 用户缓存管理
-/cache                    # 查看用户缓存状态和统计信息
+/cache                    # 查看用户缓存状态和统计信息（显示用户数量、表大小等）
 /cache username           # 检查特定用户是否已缓存
 /cache @username          # 检查特定用户是否已缓存
 /cache 123456789          # 检查特定用户ID是否已缓存
@@ -342,10 +342,10 @@ docker-compose down
 
 #### 用户缓存管理系统
 - **全新用户缓存基础设施** 采用MySQL存储和Redis性能优化
-- **可配置的群组监控** 通过 `ENABLE_USER_CACHE` 和 `USER_CACHE_GROUP_IDS` 设置
-- **管理员缓存调试** 使用 `/cache` 命令查看缓存统计和用户查询
+- **灵活的群组监控** 通过 `ENABLE_USER_CACHE` 和 `USER_CACHE_GROUP_IDS` 设置 - **留空则监听所有群组**
+- **管理员缓存调试** 使用 `/cache` 命令查看缓存统计、用户表大小和用户查询
 - **灵活的缓存清理** 使用 `/cleanid` 命令支持基于时间和完全清理
-- **自动用户数据收集** 从监控群组消息中自动收集用户名到ID的映射
+- **自动用户数据收集** 从所有监控群组消息中自动收集用户名到ID的映射
 - **增强的用户名支持** 在 `/when` 命令中利用缓存用户数据
 
 #### BIN查询功能
