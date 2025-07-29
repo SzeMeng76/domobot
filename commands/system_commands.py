@@ -87,6 +87,20 @@ def escape_markdown(text):
     return text
 
 
+def escape_markdown_v2(text):
+    """转义MarkdownV2特殊字符"""
+    if not text:
+        return text
+    
+    # MarkdownV2需要转义的字符
+    special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!', '\\']
+    
+    for char in special_chars:
+        text = text.replace(char, f'\\{char}')
+    
+    return text
+
+
 async def send_message_with_fallback(context, chat_id, text, parse_mode="Markdown", fallback_text=None):
     """
     发送消息，如果失败则使用简化的纯文本fallback
@@ -1248,7 +1262,7 @@ async def list_points_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             if len(note) > 15:
                 note = note[:15] + "..."
                 
-            reply_text += f"{i:>2}\\. `{user_id:<11}` {date} *{escape_markdown(note)}*\n"
+            reply_text += f"{i:>2}\\. `{user_id:<11}` {date} *{escape_markdown_v2(note)}*\n"
             
         if total_points > limit:
             reply_text += f"\n\\.\\.\\. 还有 {total_points - limit} 个数据点\n"
