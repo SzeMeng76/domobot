@@ -1272,14 +1272,15 @@ async def list_points_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     await delete_user_command(context, chat.id, message.message_id)
     
     try:
-        # 解析限制参数（移除50个的硬限制，改用foldable处理长列表）
+        # 解析限制参数
         limit = 10  # 默认显示10个
         if context.args:
             try:
                 limit = int(context.args[0])
                 if limit <= 0:
                     limit = 10
-                # 移除硬限制，允许显示更多数据，长列表会自动折叠
+                elif limit > 50:  # 最多显示50个，避免消息过长
+                    limit = 50
             except ValueError:
                 pass
                 
@@ -1349,15 +1350,14 @@ async def list_points_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             
         if total_points > limit:
             reply_text += f"\n\\.\\.\\. 还有 {total_points - limit} 个数据点\n"
-            reply_text += f"使用 `/listpoints {total_points}` 查看全部（长列表会自动折叠）"
+            reply_text += f"使用 `/listpoints {total_points}` 查看全部"
             
         reply_text += f"\n\n💡 **管理命令**:\n"
         reply_text += f"• `/addpoint \\<id\\> \\<date\\> \\[note\\]` \\- 添加数据点\n"
         reply_text += f"• `/removepoint \\<id\\>` \\- 删除数据点"
         
         sent_message = await send_message_with_fallback(
-            context, chat.id, 
-            foldable_text_with_markdown_v2(reply_text),
+            context, chat.id, reply_text,
             parse_mode="MarkdownV2",
             fallback_text=f"📊 已知数据点列表\n统计: 总数 {total_points} | 已验证 {verified_count} | 估算 {total_points - verified_count}\n\n管理命令:\n• /addpoint <id> <date> [note] - 添加数据点\n• /removepoint <id> - 删除数据点"
         )
