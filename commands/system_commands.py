@@ -87,6 +87,47 @@ def escape_markdown(text):
     return text
 
 
+async def send_message_with_fallback(context, chat_id, text, parse_mode="Markdown", fallback_text=None):
+    """
+    发送消息，如果失败则使用简化的纯文本fallback
+    """
+    from utils.message_manager import send_search_result
+    
+    # 尝试发送原始消息
+    sent_message = await send_search_result(context, chat_id, text, parse_mode=parse_mode)
+    if sent_message:
+        return sent_message
+    
+    # 如果失败，使用fallback文本或简化版本
+    if not fallback_text:
+        # 移除所有Markdown格式，创建简化版本
+        fallback_text = text
+        # 移除Markdown格式字符
+        import re
+        fallback_text = re.sub(r'\*\*(.*?)\*\*', r'\1', fallback_text)  # 移除粗体
+        fallback_text = re.sub(r'\*(.*?)\*', r'\1', fallback_text)      # 移除斜体
+        fallback_text = re.sub(r'`(.*?)`', r'\1', fallback_text)        # 移除代码格式
+        fallback_text = re.sub(r'\\(.)', r'\1', fallback_text)          # 移除转义字符
+    
+    # 尝试发送纯文本版本
+    try:
+        fallback_message = await context.bot.send_message(
+            chat_id=chat_id,
+            text=fallback_text
+        )
+        return fallback_message
+    except Exception:
+        # 最后的fallback：发送通用错误消息
+        try:
+            error_message = await context.bot.send_message(
+                chat_id=chat_id,
+                text="❌ 消息发送失败，请稍后重试"
+            )
+            return error_message
+        except Exception:
+            return None
+
+
 def extract_field(text, field_name):
     """从文本中提取特定字段的值，处理富文本和emoji字符"""
     if not text:
@@ -872,7 +913,11 @@ async def add_point_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "• date: 日期格式 YYYY-MM-DD\n" 
             "• note: 可选备注信息"
         )
-        sent_message = await send_search_result(context, chat.id, reply_text, parse_mode="Markdown")
+        sent_message = await send_message_with_fallback(
+            context, chat.id, reply_text, 
+            parse_mode="Markdown",
+            fallback_text="❌ 参数不足，请使用: /addpoint <user_id> <date> [note]"
+        )
         from utils.message_manager import _schedule_deletion
         if sent_message:
             await _schedule_deletion(context, chat.id, sent_message.message_id, 30)
@@ -1213,7 +1258,11 @@ async def list_points_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         reply_text += f"• `/addpoint \\<id\\> \\<date\\> \\[note\\]` \\- 添加数据点\n"
         reply_text += f"• `/removepoint \\<id\\>` \\- 删除数据点"
         
-        sent_message = await send_search_result(context, chat.id, reply_text, parse_mode="MarkdownV2")
+        sent_message = await send_message_with_fallback(
+            context, chat.id, reply_text,
+            parse_mode="MarkdownV2",
+            fallback_text=f"📊 已知数据点列表\n统计: 总数 {total_points} | 已验证 {verified_count} | 估算 {total_points - verified_count}\n\n管理命令:\n• /addpoint <id> <date> [note] - 添加数据点\n• /removepoint <id> - 删除数据点"
+        )
         from utils.message_manager import _schedule_deletion
         if sent_message:
             await _schedule_deletion(context, chat.id, sent_message.message_id, 120)
