@@ -635,7 +635,7 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                     full_name = f"{first_name} {last_name}".strip() or "无"
                     
                     result_text += f"👤 *用户ID*: `{user_id}`\n"
-                    result_text += f"📛 *用户名*: {username}\n"
+                    result_text += f"📛 *用户名*: {escape_markdown(username)}\n"
                     result_text += f"🏷️ *昵称*: {escape_markdown(full_name)}\n"
                     result_text += f"✅ *缓存状态*: 已缓存"
                 else:
@@ -652,12 +652,12 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                     last_name = cached_user.get("last_name", "")
                     full_name = f"{first_name} {last_name}".strip() or "无"
                     
-                    result_text += f"📛 *用户名*: @{username}\n"
+                    result_text += f"📛 *用户名*: @{escape_markdown(username)}\n"
                     result_text += f"👤 *用户ID*: `{user_id}`\n"
                     result_text += f"🏷️ *昵称*: {escape_markdown(full_name)}\n"
                     result_text += f"✅ *缓存状态*: 已缓存"
                 else:
-                    result_text += f"📛 *用户名*: @{username}\n"
+                    result_text += f"📛 *用户名*: @{escape_markdown(username)}\n"
                     result_text += f"❌ *缓存状态*: 未找到"
         else:
             # 显示缓存概览和配置信息
@@ -703,14 +703,14 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                                 await cursor.execute("SELECT username FROM users WHERE username IS NOT NULL AND username != '' ORDER BY last_seen DESC LIMIT 5")
                                 recent_users = await cursor.fetchall()
                                 if recent_users:
-                                    usernames = [user['username'] for user in recent_users]
+                                    usernames = [escape_markdown(user['username']) for user in recent_users]
                                     result_text += f"• *最近用户名*: {', '.join(usernames)}\n"
                                 else:
                                     result_text += f"• *最近用户名*: 暂无有用户名的用户\n"
                             else:
                                 result_text += f"• *最近用户名*: 缓存为空\n"
                     except Exception as db_e:
-                        result_text += f"• *数据库查询错误*: {str(db_e)}\n"
+                        result_text += f"• *数据库查询错误*: {escape_markdown(str(db_e))}\n"
                 else:
                     result_text += "• *状态*: 缓存管理器已启用\n"
                     result_text += "• *详情*: 无法获取详细统计信息\n"
@@ -723,11 +723,11 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                     result_text += f"• *启用状态*: {'是' if config.enable_user_cache else '否'}\n"
                     if hasattr(config, 'user_cache_group_ids') and config.user_cache_group_ids:
                         result_text += f"• *监听群组*: {len(config.user_cache_group_ids)} 个\n"
-                        result_text += f"• *群组ID*: {config.user_cache_group_ids}\n"
+                        result_text += f"• *群组ID*: {escape_markdown(str(config.user_cache_group_ids))}\n"
                     else:
                         result_text += f"• *监听群组*: 未配置 ❌\n"
                 except Exception as config_e:
-                    result_text += f"\n⚙️ *配置错误*: {str(config_e)}\n"
+                    result_text += f"\n⚙️ *配置错误*: {escape_markdown(str(config_e))}\n"
                 
                 result_text += f"\n💡 *使用方法*:\n"
                 result_text += f"• `/cache username` - 查询特定用户名\n"
@@ -741,7 +741,7 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             except Exception as e:
                 result_text = f"📊 *用户缓存概览*\n\n"
                 result_text += f"• *状态*: 缓存管理器已启用\n"
-                result_text += f"• *错误*: 无法获取详细信息 ({str(e)})\n"
+                result_text += f"• *错误*: 无法获取详细信息 ({escape_markdown(str(e))})\n"
 
         await context.bot.edit_message_text(
             chat_id=chat.id,
@@ -758,7 +758,7 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         await context.bot.edit_message_text(
             chat_id=chat.id,
             message_id=sent_message.message_id,
-            text=f"查询缓存失败: {str(e)}"
+            text=f"查询缓存失败: {escape_markdown(str(e))}"
         )
         # 调度删除错误消息
         from utils.message_manager import _schedule_deletion
