@@ -60,21 +60,18 @@ def setup_user_cache_handler(application):
         return
 
     # 检查是否配置了监听群组
-    if not config.user_cache_group_ids:
-        logger.info("未配置用户缓存监听群组，跳过设置用户缓存处理器")
-        return
-
-    # 创建群组过滤器，只监听配置中的群组
-    group_filter = filters.Chat(config.user_cache_group_ids)
-
-    # 修改：处理所有类型的消息，不仅仅是文本消息
-    # 同时支持超级群组和普通群组
-    handler = MessageHandler((filters.ChatType.SUPERGROUP | filters.ChatType.GROUP) & group_filter, cache_user_info)
+    if config.user_cache_group_ids:
+        # 如果配置了群组，只监听指定群组
+        group_filter = filters.Chat(config.user_cache_group_ids)
+        handler = MessageHandler((filters.ChatType.SUPERGROUP | filters.ChatType.GROUP) & group_filter, cache_user_info)
+        logger.info(
+            f"✅ 用户缓存处理器已设置，监听指定 {len(config.user_cache_group_ids)} 个群组: {config.user_cache_group_ids}"
+        )
+    else:
+        # 如果未配置群组，监听所有群组
+        handler = MessageHandler(filters.ChatType.SUPERGROUP | filters.ChatType.GROUP, cache_user_info)
+        logger.info("✅ 用户缓存处理器已设置，监听所有群组（未配置指定群组）")
 
     # 添加到应用程序，使用较高的优先级（group=1）以确保先执行
     # group 数字越小，优先级越高
     application.add_handler(handler, group=1)
-
-    logger.info(
-        f"✅ 用户缓存处理器已设置，监听 {len(config.user_cache_group_ids)} 个群组: {config.user_cache_group_ids}"
-    )
