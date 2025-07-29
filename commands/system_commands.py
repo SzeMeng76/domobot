@@ -424,7 +424,7 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await _schedule_deletion(context, chat.id, sent_message.message_id, 180)
                     return
             # 处理纯用户名（不带@）
-            elif not param.isdigit() and param.isalnum():
+            elif not param.isdigit() and re.match(r'^[a-zA-Z0-9_]+$', param):
                 if user_cache_manager:
                     cached_user = await user_cache_manager.get_user_by_username(param)
                     if cached_user:
