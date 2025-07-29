@@ -874,7 +874,8 @@ async def add_point_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         sent_message = await send_search_result(context, chat.id, reply_text, parse_mode="Markdown")
         from utils.message_manager import _schedule_deletion
-        await _schedule_deletion(context, chat.id, sent_message.message_id, 30)
+        if sent_message:
+            await _schedule_deletion(context, chat.id, sent_message.message_id, 30)
         return
         
     try:
@@ -892,7 +893,8 @@ async def add_point_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="Markdown"
             )
             from utils.message_manager import _schedule_deletion
-            await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
+            if sent_message:
+                await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
             return
             
         # 验证日期格式
@@ -906,7 +908,8 @@ async def add_point_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="Markdown"
             )
             from utils.message_manager import _schedule_deletion
-            await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
+            if sent_message:
+                await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
             return
             
         # 加载现有数据
@@ -940,7 +943,8 @@ async def add_point_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     parse_mode="Markdown"
                 )
                 from utils.message_manager import _schedule_deletion
-                await _schedule_deletion(context, chat.id, sent_message.message_id, 15)
+                if sent_message:
+                    await _schedule_deletion(context, chat.id, sent_message.message_id, 15)
                 return
                 
         # 添加新数据点
@@ -974,7 +978,8 @@ async def add_point_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         sent_message = await send_search_result(context, chat.id, reply_text, parse_mode="Markdown")
         from utils.message_manager import _schedule_deletion
-        await _schedule_deletion(context, chat.id, sent_message.message_id, 60)
+        if sent_message:
+            await _schedule_deletion(context, chat.id, sent_message.message_id, 60)
         
     except Exception as e:
         sent_message = await send_search_result(
@@ -983,7 +988,8 @@ async def add_point_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
         from utils.message_manager import _schedule_deletion
-        await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
+        if sent_message:
+            await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
 
 
 async def remove_point_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1012,7 +1018,8 @@ async def remove_point_command(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         sent_message = await send_search_result(context, chat.id, reply_text, parse_mode="Markdown")
         from utils.message_manager import _schedule_deletion
-        await _schedule_deletion(context, chat.id, sent_message.message_id, 20)
+        if sent_message:
+            await _schedule_deletion(context, chat.id, sent_message.message_id, 20)
         return
         
     try:
@@ -1028,7 +1035,8 @@ async def remove_point_command(update: Update, context: ContextTypes.DEFAULT_TYP
                 parse_mode="Markdown"
             )
             from utils.message_manager import _schedule_deletion
-            await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
+            if sent_message:
+                await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
             return
             
         # 加载现有数据
@@ -1046,7 +1054,8 @@ async def remove_point_command(update: Update, context: ContextTypes.DEFAULT_TYP
                 parse_mode="Markdown"
             )
             from utils.message_manager import _schedule_deletion
-            await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
+            if sent_message:
+                await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
             return
             
         with open(data_file, 'r', encoding='utf-8') as f:
@@ -1069,7 +1078,8 @@ async def remove_point_command(update: Update, context: ContextTypes.DEFAULT_TYP
                 parse_mode="Markdown"
             )
             from utils.message_manager import _schedule_deletion
-            await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
+            if sent_message:
+                await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
             return
             
         # 删除数据点
@@ -1096,7 +1106,8 @@ async def remove_point_command(update: Update, context: ContextTypes.DEFAULT_TYP
         
         sent_message = await send_search_result(context, chat.id, reply_text, parse_mode="Markdown")
         from utils.message_manager import _schedule_deletion
-        await _schedule_deletion(context, chat.id, sent_message.message_id, 60)
+        if sent_message:
+            await _schedule_deletion(context, chat.id, sent_message.message_id, 60)
         
     except Exception as e:
         sent_message = await send_search_result(
@@ -1105,7 +1116,8 @@ async def remove_point_command(update: Update, context: ContextTypes.DEFAULT_TYP
             parse_mode="Markdown"
         )
         from utils.message_manager import _schedule_deletion
-        await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
+        if sent_message:
+            await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
 
 
 async def list_points_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1149,7 +1161,8 @@ async def list_points_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                 parse_mode="Markdown"
             )
             from utils.message_manager import _schedule_deletion
-            await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
+            if sent_message:
+                await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
             return
             
         with open(data_file, 'r', encoding='utf-8') as f:
@@ -1164,7 +1177,8 @@ async def list_points_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                 parse_mode="Markdown"
             )
             from utils.message_manager import _schedule_deletion
-            await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
+            if sent_message:
+                await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
             return
             
         # 按user_id排序
@@ -1176,7 +1190,7 @@ async def list_points_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         
         # 构建显示文本
         reply_text = f"📊 **已知数据点列表**\n\n"
-        reply_text += f"📈 **统计**: 总数 {total_points} | 已验证 {verified_count} | 估算 {total_points - verified_count}\n\n"
+        reply_text += f"📈 **统计**: 总数 {total_points} \\| 已验证 {verified_count} \\| 估算 {total_points - verified_count}\n\n"
         
         display_points = points[:limit]
         
@@ -1201,7 +1215,8 @@ async def list_points_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         
         sent_message = await send_search_result(context, chat.id, reply_text, parse_mode="MarkdownV2")
         from utils.message_manager import _schedule_deletion
-        await _schedule_deletion(context, chat.id, sent_message.message_id, 120)
+        if sent_message:
+            await _schedule_deletion(context, chat.id, sent_message.message_id, 120)
         
     except Exception as e:
         sent_message = await send_search_result(
@@ -1210,7 +1225,8 @@ async def list_points_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             parse_mode="Markdown"
         )
         from utils.message_manager import _schedule_deletion
-        await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
+        if sent_message:
+            await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
 
 
 # 注册命令
@@ -1221,6 +1237,3 @@ command_factory.register_command("cleanid", clean_id_command, permission=Permiss
 command_factory.register_command("addpoint", add_point_command, permission=Permission.ADMIN, description="添加已知数据点（管理员专用）")
 command_factory.register_command("removepoint", remove_point_command, permission=Permission.ADMIN, description="删除已知数据点（管理员专用）")
 command_factory.register_command("listpoints", list_points_command, permission=Permission.ADMIN, description="列出已知数据点（管理员专用）")
-
-
-
