@@ -19,8 +19,8 @@ class KnownPointsLoader:
         Args:
             data_file: JSON数据文件路径，相对于项目根目录
         """
-        # 获取项目根目录
-        current_dir = Path(__file__).parent
+        # 获取项目根目录 - 需要向上一级到达项目根目录
+        current_dir = Path(__file__).parent.parent  # 从 /app/utils 到 /app
         self.data_file = current_dir / data_file
         print(f"🔍 调试: 数据加载器初始化，文件路径: {self.data_file}")
         self._cache = None
