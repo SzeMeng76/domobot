@@ -84,7 +84,7 @@ All configurations are managed via the `.env` file. You must copy `.env.example`
 | `QWEATHER_API_KEY`          | **(Optional)** API Key from HeFeng Weather for the `/tq` command.           |                         |
 | `EXCHANGE_RATE_API_KEYS`    | **(Optional)** API Keys from openexchangerates.org for the `/rate` command. Multiple keys separated by commas. |                         |
 | `ENABLE_USER_CACHE`         | **(Optional)** Enable user caching system (`true`/`false`).                 | `false`                 |
-| `USER_CACHE_GROUP_IDS`      | **(Optional)** Comma-separated group IDs to monitor for user caching. Leave empty to disable caching. | (empty)                 |
+| `USER_CACHE_GROUP_IDS`      | **(Optional)** Comma-separated group IDs to monitor for user caching. **Leave empty to monitor all groups** where the bot is added. | (empty - monitors all groups) |
 | `DB_HOST`                   | Hostname for the database. **Must be `mysql`**.                             | `mysql`                 |
 | `DB_PORT`                   | The internal port for the database.                                         | `3306`                  |
 | `DB_NAME`                   | The name of the database. Must match `docker-compose.yml`.                  | `bot`                   |
@@ -159,7 +159,7 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 #### Admin Commands
 ```bash
 # User cache management
-/cache                    # View user cache status and statistics
+/cache                    # View user cache status and statistics (shows user count, table size, etc.)
 /cache username           # Check if specific user is cached
 /cache @username          # Check if specific user is cached
 /cache 123456789          # Check if specific user ID is cached
@@ -356,10 +356,10 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 
 #### User Cache Management System
 - **New user caching infrastructure** with MySQL storage and Redis performance optimization
-- **Configurable group monitoring** via `ENABLE_USER_CACHE` and `USER_CACHE_GROUP_IDS` settings
-- **Admin cache debugging** with `/cache` command for viewing cache statistics and user lookup
+- **Flexible group monitoring** via `ENABLE_USER_CACHE` and `USER_CACHE_GROUP_IDS` settings - **leave empty to monitor all groups**
+- **Admin cache debugging** with `/cache` command for viewing cache statistics, user table size, and user lookup
 - **Flexible cache cleanup** with `/cleanid` command supporting time-based and complete cleanup
-- **Automatic user data collection** from monitored group messages for username-to-ID mapping
+- **Automatic user data collection** from all monitored group messages for username-to-ID mapping
 - **Enhanced username support** in `/when` command leveraging cached user data
 
 #### BIN Lookup Feature
