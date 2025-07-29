@@ -393,20 +393,33 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         # 从缓存中构建用户对象信息
                         target_user = CachedUser(cached_user)
                     else:
-                        await context.bot.edit_message_text(
-                            chat_id=chat.id,
-                            message_id=sent_message.message_id,
-                            text=f"❌ 缓存中未找到用户 @{username}\n\n"
-                                 "💡 *可能原因*:\n"
-                                 "• 用户未在监控群组中发过消息\n"
-                                 "• 用户名拼写错误\n"
-                                 "• 用户缓存中暂无此用户信息\n\n"
-                                 "✅ *建议*:\n"
-                                 "• 让用户在群内发一条消息后再试\n"
-                                 "• 使用数字ID查询: `/when 123456789`\n"
-                                 "• 回复用户消息后使用 `/when`",
-                            parse_mode="Markdown"
-                        )
+                        safe_username = safe_format_username(username)
+                        try:
+                            await context.bot.edit_message_text(
+                                chat_id=chat.id,
+                                message_id=sent_message.message_id,
+                                text=f"❌ 缓存中未找到用户 @{safe_username}\n\n"
+                                     "💡 *可能原因*:\n"
+                                     "• 用户未在监控群组中发过消息\n"
+                                     "• 用户名拼写错误\n"
+                                     "• 用户缓存中暂无此用户信息\n\n"
+                                     "✅ *建议*:\n"
+                                     "• 让用户在群内发一条消息后再试\n"
+                                     "• 使用数字ID查询: `/when 123456789`\n"
+                                     "• 回复用户消息后使用 `/when`",
+                                parse_mode="Markdown"
+                            )
+                        except Exception:
+                            # 如果Markdown失败，使用纯文本
+                            await context.bot.edit_message_text(
+                                chat_id=chat.id,
+                                message_id=sent_message.message_id,
+                                text=f"❌ 缓存中未找到用户 @{username}\n\n"
+                                     "建议:\n"
+                                     "• 让用户在群内发一条消息后再试\n"
+                                     "• 使用数字ID查询\n"
+                                     "• 回复用户消息后使用 /when"
+                            )
                         # 调度删除机器人回复消息
                         from utils.message_manager import _schedule_deletion
                         await _schedule_deletion(context, chat.id, sent_message.message_id, 180)
@@ -432,17 +445,31 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         # 从缓存中构建用户对象信息
                         target_user = CachedUser(cached_user)
                     else:
-                        await context.bot.edit_message_text(
-                            chat_id=chat.id,
-                            message_id=sent_message.message_id,
-                            text=f"❌ 缓存中未找到用户 {param}\n\n"
-                                 "💡 *提示*: 用户名查询支持以下格式:\n"
-                                 "• `/when @username`\n"
-                                 "• `/when username`\n"
-                                 "• `/when 123456789` (数字ID)\n\n"
-                                 "如果用户名查询失败，建议使用数字ID查询",
-                            parse_mode="Markdown"
-                        )
+                        safe_param = safe_format_username(param)
+                        try:
+                            await context.bot.edit_message_text(
+                                chat_id=chat.id,
+                                message_id=sent_message.message_id,
+                                text=f"❌ 缓存中未找到用户 {safe_param}\n\n"
+                                     "💡 *提示*: 用户名查询支持以下格式:\n"
+                                     "• `/when @username`\n"
+                                     "• `/when username`\n"
+                                     "• `/when 123456789` (数字ID)\n\n"
+                                     "如果用户名查询失败，建议使用数字ID查询",
+                                parse_mode="Markdown"
+                            )
+                        except Exception:
+                            # 如果Markdown失败，使用纯文本
+                            await context.bot.edit_message_text(
+                                chat_id=chat.id,
+                                message_id=sent_message.message_id,
+                                text=f"❌ 缓存中未找到用户 {param}\n\n"
+                                     "提示: 用户名查询支持以下格式:\n"
+                                     "• /when @username\n"
+                                     "• /when username\n"
+                                     "• /when 123456789 (数字ID)\n\n"
+                                     "如果用户名查询失败，建议使用数字ID查询"
+                            )
                         # 调度删除机器人回复消息
                         from utils.message_manager import _schedule_deletion
                         await _schedule_deletion(context, chat.id, sent_message.message_id, 180)
