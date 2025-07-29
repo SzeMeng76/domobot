@@ -220,7 +220,7 @@ async def bin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
     
     if len(bin_number) < 6 or len(bin_number) > 8:
-        error_text = "❌ BIN号码长度必须在6\\-8位之间"
+        error_text = "❌ BIN号码长度必须在6-8位之间"
         await send_error(context, update.effective_chat.id, foldable_text_v2(error_text), parse_mode="MarkdownV2")
         return
 
