@@ -744,10 +744,45 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                     config = get_config()
                     result_text += f"\n⚙️ *缓存配置*:\n"
                     result_text += f"• *启用状态*: {'是' if config.enable_user_cache else '否'}\n"
+                    
                     if hasattr(config, 'user_cache_group_ids') and config.user_cache_group_ids:
-                        result_text += f"• *监听群组*: {len(config.user_cache_group_ids)} 个\n"
+                        result_text += f"• *监听模式*: 指定群组 ({len(config.user_cache_group_ids)} 个)\n"
                     else:
-                        result_text += f"• *监听群组*: 未配置 ❌\n"
+                        # 查询实际监听的群组数量
+                        try:
+                            if hasattr(user_cache_manager, 'get_cursor'):
+                                async with user_cache_manager.get_cursor() as cursor:
+                                    # 方法1: 查询有多少个不同的群组有命令记录（活跃群组）
+                                    await cursor.execute("""
+                                        SELECT COUNT(DISTINCT chat_id) as active_group_count 
+                                        FROM command_stats 
+                                        WHERE chat_type IN ('supergroup', 'group')
+                                    """)
+                                    active_result = await cursor.fetchone()
+                                    active_count = (active_result['active_group_count'] if active_result else 0) or 0
+                                    
+                                    # 方法2: 查询总的群组数量（如果有group_whitelist表的话）
+                                    try:
+                                        await cursor.execute("SELECT COUNT(*) as total_groups FROM group_whitelist")
+                                        total_result = await cursor.fetchone()
+                                        total_count = (total_result['total_groups'] if total_result else 0) or 0
+                                        
+                                        if total_count > 0:
+                                            result_text += f"• *监听模式*: 所有群组 (总计: {total_count} 个, 活跃: {active_count} 个)\n"
+                                        elif active_count > 0:
+                                            result_text += f"• *监听模式*: 所有群组 (活跃: {active_count} 个)\n"
+                                        else:
+                                            result_text += f"• *监听模式*: 所有群组 (暂无活跃群组)\n"
+                                    except Exception:
+                                        # 如果没有group_whitelist表，只显示活跃群组
+                                        if active_count > 0:
+                                            result_text += f"• *监听模式*: 所有群组 (活跃: {active_count} 个)\n"
+                                        else:
+                                            result_text += f"• *监听模式*: 所有群组 (暂无活跃群组)\n"
+                            else:
+                                result_text += f"• *监听模式*: 所有群组\n"
+                        except Exception:
+                            result_text += f"• *监听模式*: 所有群组\n"
                 except Exception as config_e:
                     result_text += f"\n⚙️ *配置错误*: {escape_markdown(str(config_e))}\n"
                 
@@ -757,8 +792,8 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                 result_text += f"• `/cache 123456789` - 查询特定ID\n"
                 
                 result_text += f"\n📝 *缓存说明*:\n"
-                result_text += f"• 只有在配置的监听群组中发过消息的用户才会被缓存\n"
-                result_text += f"• 如果监听群组未配置，缓存功能将不工作\n"
+                result_text += f"• 机器人加入的所有群组中发消息的用户都会被缓存\n"
+                result_text += f"• 可通过配置文件指定特定群组进行监听\n"
                 result_text += f"• 当数据大小超过 10MB 时建议使用 `/cleanid` 清理缓存\n"
                 result_text += f"• 使用 `/cleanid 30` 可清理30天前的旧数据\n"
                 
