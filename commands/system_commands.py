@@ -4,11 +4,95 @@ import asyncio
 from datetime import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
+import requests
+import json
 
 from utils.command_factory import command_factory
 from utils.formatter import foldable_text_with_markdown_v2
 from utils.message_manager import delete_user_command, send_search_result
 from utils.permissions import Permission
+
+
+# Telegraph 相关配置和函数
+TELEGRAPH_API_URL = "https://api.telegra.ph"
+TELEGRAM_MESSAGE_LIMIT = 4096  # Telegram消息长度限制
+
+
+async def create_telegraph_page(title, content):
+    """
+    创建Telegraph页面
+    """
+    try:
+        # 创建Telegraph账户（每次都创建新的，避免token管理问题）
+        account_data = {
+            "short_name": "MengBot",
+            "author_name": "MengBot",
+            "author_url": "https://t.me/mengpricebot"
+        }
+        
+        response = requests.post(f"{TELEGRAPH_API_URL}/createAccount", data=account_data)
+        if response.status_code != 200:
+            return None
+            
+        account_info = response.json()
+        if not account_info.get("ok"):
+            return None
+            
+        access_token = account_info["result"]["access_token"]
+        
+        # 创建页面内容
+        page_content = [
+            {
+                "tag": "p",
+                "children": [content]
+            }
+        ]
+        
+        page_data = {
+            "access_token": access_token,
+            "title": title,
+            "content": json.dumps(page_content),
+            "return_content": "true"
+        }
+        
+        response = requests.post(f"{TELEGRAPH_API_URL}/createPage", data=page_data)
+        if response.status_code != 200:
+            return None
+            
+        page_info = response.json()
+        if not page_info.get("ok"):
+            return None
+            
+        return page_info["result"]["url"]
+        
+    except Exception as e:
+        print(f"创建Telegraph页面失败: {e}")
+        return None
+
+
+def format_points_for_telegraph(points):
+    """
+    将数据点格式化为Telegraph友好的格式
+    """
+    content = "已知数据点列表\n\n"
+    
+    # 统计信息
+    total_points = len(points)
+    verified_count = sum(1 for p in points if "✅" in p.get("note", ""))
+    content += f"统计: 总数 {total_points} | 已验证 {verified_count} | 估算 {total_points - verified_count}\n\n"
+    
+    # 数据点列表
+    for i, point in enumerate(points, 1):
+        user_id = point["user_id"]
+        date = point["date"]
+        note = point.get("note", "无备注")
+        content += f"{i:>3}. {user_id:<11} {date} {note}\n"
+    
+    content += f"\n\n管理命令:\n"
+    content += f"• /addpoint <id> <date> [note] - 添加数据点\n"
+    content += f"• /removepoint <id> - 删除数据点"
+    
+    return content
 
 
 class CachedUser:
@@ -1260,6 +1344,7 @@ async def list_points_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     """
     列出已知数据点命令（管理员专用）
     使用方法: /listpoints [limit]
+    现在支持Telegraph: 当内容过长时自动发布到Telegraph
     """
     message = update.effective_message
     chat = update.effective_chat
@@ -1273,14 +1358,17 @@ async def list_points_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     try:
         # 解析限制参数
+        use_telegraph = False
         limit = 10  # 默认显示10个
+        
         if context.args:
             try:
                 limit = int(context.args[0])
                 if limit <= 0:
                     limit = 10
-                elif limit > 50:  # 最多显示50个，避免消息过长
-                    limit = 50
+                # 移除50个限制，改为支持更大数量
+                elif limit > 200:  # 设置一个合理的上限
+                    limit = 200
             except ValueError:
                 pass
                 
@@ -1324,7 +1412,7 @@ async def list_points_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         total_points = len(points)
         verified_count = sum(1 for p in points if "✅" in p.get("note", ""))
         
-        # 构建显示文本
+        # 构建完整的回复文本
         reply_text = f"📊 **已知数据点列表**\n\n"
         reply_text += f"📈 **统计**: 总数 {total_points} \\| 已验证 {verified_count} \\| 估算 {total_points - verified_count}\n\n"
         
@@ -1350,17 +1438,54 @@ async def list_points_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             
         if total_points > limit:
             reply_text += f"\n\\.\\.\\. 还有 {total_points - limit} 个数据点\n"
-            reply_text += f"使用 `/listpoints {total_points}` 查看全部"
             
         reply_text += f"\n\n💡 **管理命令**:\n"
         reply_text += f"• `/addpoint \\<id\\> \\<date\\> \\[note\\]` \\- 添加数据点\n"
         reply_text += f"• `/removepoint \\<id\\>` \\- 删除数据点"
         
-        sent_message = await send_message_with_fallback(
-            context, chat.id, reply_text,
-            parse_mode="MarkdownV2",
-            fallback_text=f"📊 已知数据点列表\n统计: 总数 {total_points} | 已验证 {verified_count} | 估算 {total_points - verified_count}\n\n管理命令:\n• /addpoint <id> <date> [note] - 添加数据点\n• /removepoint <id> - 删除数据点"
-        )
+        # 检查消息长度是否超过Telegram限制
+        if len(reply_text) > TELEGRAM_MESSAGE_LIMIT:
+            # 尝试发布到Telegraph
+            telegraph_content = format_points_for_telegraph(display_points)
+            telegraph_url = await create_telegraph_page(f"数据点列表 ({total_points}个)", telegraph_content)
+            
+            if telegraph_url:
+                # 发送简化消息，包含Telegraph链接
+                short_reply = (
+                    f"📊 **已知数据点列表**\n\n"
+                    f"📈 **统计**: 总数 {total_points} \\| 已验证 {verified_count} \\| 估算 {total_points - verified_count}\n\n"
+                    f"📄 **完整列表**: 由于内容较长，已发布到Telegraph\n"
+                    f"🔗 **查看链接**: {telegraph_url}\n\n"
+                    f"💡 **管理命令**:\n"
+                    f"• `/addpoint \\<id\\> \\<date\\> \\[note\\]` \\- 添加数据点\n"
+                    f"• `/removepoint \\<id\\>` \\- 删除数据点"
+                )
+                
+                sent_message = await send_message_with_fallback(
+                    context, chat.id, short_reply,
+                    parse_mode="MarkdownV2",
+                    fallback_text=f"📊 数据点列表 (总数: {total_points})\n\n完整列表已发布到Telegraph: {telegraph_url}\n\n管理命令:\n• /addpoint <id> <date> [note] - 添加数据点\n• /removepoint <id> - 删除数据点"
+                )
+            else:
+                # Telegraph发布失败，发送截断的消息
+                fallback_text = (
+                    f"📊 数据点列表 (总数: {total_points})\n\n"
+                    f"⚠️ 由于内容过长且Telegraph发布失败，仅显示前{min(limit, 10)}个数据点\n"
+                    f"请使用较小的数字参数查看，如: /listpoints 10\n\n"
+                    f"管理命令:\n"
+                    f"• /addpoint <id> <date> [note] - 添加数据点\n"
+                    f"• /removepoint <id> - 删除数据点"
+                )
+                
+                sent_message = await send_search_result(context, chat.id, fallback_text)
+        else:
+            # 正常发送消息
+            sent_message = await send_message_with_fallback(
+                context, chat.id, reply_text,
+                parse_mode="MarkdownV2",
+                fallback_text=f"📊 已知数据点列表\n统计: 总数 {total_points} | 已验证 {verified_count} | 估算 {total_points - verified_count}\n\n管理命令:\n• /addpoint <id> <date> [note] - 添加数据点\n• /removepoint <id> - 删除数据点"
+            )
+        
         from utils.message_manager import _schedule_deletion
         if sent_message:
             await _schedule_deletion(context, chat.id, sent_message.message_id, 120)
