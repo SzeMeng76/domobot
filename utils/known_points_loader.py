@@ -22,6 +22,7 @@ class KnownPointsLoader:
         # 获取项目根目录
         current_dir = Path(__file__).parent
         self.data_file = current_dir / data_file
+        print(f"🔍 调试: 数据加载器初始化，文件路径: {self.data_file}")
         self._cache = None
         self._last_modified = None
         
@@ -39,13 +40,16 @@ class KnownPointsLoader:
     def _load_from_file(self) -> Optional[dict]:
         """从文件加载数据"""
         try:
+            print(f"🔍 调试: 尝试加载文件 {self.data_file}")
             if not self.data_file.exists():
                 print(f"⚠️ 数据文件不存在: {self.data_file}")
                 return None
                 
+            print(f"✅ 文件存在，开始读取...")
             with open(self.data_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 
+            print(f"✅ JSON解析成功，数据点数量: {len(data.get('known_points', []))}")
             self._last_modified = self.data_file.stat().st_mtime
             return data
             
