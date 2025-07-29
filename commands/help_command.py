@@ -73,6 +73,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 👤 *用户信息查询*
 - `/when <用户ID>`: 根据用户ID估算Telegram注册日期和账号年龄。
+- `/when @username`: 通过用户名查询注册信息（支持缓存用户）。
 - `/when` (回复消息): 查询被回复用户的注册信息。
 - `/id`: 获取当前用户或群组的ID信息。
 - `/id` (回复消息): 获取被回复用户的详细ID信息。
@@ -99,7 +100,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - `/app 微信`: 搜索App Store应用。
 - `/gp WeChat`: 搜索Google Play应用。
 - `/aps iCloud`: 查询iCloud全球价格。
-- `/when 123456789`: 查询用户注册日期和账号年龄。
+- `/when 123456789`: 查询用户注册日期和账号年龄（支持用户名查询）。
 - `/id`: 获取用户或群组的ID信息。
 
 🔄 *消息管理:*
@@ -110,7 +111,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 🔧 *管理员功能:*
 
-📋 *核心管理*
+🔧 *核心管理*
 - `/admin`: 打开交互式管理面板 (用户/群组/管理员管理)。
 - `/add <用户ID>`: (或回复消息) 添加用户到白名单。
 - `/addgroup`: (在群组中) 添加当前群组到白名单。
@@ -131,9 +132,21 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - `/steamcc`: 清理Steam相关缓存。
 - `/aps_cleancache`: 清理Apple服务缓存。
 
+👥 *用户缓存管理*
+- `/cache [用户名/ID]`: 查看用户缓存状态和统计信息。
+- `/cleanid [天数]`: 清理用户ID缓存（可按天数清理旧数据）。
+
+🔧 *数据点管理*
+- `/addpoint <用户ID> <日期> [备注]`: 添加已知数据点（优化注册日期估算）。
+- `/removepoint <用户ID>`: 删除指定的已知数据点。
+- `/listpoints [数量]`: 列出已知数据点（默认显示10个，可指定数量）。
+
 💡 *管理技巧:*
 - 管理面板支持批量操作和实时刷新。
-- 所有缓存清理操作都会显示清理结果。"""
+- 所有缓存清理操作都会显示清理结果和统计信息。
+- 数据点管理用于优化用户注册日期估算准确性。
+- 用户缓存支持按时间清理，避免数据库过大（建议超过10MB时清理）。
+- `/cache` 命令可查看缓存使用情况和数据库大小。"""
 
     super_admin_help_text = """
 
@@ -170,6 +183,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 👤 *用户信息查询*
 - `/when <用户ID>`: 根据用户ID估算Telegram注册日期和账号年龄。
+- `/when @username`: 通过用户名查询注册信息（支持缓存用户）。
 - `/when` (回复消息): 查询被回复用户的注册信息。
 - `/id`: 获取当前用户或群组的ID信息。
 - `/id` (回复消息): 获取被回复用户的详细ID信息。
@@ -186,7 +200,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - `/nf`: 查看Netflix全球价格排名。
 - `/ds`: 查看Disney+全球价格排名。
 - `/sp`: 查看Spotify全球价格排名。
-- `/when 123456789`: 查询用户注册日期和账号年龄。
+- `/when 123456789`: 查询用户注册日期和账号年龄（支持用户名查询）。
 - `/id`: 获取用户或群组的ID信息。
 
 🔒 *白名单专享功能预览:*
@@ -250,6 +264,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 👤 *用户信息查询*
 - `/when <用户ID>`: 根据用户ID估算Telegram注册日期和账号年龄。
+- `/when @username`: 通过用户名查询注册信息（支持缓存用户）。
 - `/when` (回复消息): 查询被回复用户的注册信息。
 - `/id`: 获取当前用户或群组的ID信息。
 - `/id` (回复消息): 获取被回复用户的详细ID信息。
@@ -276,7 +291,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - `/app 微信`: 搜索App Store应用。
 - `/gp WeChat`: 搜索Google Play应用。
 - `/aps iCloud`: 查询iCloud全球价格。
-- `/when 123456789`: 查询用户注册日期和账号年龄。
+- `/when 123456789`: 查询用户注册日期和账号年龄（支持用户名查询）。
 - `/id`: 获取用户或群组的ID信息。
 
 🔄 *消息管理:*
