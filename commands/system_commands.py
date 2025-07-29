@@ -227,30 +227,19 @@ def estimate_account_creation_date(user_id):
     # 从JSON文件加载已知数据点
     known_points = load_known_points()
     
-    # 调试：检查特定用户ID的数据点
-    debug_id = 620973285
-    for user_id, date in known_points:
-        if user_id == debug_id:
-            print(f"🔍 调试: 找到ID {debug_id} -> {date}")
-            break
-    else:
-        print(f"🔍 调试: 未找到ID {debug_id}")
-    
-    # 显示数据点范围用于调试
-    if known_points:
-        print(f"🔍 调试: 数据点范围 {known_points[0][0]} ~ {known_points[-1][0]}, 总计 {len(known_points)} 个")
-    
-    # 数据已在加载器中按ID排序，确保插值算法正确工作
-    
     # 线性插值估算
     for i in range(len(known_points) - 1):
         id1, date1 = known_points[i]
         id2, date2 = known_points[i + 1]
         
         if id1 <= user_id <= id2:
-            # 调试输出
+            # 调试输出 - 保留这个很重要，能发现排序问题
             print(f"🔍 调试: ID {user_id} 在区间 [{id1}, {id2}] 内")
             print(f"🔍 调试: 日期区间 [{date1}, {date2}]")
+            
+            # 检查日期顺序是否正确
+            if date1 > date2:
+                print(f"⚠️ 警告: 日期顺序错误! {date1} > {date2}")
             
             # 线性插值计算
             ratio = (user_id - id1) / (id2 - id1)
@@ -1040,13 +1029,8 @@ async def add_point_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data_file.parent.mkdir(exist_ok=True)
         
         # 保存数据
-        try:
-            with open(data_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=4)
-            print(f"✅ 数据已保存到: {data_file}")
-        except Exception as save_error:
-            print(f"❌ 保存数据失败: {save_error}")
-            raise save_error
+        with open(data_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
             
         # 强制重新加载数据
         loader.reload()
@@ -1173,13 +1157,8 @@ async def remove_point_command(update: Update, context: ContextTypes.DEFAULT_TYP
         data["last_updated"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
         
         # 保存数据
-        try:
-            with open(data_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=4)
-            print(f"✅ 数据已保存到: {data_file}")
-        except Exception as save_error:
-            print(f"❌ 保存数据失败: {save_error}")
-            raise save_error
+        with open(data_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
             
         # 强制重新加载数据
         loader.reload()
