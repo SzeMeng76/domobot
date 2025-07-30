@@ -89,6 +89,7 @@ from commands import (
     disney_plus,
     google_play,
     help_command,
+    max,
     netflix,
     spotify,
     steam,
@@ -236,6 +237,7 @@ async def setup_application(application: Application, config) -> None:
     netflix.set_dependencies(cache_manager, rate_converter)
     disney_plus.set_dependencies(cache_manager, rate_converter)
     spotify.set_dependencies(cache_manager, rate_converter)
+    max.set_dependencies(cache_manager, rate_converter)
     app_store.set_rate_converter(rate_converter)
     app_store.set_cache_manager(cache_manager)
     google_play.set_rate_converter(rate_converter)
