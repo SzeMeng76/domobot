@@ -506,15 +506,29 @@ class MaxPriceBot(PriceQueryService):
             "HBO Max Ultimate": "旗舰版 (HBO Max Ultimate)",
             "HBO Max (With Ads)": "含广告版 (HBO Max With Ads)",
             "HBO Max (Ad-Free)": "无广告版 (HBO Max Ad-Free)",
+            
+            # Standard plan types (统一后的标准名称)
             "Mobile": "手机版 (Mobile)",
+            "Standard": "标准版 (Standard)", 
+            "Ultimate": "至尊版 (Ultimate)",  # Platino映射后的统一名称
+            "Premium": "高级版 (Premium)",
+            "Basic": "基础版 (Basic)",
+            
+            # Legacy names (向后兼容)
             "Ponsel": "手机版 (Ponsel)",
             "Standar": "标准版 (Standar)",
             "Platinum": "白金版 (Platinum)",
             
-            # Spanish/Latin America plans
+            # Spanish/Latin America plans (原始名称显示)
             "Básico con Anuncios": "基础版含广告 (Básico con Anuncios)",
             "Estándar": "标准版 (Estándar)",
-            "Platino": "白金版 (Platino)",
+            "Platino": "至尊版 (Platino → Ultimate)",  # 显示映射关系
+            
+            # 繁体中文套餐名（台湾、香港）
+            "標準": "标准版 (標準 → Standard)",
+            "高級": "至尊版 (高級 → Ultimate)",
+            "手機": "手机版 (手機 → Mobile)",
+            "基礎": "基础版 (基礎 → Basic)",
             
             # Bundle plans
             "HBO Max + TNT Sports Basic": "HBO Max + TNT Sports 基础版",
@@ -546,6 +560,7 @@ class MaxPriceBot(PriceQueryService):
             # Extract currency, price_number and price_cny
             original_currency = plan.get("original_currency", "")
             original_price_number = plan.get("original_price_number", "")
+            monthly_price = plan.get("monthly_price", original_price_number)  # 获取月价格用于显示
             price_cny = plan.get("price_cny", 0)
             original_price = plan.get("original_price", "价格未知")
             billing_cycle = plan.get("billing_cycle", "")
@@ -555,8 +570,15 @@ class MaxPriceBot(PriceQueryService):
             connector = "" if is_last_plan else ""
 
             # Format price display with currency, price_number, and CNY
-            if original_currency and original_price_number and price_cny > 0:
-                if billing_cycle:
+            # 对于年付套餐，显示月价格但标注是年付
+            if original_currency and price_cny > 0:
+                if billing_cycle and "年" in billing_cycle:
+                    # 年付套餐：显示月价格 × 12 = 年价格
+                    if monthly_price and float(monthly_price) != float(original_price_number):
+                        price_display = f"{original_currency} {monthly_price}/月 × 12 = {original_currency} {original_price_number}/年 ≈ ¥{price_cny:.2f}"
+                    else:
+                        price_display = f"{original_currency} {original_price_number} ({billing_cycle}) ≈ ¥{price_cny:.2f}"
+                elif billing_cycle:
                     price_display = f"{original_currency} {original_price_number} ({billing_cycle}) ≈ ¥{price_cny:.2f}"
                 else:
                     price_display = f"{original_currency} {original_price_number} ≈ ¥{price_cny:.2f}"
@@ -650,31 +672,35 @@ class MaxPriceBot(PriceQueryService):
         raw_final_message = "\n".join(raw_message_parts).strip()
         return foldable_text_with_markdown_v2(raw_final_message)
 
-    async def get_top_cheapest(self, top_n: int = 10, category: str = "all") -> str:
+    async def get_top_cheapest(self, top_n: int = 10, category: str = "ultimate_yearly") -> str:
         """Gets the top cheapest countries by category."""
         if not self.data:
             error_msg = f"❌ 错误：未能加载 {self.service_name} 价格数据。"
             return foldable_text_v2(error_msg)
 
-        # Map categories to data keys
+        # Map categories to data keys - 新增ultimate年付分类
         category_mapping = {
             "all": "_top_10_cheapest_all",
             "monthly": "_top_10_cheapest_monthly", 
             "yearly": "_top_10_cheapest_yearly",
-            "ad_free": "_top_10_cheapest_ad_free",
-            "with_ads": "_top_10_cheapest_with_ads"
+            "ultimate": "_top_10_cheapest_ultimate",
+            "ultimate_yearly": "_top_10_cheapest_ultimate_yearly",  # 新增
+            "mobile": "_top_10_cheapest_mobile",
+            "standard": "_top_10_cheapest_standard"
         }
         
         category_names = {
             "all": "全部套餐",
             "monthly": "月付套餐",
             "yearly": "年付套餐", 
-            "ad_free": "无广告套餐",
-            "with_ads": "含广告套餐"
+            "ultimate": "Ultimate套餐",
+            "ultimate_yearly": "Ultimate年付套餐",  # 新增
+            "mobile": "Mobile套餐",
+            "standard": "Standard套餐"
         }
 
-        data_key = category_mapping.get(category, "_top_10_cheapest_all")
-        category_name = category_names.get(category, "全部套餐")
+        data_key = category_mapping.get(category, "_top_10_cheapest_ultimate_yearly")  # 默认改为ultimate年付
+        category_name = category_names.get(category, "Ultimate年付套餐")
 
         # Use the pre-calculated top 10 data if available
         top_10_data = self.data.get(data_key, {}).get("data", [])
@@ -707,14 +733,22 @@ class MaxPriceBot(PriceQueryService):
                 # Extract currency, price_number and price_cny
                 original_currency = item.get("original_currency", "")
                 original_price_number = item.get("original_price_number", "")
+                monthly_price = item.get("monthly_price", original_price_number)  # 获取月价格用于显示
                 price_cny = item.get("price_cny", 0)
                 original_price = item.get("original_price", "价格未知")
                 plan_name = item.get("plan_name", "未知套餐")
                 billing_cycle = item.get("billing_cycle", "")
 
                 # Format price display with currency, price_number, and CNY
-                if original_currency and original_price_number and price_cny > 0:
-                    if billing_cycle:
+                # 对于年付套餐，显示更清晰的价格格式
+                if original_currency and price_cny > 0:
+                    if billing_cycle and "年" in billing_cycle:
+                        # 年付套餐：显示月价格 × 12 = 年价格
+                        if monthly_price and float(monthly_price) != float(original_price_number):
+                            price_display = f"{original_currency} {monthly_price}/月 × 12 = {original_currency} {original_price_number}/年 ≈ ¥{price_cny:.2f}"
+                        else:
+                            price_display = f"{original_currency} {original_price_number} ({billing_cycle}) ≈ ¥{price_cny:.2f}"
+                    elif billing_cycle:
                         price_display = f"{original_currency} {original_price_number} ({billing_cycle}) ≈ ¥{price_cny:.2f}"
                     else:
                         price_display = f"{original_currency} {original_price_number} ≈ ¥{price_cny:.2f}"
@@ -888,11 +922,12 @@ async def max_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
 
     # Parse command arguments for category support
-    category = "all"  # default
+    category = "ultimate_yearly"  # 默认改为ultimate_yearly
     args = context.args or []
     
     # Check if the first argument is a category
-    if args and args[0].lower() in ["all", "monthly", "yearly", "ad_free", "with_ads"]:
+    valid_categories = ["all", "monthly", "yearly", "ultimate", "ultimate_yearly", "mobile", "standard"]
+    if args and args[0].lower() in valid_categories:
         category = args[0].lower()
         args = args[1:]  # Remove category from args
 
