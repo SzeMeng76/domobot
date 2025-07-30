@@ -14,9 +14,9 @@
 **🎉 全部免费 - 可添加到任意群组！**
 
 **所有用户和群组可用的公开功能:**
-- 📺 **流媒体价格:** Netflix、Disney+、Spotify全球各地区订阅价格查询
+- 📺 **流媒体价格:** Netflix、Disney+、Spotify、HBO Max全球各地区订阅价格查询
 - 👤 **用户信息:** Telegram注册日期、账号年龄和ID查询
-- 🆔 **快速命令:** `/nf`, `/ds`, `/sp`, `/when`, `/id`
+- 🆔 **快速命令:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`
 - 👥 **群组友好:** 在任意 Telegram 群组中都可使用，无需白名单申请
 
 *高级功能（加密货币、天气、Steam价格等）需要白名单权限。*
@@ -33,7 +33,7 @@
 
 ### ✨ 功能特性
 
--   📺 **公开流媒体价格:** 所有用户可用 - 查询Netflix、Disney+、Spotify等流媒体服务在全球各地区的订阅价格。
+-   📺 **公开流媒体价格:** 所有用户可用 - 查询Netflix、Disney+、Spotify、HBO Max等流媒体服务在全球各地区的订阅价格。
 -   👤 **公开用户信息查询:** 所有用户可用 - 查询Telegram用户注册日期、账号年龄，以及获取用户/群组ID。
 -   🪙 **加密货币价格:** 查询实时加密货币价格，支持自定义数量和货币转换，并显示 24 小时和 7 天的价格变化率。*(需要白名单)*
 -   💳 **BIN查询:** 查询信用卡BIN（银行识别号）信息，包括卡片品牌、类型、发卡银行和国家等详细信息。*(需要白名单)*
@@ -116,6 +116,7 @@ docker-compose down
 /nf          # Netflix全球价格
 /ds US       # 美国Disney+价格
 /sp          # Spotify全球价格
+/max         # HBO Max全球价格
 
 # 用户信息查询
 /when 123456789           # 通过用户ID查询
@@ -175,6 +176,7 @@ docker-compose down
 /bin_cleancache
 /crypto_cleancache
 /rate_cleancache
+/max_cleancache
 # ... 其他缓存管理命令
 ```
 

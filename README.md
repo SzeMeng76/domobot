@@ -14,9 +14,9 @@ Read this in other languages: [简体中文](./README.zh-CN.md)
 **🎉 Free for Everyone - Add to Any Group!**
 
 **Public features available to all users and groups:**
-- 📺 **Streaming Prices:** Netflix, Disney+, Spotify pricing across global regions
+- 📺 **Streaming Prices:** Netflix, Disney+, Spotify, HBO Max pricing across global regions
 - 👤 **User Information:** Telegram registration dates, account age, and ID lookup
-- 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/when`, `/id`
+- 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`
 - 👥 **Group Friendly:** Works in any Telegram group without requiring whitelist approval
 
 *Advanced features (crypto, weather, Steam prices, etc.) require whitelist access.*
@@ -33,7 +33,7 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 
 ### ✨ Features
 
--   📺 **Public Streaming Prices:** Available to all users - query subscription prices for Netflix, Disney+, and Spotify across global regions.
+-   📺 **Public Streaming Prices:** Available to all users - query subscription prices for Netflix, Disney+, Spotify, and HBO Max across global regions.
 -   👤 **Public User Information:** Available to all users - check Telegram user registration dates, account age, and get user/group IDs.
 -   🪙 **Crypto Prices:** Look up real-time cryptocurrency prices with support for custom amounts and currency conversion, including 24h and 7d percentage changes. *(Whitelist required)*
 -   💳 **BIN Lookup:** Query credit card BIN (Bank Identification Number) information including card brand, type, issuing bank, and country details. *(Whitelist required)*
@@ -116,6 +116,7 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /nf          # Netflix global pricing
 /ds US       # Disney+ pricing in US
 /sp          # Spotify global pricing
+/max         # HBO Max global pricing
 
 # User information lookup
 /when 123456789           # Query by user ID
@@ -175,6 +176,7 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /bin_cleancache
 /crypto_cleancache
 /rate_cleancache
+/max_cleancache
 # ... other cache management commands
 ```
 

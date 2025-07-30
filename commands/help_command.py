@@ -65,6 +65,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - `/nf [国家代码]`: 查询Netflix订阅价格 (默认查询热门地区)。
 - `/ds [国家代码]`: 查询Disney+订阅价格 (默认查询热门地区)。
 - `/sp [国家代码]`: 查询Spotify Premium价格 (默认查询热门地区)。
+- `/max`: 查询HBO Max全球最低价格排名 (默认Ultimate年付套餐)。
+- `/max [套餐类型]`: 按套餐类型查询排名 (支持: `all`, `monthly`, `yearly`, `ultimate`, `mobile`, `standard`)。
+- `/max [套餐类型] <国家代码>`: 查询指定国家的HBO Max价格。
+- 例如: `/max ultimate_yearly`, `/max monthly US CN`。
 
 📱 *应用与服务价格*
 - `/app <应用名>`: 搜索App Store应用。
@@ -97,6 +101,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - `/nf`: 查看Netflix全球价格排名。
 - `/ds`: 查看Disney+全球价格排名。
 - `/sp`: 查看Spotify全球价格排名。
+- `/max`: 查看HBO Max全球价格排名。
 - `/app 微信`: 搜索App Store应用。
 - `/gp WeChat`: 搜索Google Play应用。
 - `/aps iCloud`: 查询iCloud全球价格。
@@ -127,6 +132,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - `/nf_cleancache`: 清理Netflix缓存。
 - `/ds_cleancache`: 清理Disney+缓存。
 - `/sp_cleancache`: 清理Spotify缓存。
+- `/max_cleancache`: 清理HBO Max缓存。
 - `/gp_cleancache`: 清理Google Play缓存。
 - `/app_cleancache`: 清理App Store缓存。
 - `/steamcc`: 清理Steam相关缓存。
@@ -180,6 +186,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - `/nf [国家代码]`: 查询Netflix订阅价格 (默认查询热门地区)。
 - `/ds [国家代码]`: 查询Disney+订阅价格 (默认查询热门地区)。
 - `/sp [国家代码]`: 查询Spotify Premium价格 (默认查询热门地区)。
+- `/max`: 查询HBO Max全球最低价格排名 (默认Ultimate年付套餐)。
+- `/max [套餐类型]`: 按套餐类型查询排名 (支持: `all`, `monthly`, `yearly`, `ultimate`, `mobile`, `standard`)。
+- `/max [套餐类型] <国家代码>`: 查询指定国家的HBO Max价格。
+- 例如: `/max ultimate_yearly`, `/max monthly US CN`。
 
 👤 *用户信息查询*
 - `/when <用户ID>`: 根据用户ID估算Telegram注册日期和账号年龄。
@@ -200,6 +210,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - `/nf`: 查看Netflix全球价格排名。
 - `/ds`: 查看Disney+全球价格排名。
 - `/sp`: 查看Spotify全球价格排名。
+- `/max`: 查看HBO Max全球价格排名。
 - `/when 123456789`: 查询用户注册日期和账号年龄（支持用户名查询）。
 - `/id`: 获取用户或群组的ID信息。
 
@@ -256,6 +267,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - `/nf [国家代码]`: 查询Netflix订阅价格 (默认查询热门地区)。
 - `/ds [国家代码]`: 查询Disney+订阅价格 (默认查询热门地区)。
 - `/sp [国家代码]`: 查询Spotify Premium价格 (默认查询热门地区)。
+- `/max`: 查询HBO Max全球最低价格排名 (默认Ultimate年付套餐)。
+- `/max [套餐类型]`: 按套餐类型查询排名 (支持: `all`, `monthly`, `yearly`, `ultimate`, `mobile`, `standard`)。
+- `/max [套餐类型] <国家代码>`: 查询指定国家的HBO Max价格。
+- 例如: `/max ultimate_yearly`, `/max monthly US CN`。
 
 📱 *应用与服务价格*
 - `/app <应用名>`: 搜索App Store应用。
@@ -288,6 +303,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - `/nf`: 查看Netflix全球价格排名。
 - `/ds`: 查看Disney+全球价格排名。
 - `/sp`: 查看Spotify全球价格排名。
+- `/max`: 查看HBO Max全球价格排名。
 - `/app 微信`: 搜索App Store应用。
 - `/gp WeChat`: 搜索Google Play应用。
 - `/aps iCloud`: 查询iCloud全球价格。
@@ -342,7 +358,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 你好 {user.first_name}!
 
 🎯 *你可以使用这些功能:*
-- 📺 查询Netflix、Disney+、Spotify等流媒体订阅价格
+- 📺 查询Netflix、Disney+、Spotify、HBO Max等流媒体订阅价格
 - 👤 查询Telegram用户注册日期和账号年龄
 - 🆔 获取用户和群组的ID信息
 
@@ -353,6 +369,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 - `/nf`: 查看Netflix全球价格
 - `/ds`: 查看Disney+全球价格  
 - `/sp`: 查看Spotify全球价格
+- `/max`: 查看HBO Max全球价格
 - `/id`: 获取你的用户ID
 - `/when`: 查询账号注册时间
 
@@ -375,7 +392,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 - 💳 查询信用卡BIN信息和发卡银行
 - 🌦️ 查询全球城市天气和空气质量
 - 🎮 查询Steam游戏在全球各国的价格
-- 📺 查询Netflix、Disney+、Spotify等流媒体订阅价格
+- 📺 查询Netflix、Disney+、Spotify、HBO Max等流媒体订阅价格
 - 📱 查询App Store和Google Play应用价格
 - 🍎 查询Apple各项服务的全球定价
 - 👤 查询Telegram用户注册日期和账号年龄
@@ -395,6 +412,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 - `/nf`: 查看Netflix全球价格
 - `/ds`: 查看Disney+全球价格  
 - `/sp`: 查看Spotify全球价格
+- `/max`: 查看HBO Max全球价格
 - `/app 微信`: 搜索App Store应用
 - `/gp WeChat`: 搜索Google Play应用
 - `/aps iCloud`: 查询Apple服务价格
