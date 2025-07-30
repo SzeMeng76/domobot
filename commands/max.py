@@ -555,7 +555,14 @@ class MaxPriceBot(PriceQueryService):
 
         for i, plan in enumerate(sorted_plans):
             plan_name = plan.get("plan_name", "未知套餐")
-            plan_name_cn = plan_names.get(plan_name, plan_name)
+            plan_group = plan.get("plan_group", "unknown")
+            
+            # For bundle plans, use original_name or name instead of translated plan_name
+            if plan_group == "bundle":
+                bundle_name = plan.get("original_name") or plan.get("name", plan_name)
+                plan_name_cn = f"套餐包 ({bundle_name})"
+            else:
+                plan_name_cn = plan_names.get(plan_name, plan_name)
 
             # Extract currency, price_number and price_cny
             original_currency = plan.get("original_currency", "")
