@@ -52,11 +52,13 @@ class BotConfig:
         self.netflix_cache_duration = 86400  # 24小时
         self.crypto_cache_duration = 60  # 1分钟
         self.spotify_cache_duration = 86400 * 8  # 8天，配合周日清理
-        self.disney_cache_duration = 86400 * 8  # 8天，配合周日清理       
+        self.disney_cache_duration = 86400 * 8  # 8天，配合周日清理
+        self.max_cache_duration = 86400 * 8  # 8天，配合周日清理
 
         # 定时清理配置
         self.spotify_weekly_cleanup = True  # 默认启用
         self.disney_weekly_cleanup = True  # 默认启用
+        self.max_weekly_cleanup = True  # 默认启用
 
         # API配置
         self.exchange_rate_api_keys = []

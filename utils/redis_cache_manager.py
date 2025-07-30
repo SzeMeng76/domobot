@@ -79,6 +79,7 @@ class RedisCacheManager:
             "crypto": self.config.crypto_cache_duration,
             "spotify": self.config.spotify_cache_duration,  # 8天，配合周日清理
             "disney_plus": self.config.disney_cache_duration,  # 8天，配合周日清理
+            "max": self.config.max_cache_duration,  # 8天，配合周日清理
         }
 
         # 对于搜索结果特殊处理

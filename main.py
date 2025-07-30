@@ -281,6 +281,11 @@ async def setup_application(application: Application, config) -> None:
         logger.info(" 已配置 Disney+ 每周日UTC 5:00 定时清理")
         cleanup_tasks_added += 1
 
+    if config.max_weekly_cleanup:
+        await task_scheduler.add_weekly_cache_cleanup("max", "max", weekday=6, hour=5, minute=0)
+        logger.info(" 已配置 HBO Max 每周日UTC 5:00 定时清理")
+        cleanup_tasks_added += 1
+
     # 启动任务调度器（包含汇率刷新任务）
     task_scheduler.start()
     if cleanup_tasks_added > 0:
