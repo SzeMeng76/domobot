@@ -331,16 +331,20 @@ def format_age(age_str):
         return age_str, 0
 
 
-def determine_level(years):
-    """根据账号年龄确定用户级别"""
+def get_user_level_by_years(years):
+    """根据账号年龄确定Telegram用户级别 - 价格猎人主题"""
     if years >= 10:
-        return "十年老逼登"
+        return "🏆 传奇价格大师"
+    elif years >= 7:
+        return "💎 钻石级猎手"
+    elif years >= 5:
+        return "🥇 黄金级探员"
     elif years >= 3:
-        return "老兵"
-    elif years > 1:
-        return "不如老兵"
+        return "🥈 白银级侦探"
+    elif years >= 1:
+        return "🥉 青铜级新手"
     else:
-        return "新兵蛋子"
+        return "🔰 见习价格猎人"
 
 
 def estimate_account_creation_date(user_id):
@@ -404,25 +408,14 @@ def estimate_account_creation_date(user_id):
         return estimated_date
 
 
-def determine_level_by_date(creation_date):
-    """根据注册日期确定用户级别"""
+def get_user_level_by_date(creation_date):
+    """根据注册日期确定Telegram用户级别（推荐使用）"""
     from datetime import datetime
     
     now = datetime.now()
     years = (now - creation_date).days / 365.25
     
-    if years >= 10:
-        return "十年老逼登"
-    elif years >= 7:
-        return "七年老兵"
-    elif years >= 5:
-        return "五年老兵"
-    elif years >= 3:
-        return "老兵"
-    elif years >= 1:
-        return "不如老兵"
-    else:
-        return "新兵蛋子"
+    return get_user_level_by_years(years)
 
 
 async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -651,7 +644,7 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             age_str = f"{months}月"
 
         # 确定级别
-        level = determine_level_by_date(estimated_date)
+        level = get_user_level_by_date(estimated_date)
 
         # 构建结果 - 根据是否能获取到用户信息调整显示格式
         if target_user and username != "无法获取":
