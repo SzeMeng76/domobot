@@ -1496,6 +1496,11 @@ async def movie_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             text=foldable_text_with_markdown_v2(help_text),
             parse_mode=ParseMode.MARKDOWN_V2
         )
+        # 调度删除机器人回复消息
+        from utils.message_manager import _schedule_deletion
+        from utils.config_manager import get_config
+        config = get_config()
+        await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
         return
     
     query = " ".join(context.args)
@@ -1789,6 +1794,11 @@ async def tv_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             text=foldable_text_with_markdown_v2(help_text),
             parse_mode=ParseMode.MARKDOWN_V2
         )
+        # 调度删除机器人回复消息
+        from utils.message_manager import _schedule_deletion
+        from utils.config_manager import get_config
+        config = get_config()
+        await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
         return
     
     query = " ".join(context.args)
@@ -2522,6 +2532,11 @@ async def person_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             text=foldable_text_with_markdown_v2(help_text),
             parse_mode=ParseMode.MARKDOWN_V2
         )
+        # 调度删除机器人回复消息
+        from utils.message_manager import _schedule_deletion
+        from utils.config_manager import get_config
+        config = get_config()
+        await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
         return
     
     query = " ".join(context.args)
