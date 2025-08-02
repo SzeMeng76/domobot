@@ -121,7 +121,7 @@ class MovieService:
             return cached_data
             
         data = await self._make_tmdb_request(f"movie/{movie_id}", {
-            "append_to_response": "credits,videos,recommendations"
+            "append_to_response": "credits,videos,recommendations,watch/providers"
         })
         if data:
             await cache_manager.save_cache(cache_key, data, subdirectory="movie")
@@ -175,7 +175,7 @@ class MovieService:
             return cached_data
             
         data = await self._make_tmdb_request(f"tv/{tv_id}", {
-            "append_to_response": "credits,videos,recommendations"
+            "append_to_response": "credits,videos,recommendations,watch/providers"
         })
         if data:
             await cache_manager.save_cache(cache_key, data, subdirectory="movie")
@@ -213,6 +213,132 @@ class MovieService:
             return cached_data
             
         data = await self._make_tmdb_request(f"tv/{tv_id}/season/{season_number}/episode/{episode_number}")
+        if data:
+            await cache_manager.save_cache(cache_key, data, subdirectory="movie")
+        return data
+    
+    # ========================================
+    # 趋势内容相关方法
+    # ========================================
+    
+    async def get_trending_content(self, media_type: str = "all", time_window: str = "day") -> Optional[Dict]:
+        """获取趋势内容
+        Args:
+            media_type: "all", "movie", "tv", "person"
+            time_window: "day", "week"
+        """
+        cache_key = f"trending_{media_type}_{time_window}"
+        cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
+        if cached_data:
+            return cached_data
+            
+        data = await self._make_tmdb_request(f"trending/{media_type}/{time_window}")
+        if data:
+            await cache_manager.save_cache(cache_key, data, subdirectory="movie")
+        return data
+    
+    async def get_now_playing_movies(self) -> Optional[Dict]:
+        """获取正在上映的电影"""
+        cache_key = "now_playing_movies"
+        cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
+        if cached_data:
+            return cached_data
+            
+        data = await self._make_tmdb_request("movie/now_playing")
+        if data:
+            await cache_manager.save_cache(cache_key, data, subdirectory="movie")
+        return data
+    
+    async def get_upcoming_movies(self) -> Optional[Dict]:
+        """获取即将上映的电影"""
+        cache_key = "upcoming_movies"
+        cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
+        if cached_data:
+            return cached_data
+            
+        data = await self._make_tmdb_request("movie/upcoming")
+        if data:
+            await cache_manager.save_cache(cache_key, data, subdirectory="movie")
+        return data
+    
+    async def get_tv_airing_today(self) -> Optional[Dict]:
+        """获取今日播出的电视剧"""
+        cache_key = "tv_airing_today"
+        cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
+        if cached_data:
+            return cached_data
+            
+        data = await self._make_tmdb_request("tv/airing_today")
+        if data:
+            await cache_manager.save_cache(cache_key, data, subdirectory="movie")
+        return data
+    
+    async def get_tv_on_the_air(self) -> Optional[Dict]:
+        """获取正在播出的电视剧"""
+        cache_key = "tv_on_the_air"
+        cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
+        if cached_data:
+            return cached_data
+            
+        data = await self._make_tmdb_request("tv/on_the_air")
+        if data:
+            await cache_manager.save_cache(cache_key, data, subdirectory="movie")
+        return data
+    
+    # ========================================
+    # 人物搜索相关方法
+    # ========================================
+    
+    async def search_person(self, query: str, page: int = 1) -> Optional[Dict]:
+        """搜索人物"""
+        cache_key = f"person_search_{query.lower()}_{page}"
+        cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
+        if cached_data:
+            return cached_data
+            
+        data = await self._make_tmdb_request("search/person", {"query": query, "page": page})
+        if data:
+            await cache_manager.save_cache(cache_key, data, subdirectory="movie")
+        return data
+    
+    async def get_person_details(self, person_id: int) -> Optional[Dict]:
+        """获取人物详情"""
+        cache_key = f"person_detail_{person_id}"
+        cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
+        if cached_data:
+            return cached_data
+            
+        data = await self._make_tmdb_request(f"person/{person_id}", {
+            "append_to_response": "movie_credits,tv_credits,combined_credits"
+        })
+        if data:
+            await cache_manager.save_cache(cache_key, data, subdirectory="movie")
+        return data
+    
+    # ========================================
+    # 观看平台相关方法
+    # ========================================
+    
+    async def get_movie_watch_providers(self, movie_id: int, region: str = "CN") -> Optional[Dict]:
+        """获取电影观看平台信息"""
+        cache_key = f"movie_watch_providers_{movie_id}_{region}"
+        cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
+        if cached_data:
+            return cached_data
+            
+        data = await self._make_tmdb_request(f"movie/{movie_id}/watch/providers")
+        if data:
+            await cache_manager.save_cache(cache_key, data, subdirectory="movie")
+        return data
+    
+    async def get_tv_watch_providers(self, tv_id: int, region: str = "CN") -> Optional[Dict]:
+        """获取电视剧观看平台信息"""
+        cache_key = f"tv_watch_providers_{tv_id}_{region}"
+        cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
+        if cached_data:
+            return cached_data
+            
+        data = await self._make_tmdb_request(f"tv/{tv_id}/watch/providers")
         if data:
             await cache_manager.save_cache(cache_key, data, subdirectory="movie")
         return data
@@ -428,6 +554,13 @@ class MovieService:
         
         if poster_url:
             lines.append(f"🖼️ *海报*: [查看]({poster_url})")
+        
+        # 添加观看平台信息
+        watch_providers = detail_data.get("watch/providers")
+        if watch_providers:
+            provider_info = self.format_watch_providers_compact(watch_providers, "tv")
+            if provider_info:
+                lines.append(provider_info)
             
         lines.extend([
             creator_info,
@@ -442,7 +575,9 @@ class MovieService:
         lines.extend([
             f"",
             f"💡 使用 `/tv_rec {tv_id}` 获取相似推荐",
-            f"💡 使用 `/tv_season {tv_id} <季数>` 查看季详情"
+            f"💡 使用 `/tv_videos {tv_id}` 查看预告片",
+            f"💡 使用 `/tv_season {tv_id} <季数>` 查看季详情",
+            f"💡 使用 `/tv_watch {tv_id}` 查看完整观看平台"
         ])
         
         return "\n".join(filter(None, lines)), poster_url  # 过滤空行
@@ -664,6 +799,13 @@ class MovieService:
             
         if poster_url:
             lines.append(f"🖼️ *海报*: [查看]({poster_url})")
+        
+        # 添加观看平台信息
+        watch_providers = detail_data.get("watch/providers")
+        if watch_providers:
+            provider_info = self.format_watch_providers_compact(watch_providers, "movie")
+            if provider_info:
+                lines.append(provider_info)
             
         lines.extend([
             director_info,
@@ -677,7 +819,9 @@ class MovieService:
         movie_id = detail_data.get("id")
         lines.extend([
             f"",
-            f"💡 使用 `/movie_rec {movie_id}` 获取相似推荐"
+            f"💡 使用 `/movie_rec {movie_id}` 获取相似推荐",
+            f"💡 使用 `/movie_videos {movie_id}` 查看预告片",
+            f"💡 使用 `/movie_watch {movie_id}` 查看完整观看平台"
         ])
         
         return "\n".join(filter(None, lines)), poster_url  # 过滤空行
@@ -705,6 +849,570 @@ class MovieService:
         lines.append("💡 使用 `/movie_detail <ID>` 查看详细信息")
         
         return "\n".join(lines)
+    
+    def format_movie_videos(self, videos_data: Dict) -> str:
+        """格式化电影视频信息"""
+        if not videos_data or not videos_data.get("results"):
+            return "❌ 暂无视频内容"
+        
+        videos = videos_data["results"]
+        if not videos:
+            return "❌ 暂无视频内容"
+        
+        lines = ["🎬 *相关视频*\n"]
+        
+        # 按类型分组显示
+        trailers = [v for v in videos if v.get("type") == "Trailer"]
+        teasers = [v for v in videos if v.get("type") == "Teaser"]
+        clips = [v for v in videos if v.get("type") == "Clip"]
+        featurettes = [v for v in videos if v.get("type") == "Featurette"]
+        
+        def add_videos(video_list, title, emoji):
+            if video_list:
+                lines.append(f"{emoji} *{title}*:")
+                for video in video_list[:3]:  # 每类最多显示3个
+                    name = video.get("name", "未知")
+                    site = video.get("site", "")
+                    key = video.get("key", "")
+                    
+                    if site == "YouTube" and key:
+                        url = f"https://www.youtube.com/watch?v={key}"
+                        lines.append(f"   🎥 [{name}]({url})")
+                    else:
+                        lines.append(f"   🎥 {name} ({site})")
+                lines.append("")
+        
+        add_videos(trailers, "预告片", "🎬")
+        add_videos(teasers, "先导预告", "👀")
+        add_videos(clips, "片段", "📹")
+        add_videos(featurettes, "幕后花絮", "🎭")
+        
+        if not any([trailers, teasers, clips, featurettes]):
+            return "❌ 暂无可用视频内容"
+        
+        return "\n".join(lines).rstrip()
+    
+    def format_tv_videos(self, videos_data: Dict) -> str:
+        """格式化电视剧视频信息"""
+        if not videos_data or not videos_data.get("results"):
+            return "❌ 暂无视频内容"
+        
+        videos = videos_data["results"]
+        if not videos:
+            return "❌ 暂无视频内容"
+        
+        lines = ["📺 *相关视频*\n"]
+        
+        # 按类型分组显示
+        trailers = [v for v in videos if v.get("type") == "Trailer"]
+        teasers = [v for v in videos if v.get("type") == "Teaser"]
+        clips = [v for v in videos if v.get("type") == "Clip"]
+        behind_scenes = [v for v in videos if v.get("type") == "Behind the Scenes"]
+        
+        def add_videos(video_list, title, emoji):
+            if video_list:
+                lines.append(f"{emoji} *{title}*:")
+                for video in video_list[:3]:  # 每类最多显示3个
+                    name = video.get("name", "未知")
+                    site = video.get("site", "")
+                    key = video.get("key", "")
+                    
+                    if site == "YouTube" and key:
+                        url = f"https://www.youtube.com/watch?v={key}"
+                        lines.append(f"   📺 [{name}]({url})")
+                    else:
+                        lines.append(f"   📺 {name} ({site})")
+                lines.append("")
+        
+        add_videos(trailers, "预告片", "🎬")
+        add_videos(teasers, "先导预告", "👀")
+        add_videos(clips, "片段", "📹")
+        add_videos(behind_scenes, "幕后花絮", "🎭")
+        
+        if not any([trailers, teasers, clips, behind_scenes]):
+            return "❌ 暂无可用视频内容"
+        
+        return "\n".join(lines).rstrip()
+
+    # ========================================
+    # 趋势内容格式化方法
+    # ========================================
+    
+    def format_trending_content(self, trending_data: Dict, time_window: str = "day") -> str:
+        """格式化趋势内容"""
+        if not trending_data or not trending_data.get("results"):
+            return "❌ 获取趋势内容失败"
+        
+        results = trending_data["results"][:15]  # 显示前15个结果
+        time_text = "今日" if time_window == "day" else "本周"
+        lines = [f"🔥 *{time_text}热门内容*\n"]
+        
+        for i, item in enumerate(results, 1):
+            # 判断是电影还是电视剧
+            media_type = item.get("media_type", "unknown")
+            
+            if media_type == "movie":
+                title = item.get("title", "未知标题")
+                release_date = item.get("release_date", "")
+                year = release_date[:4] if release_date else ""
+                emoji = "🎬"
+            elif media_type == "tv":
+                title = item.get("name", "未知标题")
+                first_air_date = item.get("first_air_date", "")
+                year = first_air_date[:4] if first_air_date else ""
+                emoji = "📺"
+            elif media_type == "person":
+                title = item.get("name", "未知人物")
+                year = ""
+                emoji = "👤"
+            else:
+                continue  # 跳过未知类型
+            
+            vote_average = item.get("vote_average", 0)
+            item_id = item.get("id")
+            
+            # 排名图标
+            if i <= 3:
+                rank_icons = ["🥇", "🥈", "🥉"]
+                rank = rank_icons[i-1]
+            else:
+                rank = f"{i}."
+            
+            year_text = f" ({year})" if year else ""
+            lines.append(f"{rank} {emoji} *{title}*{year_text}")
+            
+            if media_type != "person":
+                lines.append(f"     ⭐ {vote_average:.1f}/10 | 🆔 `{item_id}`")
+            else:
+                lines.append(f"     👤 人物 | 🆔 `{item_id}`")
+            lines.append("")
+        
+        lines.append("💡 使用对应的detail命令查看详细信息")
+        
+        return "\n".join(lines)
+    
+    def format_now_playing_movies(self, playing_data: Dict) -> str:
+        """格式化正在上映的电影"""
+        if not playing_data or not playing_data.get("results"):
+            return "❌ 获取正在上映电影失败"
+        
+        results = playing_data["results"][:15]  # 显示前15个结果
+        lines = ["🎭 *正在上映的电影*\n"]
+        
+        for i, movie in enumerate(results, 1):
+            title = movie.get("title", "未知标题")
+            release_date = movie.get("release_date", "")
+            year = release_date[:4] if release_date else ""
+            vote_average = movie.get("vote_average", 0)
+            movie_id = movie.get("id")
+            
+            year_text = f" ({year})" if year else ""
+            lines.append(f"{i}. *{title}*{year_text}")
+            lines.append(f"   ⭐ {vote_average:.1f}/10 | 🆔 `{movie_id}`")
+            lines.append("")
+        
+        lines.append("💡 使用 `/movie_detail <ID>` 查看详细信息")
+        
+        return "\n".join(lines)
+    
+    def format_upcoming_movies(self, upcoming_data: Dict) -> str:
+        """格式化即将上映的电影"""
+        if not upcoming_data or not upcoming_data.get("results"):
+            return "❌ 获取即将上映电影失败"
+        
+        results = upcoming_data["results"][:15]  # 显示前15个结果
+        lines = ["🗓️ *即将上映的电影*\n"]
+        
+        for i, movie in enumerate(results, 1):
+            title = movie.get("title", "未知标题")
+            release_date = movie.get("release_date", "")
+            vote_average = movie.get("vote_average", 0)
+            movie_id = movie.get("id")
+            
+            release_text = f" (上映: {release_date})" if release_date else ""
+            lines.append(f"{i}. *{title}*{release_text}")
+            
+            if vote_average > 0:
+                lines.append(f"   ⭐ {vote_average:.1f}/10 | 🆔 `{movie_id}`")
+            else:
+                lines.append(f"   🆔 `{movie_id}`")
+            lines.append("")
+        
+        lines.append("💡 使用 `/movie_detail <ID>` 查看详细信息")
+        
+        return "\n".join(lines)
+    
+    def format_tv_airing_today(self, airing_data: Dict) -> str:
+        """格式化今日播出的电视剧"""
+        if not airing_data or not airing_data.get("results"):
+            return "❌ 获取今日播出电视剧失败"
+        
+        results = airing_data["results"][:15]  # 显示前15个结果
+        lines = ["📅 *今日播出的电视剧*\n"]
+        
+        for i, tv in enumerate(results, 1):
+            name = tv.get("name", "未知标题")
+            first_air_date = tv.get("first_air_date", "")
+            year = first_air_date[:4] if first_air_date else ""
+            vote_average = tv.get("vote_average", 0)
+            tv_id = tv.get("id")
+            
+            year_text = f" ({year})" if year else ""
+            lines.append(f"{i}. *{name}*{year_text}")
+            lines.append(f"   ⭐ {vote_average:.1f}/10 | 🆔 `{tv_id}`")
+            lines.append("")
+        
+        lines.append("💡 使用 `/tv_detail <ID>` 查看详细信息")
+        
+        return "\n".join(lines)
+    
+    def format_tv_on_the_air(self, on_air_data: Dict) -> str:
+        """格式化正在播出的电视剧"""
+        if not on_air_data or not on_air_data.get("results"):
+            return "❌ 获取正在播出电视剧失败"
+        
+        results = on_air_data["results"][:15]  # 显示前15个结果
+        lines = ["📺 *正在播出的电视剧*\n"]
+        
+        for i, tv in enumerate(results, 1):
+            name = tv.get("name", "未知标题")
+            first_air_date = tv.get("first_air_date", "")
+            year = first_air_date[:4] if first_air_date else ""
+            vote_average = tv.get("vote_average", 0)
+            tv_id = tv.get("id")
+            
+            year_text = f" ({year})" if year else ""
+            lines.append(f"{i}. *{name}*{year_text}")
+            lines.append(f"   ⭐ {vote_average:.1f}/10 | 🆔 `{tv_id}`")
+            lines.append("")
+        
+        lines.append("💡 使用 `/tv_detail <ID>` 查看详细信息")
+        
+        return "\n".join(lines)
+
+    # ========================================
+    # 人物搜索格式化方法
+    # ========================================
+    
+    def format_person_search_results(self, search_data: Dict) -> tuple:
+        """格式化人物搜索结果，返回(文本内容, 头像URL)"""
+        if not search_data or not search_data.get("results"):
+            return "❌ 未找到相关人物", None
+        
+        results = search_data["results"][:10]  # 显示前10个结果
+        lines = ["👤 *人物搜索结果*\n"]
+        
+        # 获取第一个有头像的人物的头像URL
+        profile_url = None
+        for person in results:
+            profile_path = person.get("profile_path")
+            if profile_path:
+                profile_url = f"{self.tmdb_image_base_url}{profile_path}"
+                break
+        
+        for i, person in enumerate(results, 1):
+            name = person.get("name", "未知姓名")
+            known_for_department = person.get("known_for_department", "")
+            person_id = person.get("id")
+            profile_path = person.get("profile_path")
+            
+            # 职业映射
+            department_map = {
+                "Acting": "演员",
+                "Directing": "导演", 
+                "Writing": "编剧",
+                "Production": "制片",
+                "Camera": "摄影",
+                "Editing": "剪辑",
+                "Sound": "音效",
+                "Art": "美术",
+                "Costume & Make-Up": "化妆造型"
+            }
+            department_cn = department_map.get(known_for_department, known_for_department)
+            
+            lines.append(f"{i}. *{name}*")
+            if department_cn:
+                lines.append(f"   🎭 职业: {department_cn}")
+            lines.append(f"   🆔 ID: `{person_id}`")
+            
+            if profile_path:
+                lines.append(f"   📸 头像: [查看]({self.tmdb_image_base_url}{profile_path})")
+            
+            # 显示知名作品
+            known_for = person.get("known_for", [])
+            if known_for:
+                known_titles = []
+                for work in known_for[:3]:  # 最多显示3个作品
+                    if work.get("media_type") == "movie":
+                        known_titles.append(work.get("title", ""))
+                    elif work.get("media_type") == "tv":
+                        known_titles.append(work.get("name", ""))
+                
+                if known_titles:
+                    lines.append(f"   🌟 知名作品: {', '.join(filter(None, known_titles))}")
+            
+            lines.append("")
+        
+        lines.append("💡 使用 `/person_detail <ID>` 查看详细信息")
+        
+        return "\n".join(lines), profile_url
+    
+    def format_person_details(self, detail_data: Dict) -> tuple:
+        """格式化人物详情，返回(文本内容, 头像URL)"""
+        if not detail_data:
+            return "❌ 获取人物详情失败", None
+        
+        name = detail_data.get("name", "未知姓名")
+        biography = detail_data.get("biography", "暂无简介")
+        birthday = detail_data.get("birthday", "")
+        deathday = detail_data.get("deathday", "")
+        place_of_birth = detail_data.get("place_of_birth", "")
+        known_for_department = detail_data.get("known_for_department", "")
+        profile_path = detail_data.get("profile_path")
+        popularity = detail_data.get("popularity", 0)
+        
+        # 构建头像URL
+        profile_url = f"{self.tmdb_image_base_url}{profile_path}" if profile_path else None
+        
+        # 职业映射
+        department_map = {
+            "Acting": "演员",
+            "Directing": "导演", 
+            "Writing": "编剧",
+            "Production": "制片",
+            "Camera": "摄影",
+            "Editing": "剪辑",
+            "Sound": "音效",
+            "Art": "美术",
+            "Costume & Make-Up": "化妆造型"
+        }
+        department_cn = department_map.get(known_for_department, known_for_department)
+        
+        lines = [
+            f"👤 *{name}*",
+            f""
+        ]
+        
+        if department_cn:
+            lines.append(f"🎭 *主要职业*: {department_cn}")
+            
+        if birthday:
+            lines.append(f"🎂 *出生日期*: {birthday}")
+        if deathday:
+            lines.append(f"💀 *去世日期*: {deathday}")
+        if place_of_birth:
+            lines.append(f"🌍 *出生地*: {place_of_birth}")
+            
+        lines.append(f"⭐ *人气指数*: {popularity:.1f}")
+        
+        if profile_url:
+            lines.append(f"📸 *头像*: [查看]({profile_url})")
+        
+        # 电影作品
+        movie_credits = detail_data.get("movie_credits", {})
+        if movie_credits and movie_credits.get("cast"):
+            movie_cast = movie_credits["cast"][:5]  # 显示前5部电影
+            if movie_cast:
+                lines.extend([
+                    f"",
+                    f"🎬 *主要电影作品*:"
+                ])
+                for movie in movie_cast:
+                    title = movie.get("title", "未知")
+                    release_date = movie.get("release_date", "")
+                    year = release_date[:4] if release_date else ""
+                    character = movie.get("character", "")
+                    year_text = f" ({year})" if year else ""
+                    character_text = f" 饰演 {character}" if character else ""
+                    lines.append(f"   • {title}{year_text}{character_text}")
+        
+        # 电视剧作品
+        tv_credits = detail_data.get("tv_credits", {})
+        if tv_credits and tv_credits.get("cast"):
+            tv_cast = tv_credits["cast"][:5]  # 显示前5部电视剧
+            if tv_cast:
+                lines.extend([
+                    f"",
+                    f"📺 *主要电视剧作品*:"
+                ])
+                for tv in tv_cast:
+                    name_tv = tv.get("name", "未知")
+                    first_air_date = tv.get("first_air_date", "")
+                    year = first_air_date[:4] if first_air_date else ""
+                    character = tv.get("character", "")
+                    year_text = f" ({year})" if year else ""
+                    character_text = f" 饰演 {character}" if character else ""
+                    lines.append(f"   • {name_tv}{year_text}{character_text}")
+        
+        # 导演作品
+        if movie_credits and movie_credits.get("crew"):
+            director_works = [work for work in movie_credits["crew"] if work.get("job") == "Director"]
+            if director_works:
+                lines.extend([
+                    f"",
+                    f"🎬 *导演作品*:"
+                ])
+                for work in director_works[:5]:
+                    title = work.get("title", "未知")
+                    release_date = work.get("release_date", "")
+                    year = release_date[:4] if release_date else ""
+                    year_text = f" ({year})" if year else ""
+                    lines.append(f"   • {title}{year_text}")
+        
+        if biography:
+            lines.extend([
+                f"",
+                f"📖 *个人简介*:",
+                f"{biography[:300]}{'...' if len(biography) > 300 else ''}"
+            ])
+        
+        return "\n".join(filter(None, lines)), profile_url
+
+    # ========================================
+    # 观看平台格式化方法
+    # ========================================
+    
+    def format_watch_providers(self, providers_data: Dict, content_type: str = "movie") -> str:
+        """格式化观看平台信息
+        Args:
+            providers_data: 平台数据
+            content_type: "movie" 或 "tv"
+        """
+        if not providers_data or not providers_data.get("results"):
+            return "❌ 暂无观看平台信息"
+        
+        results = providers_data["results"]
+        content_name = "电影" if content_type == "movie" else "电视剧"
+        lines = [f"📺 *{content_name}观看平台*\n"]
+        
+        # 优先显示的地区
+        priority_regions = ["CN", "US", "GB", "JP", "KR", "HK", "TW"]
+        all_regions = list(results.keys())
+        
+        # 按优先级排序地区
+        sorted_regions = []
+        for region in priority_regions:
+            if region in all_regions:
+                sorted_regions.append(region)
+        for region in all_regions:
+            if region not in sorted_regions:
+                sorted_regions.append(region)
+        
+        region_names = {
+            "CN": "🇨🇳 中国大陆",
+            "US": "🇺🇸 美国", 
+            "GB": "🇬🇧 英国",
+            "JP": "🇯🇵 日本",
+            "KR": "🇰🇷 韩国",
+            "HK": "🇭🇰 香港",
+            "TW": "🇹🇼 台湾",
+            "CA": "🇨🇦 加拿大",
+            "AU": "🇦🇺 澳大利亚",
+            "DE": "🇩🇪 德国",
+            "FR": "🇫🇷 法国"
+        }
+        
+        found_any = False
+        for region in sorted_regions[:5]:  # 最多显示5个地区
+            region_data = results[region]
+            region_name = region_names.get(region, f"🌍 {region}")
+            
+            # 检查是否有任何观看方式
+            has_content = any([
+                region_data.get("flatrate"),
+                region_data.get("buy"), 
+                region_data.get("rent"),
+                region_data.get("free")
+            ])
+            
+            if not has_content:
+                continue
+                
+            found_any = True
+            lines.append(f"**{region_name}**")
+            
+            # 流媒体订阅
+            if region_data.get("flatrate"):
+                platforms = [p["provider_name"] for p in region_data["flatrate"][:5]]
+                lines.append(f"🎬 *订阅观看*: {', '.join(platforms)}")
+            
+            # 购买
+            if region_data.get("buy"):
+                platforms = [p["provider_name"] for p in region_data["buy"][:3]]
+                lines.append(f"💰 *购买*: {', '.join(platforms)}")
+            
+            # 租赁
+            if region_data.get("rent"):
+                platforms = [p["provider_name"] for p in region_data["rent"][:3]]
+                lines.append(f"🏪 *租赁*: {', '.join(platforms)}")
+            
+            # 免费观看
+            if region_data.get("free"):
+                platforms = [p["provider_name"] for p in region_data["free"][:3]]
+                lines.append(f"🆓 *免费*: {', '.join(platforms)}")
+            
+            lines.append("")
+        
+        if not found_any:
+            return f"❌ 暂无该{content_name}的观看平台信息"
+        
+        lines.append("💡 数据来源: JustWatch")
+        lines.append("⚠️ 平台可用性可能因时间而变化")
+        
+        return "\n".join(filter(None, lines))
+    
+    def format_watch_providers_compact(self, providers_data: Dict, content_type: str = "movie") -> str:
+        """格式化观看平台信息（简化版，用于详情页面）"""
+        if not providers_data or not providers_data.get("results"):
+            return ""
+        
+        results = providers_data["results"]
+        lines = []
+        
+        # 优先显示中国大陆和美国
+        priority_regions = ["CN", "US", "GB"]
+        region_names = {"CN": "🇨🇳中国", "US": "🇺🇸美国", "GB": "🇬🇧英国"}
+        found_any = False
+        
+        for region in priority_regions:
+            if region not in results:
+                continue
+                
+            region_data = results[region]
+            region_name = region_names.get(region, f"🌍{region}")
+            
+            # 只显示订阅平台（最常用）
+            if region_data.get("flatrate"):
+                platforms = []
+                for p in region_data["flatrate"][:3]:
+                    platform_name = p["provider_name"]
+                    platforms.append(platform_name)
+                
+                if platforms:
+                    found_any = True
+                    lines.append(f"📺 *观看平台*: {', '.join(platforms)} ({region_name})")
+                    break  # 只显示第一个有平台的地区
+        
+        if not found_any:
+            # 如果没有订阅平台，尝试显示购买平台
+            for region in priority_regions:
+                if region not in results:
+                    continue
+                    
+                region_data = results[region]
+                region_name = region_names.get(region, f"🌍{region}")
+                
+                if region_data.get("buy"):
+                    platforms = []
+                    for p in region_data["buy"][:2]:
+                        platform_name = p["provider_name"]
+                        platforms.append(platform_name)
+                    
+                    if platforms:
+                        lines.append(f"💰 *购买平台*: {', '.join(platforms)} ({region_name})")
+                        break
+        
+        return "\n".join(lines) if lines else ""
 
 # 全局服务实例
 movie_service: MovieService = None
@@ -1387,11 +2095,647 @@ async def tv_episode_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
+async def movie_videos_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理 /movie_videos 命令 - 获取电影视频"""
+    if not update.message or not update.effective_chat:
+        return
+    
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    
+    if not context.args:
+        await send_error(
+            context, 
+            update.effective_chat.id, 
+            foldable_text_v2("❌ 请提供电影ID\n\n用法: `/movie_videos <电影ID>`"), 
+            parse_mode="MarkdownV2"
+        )
+        return
+    
+    try:
+        movie_id = int(context.args[0])
+    except ValueError:
+        await send_error(
+            context, 
+            update.effective_chat.id, 
+            foldable_text_v2("❌ 电影ID必须是数字"), 
+            parse_mode="MarkdownV2"
+        )
+        return
+    
+    if not movie_service:
+        error_message = "❌ 电影查询服务未初始化"
+        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        return
+    
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"🔍 正在获取电影视频 \(ID: {movie_id}\)\.\.\.",
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    
+    try:
+        detail_data = await movie_service.get_movie_details(movie_id)
+        if detail_data and detail_data.get("videos"):
+            result_text = movie_service.format_movie_videos(detail_data["videos"])
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+        else:
+            await message.edit_text(f"❌ 未找到ID为 {movie_id} 的电影或无视频内容")
+    except Exception as e:
+        logger.error(f"获取电影视频失败: {e}")
+        await message.edit_text("❌ 获取电影视频时发生错误")
+    
+    # 调度删除机器人回复消息
+    from utils.message_manager import _schedule_deletion
+    from utils.config_manager import get_config
+    config = get_config()
+    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
+
+async def tv_videos_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理 /tv_videos 命令 - 获取电视剧视频"""
+    if not update.message or not update.effective_chat:
+        return
+    
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    
+    if not context.args:
+        await send_error(
+            context, 
+            update.effective_chat.id, 
+            foldable_text_v2("❌ 请提供电视剧ID\n\n用法: `/tv_videos <电视剧ID>`"), 
+            parse_mode="MarkdownV2"
+        )
+        return
+    
+    try:
+        tv_id = int(context.args[0])
+    except ValueError:
+        await send_error(
+            context, 
+            update.effective_chat.id, 
+            foldable_text_v2("❌ 电视剧ID必须是数字"), 
+            parse_mode="MarkdownV2"
+        )
+        return
+    
+    if not movie_service:
+        error_message = "❌ 电视剧查询服务未初始化"
+        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        return
+    
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"🔍 正在获取电视剧视频 \(ID: {tv_id}\)\.\.\.",
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    
+    try:
+        detail_data = await movie_service.get_tv_details(tv_id)
+        if detail_data and detail_data.get("videos"):
+            result_text = movie_service.format_tv_videos(detail_data["videos"])
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+        else:
+            await message.edit_text(f"❌ 未找到ID为 {tv_id} 的电视剧或无视频内容")
+    except Exception as e:
+        logger.error(f"获取电视剧视频失败: {e}")
+        await message.edit_text("❌ 获取电视剧视频时发生错误")
+    
+    # 调度删除机器人回复消息
+    from utils.message_manager import _schedule_deletion
+    from utils.config_manager import get_config
+    config = get_config()
+    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
+
+async def trending_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理 /trending 命令 - 获取今日热门内容"""
+    if not update.message or not update.effective_chat:
+        return
+    
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    
+    if not movie_service:
+        error_message = "❌ 电影查询服务未初始化"
+        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        return
+    
+    # 获取参数，默认为今日全部内容
+    time_window = "day"
+    media_type = "all"
+    
+    if context.args:
+        if context.args[0].lower() in ["day", "week"]:
+            time_window = context.args[0].lower()
+        if len(context.args) > 1 and context.args[1].lower() in ["movie", "tv", "person"]:
+            media_type = context.args[1].lower()
+    
+    time_text = "今日" if time_window == "day" else "本周"
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"🔍 正在获取{time_text}热门内容\.\.\.",
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    
+    try:
+        trending_data = await movie_service.get_trending_content(media_type, time_window)
+        if trending_data:
+            result_text = movie_service.format_trending_content(trending_data, time_window)
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+        else:
+            await message.edit_text("❌ 获取热门内容失败，请稍后重试")
+    except Exception as e:
+        logger.error(f"获取热门内容失败: {e}")
+        await message.edit_text("❌ 获取热门内容时发生错误")
+    
+    # 调度删除机器人回复消息
+    from utils.message_manager import _schedule_deletion
+    from utils.config_manager import get_config
+    config = get_config()
+    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
+
+async def trending_week_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理 /trending_week 命令 - 获取本周热门内容"""
+    if not update.message or not update.effective_chat:
+        return
+    
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    
+    if not movie_service:
+        error_message = "❌ 电影查询服务未初始化"
+        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        return
+    
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="🔍 正在获取本周热门内容\.\.\.",
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    
+    try:
+        trending_data = await movie_service.get_trending_content("all", "week")
+        if trending_data:
+            result_text = movie_service.format_trending_content(trending_data, "week")
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+        else:
+            await message.edit_text("❌ 获取本周热门内容失败，请稍后重试")
+    except Exception as e:
+        logger.error(f"获取本周热门内容失败: {e}")
+        await message.edit_text("❌ 获取本周热门内容时发生错误")
+    
+    # 调度删除机器人回复消息
+    from utils.message_manager import _schedule_deletion
+    from utils.config_manager import get_config
+    config = get_config()
+    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
+
+async def now_playing_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理 /now_playing 命令 - 获取正在上映的电影"""
+    if not update.message or not update.effective_chat:
+        return
+    
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    
+    if not movie_service:
+        error_message = "❌ 电影查询服务未初始化"
+        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        return
+    
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="🔍 正在获取正在上映的电影\.\.\.",
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    
+    try:
+        playing_data = await movie_service.get_now_playing_movies()
+        if playing_data:
+            result_text = movie_service.format_now_playing_movies(playing_data)
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+        else:
+            await message.edit_text("❌ 获取正在上映电影失败，请稍后重试")
+    except Exception as e:
+        logger.error(f"获取正在上映电影失败: {e}")
+        await message.edit_text("❌ 获取正在上映电影时发生错误")
+    
+    # 调度删除机器人回复消息
+    from utils.message_manager import _schedule_deletion
+    from utils.config_manager import get_config
+    config = get_config()
+    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
+
+async def upcoming_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理 /upcoming 命令 - 获取即将上映的电影"""
+    if not update.message or not update.effective_chat:
+        return
+    
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    
+    if not movie_service:
+        error_message = "❌ 电影查询服务未初始化"
+        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        return
+    
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="🔍 正在获取即将上映的电影\.\.\.",
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    
+    try:
+        upcoming_data = await movie_service.get_upcoming_movies()
+        if upcoming_data:
+            result_text = movie_service.format_upcoming_movies(upcoming_data)
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+        else:
+            await message.edit_text("❌ 获取即将上映电影失败，请稍后重试")
+    except Exception as e:
+        logger.error(f"获取即将上映电影失败: {e}")
+        await message.edit_text("❌ 获取即将上映电影时发生错误")
+    
+    # 调度删除机器人回复消息
+    from utils.message_manager import _schedule_deletion
+    from utils.config_manager import get_config
+    config = get_config()
+    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
+
+async def tv_airing_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理 /tv_airing 命令 - 获取今日播出的电视剧"""
+    if not update.message or not update.effective_chat:
+        return
+    
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    
+    if not movie_service:
+        error_message = "❌ 电视剧查询服务未初始化"
+        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        return
+    
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="🔍 正在获取今日播出的电视剧\.\.\.",
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    
+    try:
+        airing_data = await movie_service.get_tv_airing_today()
+        if airing_data:
+            result_text = movie_service.format_tv_airing_today(airing_data)
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+        else:
+            await message.edit_text("❌ 获取今日播出电视剧失败，请稍后重试")
+    except Exception as e:
+        logger.error(f"获取今日播出电视剧失败: {e}")
+        await message.edit_text("❌ 获取今日播出电视剧时发生错误")
+    
+    # 调度删除机器人回复消息
+    from utils.message_manager import _schedule_deletion
+    from utils.config_manager import get_config
+    config = get_config()
+    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
+
+async def tv_on_air_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理 /tv_on_air 命令 - 获取正在播出的电视剧"""
+    if not update.message or not update.effective_chat:
+        return
+    
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    
+    if not movie_service:
+        error_message = "❌ 电视剧查询服务未初始化"
+        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        return
+    
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="🔍 正在获取正在播出的电视剧\.\.\.",
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    
+    try:
+        on_air_data = await movie_service.get_tv_on_the_air()
+        if on_air_data:
+            result_text = movie_service.format_tv_on_the_air(on_air_data)
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+        else:
+            await message.edit_text("❌ 获取正在播出电视剧失败，请稍后重试")
+    except Exception as e:
+        logger.error(f"获取正在播出电视剧失败: {e}")
+        await message.edit_text("❌ 获取正在播出电视剧时发生错误")
+    
+    # 调度删除机器人回复消息
+    from utils.message_manager import _schedule_deletion
+    from utils.config_manager import get_config
+    config = get_config()
+    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
+
+async def person_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理 /person 命令 - 搜索人物"""
+    if not update.message or not update.effective_chat:
+        return
+    
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    
+    if not context.args:
+        help_text = (
+            "*👤 人物信息查询帮助*\n\n"
+            "`/person <人物名>` - 搜索人物\n"
+            "`/person_detail <人物ID>` - 获取人物详情\n\n"
+            "**示例:**\n"
+            "`/person 汤姆·汉克斯`\n"
+            "`/person_detail 31`"
+        )
+        message = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=foldable_text_with_markdown_v2(help_text),
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+        return
+    
+    query = " ".join(context.args)
+    
+    if not movie_service:
+        error_message = "❌ 人物查询服务未初始化"
+        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        return
+    
+    # 显示搜索进度
+    escaped_query = escape_markdown(query, version=2)
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"🔍 正在搜索人物: *{escaped_query}*\\.\\.\\.",
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    
+    try:
+        search_data = await movie_service.search_person(query)
+        if search_data:
+            result_text, profile_url = movie_service.format_person_search_results(search_data)
+            
+            # 如果有头像URL，先发送图片再发送文本
+            if profile_url:
+                try:
+                    # 发送头像图片
+                    photo_message = await context.bot.send_photo(
+                        chat_id=update.effective_chat.id,
+                        photo=profile_url,
+                        caption=foldable_text_with_markdown_v2(result_text),
+                        parse_mode=ParseMode.MARKDOWN_V2
+                    )
+                    # 删除原来的加载消息
+                    await message.delete()
+                    # 更新message为新发送的图片消息，用于后续删除调度
+                    message = photo_message
+                except Exception as photo_error:
+                    logger.warning(f"发送头像失败: {photo_error}，改用文本消息")
+                    # 如果图片发送失败，改用文本消息
+                    await message.edit_text(
+                        foldable_text_with_markdown_v2(result_text),
+                        parse_mode=ParseMode.MARKDOWN_V2
+                    )
+            else:
+                # 没有头像，直接发送文本
+                await message.edit_text(
+                    foldable_text_with_markdown_v2(result_text),
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
+        else:
+            await message.edit_text("❌ 搜索人物失败，请稍后重试")
+    except Exception as e:
+        logger.error(f"人物搜索失败: {e}")
+        await message.edit_text("❌ 搜索人物时发生错误")
+    
+    # 调度删除机器人回复消息
+    from utils.message_manager import _schedule_deletion
+    from utils.config_manager import get_config
+    config = get_config()
+    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
+
+async def person_detail_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理 /person_detail 命令 - 获取人物详情"""
+    if not update.message or not update.effective_chat:
+        return
+    
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    
+    if not context.args:
+        await send_error(
+            context, 
+            update.effective_chat.id, 
+            foldable_text_v2("❌ 请提供人物ID\n\n用法: `/person_detail <人物ID>`"), 
+            parse_mode="MarkdownV2"
+        )
+        return
+    
+    try:
+        person_id = int(context.args[0])
+    except ValueError:
+        await send_error(
+            context, 
+            update.effective_chat.id, 
+            foldable_text_v2("❌ 人物ID必须是数字"), 
+            parse_mode="MarkdownV2"
+        )
+        return
+    
+    if not movie_service:
+        error_message = "❌ 人物查询服务未初始化"
+        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        return
+    
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"🔍 正在获取人物详情 \(ID: {person_id}\)\.\.\.",
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    
+    try:
+        detail_data = await movie_service.get_person_details(person_id)
+        if detail_data:
+            result_text, profile_url = movie_service.format_person_details(detail_data)
+            
+            # 如果有头像URL，先发送图片再发送文本
+            if profile_url:
+                try:
+                    # 发送头像图片
+                    photo_message = await context.bot.send_photo(
+                        chat_id=update.effective_chat.id,
+                        photo=profile_url,
+                        caption=foldable_text_with_markdown_v2(result_text),
+                        parse_mode=ParseMode.MARKDOWN_V2
+                    )
+                    # 删除原来的加载消息
+                    await message.delete()
+                    # 更新message为新发送的图片消息，用于后续删除调度
+                    message = photo_message
+                except Exception as photo_error:
+                    logger.warning(f"发送头像失败: {photo_error}，改用文本消息")
+                    # 如果图片发送失败，改用文本消息
+                    await message.edit_text(
+                        foldable_text_with_markdown_v2(result_text),
+                        parse_mode=ParseMode.MARKDOWN_V2
+                    )
+            else:
+                # 没有头像，直接发送文本
+                await message.edit_text(
+                    foldable_text_with_markdown_v2(result_text),
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
+        else:
+            await message.edit_text(f"❌ 未找到ID为 {person_id} 的人物")
+    except Exception as e:
+        logger.error(f"获取人物详情失败: {e}")
+        await message.edit_text("❌ 获取人物详情时发生错误")
+    
+    # 调度删除机器人回复消息
+    from utils.message_manager import _schedule_deletion
+    from utils.config_manager import get_config
+    config = get_config()
+    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
+
+async def movie_watch_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理 /movie_watch 命令 - 获取电影观看平台"""
+    if not update.message or not update.effective_chat:
+        return
+    
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    
+    if not context.args:
+        await send_error(
+            context, 
+            update.effective_chat.id, 
+            foldable_text_v2("❌ 请提供电影ID\n\n用法: `/movie_watch <电影ID>`"), 
+            parse_mode="MarkdownV2"
+        )
+        return
+    
+    try:
+        movie_id = int(context.args[0])
+    except ValueError:
+        await send_error(
+            context, 
+            update.effective_chat.id, 
+            foldable_text_v2("❌ 电影ID必须是数字"), 
+            parse_mode="MarkdownV2"
+        )
+        return
+    
+    if not movie_service:
+        error_message = "❌ 电影查询服务未初始化"
+        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        return
+    
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"🔍 正在获取观看平台信息 \(ID: {movie_id}\)\.\.\.",
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    
+    try:
+        providers_data = await movie_service.get_movie_watch_providers(movie_id)
+        if providers_data:
+            result_text = movie_service.format_watch_providers(providers_data, "movie")
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+        else:
+            await message.edit_text(f"❌ 未找到ID为 {movie_id} 的电影观看平台信息")
+    except Exception as e:
+        logger.error(f"获取电影观看平台失败: {e}")
+        await message.edit_text("❌ 获取观看平台信息时发生错误")
+    
+    # 调度删除机器人回复消息
+    from utils.message_manager import _schedule_deletion
+    from utils.config_manager import get_config
+    config = get_config()
+    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
+
+async def tv_watch_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理 /tv_watch 命令 - 获取电视剧观看平台"""
+    if not update.message or not update.effective_chat:
+        return
+    
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    
+    if not context.args:
+        await send_error(
+            context, 
+            update.effective_chat.id, 
+            foldable_text_v2("❌ 请提供电视剧ID\n\n用法: `/tv_watch <电视剧ID>`"), 
+            parse_mode="MarkdownV2"
+        )
+        return
+    
+    try:
+        tv_id = int(context.args[0])
+    except ValueError:
+        await send_error(
+            context, 
+            update.effective_chat.id, 
+            foldable_text_v2("❌ 电视剧ID必须是数字"), 
+            parse_mode="MarkdownV2"
+        )
+        return
+    
+    if not movie_service:
+        error_message = "❌ 电视剧查询服务未初始化"
+        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        return
+    
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"🔍 正在获取观看平台信息 \(ID: {tv_id}\)\.\.\.",
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    
+    try:
+        providers_data = await movie_service.get_tv_watch_providers(tv_id)
+        if providers_data:
+            result_text = movie_service.format_watch_providers(providers_data, "tv")
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+        else:
+            await message.edit_text(f"❌ 未找到ID为 {tv_id} 的电视剧观看平台信息")
+    except Exception as e:
+        logger.error(f"获取电视剧观看平台失败: {e}")
+        await message.edit_text("❌ 获取观看平台信息时发生错误")
+    
+    # 调度删除机器人回复消息
+    from utils.message_manager import _schedule_deletion
+    from utils.config_manager import get_config
+    config = get_config()
+    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
+
 # 注册命令
 command_factory.register_command("movie", movie_command, permission=Permission.USER, description="搜索电影信息")
 command_factory.register_command("movie_hot", movie_hot_command, permission=Permission.USER, description="获取热门电影")
 command_factory.register_command("movie_detail", movie_detail_command, permission=Permission.USER, description="获取电影详情")
 command_factory.register_command("movie_rec", movie_rec_command, permission=Permission.USER, description="获取电影推荐")
+command_factory.register_command("movie_videos", movie_videos_command, permission=Permission.USER, description="获取电影预告片")
 command_factory.register_command("movie_cleancache", movie_clean_cache_command, permission=Permission.ADMIN, description="清理电影和电视剧查询缓存")
 
 # 注册电视剧命令
@@ -1399,5 +2743,22 @@ command_factory.register_command("tv", tv_command, permission=Permission.USER, d
 command_factory.register_command("tv_hot", tv_hot_command, permission=Permission.USER, description="获取热门电视剧")
 command_factory.register_command("tv_detail", tv_detail_command, permission=Permission.USER, description="获取电视剧详情")
 command_factory.register_command("tv_rec", tv_rec_command, permission=Permission.USER, description="获取电视剧推荐")
+command_factory.register_command("tv_videos", tv_videos_command, permission=Permission.USER, description="获取电视剧预告片")
 command_factory.register_command("tv_season", tv_season_command, permission=Permission.USER, description="获取电视剧季详情")
 command_factory.register_command("tv_episode", tv_episode_command, permission=Permission.USER, description="获取电视剧集详情")
+
+# 注册趋势和上映相关命令
+command_factory.register_command("trending", trending_command, permission=Permission.USER, description="获取今日热门内容")
+command_factory.register_command("trending_week", trending_week_command, permission=Permission.USER, description="获取本周热门内容")
+command_factory.register_command("now_playing", now_playing_command, permission=Permission.USER, description="获取正在上映的电影")
+command_factory.register_command("upcoming", upcoming_command, permission=Permission.USER, description="获取即将上映的电影")
+command_factory.register_command("tv_airing", tv_airing_command, permission=Permission.USER, description="获取今日播出的电视剧")
+command_factory.register_command("tv_on_air", tv_on_air_command, permission=Permission.USER, description="获取正在播出的电视剧")
+
+# 注册人物搜索命令
+command_factory.register_command("person", person_command, permission=Permission.USER, description="搜索人物信息")
+command_factory.register_command("person_detail", person_detail_command, permission=Permission.USER, description="获取人物详情")
+
+# 注册观看平台命令
+command_factory.register_command("movie_watch", movie_watch_command, permission=Permission.USER, description="获取电影观看平台")
+command_factory.register_command("tv_watch", tv_watch_command, permission=Permission.USER, description="获取电视剧观看平台")
