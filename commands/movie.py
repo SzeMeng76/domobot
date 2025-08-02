@@ -6,6 +6,7 @@ import httpx
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
+from telegram.helpers import escape_markdown
 
 from utils.command_factory import command_factory
 from utils.config_manager import config_manager
@@ -710,9 +711,10 @@ async def movie_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
     
     # 显示搜索进度
+    escaped_query = escape_markdown(query, version=2)
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=f"🔍 正在搜索电影: *{query.replace('_', '\\_')}*...",
+        text=f"🔍 正在搜索电影: *{escaped_query}*\\.\\.\\.",
         parse_mode=ParseMode.MARKDOWN_V2
     )
     
@@ -750,7 +752,7 @@ async def movie_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text="🔍 正在获取热门电影...",
+        text="🔍 正在获取热门电影\.\.\.",
         parse_mode=ParseMode.MARKDOWN_V2
     )
     
@@ -808,7 +810,7 @@ async def movie_detail_command(update: Update, context: ContextTypes.DEFAULT_TYP
     
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=f"🔍 正在获取电影详情 (ID: {movie_id})...",
+        text=f"🔍 正在获取电影详情 \(ID: {movie_id}\)\.\.\.",
         parse_mode=ParseMode.MARKDOWN_V2
     )
     
@@ -866,7 +868,7 @@ async def movie_rec_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=f"🔍 正在获取电影推荐 (基于ID: {movie_id})...",
+        text=f"🔍 正在获取电影推荐 \(基于ID: {movie_id}\)\.\.\.",
         parse_mode=ParseMode.MARKDOWN_V2
     )
     
@@ -956,7 +958,7 @@ async def tv_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     # 显示搜索进度
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=f"🔍 正在搜索电视剧: *{query.replace('_', '\\_')}*...",
+        text=f"🔍 正在搜索电视剧: *{escape_markdown(query, version=2)}*\.\.\.",
         parse_mode=ParseMode.MARKDOWN_V2
     )
     
@@ -994,7 +996,7 @@ async def tv_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text="🔍 正在获取热门电视剧...",
+        text="🔍 正在获取热门电视剧\.\.\.",
         parse_mode=ParseMode.MARKDOWN_V2
     )
     
@@ -1052,7 +1054,7 @@ async def tv_detail_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=f"🔍 正在获取电视剧详情 (ID: {tv_id})...",
+        text=f"🔍 正在获取电视剧详情 \(ID: {tv_id}\)\.\.\.",
         parse_mode=ParseMode.MARKDOWN_V2
     )
     
@@ -1110,7 +1112,7 @@ async def tv_rec_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=f"🔍 正在获取电视剧推荐 (基于ID: {tv_id})...",
+        text=f"🔍 正在获取电视剧推荐 \(基于ID: {tv_id}\)\.\.\.",
         parse_mode=ParseMode.MARKDOWN_V2
     )
     
@@ -1169,7 +1171,7 @@ async def tv_season_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=f"🔍 正在获取第{season_number}季详情 (电视剧ID: {tv_id})...",
+        text=f"🔍 正在获取第{season_number}季详情 \(电视剧ID: {tv_id}\)\.\.\.",
         parse_mode=ParseMode.MARKDOWN_V2
     )
     
@@ -1229,7 +1231,7 @@ async def tv_episode_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=f"🔍 正在获取第{season_number}季第{episode_number}集详情 (电视剧ID: {tv_id})...",
+        text=f"🔍 正在获取第{season_number}季第{episode_number}集详情 \(电视剧ID: {tv_id}\)\.\.\.",
         parse_mode=ParseMode.MARKDOWN_V2
     )
     
