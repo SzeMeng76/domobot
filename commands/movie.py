@@ -217,13 +217,21 @@ class MovieService:
             await cache_manager.save_cache(cache_key, data, subdirectory="movie")
         return data
     
-    def format_movie_search_results(self, search_data: Dict) -> str:
-        """格式化电影搜索结果"""
+    def format_movie_search_results(self, search_data: Dict) -> tuple:
+        """格式化电影搜索结果，返回(文本内容, 海报URL)"""
         if not search_data or not search_data.get("results"):
-            return "❌ 未找到相关电影"
+            return "❌ 未找到相关电影", None
         
         results = search_data["results"][:10]  # 显示前10个结果
         lines = ["🎬 *电影搜索结果*\n"]
+        
+        # 获取第一个有海报的电影的海报URL
+        poster_url = None
+        for movie in results:
+            poster_path = movie.get("poster_path")
+            if poster_path:
+                poster_url = f"{self.tmdb_image_base_url}{poster_path}"
+                break
         
         for i, movie in enumerate(results, 1):
             title = movie.get("title", "未知标题")
@@ -232,6 +240,7 @@ class MovieService:
             year = release_date[:4] if release_date else "未知年份"
             vote_average = movie.get("vote_average", 0)
             movie_id = movie.get("id")
+            poster_path = movie.get("poster_path")
             
             title_text = f"{title}"
             if original_title and original_title != title:
@@ -240,24 +249,34 @@ class MovieService:
             lines.append(f"{i}. *{title_text}* ({year})")
             lines.append(f"   ⭐ 评分: {vote_average:.1f}/10")
             lines.append(f"   🆔 ID: `{movie_id}`")
+            if poster_path:
+                lines.append(f"   🖼️ 海报: [查看]({self.tmdb_image_base_url}{poster_path})")
             lines.append("")
         
         lines.append("💡 使用 `/movie_detail <ID>` 查看详细信息")
         lines.append("💡 使用 `/movie_rec <ID>` 获取相似推荐")
         
-        return "\n".join(lines)
+        return "\n".join(lines), poster_url
 
     # ========================================
     # 电视剧格式化方法
     # ========================================
     
-    def format_tv_search_results(self, search_data: Dict) -> str:
-        """格式化电视剧搜索结果"""
+    def format_tv_search_results(self, search_data: Dict) -> tuple:
+        """格式化电视剧搜索结果，返回(文本内容, 海报URL)"""
         if not search_data or not search_data.get("results"):
-            return "❌ 未找到相关电视剧"
+            return "❌ 未找到相关电视剧", None
         
         results = search_data["results"][:10]  # 显示前10个结果
         lines = ["📺 *电视剧搜索结果*\n"]
+        
+        # 获取第一个有海报的电视剧的海报URL
+        poster_url = None
+        for tv in results:
+            poster_path = tv.get("poster_path")
+            if poster_path:
+                poster_url = f"{self.tmdb_image_base_url}{poster_path}"
+                break
         
         for i, tv in enumerate(results, 1):
             name = tv.get("name", "未知标题")
@@ -266,6 +285,7 @@ class MovieService:
             year = first_air_date[:4] if first_air_date else "未知年份"
             vote_average = tv.get("vote_average", 0)
             tv_id = tv.get("id")
+            poster_path = tv.get("poster_path")
             
             title_text = f"{name}"
             if original_name and original_name != name:
@@ -274,12 +294,14 @@ class MovieService:
             lines.append(f"{i}. *{title_text}* ({year})")
             lines.append(f"   ⭐ 评分: {vote_average:.1f}/10")
             lines.append(f"   🆔 ID: `{tv_id}`")
+            if poster_path:
+                lines.append(f"   🖼️ 海报: [查看]({self.tmdb_image_base_url}{poster_path})")
             lines.append("")
         
         lines.append("💡 使用 `/tv_detail <ID>` 查看详细信息")
         lines.append("💡 使用 `/tv_rec <ID>` 获取相似推荐")
         
-        return "\n".join(lines)
+        return "\n".join(lines), poster_url
     
     def format_popular_tv_shows(self, popular_data: Dict) -> str:
         """格式化热门电视剧列表"""
@@ -312,10 +334,10 @@ class MovieService:
         
         return "\n".join(lines)
     
-    def format_tv_details(self, detail_data: Dict) -> str:
-        """格式化电视剧详情"""
+    def format_tv_details(self, detail_data: Dict) -> tuple:
+        """格式化电视剧详情，返回(文本内容, 海报URL)"""
         if not detail_data:
-            return "❌ 获取电视剧详情失败"
+            return "❌ 获取电视剧详情失败", None
         
         name = detail_data.get("name", "未知标题")
         original_name = detail_data.get("original_name", "")
@@ -329,6 +351,10 @@ class MovieService:
         vote_average = detail_data.get("vote_average", 0)
         vote_count = detail_data.get("vote_count", 0)
         status = detail_data.get("status", "未知")
+        poster_path = detail_data.get("poster_path")
+        
+        # 构建海报URL
+        poster_url = f"{self.tmdb_image_base_url}{poster_path}" if poster_path else None
         
         # 状态翻译
         status_map = {
@@ -399,6 +425,9 @@ class MovieService:
             f"📺 *播出网络*: {network_text}",
             f"🏢 *制作公司*: {company_text}",
         ])
+        
+        if poster_url:
+            lines.append(f"🖼️ *海报*: [查看]({poster_url})")
             
         lines.extend([
             creator_info,
@@ -416,7 +445,7 @@ class MovieService:
             f"💡 使用 `/tv_season {tv_id} <季数>` 查看季详情"
         ])
         
-        return "\n".join(filter(None, lines))  # 过滤空行
+        return "\n".join(filter(None, lines)), poster_url  # 过滤空行
     
     def format_tv_recommendations(self, rec_data: Dict, original_tv_id: int) -> str:
         """格式化电视剧推荐"""
@@ -567,10 +596,10 @@ class MovieService:
         
         return "\n".join(lines)
     
-    def format_movie_details(self, detail_data: Dict) -> str:
-        """格式化电影详情"""
+    def format_movie_details(self, detail_data: Dict) -> tuple:
+        """格式化电影详情，返回(文本内容, 海报URL)"""
         if not detail_data:
-            return "❌ 获取电影详情失败"
+            return "❌ 获取电影详情失败", None
         
         title = detail_data.get("title", "未知标题")
         original_title = detail_data.get("original_title", "")
@@ -582,6 +611,10 @@ class MovieService:
         vote_count = detail_data.get("vote_count", 0)
         budget = detail_data.get("budget", 0)
         revenue = detail_data.get("revenue", 0)
+        poster_path = detail_data.get("poster_path")
+        
+        # 构建海报URL
+        poster_url = f"{self.tmdb_image_base_url}{poster_path}" if poster_path else None
         
         # 类型
         genres = [g["name"] for g in detail_data.get("genres", [])]
@@ -629,6 +662,9 @@ class MovieService:
         if revenue > 0:
             lines.append(f"💵 *票房收入*: ${revenue:,}")
             
+        if poster_url:
+            lines.append(f"🖼️ *海报*: [查看]({poster_url})")
+            
         lines.extend([
             director_info,
             cast_info,
@@ -644,7 +680,7 @@ class MovieService:
             f"💡 使用 `/movie_rec {movie_id}` 获取相似推荐"
         ])
         
-        return "\n".join(filter(None, lines))  # 过滤空行
+        return "\n".join(filter(None, lines)), poster_url  # 过滤空行
     
     def format_movie_recommendations(self, rec_data: Dict, original_movie_id: int) -> str:
         """格式化电影推荐"""
@@ -721,11 +757,33 @@ async def movie_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     try:
         search_data = await movie_service.search_movies(query)
         if search_data:
-            result_text = movie_service.format_movie_search_results(search_data)
-            await message.edit_text(
-                foldable_text_with_markdown_v2(result_text),
-                parse_mode=ParseMode.MARKDOWN_V2
-            )
+            result_text, poster_url = movie_service.format_movie_search_results(search_data)
+            
+            # 如果有海报URL，先发送图片再发送文本
+            if poster_url:
+                try:
+                    # 发送海报图片
+                    await context.bot.send_photo(
+                        chat_id=update.effective_chat.id,
+                        photo=poster_url,
+                        caption=foldable_text_with_markdown_v2(result_text),
+                        parse_mode=ParseMode.MARKDOWN_V2
+                    )
+                    # 删除原来的加载消息
+                    await message.delete()
+                except Exception as photo_error:
+                    logger.warning(f"发送海报失败: {photo_error}，改用文本消息")
+                    # 如果图片发送失败，改用文本消息
+                    await message.edit_text(
+                        foldable_text_with_markdown_v2(result_text),
+                        parse_mode=ParseMode.MARKDOWN_V2
+                    )
+            else:
+                # 没有海报，直接发送文本
+                await message.edit_text(
+                    foldable_text_with_markdown_v2(result_text),
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
         else:
             await message.edit_text("❌ 搜索电影失败，请稍后重试")
     except Exception as e:
@@ -817,11 +875,33 @@ async def movie_detail_command(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         detail_data = await movie_service.get_movie_details(movie_id)
         if detail_data:
-            result_text = movie_service.format_movie_details(detail_data)
-            await message.edit_text(
-                foldable_text_with_markdown_v2(result_text),
-                parse_mode=ParseMode.MARKDOWN_V2
-            )
+            result_text, poster_url = movie_service.format_movie_details(detail_data)
+            
+            # 如果有海报URL，先发送图片再发送文本
+            if poster_url:
+                try:
+                    # 发送海报图片
+                    await context.bot.send_photo(
+                        chat_id=update.effective_chat.id,
+                        photo=poster_url,
+                        caption=foldable_text_with_markdown_v2(result_text),
+                        parse_mode=ParseMode.MARKDOWN_V2
+                    )
+                    # 删除原来的加载消息
+                    await message.delete()
+                except Exception as photo_error:
+                    logger.warning(f"发送海报失败: {photo_error}，改用文本消息")
+                    # 如果图片发送失败，改用文本消息
+                    await message.edit_text(
+                        foldable_text_with_markdown_v2(result_text),
+                        parse_mode=ParseMode.MARKDOWN_V2
+                    )
+            else:
+                # 没有海报，直接发送文本
+                await message.edit_text(
+                    foldable_text_with_markdown_v2(result_text),
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
         else:
             await message.edit_text(f"❌ 未找到ID为 {movie_id} 的电影")
     except Exception as e:
@@ -965,11 +1045,33 @@ async def tv_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     try:
         search_data = await movie_service.search_tv_shows(query)
         if search_data:
-            result_text = movie_service.format_tv_search_results(search_data)
-            await message.edit_text(
-                foldable_text_with_markdown_v2(result_text),
-                parse_mode=ParseMode.MARKDOWN_V2
-            )
+            result_text, poster_url = movie_service.format_tv_search_results(search_data)
+            
+            # 如果有海报URL，先发送图片再发送文本
+            if poster_url:
+                try:
+                    # 发送海报图片
+                    await context.bot.send_photo(
+                        chat_id=update.effective_chat.id,
+                        photo=poster_url,
+                        caption=foldable_text_with_markdown_v2(result_text),
+                        parse_mode=ParseMode.MARKDOWN_V2
+                    )
+                    # 删除原来的加载消息
+                    await message.delete()
+                except Exception as photo_error:
+                    logger.warning(f"发送海报失败: {photo_error}，改用文本消息")
+                    # 如果图片发送失败，改用文本消息
+                    await message.edit_text(
+                        foldable_text_with_markdown_v2(result_text),
+                        parse_mode=ParseMode.MARKDOWN_V2
+                    )
+            else:
+                # 没有海报，直接发送文本
+                await message.edit_text(
+                    foldable_text_with_markdown_v2(result_text),
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
         else:
             await message.edit_text("❌ 搜索电视剧失败，请稍后重试")
     except Exception as e:
@@ -1061,11 +1163,33 @@ async def tv_detail_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     try:
         detail_data = await movie_service.get_tv_details(tv_id)
         if detail_data:
-            result_text = movie_service.format_tv_details(detail_data)
-            await message.edit_text(
-                foldable_text_with_markdown_v2(result_text),
-                parse_mode=ParseMode.MARKDOWN_V2
-            )
+            result_text, poster_url = movie_service.format_tv_details(detail_data)
+            
+            # 如果有海报URL，先发送图片再发送文本
+            if poster_url:
+                try:
+                    # 发送海报图片
+                    await context.bot.send_photo(
+                        chat_id=update.effective_chat.id,
+                        photo=poster_url,
+                        caption=foldable_text_with_markdown_v2(result_text),
+                        parse_mode=ParseMode.MARKDOWN_V2
+                    )
+                    # 删除原来的加载消息
+                    await message.delete()
+                except Exception as photo_error:
+                    logger.warning(f"发送海报失败: {photo_error}，改用文本消息")
+                    # 如果图片发送失败，改用文本消息
+                    await message.edit_text(
+                        foldable_text_with_markdown_v2(result_text),
+                        parse_mode=ParseMode.MARKDOWN_V2
+                    )
+            else:
+                # 没有海报，直接发送文本
+                await message.edit_text(
+                    foldable_text_with_markdown_v2(result_text),
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
         else:
             await message.edit_text(f"❌ 未找到ID为 {tv_id} 的电视剧")
     except Exception as e:
