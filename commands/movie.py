@@ -98,7 +98,7 @@ class MovieService:
             
         data = await self._make_tmdb_request("search/movie", {"query": query, "page": page})
         if data:
-            await cache_manager.save_cache(cache_key, data, subdirectory="movie", ttl=3600)
+            await cache_manager.save_cache(cache_key, data, subdirectory="movie")
         return data
     
     async def get_popular_movies(self, page: int = 1) -> Optional[Dict]:
@@ -110,7 +110,7 @@ class MovieService:
             
         data = await self._make_tmdb_request("movie/popular", {"page": page})
         if data:
-            await cache_manager.save_cache(cache_key, data, subdirectory="movie", ttl=1800)
+            await cache_manager.save_cache(cache_key, data, subdirectory="movie")
         return data
     
     async def get_movie_details(self, movie_id: int) -> Optional[Dict]:
@@ -124,7 +124,7 @@ class MovieService:
             "append_to_response": "credits,videos,recommendations"
         })
         if data:
-            await cache_manager.save_cache(cache_key, data, subdirectory="movie", ttl=7200)
+            await cache_manager.save_cache(cache_key, data, subdirectory="movie")
         return data
     
     async def get_movie_recommendations(self, movie_id: int, page: int = 1) -> Optional[Dict]:
@@ -136,7 +136,7 @@ class MovieService:
             
         data = await self._make_tmdb_request(f"movie/{movie_id}/recommendations", {"page": page})
         if data:
-            await cache_manager.save_cache(cache_key, data, subdirectory="movie", ttl=3600)
+            await cache_manager.save_cache(cache_key, data, subdirectory="movie")
         return data
     
     # ========================================
@@ -152,7 +152,7 @@ class MovieService:
             
         data = await self._make_tmdb_request("search/tv", {"query": query, "page": page})
         if data:
-            await cache_manager.save_cache(cache_key, data, subdirectory="movie", ttl=3600)
+            await cache_manager.save_cache(cache_key, data, subdirectory="movie")
         return data
     
     async def get_popular_tv_shows(self, page: int = 1) -> Optional[Dict]:
@@ -164,7 +164,7 @@ class MovieService:
             
         data = await self._make_tmdb_request("tv/popular", {"page": page})
         if data:
-            await cache_manager.save_cache(cache_key, data, subdirectory="movie", ttl=1800)
+            await cache_manager.save_cache(cache_key, data, subdirectory="movie")
         return data
     
     async def get_tv_details(self, tv_id: int) -> Optional[Dict]:
@@ -178,7 +178,7 @@ class MovieService:
             "append_to_response": "credits,videos,recommendations"
         })
         if data:
-            await cache_manager.save_cache(cache_key, data, subdirectory="movie", ttl=7200)
+            await cache_manager.save_cache(cache_key, data, subdirectory="movie")
         return data
     
     async def get_tv_recommendations(self, tv_id: int, page: int = 1) -> Optional[Dict]:
@@ -190,7 +190,7 @@ class MovieService:
             
         data = await self._make_tmdb_request(f"tv/{tv_id}/recommendations", {"page": page})
         if data:
-            await cache_manager.save_cache(cache_key, data, subdirectory="movie", ttl=3600)
+            await cache_manager.save_cache(cache_key, data, subdirectory="movie")
         return data
     
     async def get_tv_season_details(self, tv_id: int, season_number: int) -> Optional[Dict]:
@@ -202,7 +202,7 @@ class MovieService:
             
         data = await self._make_tmdb_request(f"tv/{tv_id}/season/{season_number}")
         if data:
-            await cache_manager.save_cache(cache_key, data, subdirectory="movie", ttl=7200)
+            await cache_manager.save_cache(cache_key, data, subdirectory="movie")
         return data
     
     async def get_tv_episode_details(self, tv_id: int, season_number: int, episode_number: int) -> Optional[Dict]:
@@ -214,7 +214,7 @@ class MovieService:
             
         data = await self._make_tmdb_request(f"tv/{tv_id}/season/{season_number}/episode/{episode_number}")
         if data:
-            await cache_manager.save_cache(cache_key, data, subdirectory="movie", ttl=7200)
+            await cache_manager.save_cache(cache_key, data, subdirectory="movie")
         return data
     
     def format_movie_search_results(self, search_data: Dict) -> str:
