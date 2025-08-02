@@ -763,7 +763,7 @@ async def movie_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             if poster_url:
                 try:
                     # 发送海报图片
-                    await context.bot.send_photo(
+                    photo_message = await context.bot.send_photo(
                         chat_id=update.effective_chat.id,
                         photo=poster_url,
                         caption=foldable_text_with_markdown_v2(result_text),
@@ -771,6 +771,8 @@ async def movie_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                     )
                     # 删除原来的加载消息
                     await message.delete()
+                    # 更新message为新发送的图片消息，用于后续删除调度
+                    message = photo_message
                 except Exception as photo_error:
                     logger.warning(f"发送海报失败: {photo_error}，改用文本消息")
                     # 如果图片发送失败，改用文本消息
@@ -881,7 +883,7 @@ async def movie_detail_command(update: Update, context: ContextTypes.DEFAULT_TYP
             if poster_url:
                 try:
                     # 发送海报图片
-                    await context.bot.send_photo(
+                    photo_message = await context.bot.send_photo(
                         chat_id=update.effective_chat.id,
                         photo=poster_url,
                         caption=foldable_text_with_markdown_v2(result_text),
@@ -889,6 +891,8 @@ async def movie_detail_command(update: Update, context: ContextTypes.DEFAULT_TYP
                     )
                     # 删除原来的加载消息
                     await message.delete()
+                    # 更新message为新发送的图片消息，用于后续删除调度
+                    message = photo_message
                 except Exception as photo_error:
                     logger.warning(f"发送海报失败: {photo_error}，改用文本消息")
                     # 如果图片发送失败，改用文本消息
@@ -1051,7 +1055,7 @@ async def tv_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             if poster_url:
                 try:
                     # 发送海报图片
-                    await context.bot.send_photo(
+                    photo_message = await context.bot.send_photo(
                         chat_id=update.effective_chat.id,
                         photo=poster_url,
                         caption=foldable_text_with_markdown_v2(result_text),
@@ -1059,6 +1063,8 @@ async def tv_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                     )
                     # 删除原来的加载消息
                     await message.delete()
+                    # 更新message为新发送的图片消息，用于后续删除调度
+                    message = photo_message
                 except Exception as photo_error:
                     logger.warning(f"发送海报失败: {photo_error}，改用文本消息")
                     # 如果图片发送失败，改用文本消息
@@ -1169,7 +1175,7 @@ async def tv_detail_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             if poster_url:
                 try:
                     # 发送海报图片
-                    await context.bot.send_photo(
+                    photo_message = await context.bot.send_photo(
                         chat_id=update.effective_chat.id,
                         photo=poster_url,
                         caption=foldable_text_with_markdown_v2(result_text),
@@ -1177,6 +1183,8 @@ async def tv_detail_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                     )
                     # 删除原来的加载消息
                     await message.delete()
+                    # 更新message为新发送的图片消息，用于后续删除调度
+                    message = photo_message
                 except Exception as photo_error:
                     logger.warning(f"发送海报失败: {photo_error}，改用文本消息")
                     # 如果图片发送失败，改用文本消息
