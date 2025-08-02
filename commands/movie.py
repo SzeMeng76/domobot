@@ -345,6 +345,41 @@ class MovieService:
             await cache_manager.save_cache(cache_key, data, subdirectory="movie")
         return data
     
+    def _get_first_trailer_url(self, videos_data: Dict) -> Optional[str]:
+        """获取第一个预告片的YouTube链接"""
+        if not videos_data or not videos_data.get("results"):
+            return None
+            
+        videos = videos_data["results"]
+        if not videos:
+            return None
+            
+        # 优先查找官方预告片
+        for video in videos:
+            if (video.get("type") == "Trailer" and 
+                video.get("site") == "YouTube" and 
+                video.get("official", True)):  # 优先官方视频
+                key = video.get("key")
+                if key:
+                    return f"https://www.youtube.com/watch?v={key}"
+        
+        # 如果没有官方预告片，查找任何预告片
+        for video in videos:
+            if (video.get("type") == "Trailer" and 
+                video.get("site") == "YouTube"):
+                key = video.get("key")
+                if key:
+                    return f"https://www.youtube.com/watch?v={key}"
+        
+        # 如果没有预告片，查找任何视频
+        for video in videos:
+            if video.get("site") == "YouTube":
+                key = video.get("key")
+                if key:
+                    return f"https://www.youtube.com/watch?v={key}"
+        
+        return None
+    
     def format_movie_search_results(self, search_data: Dict) -> tuple:
         """格式化电影搜索结果，返回(文本内容, 海报URL)"""
         if not search_data or not search_data.get("results"):
@@ -556,6 +591,13 @@ class MovieService:
         
         if poster_url:
             lines.append(f"🖼️ *海报*: [查看]({poster_url})")
+        
+        # 添加预告片链接
+        videos_data = detail_data.get("videos")
+        if videos_data:
+            trailer_url = self._get_first_trailer_url(videos_data)
+            if trailer_url:
+                lines.append(f"🎬 *预告片*: [观看]({trailer_url})")
         
         # 添加观看平台信息
         watch_providers = detail_data.get("watch/providers")
@@ -801,6 +843,13 @@ class MovieService:
             
         if poster_url:
             lines.append(f"🖼️ *海报*: [查看]({poster_url})")
+        
+        # 添加预告片链接
+        videos_data = detail_data.get("videos")
+        if videos_data:
+            trailer_url = self._get_first_trailer_url(videos_data)
+            if trailer_url:
+                lines.append(f"🎬 *预告片*: [观看]({trailer_url})")
         
         # 添加观看平台信息
         watch_providers = detail_data.get("watch/providers")
