@@ -41,7 +41,7 @@ class MovieService:
         """获取Trakt API密钥"""
         return config_manager.config.trakt_api_key if hasattr(config_manager.config, 'trakt_api_key') else None
     
-    async def _make_tmdb_request(self, endpoint: str, params: Dict[str, Any] = None) -> Optional[Dict]:
+    async def _make_tmdb_request(self, endpoint: str, params: Dict[str, Any] = None, use_english_for_videos: bool = False) -> Optional[Dict]:
         """发起TMDB API请求"""
         api_key = await self._get_tmdb_api_key()
         if not api_key:
@@ -50,7 +50,9 @@ class MovieService:
             
         try:
             url = f"{self.tmdb_base_url}/{endpoint}"
-            request_params = {"api_key": api_key, "language": "zh-CN"}
+            # 对于视频相关的API，使用英语以获取更多内容
+            language = "en-US" if use_english_for_videos or "/videos" in endpoint else "zh-CN"
+            request_params = {"api_key": api_key, "language": language}
             if params:
                 request_params.update(params)
                 
@@ -122,7 +124,7 @@ class MovieService:
             
         data = await self._make_tmdb_request(f"movie/{movie_id}", {
             "append_to_response": "credits,videos,recommendations,watch/providers"
-        })
+        }, use_english_for_videos=True)
         if data:
             await cache_manager.save_cache(cache_key, data, subdirectory="movie")
         return data
@@ -176,7 +178,7 @@ class MovieService:
             
         data = await self._make_tmdb_request(f"tv/{tv_id}", {
             "append_to_response": "credits,videos,recommendations,watch/providers"
-        })
+        }, use_english_for_videos=True)
         if data:
             await cache_manager.save_cache(cache_key, data, subdirectory="movie")
         return data
