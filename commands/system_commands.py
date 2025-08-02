@@ -773,15 +773,27 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                 cache_type = type(user_cache_manager).__name__
                 result_text += f"• *缓存类型*: {cache_type}\n"
                 
-                # 检查连接状态
+                # 检查连接状态和连接池信息
                 if hasattr(user_cache_manager, '_connected'):
                     connection_status = "已连接" if user_cache_manager._connected else "未连接"
                     result_text += f"• *连接状态*: {connection_status}\n"
+                    
+                    # 添加连接池监控信息
+                    if user_cache_manager._connected and hasattr(user_cache_manager, 'pool'):
+                        pool = user_cache_manager.pool
+                        if pool:
+                            result_text += f"• *连接池状态*: {pool.size}/{pool.maxsize} 连接"
+                            if pool.freesize < pool.minsize:
+                                result_text += " ⚠️"
+                            result_text += f" (空闲: {pool.freesize})\n"
                 
                 # 尝试获取缓存统计信息
                 if hasattr(user_cache_manager, 'get_cursor'):
                     try:
                         async with user_cache_manager.get_cursor() as cursor:
+                            # 更新表统计信息确保准确性
+                            await cursor.execute("ANALYZE TABLE users")
+                            
                             # 优化：使用一个查询获取多个统计信息，并处理空值
                             await cursor.execute("""
                                 SELECT 
@@ -791,11 +803,14 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                             """)
                             stats_result = await cursor.fetchone()
                             
-                            # 获取用户表大小信息
+                            # 获取用户表大小信息 - 修正查询确保获取准确大小
                             await cursor.execute("""
                                 SELECT 
-                                    ROUND(SUM(data_length + index_length) / 1024, 3) as size_kb,
-                                    ROUND(SUM(data_length + index_length) / 1024 / 1024, 3) as size_mb
+                                    ROUND((data_length + index_length) / 1024, 3) as size_kb,
+                                    ROUND((data_length + index_length) / 1024 / 1024, 3) as size_mb,
+                                    ROUND(data_length / 1024, 3) as data_kb,
+                                    ROUND(index_length / 1024, 3) as index_kb,
+                                    table_rows
                                 FROM information_schema.tables 
                                 WHERE table_schema = DATABASE()
                                 AND table_name = 'users'
@@ -810,14 +825,20 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                                 result_text += f"• *有用户名用户*: {with_username}\n"
                                 result_text += f"• *无用户名用户*: {max(0, total_users - with_username)}\n"
                                 
-                                # 添加用户表大小信息
+                                # 添加用户表大小信息 - 显示详细的大小分解
                                 if size_result and size_result['size_kb']:
                                     size_kb = size_result['size_kb'] or 0
                                     size_mb = size_result['size_mb'] or 0
+                                    data_kb = size_result['data_kb'] or 0
+                                    index_kb = size_result['index_kb'] or 0
+                                    
                                     if size_mb >= 1:
                                         result_text += f"• *用户表大小*: {size_mb} MB"
                                     else:
                                         result_text += f"• *用户表大小*: {size_kb} KB"
+                                    
+                                    # 添加详细分解
+                                    result_text += f" (数据: {data_kb}KB + 索引: {index_kb}KB)"
                                     
                                     # 添加平均每用户数据量
                                     if total_users > 0:
@@ -825,6 +846,17 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                                         result_text += f" (平均 {avg_kb_per_user:.1f} KB/用户)\n"
                                     else:
                                         result_text += "\n"
+                                    
+                                    # 添加表大小告警
+                                    if size_mb >= 10:
+                                        result_text += f"⚠️ *告警*: 用户表已超过10MB，建议使用 `/cleanid 30` 清理旧数据\n"
+                                    elif size_mb >= 5:
+                                        result_text += f"💡 *提示*: 用户表接近5MB，可考虑定期清理\n"
+                                        
+                                    # 添加统计信息对比（用于调试）
+                                    table_rows = size_result.get('table_rows', 0) or 0
+                                    if table_rows != total_users:
+                                        result_text += f"• *统计信息*: MySQL表统计 {table_rows}，实际计数 {total_users}\n"
                                 else:
                                     result_text += f"• *用户表大小*: < 1 KB\n"
                             else:
