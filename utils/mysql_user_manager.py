@@ -105,11 +105,11 @@ class MySQLUserManager:
                 await cursor.execute(
                     """
                     INSERT INTO users (user_id, username, first_name, last_name, last_seen, created_at)
-                    VALUES (%s, %s, %s, %s, NOW(), NOW()) 
+                    VALUES (%s, %s, %s, %s, NOW(), NOW()) AS new_user
                     ON DUPLICATE KEY UPDATE
-                        username = VALUES(username),
-                        first_name = VALUES(first_name),
-                        last_name = VALUES(last_name),
+                        username = new_user.username,
+                        first_name = new_user.first_name,
+                        last_name = new_user.last_name,
                         last_seen = NOW()
                 """,
                     (user_id, username, first_name, last_name),
