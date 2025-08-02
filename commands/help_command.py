@@ -55,6 +55,18 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - `/tq <城市> <天数>`: 查询未来多日天气 (最多7天)。
 - `/tq <城市> <参数>`: 支持 `24h`, `降水`, `指数` 等高级查询。
 
+🎬 *电影和电视剧查询*
+- `/movie <电影名>`: 搜索电影信息。
+- `/movie_hot`: 获取当前热门电影排行榜。
+- `/movie_detail <电影ID>`: 获取电影详情 (演员、导演、票房等)。
+- `/movie_rec <电影ID>`: 获取基于指定电影的相似推荐。
+- `/tv <电视剧名>`: 搜索电视剧信息。
+- `/tv_hot`: 获取当前热门电视剧排行榜。
+- `/tv_detail <电视剧ID>`: 获取电视剧详情 (演员、季数、集数等)。
+- `/tv_rec <电视剧ID>`: 获取基于指定电视剧的相似推荐。
+- `/tv_season <电视剧ID> <季数>`: 获取指定季的详细信息和剧集列表。
+- `/tv_episode <电视剧ID> <季数> <集数>`: 获取单集详情。
+
 🎮 *Steam 价格查询*
 - `/steam <游戏名>`: 查询Steam游戏在默认地区的价格。
 - `/steam <游戏名> [国家代码]`: 在指定的一个或多个国家/地区查询游戏价格。
@@ -97,6 +109,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - `/crypto btc`: 查询比特币价格。
 - `/bin 123456`: 查询信用卡BIN信息。
 - `/tq 北京`: 查询北京天气。
+- `/movie 复仇者联盟`: 搜索电影信息。
+- `/tv 权力的游戏`: 搜索电视剧信息。
 - `/steam 赛博朋克`: 查询《赛博朋克2077》价格。
 - `/nf`: 查看Netflix全球价格排名。
 - `/ds`: 查看Disney+全球价格排名。
@@ -129,6 +143,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - `/tq_cleanlocation`: 清理天气位置缓存。
 - `/tq_cleanforecast`: 清理天气预报缓存。
 - `/tq_cleanrealtime`: 清理实时天气缓存。
+- `/movie_cleancache`: 清理电影和电视剧查询缓存。
 - `/nf_cleancache`: 清理Netflix缓存。
 - `/ds_cleancache`: 清理Disney+缓存。
 - `/sp_cleancache`: 清理Spotify缓存。
@@ -220,6 +235,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - 🪙 加密货币价格查询
 - 💳 信用卡BIN信息查询
 - 🌦️ 天气查询和预报
+- 🎬 电影和电视剧信息查询
 - 🎮 Steam游戏价格查询
 - 📱 App Store和Google Play应用查询
 - 🍎 Apple各项服务价格查询
@@ -256,6 +272,18 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - `/tq <城市>`: 查询城市的实时天气和空气质量。
 - `/tq <城市> <天数>`: 查询未来多日天气 (最多7天)。
 - `/tq <城市> <参数>`: 支持 `24h`, `降水`, `指数` 等高级查询。
+
+🎬 *电影和电视剧查询*
+- `/movie <电影名>`: 搜索电影信息。
+- `/movie_hot`: 获取当前热门电影排行榜。
+- `/movie_detail <电影ID>`: 获取电影详情 (演员、导演、票房等)。
+- `/movie_rec <电影ID>`: 获取基于指定电影的相似推荐。
+- `/tv <电视剧名>`: 搜索电视剧信息。
+- `/tv_hot`: 获取当前热门电视剧排行榜。
+- `/tv_detail <电视剧ID>`: 获取电视剧详情 (演员、季数、集数等)。
+- `/tv_rec <电视剧ID>`: 获取基于指定电视剧的相似推荐。
+- `/tv_season <电视剧ID> <季数>`: 获取指定季的详细信息和剧集列表。
+- `/tv_episode <电视剧ID> <季数> <集数>`: 获取单集详情。
 
 🎮 *Steam 价格查询*
 - `/steam <游戏名>`: 查询Steam游戏在默认地区的价格。
@@ -299,6 +327,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - `/crypto btc`: 查询比特币价格。
 - `/bin 123456`: 查询信用卡BIN信息。
 - `/tq 北京`: 查询北京天气。
+- `/movie 复仇者联盟`: 搜索电影信息。
+- `/tv 权力的游戏`: 搜索电视剧信息。
 - `/steam 赛博朋克`: 查询《赛博朋克2077》价格。
 - `/nf`: 查看Netflix全球价格排名。
 - `/ds`: 查看Disney+全球价格排名。
@@ -391,6 +421,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 - 🪙 查询加密货币价格和市场数据
 - 💳 查询信用卡BIN信息和发卡银行
 - 🌦️ 查询全球城市天气和空气质量
+- 🎬 查询电影和电视剧信息、评分、演员阵容
 - 🎮 查询Steam游戏在全球各国的价格
 - 📺 查询Netflix、Disney+、Spotify、HBO Max等流媒体订阅价格
 - 📱 查询App Store和Google Play应用价格
@@ -406,6 +437,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 - `/crypto btc`: 查询比特币价格
 - `/bin 123456`: 查询信用卡BIN信息
 - `/tq 北京`: 查询北京天气
+- `/movie 复仇者联盟`: 搜索电影信息
+- `/tv 权力的游戏`: 搜索电视剧信息
 - `/steam 赛博朋克`: 查询游戏价格
 - `/steamb Half-Life`: 查询Steam捆绑包
 - `/steams 动作`: 综合搜索游戏

@@ -35,6 +35,7 @@
 
 -   📺 **公开流媒体价格:** 所有用户可用 - 查询Netflix、Disney+、Spotify、HBO Max等流媒体服务在全球各地区的订阅价格。
 -   👤 **公开用户信息查询:** 所有用户可用 - 查询Telegram用户注册日期、账号年龄，以及获取用户/群组ID。
+-   🎬 **电影和电视剧信息:** 查询电影/电视剧详情、评分、演员阵容、推荐和季集信息，使用TMDB API。*(需要白名单)*
 -   🪙 **加密货币价格:** 查询实时加密货币价格，支持自定义数量和货币转换，并显示 24 小时和 7 天的价格变化率。*(需要白名单)*
 -   💳 **BIN查询:** 查询信用卡BIN（银行识别号）信息，包括卡片品牌、类型、发卡银行和国家等详细信息。*(需要白名单)*
 -   🌦️ **天气预报:** 提供详细、多格式的天气预报（实时、多日、每小时、分钟级降水和生活指数）。*(需要白名单)*
@@ -81,6 +82,7 @@ docker-compose down
 | `SUPER_ADMIN_ID`            | **（必需）** 拥有所有权限的机器人主要所有者的用户ID。                       |                         |
 | `CMC_API_KEY`               | **（可选）** CoinMarketCap的API Key，用于启用 `/crypto` 命令。                  |                         |
 | `BIN_API_KEY`               | **（可选）** DY.AX的API Key，用于启用 `/bin` 命令。                         |                         |
+| `TMDB_API_KEY`              | **（可选）** TMDB的API Key，用于启用 `/movie` 和 `/tv` 命令。               |                         |
 | `QWEATHER_API_KEY`          | **（可选）** 和风天气的API Key，用于启用 `/tq` 命令。                       |                         |
 | `EXCHANGE_RATE_API_KEYS`    | **（可选）** openexchangerates.org的API Key，用于启用 `/rate` 命令。多个密钥用逗号分隔。 |                         |
 | `ENABLE_USER_CACHE`         | **（可选）** 启用用户缓存系统 (`true`/`false`)。                            | `false`                 |
@@ -145,6 +147,17 @@ docker-compose down
 /tq 北京
 /tq 东京 7
 
+# 电影和电视剧
+/movie 复仇者联盟
+/movie_hot
+/movie_detail 299536
+/movie_rec 299536
+/tv 权力的游戏
+/tv_hot
+/tv_detail 1399
+/tv_season 1399 1
+/tv_episode 1399 1 1
+
 # Steam游戏价格
 /steam 赛博朋克
 /steam "荒野大镖客" US
@@ -176,6 +189,7 @@ docker-compose down
 /bin_cleancache
 /crypto_cleancache
 /rate_cleancache
+/movie_cleancache
 /max_cleancache
 # ... 其他缓存管理命令
 ```
@@ -376,6 +390,7 @@ docker-compose down
 
 - **CoinMarketCap API:** 用于加密货币价格数据
 - **DY.AX BIN API:** 用于信用卡BIN信息查询
+- **TMDB API:** 用于电影和电视剧信息查询
 - **和风天气API:** 用于天气预报数据
 - **Steam API:** 用于游戏价格信息
 - **各种流媒体服务API:** 用于订阅价格查询

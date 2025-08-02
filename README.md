@@ -35,6 +35,7 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 
 -   📺 **Public Streaming Prices:** Available to all users - query subscription prices for Netflix, Disney+, Spotify, and HBO Max across global regions.
 -   👤 **Public User Information:** Available to all users - check Telegram user registration dates, account age, and get user/group IDs.
+-   🎬 **Movie & TV Information:** Query movie/TV show details, ratings, cast, recommendations, and season/episode information using TMDB API. *(Whitelist required)*
 -   🪙 **Crypto Prices:** Look up real-time cryptocurrency prices with support for custom amounts and currency conversion, including 24h and 7d percentage changes. *(Whitelist required)*
 -   💳 **BIN Lookup:** Query credit card BIN (Bank Identification Number) information including card brand, type, issuing bank, and country details. *(Whitelist required)*
 -   🌦️ **Weather Forecasts:** Detailed, multi-format weather forecasts (real-time, daily, hourly, minutely precipitation, and lifestyle indices). *(Whitelist required)*
@@ -81,6 +82,7 @@ All configurations are managed via the `.env` file. You must copy `.env.example`
 | `SUPER_ADMIN_ID`            | **(Required)** The User ID of the main bot owner with all permissions.      |                         |
 | `CMC_API_KEY`               | **(Optional)** API Key from CoinMarketCap for the `/crypto` command.        |                         |
 | `BIN_API_KEY`               | **(Optional)** API Key from DY.AX for the `/bin` command.                   |                         |
+| `TMDB_API_KEY`              | **(Optional)** API Key from TMDB for the `/movie` and `/tv` commands.       |                         |
 | `QWEATHER_API_KEY`          | **(Optional)** API Key from HeFeng Weather for the `/tq` command.           |                         |
 | `EXCHANGE_RATE_API_KEYS`    | **(Optional)** API Keys from openexchangerates.org for the `/rate` command. Multiple keys separated by commas. |                         |
 | `ENABLE_USER_CACHE`         | **(Optional)** Enable user caching system (`true`/`false`).                 | `false`                 |
@@ -145,6 +147,17 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /tq Beijing
 /tq Tokyo 7
 
+# Movies and TV shows
+/movie Avengers
+/movie_hot
+/movie_detail 299536
+/movie_rec 299536
+/tv Game of Thrones
+/tv_hot
+/tv_detail 1399
+/tv_season 1399 1
+/tv_episode 1399 1 1
+
 # Steam game prices
 /steam Cyberpunk
 /steam "Red Dead" US
@@ -176,6 +189,7 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /bin_cleancache
 /crypto_cleancache
 /rate_cleancache
+/movie_cleancache
 /max_cleancache
 # ... other cache management commands
 ```
@@ -390,6 +404,7 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 
 - **CoinMarketCap API:** For cryptocurrency price data
 - **DY.AX BIN API:** For credit card BIN information lookup
+- **TMDB API:** For movie and TV show information
 - **HeFeng Weather API:** For weather forecast data
 - **Steam API:** For game pricing information
 - **Various streaming service APIs:** For subscription pricing
