@@ -853,9 +853,9 @@ async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE
                                     elif size_mb >= 5:
                                         result_text += f"💡 *提示*: 用户表接近5MB，可考虑定期清理\n"
                                         
-                                    # 添加统计信息对比（用于调试）
+                                    # 添加统计信息对比（仅在明显不一致时显示）
                                     table_rows = size_result.get('table_rows', 0) or 0
-                                    if table_rows != total_users:
+                                    if table_rows > 0 and abs(table_rows - total_users) > 5:
                                         result_text += f"• *统计信息*: MySQL表统计 {table_rows}，实际计数 {total_users}\n"
                                 else:
                                     result_text += f"• *用户表大小*: < 1 KB\n"
