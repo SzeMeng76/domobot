@@ -90,6 +90,7 @@ from commands import (
     google_play,
     help_command,
     max,
+    movie,
     netflix,
     spotify,
     steam,
@@ -246,6 +247,8 @@ async def setup_application(application: Application, config) -> None:
     weather.set_dependencies(cache_manager, httpx_client)
     crypto.set_dependencies(cache_manager, httpx_client)
     bin.set_dependencies(cache_manager, httpx_client)
+    movie.set_dependencies(cache_manager, httpx_client)
+    movie.init_movie_service()
 
     # 新增：为需要用户缓存的模块注入依赖
     # 这里可以根据实际需要为特定命令模块注入用户缓存管理器
@@ -284,6 +287,11 @@ async def setup_application(application: Application, config) -> None:
     if config.max_weekly_cleanup:
         await task_scheduler.add_weekly_cache_cleanup("max", "max", weekday=6, hour=5, minute=0)
         logger.info(" 已配置 HBO Max 每周日UTC 5:00 定时清理")
+        cleanup_tasks_added += 1
+
+    if config.movie_weekly_cleanup:
+        await task_scheduler.add_weekly_cache_cleanup("movie", "movie", weekday=6, hour=5, minute=0)
+        logger.info(" 已配置 电影和电视剧 每周日UTC 5:00 定时清理")
         cleanup_tasks_added += 1
 
     # 启动任务调度器（包含汇率刷新任务）

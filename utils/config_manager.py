@@ -21,6 +21,10 @@ class BotConfig:
         self.qweather_api_key: str = ""
         self.cmc_api_key: str = ""
         self.bin_api_key: str = ""
+        
+        # 电影信息API配置
+        self.tmdb_api_key: str = ""
+        self.trakt_api_key: str = ""
     
         # Webhook 配置
         self.webhook_url = ""
@@ -54,11 +58,13 @@ class BotConfig:
         self.spotify_cache_duration = 86400 * 8  # 8天，配合周日清理
         self.disney_cache_duration = 86400 * 8  # 8天，配合周日清理
         self.max_cache_duration = 86400 * 8  # 8天，配合周日清理
+        self.movie_cache_duration = 86400 * 3  # 3天，电影和电视剧缓存
 
         # 定时清理配置
         self.spotify_weekly_cleanup = True  # 默认启用
         self.disney_weekly_cleanup = True  # 默认启用
         self.max_weekly_cleanup = True  # 默认启用
+        self.movie_weekly_cleanup = True  # 默认启用，电影和电视剧缓存
 
         # API配置
         self.exchange_rate_api_keys = []
@@ -204,10 +210,12 @@ class ConfigManager:
         self.config.steam_cache_duration = get_int_env("STEAM_CACHE_DURATION", "259200")
         self.config.netflix_cache_duration = get_int_env("NETFLIX_CACHE_DURATION", "86400")
         self.config.crypto_cache_duration = get_int_env("CRYPTO_CACHE_DURATION", "60")
+        self.config.movie_cache_duration = get_int_env("MOVIE_CACHE_DURATION", str(86400 * 3))
 
         # 定时清理配置
         self.config.spotify_weekly_cleanup = get_bool_env("SPOTIFY_WEEKLY_CLEANUP")
         self.config.disney_weekly_cleanup = get_bool_env("DISNEY_WEEKLY_CLEANUP")
+        self.config.movie_weekly_cleanup = get_bool_env("MOVIE_WEEKLY_CLEANUP", "True")
 
         # API配置
         keys_str = os.getenv("EXCHANGE_RATE_API_KEYS") or os.getenv("EXCHANGE_RATE_API_KEY", "")
@@ -277,6 +285,10 @@ class ConfigManager:
         self.config.qweather_api_key = os.getenv("QWEATHER_API_KEY", "")
         self.config.cmc_api_key = os.getenv("CMC_API_KEY", "")
         self.config.bin_api_key = os.getenv("BIN_API_KEY", "")
+        
+        # 电影信息 API 配置
+        self.config.tmdb_api_key = os.getenv("TMDB_API_KEY", "")
+        self.config.trakt_api_key = os.getenv("TRAKT_API_KEY", "")
 
         # MySQL 配置
         self.config.db_host = os.getenv("DB_HOST", "localhost")

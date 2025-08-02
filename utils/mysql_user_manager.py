@@ -101,14 +101,15 @@ class MySQLUserManager:
 
         try:
             async with self.get_cursor() as cursor:
+                # 优化: 使用INSERT ... ON DUPLICATE KEY UPDATE避免重复查询
                 await cursor.execute(
                     """
-                    INSERT INTO users (user_id, username, first_name, last_name, last_seen)
-                    VALUES (%s, %s, %s, %s, NOW()) AS new_user
+                    INSERT INTO users (user_id, username, first_name, last_name, last_seen, created_at)
+                    VALUES (%s, %s, %s, %s, NOW(), NOW()) 
                     ON DUPLICATE KEY UPDATE
-                        username = new_user.username,
-                        first_name = new_user.first_name,
-                        last_name = new_user.last_name,
+                        username = VALUES(username),
+                        first_name = VALUES(first_name),
+                        last_name = VALUES(last_name),
                         last_seen = NOW()
                 """,
                     (user_id, username, first_name, last_name),
