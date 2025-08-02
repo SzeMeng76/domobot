@@ -58,14 +58,30 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 🎬 *电影和电视剧查询*
 - `/movie <电影名>`: 搜索电影信息。
 - `/movie_hot`: 获取当前热门电影排行榜。
-- `/movie_detail <电影ID>`: 获取电影详情 (演员、导演、票房等)。
+- `/movie_detail <电影ID>`: 获取电影详情 (演员、导演、票房等，含预告片链接)。
 - `/movie_rec <电影ID>`: 获取基于指定电影的相似推荐。
+- `/movie_videos <电影ID>`: 获取电影预告片和相关视频。
+- `/movie_watch <电影ID>`: 获取电影在各平台的观看信息。
 - `/tv <电视剧名>`: 搜索电视剧信息。
 - `/tv_hot`: 获取当前热门电视剧排行榜。
-- `/tv_detail <电视剧ID>`: 获取电视剧详情 (演员、季数、集数等)。
+- `/tv_detail <电视剧ID>`: 获取电视剧详情 (演员、季数、集数等，含预告片链接)。
 - `/tv_rec <电视剧ID>`: 获取基于指定电视剧的相似推荐。
+- `/tv_videos <电视剧ID>`: 获取电视剧预告片和相关视频。
+- `/tv_watch <电视剧ID>`: 获取电视剧在各平台的观看信息。
 - `/tv_season <电视剧ID> <季数>`: 获取指定季的详细信息和剧集列表。
 - `/tv_episode <电视剧ID> <季数> <集数>`: 获取单集详情。
+
+🔥 *热门趋势内容*
+- `/trending`: 获取今日全球热门电影、电视剧和人物。
+- `/trending_week`: 获取本周全球热门内容排行。
+- `/now_playing`: 获取正在上映的电影列表。
+- `/upcoming`: 获取即将上映的电影预告。
+- `/tv_airing`: 获取今日播出的电视剧。
+- `/tv_on_air`: 获取正在播出的电视剧。
+
+👤 *人物信息查询*
+- `/person <人物名>`: 搜索演员、导演等影视人物。
+- `/person_detail <人物ID>`: 获取人物详情 (作品、简介等)。
 
 🎮 *Steam 价格查询*
 - `/steam <游戏名>`: 查询Steam游戏在默认地区的价格。
@@ -111,6 +127,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - `/tq 北京`: 查询北京天气。
 - `/movie 复仇者联盟`: 搜索电影信息。
 - `/tv 权力的游戏`: 搜索电视剧信息。
+- `/movie_videos 299534`: 查看电影预告片。
+- `/trending`: 查看今日热门内容。
+- `/person 汤姆·汉克斯`: 搜索影视人物。
 - `/steam 赛博朋克`: 查询《赛博朋克2077》价格。
 - `/nf`: 查看Netflix全球价格排名。
 - `/ds`: 查看Disney+全球价格排名。
@@ -276,14 +295,30 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 🎬 *电影和电视剧查询*
 - `/movie <电影名>`: 搜索电影信息。
 - `/movie_hot`: 获取当前热门电影排行榜。
-- `/movie_detail <电影ID>`: 获取电影详情 (演员、导演、票房等)。
+- `/movie_detail <电影ID>`: 获取电影详情 (演员、导演、票房等，含预告片链接)。
 - `/movie_rec <电影ID>`: 获取基于指定电影的相似推荐。
+- `/movie_videos <电影ID>`: 获取电影预告片和相关视频。
+- `/movie_watch <电影ID>`: 获取电影在各平台的观看信息。
 - `/tv <电视剧名>`: 搜索电视剧信息。
 - `/tv_hot`: 获取当前热门电视剧排行榜。
-- `/tv_detail <电视剧ID>`: 获取电视剧详情 (演员、季数、集数等)。
+- `/tv_detail <电视剧ID>`: 获取电视剧详情 (演员、季数、集数等，含预告片链接)。
 - `/tv_rec <电视剧ID>`: 获取基于指定电视剧的相似推荐。
+- `/tv_videos <电视剧ID>`: 获取电视剧预告片和相关视频。
+- `/tv_watch <电视剧ID>`: 获取电视剧在各平台的观看信息。
 - `/tv_season <电视剧ID> <季数>`: 获取指定季的详细信息和剧集列表。
 - `/tv_episode <电视剧ID> <季数> <集数>`: 获取单集详情。
+
+🔥 *热门趋势内容*
+- `/trending`: 获取今日全球热门电影、电视剧和人物。
+- `/trending_week`: 获取本周全球热门内容排行。
+- `/now_playing`: 获取正在上映的电影列表。
+- `/upcoming`: 获取即将上映的电影预告。
+- `/tv_airing`: 获取今日播出的电视剧。
+- `/tv_on_air`: 获取正在播出的电视剧。
+
+👤 *人物信息查询*
+- `/person <人物名>`: 搜索演员、导演等影视人物。
+- `/person_detail <人物ID>`: 获取人物详情 (作品、简介等)。
 
 🎮 *Steam 价格查询*
 - `/steam <游戏名>`: 查询Steam游戏在默认地区的价格。
@@ -329,6 +364,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - `/tq 北京`: 查询北京天气。
 - `/movie 复仇者联盟`: 搜索电影信息。
 - `/tv 权力的游戏`: 搜索电视剧信息。
+- `/movie_videos 299534`: 查看电影预告片。
+- `/trending`: 查看今日热门内容。
+- `/person 汤姆·汉克斯`: 搜索影视人物。
 - `/steam 赛博朋克`: 查询《赛博朋克2077》价格。
 - `/nf`: 查看Netflix全球价格排名。
 - `/ds`: 查看Disney+全球价格排名。

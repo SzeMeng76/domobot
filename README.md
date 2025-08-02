@@ -35,7 +35,7 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 
 -   📺 **Public Streaming Prices:** Available to all users - query subscription prices for Netflix, Disney+, Spotify, and HBO Max across global regions.
 -   👤 **Public User Information:** Available to all users - check Telegram user registration dates, account age, and get user/group IDs.
--   🎬 **Movie & TV Information:** Query movie/TV show details with poster images, ratings, cast, recommendations, and season/episode information using TMDB API. *(Whitelist required)*
+-   🎬 **Movie & TV Information:** Query movie/TV show details with poster images, ratings, cast, recommendations, trailers, viewing platforms, and season/episode information using TMDB API. Includes trending content discovery and people search functionality. *(Whitelist required)*
 -   🪙 **Crypto Prices:** Look up real-time cryptocurrency prices with support for custom amounts and currency conversion, including 24h and 7d percentage changes. *(Whitelist required)*
 -   💳 **BIN Lookup:** Query credit card BIN (Bank Identification Number) information including card brand, type, issuing bank, and country details. *(Whitelist required)*
 -   🌦️ **Weather Forecasts:** Detailed, multi-format weather forecasts (real-time, daily, hourly, minutely precipitation, and lifestyle indices). *(Whitelist required)*
@@ -150,13 +150,29 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 # Movies and TV shows
 /movie Avengers
 /movie_hot
-/movie_detail 299536
+/movie_detail 299536           # Get movie details (includes trailer links)
 /movie_rec 299536
+/movie_videos 299536           # Get movie trailers and videos
+/movie_watch 299536            # Get viewing platforms information
 /tv Game of Thrones
 /tv_hot
-/tv_detail 1399
+/tv_detail 1399                # Get TV details (includes trailer links)
 /tv_season 1399 1
 /tv_episode 1399 1 1
+/tv_videos 1399                # Get TV trailers and videos
+/tv_watch 1399                 # Get viewing platforms information
+
+# Trending content
+/trending                      # Today's trending movies, TV shows, and people
+/trending_week                 # This week's trending content
+/now_playing                   # Currently playing movies
+/upcoming                      # Upcoming movie releases
+/tv_airing                     # Today's airing TV shows
+/tv_on_air                     # Currently airing TV shows
+
+# People search
+/person Tom Hanks              # Search for actors, directors, etc.
+/person_detail 31              # Get person details and filmography
 
 # Steam game prices
 /steam Cyberpunk
