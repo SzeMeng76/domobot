@@ -298,15 +298,15 @@ class MovieService:
             episodes_need_fallback = []
             
             for episode in episodes:
-                if not episode.get("overview"):  # 如果剧集简介为空
+                if not episode.get("overview"):  # 使用和tv_details相同的简单检查
                     episodes_need_fallback.append(episode.get("episode_number"))
             
-            # 如果有剧集需要英文简介补充，获取英文数据
+            # 如果有剧集需要英文简介补充，或季简介为空，获取英文数据
             if episodes_need_fallback or not data.get("overview"):
                 english_data = await self._make_tmdb_request(f"tv/{tv_id}/season/{season_number}", language="en-US")
                 
                 if english_data:
-                    # 如果中文季简介为空，使用英文季简介
+                    # 如果中文季简介为空，使用英文季简介（和tv_details相同逻辑）
                     if not data.get("overview") and english_data.get("overview"):
                         data["overview"] = english_data["overview"]
                     
@@ -318,7 +318,8 @@ class MovieService:
                         ep_num = episode.get("episode_number")
                         if ep_num in episodes_need_fallback and ep_num in english_episodes_dict:
                             english_ep = english_episodes_dict[ep_num]
-                            if english_ep.get("overview"):
+                            # 使用和tv_details相同的逻辑
+                            if not episode.get("overview") and english_ep.get("overview"):
                                 episode["overview"] = english_ep["overview"]
                             # 也可以补充其他可能为空的字段
                             if not episode.get("name") and english_ep.get("name"):
@@ -338,7 +339,7 @@ class MovieService:
         data = await self._make_tmdb_request(f"tv/{tv_id}/season/{season_number}/episode/{episode_number}")
         
         if data:
-            # 如果关键字段为空，获取英文信息补充
+            # 如果关键字段为空，获取英文信息补充（和tv_details相同逻辑）
             if not data.get("overview") or not data.get("name"):
                 english_data = await self._make_tmdb_request(f"tv/{tv_id}/season/{season_number}/episode/{episode_number}", language="en-US")
                 
