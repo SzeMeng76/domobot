@@ -17,7 +17,7 @@ from utils.command_factory import command_factory
 from utils.config_manager import config_manager
 from utils.country_data import SUPPORTED_COUNTRIES, get_country_flag
 from utils.formatter import foldable_text_v2, foldable_text_with_markdown_v2
-from utils.message_manager import delete_user_command, send_error, send_help, send_search_result, send_success
+from utils.message_manager import delete_user_command, send_error, send_help, send_search_result, send_success, send_message_with_auto_delete, MessageType
 from utils.permissions import Permission
 from utils.rate_converter import RateConverter
 from utils.session_manager import steam_bundle_sessions as bundle_search_sessions
@@ -965,8 +965,20 @@ async def steam_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     # 检查steam_checker是否已初始化
     if steam_checker is None:
         error_message = "❌ Steam功能未初始化，请稍后重试。"
-        await send_error(context, update.message.chat_id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
-        await delete_user_command(context, update.message.chat_id, update.message.message_id)
+        # 生成会话ID用于消息管理
+        import time
+        user_id = update.effective_user.id
+        session_id = f"steam_init_error_{user_id}_{int(time.time())}"
+        
+        await send_message_with_auto_delete(
+            context,
+            update.message.chat_id,
+            foldable_text_v2(error_message),
+            MessageType.ERROR,
+            session_id=session_id,
+            parse_mode="MarkdownV2"
+        )
+        await delete_user_command(context, update.message.chat_id, update.message.message_id, session_id=session_id)
         return
 
     if not context.args:
@@ -993,8 +1005,20 @@ async def steam_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "• `/steamb 216938` - 通过ID查询捆绑包\n\n"
             "*提示：* 默认使用中国区(CN)查询"
         )
-        await send_help(context, update.message.chat_id, foldable_text_with_markdown_v2(help_message), parse_mode="MarkdownV2")
-        await delete_user_command(context, update.message.chat_id, update.message.message_id)
+        # 生成会话ID用于消息管理
+        import time
+        user_id = update.effective_user.id
+        session_id = f"steam_help_{user_id}_{int(time.time())}"
+        
+        await send_message_with_auto_delete(
+            context,
+            update.message.chat_id,
+            foldable_text_with_markdown_v2(help_message),
+            MessageType.HELP,
+            session_id=session_id,
+            parse_mode="MarkdownV2"
+        )
+        await delete_user_command(context, update.message.chat_id, update.message.message_id, session_id=session_id)
         return
 
     user_id = update.effective_user.id
@@ -1053,33 +1077,62 @@ async def steam_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "results": page_results
         }
 
+        # 生成会话ID用于消息管理
+        import time
+        session_id = f"steam_search_{user_id}_{int(time.time())}"
+
         # 存储用户搜索会话
         user_search_sessions[user_id] = {
             "query": query,
             "search_data": search_data_for_session,
             "message_id": message.message_id,
-            "country_inputs": country_inputs
+            "country_inputs": country_inputs,
+            "session_id": session_id
         }
 
         # 格式化并显示结果
         result_text = format_steam_search_results(search_data_for_session)
         keyboard = create_steam_search_keyboard(search_data_for_session)
 
-        await message.edit_text(
+        # 删除搜索进度消息，然后发送新的搜索结果消息
+        await message.delete()
+        
+        # 使用统一的消息发送API发送搜索结果
+        new_message = await send_message_with_auto_delete(
+            context,
+            update.effective_chat.id,
             foldable_text_v2(result_text),
+            MessageType.SEARCH_RESULT,
+            session_id=session_id,
             reply_markup=keyboard,
             parse_mode="MarkdownV2",
             disable_web_page_preview=True
         )
+        
+        # 更新会话中的消息ID
+        if new_message:
+            user_search_sessions[user_id]["message_id"] = new_message.message_id
 
-        # 计划自动删除消息（包括用户命令）
-        await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+        # 删除用户命令消息
+        await delete_user_command(context, update.effective_chat.id, update.message.message_id, session_id=session_id)
 
     except Exception as e:
         error_msg = steam_checker.error_handler.log_error(e, "搜索游戏")
         await message.delete()
-        await send_error(context, update.effective_chat.id, foldable_text_v2(error_msg), parse_mode="MarkdownV2")
-        await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+        
+        # 生成会话ID用于消息管理
+        import time
+        session_id = f"steam_error_{user_id}_{int(time.time())}"
+        
+        await send_message_with_auto_delete(
+            context,
+            update.effective_chat.id,
+            foldable_text_v2(error_msg),
+            MessageType.ERROR,
+            session_id=session_id,
+            parse_mode="MarkdownV2"
+        )
+        await delete_user_command(context, update.effective_chat.id, update.message.message_id, session_id=session_id)
 
 
 
@@ -1093,14 +1146,38 @@ async def steam_bundle_command(update: Update, context: ContextTypes.DEFAULT_TYP
     # 检查steam_checker是否已初始化
     if steam_checker is None:
         error_message = "❌ Steam功能未初始化，请稍后重试。"
-        await send_error(context, update.message.chat_id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
-        await delete_user_command(context, update.message.chat_id, update.message.message_id)
+        # 生成会话ID用于消息管理
+        import time
+        user_id = update.effective_user.id
+        session_id = f"steam_init_error_{user_id}_{int(time.time())}"
+        
+        await send_message_with_auto_delete(
+            context,
+            update.message.chat_id,
+            foldable_text_v2(error_message),
+            MessageType.ERROR,
+            session_id=session_id,
+            parse_mode="MarkdownV2"
+        )
+        await delete_user_command(context, update.message.chat_id, update.message.message_id, session_id=session_id)
         return
 
     if not context.args:
         error_message = "请提供捆绑包名称或ID。"
-        await send_error(context, update.message.chat_id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
-        await delete_user_command(context, update.message.chat_id, update.message.message_id)
+        # 生成会话ID用于消息管理
+        import time
+        user_id = update.effective_user.id
+        session_id = f"steamb_error_{user_id}_{int(time.time())}"
+        
+        await send_message_with_auto_delete(
+            context,
+            update.message.chat_id,
+            foldable_text_v2(error_message),
+            MessageType.ERROR,
+            session_id=session_id,
+            parse_mode="MarkdownV2"
+        )
+        await delete_user_command(context, update.message.chat_id, update.message.message_id, session_id=session_id)
         return
 
     user_id = update.effective_user.id
@@ -1168,43 +1245,62 @@ async def steam_bundle_command(update: Update, context: ContextTypes.DEFAULT_TYP
             "results": page_results
         }
 
+        # 生成会话ID用于消息管理
+        import time
+        session_id = f"steam_bundle_{user_id}_{int(time.time())}"
+
         # 存储用户搜索会话
         bundle_search_sessions[user_id] = {
             "query": query,
             "search_data": search_data_for_session,
             "message_id": message.message_id,
-            "cc": cc
+            "cc": cc,
+            "session_id": session_id
         }
 
         # 格式化并显示结果
         result_text = format_bundle_search_results(search_data_for_session)
         keyboard = create_bundle_search_keyboard(search_data_for_session)
 
-        await message.edit_text(
+        # 删除搜索进度消息，然后发送新的搜索结果消息
+        await message.delete()
+        
+        # 使用统一的消息发送API发送搜索结果
+        new_message = await send_message_with_auto_delete(
+            context,
+            update.effective_chat.id,
             foldable_text_v2(result_text),
+            MessageType.SEARCH_RESULT,
+            session_id=session_id,
             reply_markup=keyboard,
             parse_mode="MarkdownV2",
             disable_web_page_preview=True
         )
+        
+        # 更新会话中的消息ID
+        if new_message:
+            bundle_search_sessions[user_id]["message_id"] = new_message.message_id
 
-        # 计划自动删除消息（包括用户命令）
-        chat_id = update.effective_chat.id
-        message_id = message.message_id
-        user_command_id = update.message.message_id
-        bot_delete_delay = config_manager.config.auto_delete_delay
-        user_delete_delay = config_manager.config.user_command_delete_delay
-
-        logger.info(f"🔧 Scheduling deletion for Steam bundle search message {message_id} in chat {chat_id} after {bot_delete_delay} seconds")
-        logger.info(f"���� Scheduling deletion for user command {user_command_id} in chat {chat_id} after {user_delete_delay} seconds")
-
-        # 使用新的消息管理器
-        await delete_user_command(context, chat_id, user_command_id)
+        # 删除用户命令消息
+        await delete_user_command(context, update.effective_chat.id, update.message.message_id, session_id=session_id)
 
     except Exception as e:
         error_msg = f"❌ 查询捆绑包出错: {e}"
         await message.delete()
-        await send_error(context, update.effective_chat.id, foldable_text_v2(error_msg), parse_mode="MarkdownV2")
-        await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+        
+        # 生成会话ID用于消息管理
+        import time
+        session_id = f"steamb_error_{user_id}_{int(time.time())}"
+        
+        await send_message_with_auto_delete(
+            context,
+            update.effective_chat.id,
+            foldable_text_v2(error_msg),
+            MessageType.ERROR,
+            session_id=session_id,
+            parse_mode="MarkdownV2"
+        )
+        await delete_user_command(context, update.effective_chat.id, update.message.message_id, session_id=session_id)
 
 
 
@@ -1217,14 +1313,38 @@ async def steam_search_command(update: Update, context: ContextTypes.DEFAULT_TYP
     # 检查steam_checker是否已初始化
     if steam_checker is None:
         error_message = "❌ Steam功能未初始化，请稍后重试。"
-        await send_error(context, update.message.chat_id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
-        await delete_user_command(context, update.message.chat_id, update.message.message_id)
+        # 生成会话ID用于消息管理
+        import time
+        user_id = update.effective_user.id
+        session_id = f"steam_init_error_{user_id}_{int(time.time())}"
+        
+        await send_message_with_auto_delete(
+            context,
+            update.message.chat_id,
+            foldable_text_v2(error_message),
+            MessageType.ERROR,
+            session_id=session_id,
+            parse_mode="MarkdownV2"
+        )
+        await delete_user_command(context, update.message.chat_id, update.message.message_id, session_id=session_id)
         return
 
     if not context.args:
         error_message = "请提供搜索关键词。"
-        await send_error(context, update.message.chat_id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
-        await delete_user_command(context, update.message.chat_id, update.message.message_id)
+        # 生成会话ID用于消息管理
+        import time
+        user_id = update.effective_user.id
+        session_id = f"steams_error_{user_id}_{int(time.time())}"
+        
+        await send_message_with_auto_delete(
+            context,
+            update.message.chat_id,
+            foldable_text_v2(error_message),
+            MessageType.ERROR,
+            session_id=session_id,
+            parse_mode="MarkdownV2"
+        )
+        await delete_user_command(context, update.message.chat_id, update.message.message_id, session_id=session_id)
         return
 
     loading_message = "🔍 正在查询中... ⏳"
@@ -1236,16 +1356,43 @@ async def steam_search_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
     query = ' '.join(context.args)
     cc = steam_checker.config.DEFAULT_CC
+    
+    # 生成会话ID用于消息管理
+    import time
+    user_id = update.effective_user.id
+    session_id = f"steam_search_all_{user_id}_{int(time.time())}"
+    
     try:
         result = await steam_checker.search_and_format_all(query, cc)
         await message.delete()
-        await send_search_result(context, update.effective_chat.id, foldable_text_with_markdown_v2(result), parse_mode="MarkdownV2")
-        await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+        
+        # 使用统一的消息发送API
+        await send_message_with_auto_delete(
+            context,
+            update.effective_chat.id,
+            foldable_text_with_markdown_v2(result),
+            MessageType.SEARCH_RESULT,
+            session_id=session_id,
+            parse_mode="MarkdownV2"
+        )
+        await delete_user_command(context, update.effective_chat.id, update.message.message_id, session_id=session_id)
     except Exception as e:
         error_msg = f"❌ 综合搜索出错: {e}"
         await message.delete()
-        await send_error(context, update.effective_chat.id, foldable_text_v2(error_msg), parse_mode="MarkdownV2")
-        await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+        
+        # 生成会话ID用于消息管理
+        import time
+        session_id = f"steams_error_{user_id}_{int(time.time())}"
+        
+        await send_message_with_auto_delete(
+            context,
+            update.effective_chat.id,
+            foldable_text_v2(error_msg),
+            MessageType.ERROR,
+            session_id=session_id,
+            parse_mode="MarkdownV2"
+        )
+        await delete_user_command(context, update.effective_chat.id, update.message.message_id, session_id=session_id)
 
 async def steam_clean_cache_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles the /steamcc command to clear Steam cache."""
@@ -1254,8 +1401,20 @@ async def steam_clean_cache_command(update: Update, context: ContextTypes.DEFAUL
 
     if steam_checker is None:
         error_message = "❌ Steam功能未初始化，请稍后重试。"
-        await send_error(context, update.message.chat_id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
-        await delete_user_command(context, update.message.chat_id, update.message.message_id)
+        # 生成会话ID用于消息管理
+        import time
+        user_id = update.effective_user.id
+        session_id = f"steamcc_init_error_{user_id}_{int(time.time())}"
+        
+        await send_message_with_auto_delete(
+            context,
+            update.message.chat_id,
+            foldable_text_v2(error_message),
+            MessageType.ERROR,
+            session_id=session_id,
+            parse_mode="MarkdownV2"
+        )
+        await delete_user_command(context, update.message.chat_id, update.message.message_id, session_id=session_id)
         return
 
     try:
@@ -1264,17 +1423,53 @@ async def steam_clean_cache_command(update: Update, context: ContextTypes.DEFAUL
         if cache_mgr is not None:
             await cache_mgr.clear_cache(subdirectory="steam")
             success_message = "✅ Steam 缓存已清理。"
-            await send_success(context, update.message.chat_id, foldable_text_v2(success_message), parse_mode="MarkdownV2")
-            await delete_user_command(context, update.message.chat_id, update.message.message_id)
+            # 生成会话ID用于消息管理
+            import time
+            user_id = update.effective_user.id
+            session_id = f"steamcc_success_{user_id}_{int(time.time())}"
+            
+            await send_message_with_auto_delete(
+                context,
+                update.message.chat_id,
+                foldable_text_v2(success_message),
+                MessageType.SUCCESS,
+                session_id=session_id,
+                parse_mode="MarkdownV2"
+            )
+            await delete_user_command(context, update.message.chat_id, update.message.message_id, session_id=session_id)
         else:
             error_message = "❌ 缓存管理器未初始化。"
-            await send_error(context, update.message.chat_id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
-            await delete_user_command(context, update.message.chat_id, update.message.message_id)
+            # 生成会话ID用于消息管理
+            import time
+            user_id = update.effective_user.id
+            session_id = f"steamcc_error_{user_id}_{int(time.time())}"
+            
+            await send_message_with_auto_delete(
+                context,
+                update.message.chat_id,
+                foldable_text_v2(error_message),
+                MessageType.ERROR,
+                session_id=session_id,
+                parse_mode="MarkdownV2"
+            )
+            await delete_user_command(context, update.message.chat_id, update.message.message_id, session_id=session_id)
     except Exception as e:
         logger.error(f"Error clearing Steam cache: {e}")
         error_msg = f"❌ 清理 Steam 缓存时发生错误: {e}"
-        await send_error(context, update.message.chat_id, foldable_text_v2(error_msg), parse_mode="MarkdownV2")
-        await delete_user_command(context, update.message.chat_id, update.message.message_id)
+        # 生成会话ID用于消息管理
+        import time
+        user_id = update.effective_user.id
+        session_id = f"steamcc_error_{user_id}_{int(time.time())}"
+        
+        await send_message_with_auto_delete(
+            context,
+            update.message.chat_id,
+            foldable_text_v2(error_msg),
+            MessageType.ERROR,
+            session_id=session_id,
+            parse_mode="MarkdownV2"
+        )
+        await delete_user_command(context, update.message.chat_id, update.message.message_id, session_id=session_id)
 
 async def steam_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理Steam搜索结果的内联键盘回调"""
