@@ -1333,7 +1333,8 @@ class MovieService:
                     
                     if site == "YouTube" and key:
                         url = f"https://www.youtube.com/watch?v={key}"
-                        lines.append(f"   🎥 [{name}]({url})")
+                        escaped_name = escape_markdown(name, version=2)
+                        lines.append(f"   🎥 [{escaped_name}]({url})")
                     else:
                         lines.append(f"   🎥 {name} ({site})")
                 lines.append("")
@@ -1375,7 +1376,8 @@ class MovieService:
                     
                     if site == "YouTube" and key:
                         url = f"https://www.youtube.com/watch?v={key}"
-                        lines.append(f"   📺 [{name}]({url})")
+                        escaped_name = escape_markdown(name, version=2)
+                        lines.append(f"   📺 [{escaped_name}]({url})")
                     else:
                         lines.append(f"   📺 {name} ({site})")
                 lines.append("")
