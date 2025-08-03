@@ -477,9 +477,9 @@ class MovieService:
         try:
             # 创建Telegraph账户
             account_data = {
-                "short_name": "DomoBot",
-                "author_name": "DomoBot Movie Reviews",
-                "author_url": "https://t.me/domopricevbot"
+                "short_name": "MengBot",
+                "author_name": "MengBot Movie Reviews",
+                "author_url": "https://t.me/mengpricebot"
             }
             
             response = await httpx_client.post(f"{TELEGRAPH_API_URL}/createAccount", data=account_data)
