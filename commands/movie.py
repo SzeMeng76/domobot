@@ -94,6 +94,31 @@ class MovieService:
         endpoint = f"{content_type}/{content_id}/videos"
         return await self._make_tmdb_request(endpoint, language="en-US")
     
+    async def _get_reviews_data(self, content_type: str, content_id: int) -> Optional[Dict]:
+        """获取评价数据的方法，优先中文评价，不足时补充英文评价"""
+        # 先获取中文评价
+        chinese_reviews = await self._make_tmdb_request(f"{content_type}/{content_id}/reviews", language="zh-CN")
+        
+        # 如果中文评价少于2个，再获取英文评价补充
+        all_reviews = []
+        if chinese_reviews and chinese_reviews.get("results"):
+            all_reviews.extend(chinese_reviews["results"])
+        
+        # 如果需要更多评价，获取英文评价
+        if len(all_reviews) < 2:
+            english_reviews = await self._make_tmdb_request(f"{content_type}/{content_id}/reviews", language="en-US")
+            if english_reviews and english_reviews.get("results"):
+                # 添加英文评价，但避免重复
+                existing_ids = {review.get("id") for review in all_reviews}
+                for review in english_reviews["results"]:
+                    if review.get("id") not in existing_ids and len(all_reviews) < 4:
+                        all_reviews.append(review)
+        
+        # 构造返回数据
+        if all_reviews:
+            return {"results": all_reviews}
+        return None
+    
     async def search_movies(self, query: str, page: int = 1) -> Optional[Dict]:
         """搜索电影"""
         cache_key = f"movie_search_{query.lower()}_{page}"
@@ -135,6 +160,11 @@ class MovieService:
             videos_data = await self._get_videos_data("movie", movie_id)
             if videos_data:
                 data["videos"] = videos_data
+            
+            # 获取评价信息
+            reviews_data = await self._get_reviews_data("movie", movie_id)
+            if reviews_data:
+                data["reviews"] = reviews_data
             
             await cache_manager.save_cache(cache_key, data, subdirectory="movie")
         return data
@@ -196,6 +226,11 @@ class MovieService:
             videos_data = await self._get_videos_data("tv", tv_id)
             if videos_data:
                 data["videos"] = videos_data
+            
+            # 获取评价信息
+            reviews_data = await self._get_reviews_data("tv", tv_id)
+            if reviews_data:
+                data["reviews"] = reviews_data
             
             await cache_manager.save_cache(cache_key, data, subdirectory="movie")
         return data
@@ -396,6 +431,41 @@ class MovieService:
                     return f"https://www.youtube.com/watch?v={key}"
         
         return None
+    
+    def _format_reviews_section(self, reviews_data: Dict) -> str:
+        """格式化评价部分"""
+        if not reviews_data or not reviews_data.get("results"):
+            return ""
+        
+        reviews = reviews_data["results"][:2]  # 只显示前2个评价
+        if not reviews:
+            return ""
+        
+        lines = ["", "📝 *用户评价*:"]
+        
+        for i, review in enumerate(reviews, 1):
+            author = review.get("author", "匿名用户")
+            content = review.get("content", "")
+            rating = review.get("author_details", {}).get("rating")
+            
+            if content:
+                # 截取评价内容，最多200字符
+                content_preview = content[:200] + "..." if len(content) > 200 else content
+                # 替换换行符为空格
+                content_preview = content_preview.replace('\n', ' ').replace('\r', ' ')
+                
+                # 简单检测语言（基于字符特征）
+                chinese_chars = len([c for c in content if '\u4e00' <= c <= '\u9fff'])
+                is_chinese = chinese_chars > len(content) * 0.3  # 如果中文字符超过30%认为是中文
+                
+                lang_flag = "🇨🇳" if is_chinese else "🇺🇸"
+                rating_text = f" ({rating}/10)" if rating else ""
+                
+                lines.append(f"")
+                lines.append(f"👤 *{author}*{rating_text} {lang_flag}:")
+                lines.append(f"_{content_preview}_")
+        
+        return "\n".join(lines) if len(lines) > 2 else ""
     
     def format_movie_search_results(self, search_data: Dict) -> tuple:
         """格式化电影搜索结果，返回(文本内容, 海报URL)"""
@@ -632,6 +702,13 @@ class MovieService:
             f"📖 *剧情简介*:",
             f"{overview[:500]}{'...' if len(overview) > 500 else ''}",
         ])
+        
+        # 添加用户评价
+        reviews_data = detail_data.get("reviews")
+        if reviews_data:
+            reviews_section = self._format_reviews_section(reviews_data)
+            if reviews_section:
+                lines.append(reviews_section)
         
         # 添加操作提示
         tv_id = detail_data.get("id")
@@ -886,6 +963,13 @@ class MovieService:
             f"📖 *剧情简介*:",
             f"{overview[:500]}{'...' if len(overview) > 500 else ''}",
         ])
+        
+        # 添加用户评价
+        reviews_data = detail_data.get("reviews")
+        if reviews_data:
+            reviews_section = self._format_reviews_section(reviews_data)
+            if reviews_section:
+                lines.append(reviews_section)
         
         # 添加操作提示
         movie_id = detail_data.get("id")
