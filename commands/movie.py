@@ -325,6 +325,17 @@ class MovieService:
                             if not episode.get("name") and english_ep.get("name"):
                                 episode["name"] = english_ep["name"]
             
+            # 如果季简介仍然为空，尝试使用TV show的简介作为fallback
+            if not data.get("overview"):
+                tv_data = await self._make_tmdb_request(f"tv/{tv_id}")
+                if tv_data and tv_data.get("overview"):
+                    data["overview"] = tv_data["overview"]
+                else:
+                    # 如果中文TV show简介也为空，尝试英文TV show简介
+                    tv_data_en = await self._make_tmdb_request(f"tv/{tv_id}", language="en-US")
+                    if tv_data_en and tv_data_en.get("overview"):
+                        data["overview"] = tv_data_en["overview"]
+            
             await cache_manager.save_cache(cache_key, data, subdirectory="movie")
         return data
     
