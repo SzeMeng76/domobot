@@ -511,6 +511,8 @@ class MovieService:
             lines.append("")
         
         lines.append("💡 使用 `/tv_detail <ID>` 查看详细信息")
+        lines.append("💡 使用 `/tv_rec <ID>` 获取相似推荐")
+        lines.append("💡 使用 `/tv_videos <ID>` 查看预告片")
         
         return "\n".join(lines)
     
@@ -789,6 +791,8 @@ class MovieService:
             lines.append("")
         
         lines.append("💡 使用 `/movie_detail <ID>` 查看详细信息")
+        lines.append("💡 使用 `/movie_rec <ID>` 获取相似推荐")
+        lines.append("💡 使用 `/movie_videos <ID>` 查看预告片")
         
         return "\n".join(lines)
     
@@ -1055,7 +1059,10 @@ class MovieService:
                 lines.append(f"     👤 人物 | 🆔 `{item_id}`")
             lines.append("")
         
-        lines.append("💡 使用对应的detail命令查看详细信息")
+        lines.append("💡 使用命令查看详细信息：")
+        lines.append("   🎬 电影: `/movie_detail <ID>`")
+        lines.append("   📺 电视剧: `/tv_detail <ID>`")
+        lines.append("   👤 人物: `/person_detail <ID>`")
         
         return "\n".join(lines)
     
@@ -1080,6 +1087,7 @@ class MovieService:
             lines.append("")
         
         lines.append("💡 使用 `/movie_detail <ID>` 查看详细信息")
+        lines.append("💡 使用 `/movie_videos <ID>` 查看预告片")
         
         return "\n".join(lines)
     
@@ -1107,6 +1115,7 @@ class MovieService:
             lines.append("")
         
         lines.append("💡 使用 `/movie_detail <ID>` 查看详细信息")
+        lines.append("💡 使用 `/movie_videos <ID>` 查看预告片")
         
         return "\n".join(lines)
     
@@ -1131,6 +1140,7 @@ class MovieService:
             lines.append("")
         
         lines.append("💡 使用 `/tv_detail <ID>` 查看详细信息")
+        lines.append("💡 使用 `/tv_videos <ID>` 查看预告片")
         
         return "\n".join(lines)
     
@@ -1155,6 +1165,7 @@ class MovieService:
             lines.append("")
         
         lines.append("💡 使用 `/tv_detail <ID>` 查看详细信息")
+        lines.append("💡 使用 `/tv_videos <ID>` 查看预告片")
         
         return "\n".join(lines)
 
