@@ -161,6 +161,21 @@ class MovieService:
         })
         
         if data:
+            # 如果关键字段为空，获取英文信息补充
+            if not data.get("overview") or not data.get("tagline"):
+                english_data = await self._make_tmdb_request(f"movie/{movie_id}", {
+                    "append_to_response": "credits,recommendations,watch/providers"
+                }, language="en-US")
+                
+                if english_data:
+                    # 如果中文简介为空，使用英文简介
+                    if not data.get("overview") and english_data.get("overview"):
+                        data["overview"] = english_data["overview"]
+                    
+                    # 如果中文标语为空，使用英文标语
+                    if not data.get("tagline") and english_data.get("tagline"):
+                        data["tagline"] = english_data["tagline"]
+            
             # 单独获取英文视频信息以获得更多内容
             videos_data = await self._get_videos_data("movie", movie_id)
             if videos_data:
@@ -227,6 +242,21 @@ class MovieService:
         })
         
         if data:
+            # 如果关键字段为空，获取英文信息补充
+            if not data.get("overview") or not data.get("tagline"):
+                english_data = await self._make_tmdb_request(f"tv/{tv_id}", {
+                    "append_to_response": "credits,recommendations,watch/providers"
+                }, language="en-US")
+                
+                if english_data:
+                    # 如果中文简介为空，使用英文简介
+                    if not data.get("overview") and english_data.get("overview"):
+                        data["overview"] = english_data["overview"]
+                    
+                    # 如果中文标语为空，使用英文标语
+                    if not data.get("tagline") and english_data.get("tagline"):
+                        data["tagline"] = english_data["tagline"]
+            
             # 单独获取英文视频信息以获得更多内容
             videos_data = await self._get_videos_data("tv", tv_id)
             if videos_data:
@@ -2510,6 +2540,11 @@ async def movie_reviews_command(update: Update, context: ContextTypes.DEFAULT_TY
         reviews_data = await movie_service._get_reviews_data("movie", movie_id)
         if not reviews_data:
             await message.edit_text(f"❌ 未找到电影《{movie_title}》的评价信息")
+            # 调度删除机器人回复消息
+            from utils.message_manager import _schedule_deletion
+            from utils.config_manager import get_config
+            config = get_config()
+            await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
             return
         
         # 格式化评价列表
@@ -2669,6 +2704,11 @@ async def tv_reviews_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         reviews_data = await movie_service._get_reviews_data("tv", tv_id)
         if not reviews_data:
             await message.edit_text(f"❌ 未找到电视剧《{tv_title}》的评价信息")
+            # 调度删除机器人回复消息
+            from utils.message_manager import _schedule_deletion
+            from utils.config_manager import get_config
+            config = get_config()
+            await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
             return
         
         # 格式化评价列表
