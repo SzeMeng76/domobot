@@ -1306,96 +1306,90 @@ class MovieService:
         
         return "\n".join(lines)
     
-def format_movie_videos(self, videos_data: Dict) -> str:
-    """格式化电影视频信息"""
-    if not videos_data or not videos_data.get("results"):
-        return "❌ 暂无视频内容"
+    def format_movie_videos(self, videos_data: Dict) -> str:
+        """格式化电影视频信息"""
+        if not videos_data or not videos_data.get("results"):
+            return "❌ 暂无视频内容"
+        
+        videos = videos_data["results"]
+        if not videos:
+            return "❌ 暂无视频内容"
+        
+        lines = ["🎬 *相关视频*\n"]
+        
+        # 按类型分组显示
+        trailers = [v for v in videos if v.get("type") == "Trailer"]
+        teasers = [v for v in videos if v.get("type") == "Teaser"]
+        clips = [v for v in videos if v.get("type") == "Clip"]
+        featurettes = [v for v in videos if v.get("type") == "Featurette"]
+        
+        def add_videos(video_list, title, emoji):
+            if video_list:
+                lines.append(f"{emoji} *{title}*:")
+                for video in video_list[:3]:  # 每类最多显示3个
+                    name = video.get("name", "未知")
+                    site = video.get("site", "")
+                    key = video.get("key", "")
+                    
+                    if site == "YouTube" and key:
+                        url = f"https://www.youtube.com/watch?v={key}"
+                        lines.append(f"   🎥 [{name}]({url})")
+                    else:
+                        lines.append(f"   🎥 {name} ({site})")
+                lines.append("")
+        
+        add_videos(trailers, "预告片", "🎬")
+        add_videos(teasers, "先导预告", "👀")
+        add_videos(clips, "片段", "📹")
+        add_videos(featurettes, "幕后花絮", "🎭")
+        
+        if not any([trailers, teasers, clips, featurettes]):
+            return "❌ 暂无可用视频内容"
+        
+        return "\n".join(lines).rstrip()
     
-    videos = videos_data["results"]
-    if not videos:
-        return "❌ 暂无视频内容"
-    
-    lines = ["🎬 *相关视频*\n"]
-    
-    # 按类型分组显示
-    trailers = [v for v in videos if v.get("type") == "Trailer"]
-    teasers = [v for v in videos if v.get("type") == "Teaser"]
-    clips = [v for v in videos if v.get("type") == "Clip"]
-    featurettes = [v for v in videos if v.get("type") == "Featurette"]
-    
-    def add_videos(video_list, title, emoji):
-        if video_list:
-            lines.append(f"{emoji} *{title}*:")
-            for video in video_list[:3]:  # 每类最多显示3个
-                name = video.get("name", "未知")
-                site = video.get("site", "")
-                key = video.get("key", "")
-                
-                # 转义视频名称中的方括号和其他Markdown特殊字符
-                escaped_name = escape_markdown(name, version=2)
-                
-                if site == "YouTube" and key:
-                    url = f"https://www.youtube.com/watch?v={key}"
-                    lines.append(f"   🎥 [{escaped_name}]({url})")
-                else:
-                    lines.append(f"   🎥 {escaped_name} ({site})")
-            lines.append("")
-    
-    add_videos(trailers, "预告片", "🎬")
-    add_videos(teasers, "先导预告", "👀")
-    add_videos(clips, "片段", "📹")
-    add_videos(featurettes, "幕后花絮", "🎭")
-    
-    if not any([trailers, teasers, clips, featurettes]):
-        return "❌ 暂无可用视频内容"
-    
-    return "\n".join(lines).rstrip()
+    def format_tv_videos(self, videos_data: Dict) -> str:
+        """格式化电视剧视频信息"""
+        if not videos_data or not videos_data.get("results"):
+            return "❌ 暂无视频内容"
+        
+        videos = videos_data["results"]
+        if not videos:
+            return "❌ 暂无视频内容"
+        
+        lines = ["📺 *相关视频*\n"]
+        
+        # 按类型分组显示
+        trailers = [v for v in videos if v.get("type") == "Trailer"]
+        teasers = [v for v in videos if v.get("type") == "Teaser"]
+        clips = [v for v in videos if v.get("type") == "Clip"]
+        behind_scenes = [v for v in videos if v.get("type") == "Behind the Scenes"]
+        
+        def add_videos(video_list, title, emoji):
+            if video_list:
+                lines.append(f"{emoji} *{title}*:")
+                for video in video_list[:3]:  # 每类最多显示3个
+                    name = video.get("name", "未知")
+                    site = video.get("site", "")
+                    key = video.get("key", "")
+                    
+                    if site == "YouTube" and key:
+                        url = f"https://www.youtube.com/watch?v={key}"
+                        lines.append(f"   📺 [{name}]({url})")
+                    else:
+                        lines.append(f"   📺 {name} ({site})")
+                lines.append("")
+        
+        add_videos(trailers, "预告片", "🎬")
+        add_videos(teasers, "先导预告", "👀")
+        add_videos(clips, "片段", "📹")
+        add_videos(behind_scenes, "幕后花絮", "🎭")
+        
+        if not any([trailers, teasers, clips, behind_scenes]):
+            return "❌ 暂无可用视频内容"
+        
+        return "\n".join(lines).rstrip()
 
-def format_tv_videos(self, videos_data: Dict) -> str:
-    """格式化电视剧视频信息"""
-    if not videos_data or not videos_data.get("results"):
-        return "❌ 暂无视频内容"
-    
-    videos = videos_data["results"]
-    if not videos:
-        return "❌ 暂无视频内容"
-    
-    lines = ["📺 *相关视频*\n"]
-    
-    # 按类型分组显示
-    trailers = [v for v in videos if v.get("type") == "Trailer"]
-    teasers = [v for v in videos if v.get("type") == "Teaser"]
-    clips = [v for v in videos if v.get("type") == "Clip"]
-    behind_scenes = [v for v in videos if v.get("type") == "Behind the Scenes"]
-    
-    def add_videos(video_list, title, emoji):
-        if video_list:
-            lines.append(f"{emoji} *{title}*:")
-            for video in video_list[:3]:  # 每类最多显示3个
-                name = video.get("name", "未知")
-                site = video.get("site", "")
-                key = video.get("key", "")
-                
-                # 转义视频名称中的方括号和其他Markdown特殊字符
-                escaped_name = escape_markdown(name, version=2)
-                
-                if site == "YouTube" and key:
-                    url = f"https://www.youtube.com/watch?v={key}"
-                    lines.append(f"   📺 [{escaped_name}]({url})")
-                else:
-                    lines.append(f"   📺 {escaped_name} ({site})")
-            lines.append("")
-    
-    add_videos(trailers, "预告片", "🎬")
-    add_videos(teasers, "先导预告", "👀")
-    add_videos(clips, "片段", "📹")
-    add_videos(behind_scenes, "幕后花絮", "🎭")
-    
-    if not any([trailers, teasers, clips, behind_scenes]):
-        return "❌ 暂无可用视频内容"
-    
-    return "\n".join(lines).rstrip()
-    
     # ========================================
     # 趋势内容格式化方法
     # ========================================
