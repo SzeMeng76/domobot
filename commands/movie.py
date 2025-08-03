@@ -1,4 +1,5 @@
 import logging
+import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -15,6 +16,10 @@ from utils.message_manager import delete_user_command, send_error, send_success
 from utils.permissions import Permission
 
 logger = logging.getLogger(__name__)
+
+# Telegraph 相关配置
+TELEGRAPH_API_URL = "https://api.telegra.ph"
+TELEGRAM_MESSAGE_LIMIT = 4096
 
 # 全局变量
 cache_manager = None
@@ -467,6 +472,115 @@ class MovieService:
         
         return "\n".join(lines) if len(lines) > 2 else ""
     
+    async def create_telegraph_page(self, title: str, content: str) -> Optional[str]:
+        """创建Telegraph页面"""
+        try:
+            # 创建Telegraph账户
+            account_data = {
+                "short_name": "DomoBot",
+                "author_name": "DomoBot Movie Reviews",
+                "author_url": "https://t.me/domopricevbot"
+            }
+            
+            response = await httpx_client.post(f"{TELEGRAPH_API_URL}/createAccount", data=account_data)
+            if response.status_code != 200:
+                return None
+                
+            account_info = response.json()
+            if not account_info.get("ok"):
+                return None
+                
+            access_token = account_info["result"]["access_token"]
+            
+            # 创建页面内容
+            page_content = [
+                {
+                    "tag": "p",
+                    "children": [content]
+                }
+            ]
+            
+            page_data = {
+                "access_token": access_token,
+                "title": title,
+                "content": json.dumps(page_content),
+                "return_content": "true"
+            }
+            
+            response = await httpx_client.post(f"{TELEGRAPH_API_URL}/createPage", data=page_data)
+            if response.status_code != 200:
+                return None
+                
+            page_info = response.json()
+            if not page_info.get("ok"):
+                return None
+                
+            return page_info["result"]["url"]
+        
+        except Exception as e:
+            logger.error(f"创建Telegraph页面失败: {e}")
+            return None
+    
+    def format_reviews_for_telegraph(self, reviews_data: Dict, title: str) -> str:
+        """将评价格式化为Telegraph友好的格式"""
+        if not reviews_data or not reviews_data.get("results"):
+            return "暂无评价内容"
+        
+        reviews = reviews_data["results"]
+        content = f"{title} - 用户评价\n\n"
+        content += f"共 {len(reviews)} 条评价\n\n"
+        
+        for i, review in enumerate(reviews, 1):
+            author = review.get("author", "匿名用户")
+            review_content = review.get("content", "")
+            rating = review.get("author_details", {}).get("rating")
+            created_at = review.get("created_at", "")
+            
+            # 简单检测语言
+            chinese_chars = len([c for c in review_content if '\u4e00' <= c <= '\u9fff'])
+            is_chinese = chinese_chars > len(review_content) * 0.3
+            lang_flag = "🇨🇳" if is_chinese else "🇺🇸"
+            
+            rating_text = f" ({rating}/10)" if rating else ""
+            date_text = f" - {created_at[:10]}" if created_at else ""
+            
+            content += f"=== 评价 {i} ===\n"
+            content += f"👤 {author}{rating_text} {lang_flag}{date_text}\n\n"
+            content += f"{review_content}\n\n"
+            content += "=" * 50 + "\n\n"
+        
+        return content
+    
+    def format_reviews_list(self, reviews_data: Dict) -> str:
+        """格式化评价列表（简短版本）"""
+        if not reviews_data or not reviews_data.get("results"):
+            return "❌ 暂无用户评价"
+        
+        reviews = reviews_data["results"][:5]  # 显示前5个评价
+        lines = ["📝 *用户评价列表*\n"]
+        
+        for i, review in enumerate(reviews, 1):
+            author = review.get("author", "匿名用户")
+            content = review.get("content", "")
+            rating = review.get("author_details", {}).get("rating")
+            
+            # 简单检测语言
+            chinese_chars = len([c for c in content if '\u4e00' <= c <= '\u9fff'])
+            is_chinese = chinese_chars > len(content) * 0.3
+            lang_flag = "🇨🇳" if is_chinese else "🇺🇸"
+            
+            # 截取评价内容，最多150字符
+            content_preview = content[:150] + "..." if len(content) > 150 else content
+            content_preview = content_preview.replace('\n', ' ').replace('\r', ' ')
+            
+            rating_text = f" ({rating}/10)" if rating else ""
+            
+            lines.append(f"{i}. *{author}*{rating_text} {lang_flag}:")
+            lines.append(f"   _{content_preview}_")
+            lines.append("")
+        
+        return "\n".join(lines)
+    
     def format_movie_search_results(self, search_data: Dict) -> tuple:
         """格式化电影搜索结果，返回(文本内容, 海报URL)"""
         if not search_data or not search_data.get("results"):
@@ -716,6 +830,7 @@ class MovieService:
             f"",
             f"💡 使用 `/tv_rec {tv_id}` 获取相似推荐",
             f"💡 使用 `/tv_videos {tv_id}` 查看预告片",
+            f"💡 使用 `/tv_reviews {tv_id}` 查看用户评价",
             f"💡 使用 `/tv_season {tv_id} <季数>` 查看季详情",
             f"💡 使用 `/tv_watch {tv_id}` 查看完整观看平台"
         ])
@@ -977,6 +1092,7 @@ class MovieService:
             f"",
             f"💡 使用 `/movie_rec {movie_id}` 获取相似推荐",
             f"💡 使用 `/movie_videos {movie_id}` 查看预告片",
+            f"💡 使用 `/movie_reviews {movie_id}` 查看用户评价",
             f"💡 使用 `/movie_watch {movie_id}` 查看完整观看平台"
         ])
         
@@ -2343,6 +2459,106 @@ async def movie_videos_command(update: Update, context: ContextTypes.DEFAULT_TYP
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
+async def movie_reviews_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理 /movie_reviews 命令 - 获取电影评价"""
+    if not update.message or not update.effective_chat:
+        return
+    
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    
+    if not context.args:
+        await send_error(
+            context, 
+            update.effective_chat.id, 
+            foldable_text_v2("❌ 请提供电影ID\n\n用法: `/movie_reviews <电影ID>`"), 
+            parse_mode="MarkdownV2"
+        )
+        return
+    
+    try:
+        movie_id = int(context.args[0])
+    except ValueError:
+        await send_error(
+            context, 
+            update.effective_chat.id, 
+            foldable_text_v2("❌ 电影ID必须是数字"), 
+            parse_mode="MarkdownV2"
+        )
+        return
+    
+    if not movie_service:
+        error_message = "❌ 电影查询服务未初始化"
+        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        return
+    
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"🔍 正在获取电影评价 \(ID: {movie_id}\)\.\.\.",
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    
+    try:
+        # 获取电影基本信息
+        detail_data = await movie_service.get_movie_details(movie_id)
+        if not detail_data:
+            await message.edit_text(f"❌ 未找到ID为 {movie_id} 的电影")
+            return
+        
+        movie_title = detail_data.get("title", "未知电影")
+        
+        # 获取评价数据
+        reviews_data = await movie_service._get_reviews_data("movie", movie_id)
+        if not reviews_data:
+            await message.edit_text(f"❌ 未找到电影《{movie_title}》的评价信息")
+            return
+        
+        # 格式化评价列表
+        result_text = movie_service.format_reviews_list(reviews_data)
+        
+        # 检查是否需要使用Telegraph
+        if len(result_text) > TELEGRAM_MESSAGE_LIMIT - 500:  # 留一些余量
+            # 创建Telegraph页面
+            telegraph_content = movie_service.format_reviews_for_telegraph(reviews_data, movie_title)
+            telegraph_url = await movie_service.create_telegraph_page(f"{movie_title} - 用户评价", telegraph_content)
+            
+            if telegraph_url:
+                # 发送包含Telegraph链接的简化消息
+                reviews_count = len(reviews_data.get("results", []))
+                summary_text = (
+                    f"📝 *电影《{movie_title}》用户评价*\n\n"
+                    f"📊 共 {reviews_count} 条评价\n"
+                    f"📄 **完整评价列表**: 由于内容较长，已发布到Telegraph\n"
+                    f"🔗 **查看链接**: {telegraph_url}\n\n"
+                    f"💡 使用 `/movie_detail {movie_id}` 查看电影详情"
+                )
+                await message.edit_text(
+                    foldable_text_with_markdown_v2(summary_text),
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
+            else:
+                # Telegraph发布失败，发送截断的消息
+                truncated_text = result_text[:TELEGRAM_MESSAGE_LIMIT - 200] + "\n\n⚠️ 内容过长已截断，完整评价请查看详情页面"
+                await message.edit_text(
+                    foldable_text_with_markdown_v2(truncated_text),
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
+        else:
+            # 内容不长，直接发送
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+        
+    except Exception as e:
+        logger.error(f"获取电影评价失败: {e}")
+        await message.edit_text("❌ 获取电影评价时发生错误")
+    
+    # 调度删除机器人回复消息
+    from utils.message_manager import _schedule_deletion
+    from utils.config_manager import get_config
+    config = get_config()
+    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
+
 async def tv_videos_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理 /tv_videos 命令 - 获取电视剧视频"""
     if not update.message or not update.effective_chat:
@@ -2395,6 +2611,106 @@ async def tv_videos_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     except Exception as e:
         logger.error(f"获取电视剧视频失败: {e}")
         await message.edit_text("❌ 获取电视剧视频时发生错误")
+    
+    # 调度删除机器人回复消息
+    from utils.message_manager import _schedule_deletion
+    from utils.config_manager import get_config
+    config = get_config()
+    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
+
+async def tv_reviews_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理 /tv_reviews 命令 - 获取电视剧评价"""
+    if not update.message or not update.effective_chat:
+        return
+    
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    
+    if not context.args:
+        await send_error(
+            context, 
+            update.effective_chat.id, 
+            foldable_text_v2("❌ 请提供电视剧ID\n\n用法: `/tv_reviews <电视剧ID>`"), 
+            parse_mode="MarkdownV2"
+        )
+        return
+    
+    try:
+        tv_id = int(context.args[0])
+    except ValueError:
+        await send_error(
+            context, 
+            update.effective_chat.id, 
+            foldable_text_v2("❌ 电视剧ID必须是数字"), 
+            parse_mode="MarkdownV2"
+        )
+        return
+    
+    if not movie_service:
+        error_message = "❌ 电视剧查询服务未初始化"
+        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        return
+    
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"🔍 正在获取电视剧评价 \(ID: {tv_id}\)\.\.\.",
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    
+    try:
+        # 获取电视剧基本信息
+        detail_data = await movie_service.get_tv_details(tv_id)
+        if not detail_data:
+            await message.edit_text(f"❌ 未找到ID为 {tv_id} 的电视剧")
+            return
+        
+        tv_title = detail_data.get("name", "未知电视剧")
+        
+        # 获取评价数据
+        reviews_data = await movie_service._get_reviews_data("tv", tv_id)
+        if not reviews_data:
+            await message.edit_text(f"❌ 未找到电视剧《{tv_title}》的评价信息")
+            return
+        
+        # 格式化评价列表
+        result_text = movie_service.format_reviews_list(reviews_data)
+        
+        # 检查是否需要使用Telegraph
+        if len(result_text) > TELEGRAM_MESSAGE_LIMIT - 500:  # 留一些余量
+            # 创建Telegraph页面
+            telegraph_content = movie_service.format_reviews_for_telegraph(reviews_data, tv_title)
+            telegraph_url = await movie_service.create_telegraph_page(f"{tv_title} - 用户评价", telegraph_content)
+            
+            if telegraph_url:
+                # 发送包含Telegraph链接的简化消息
+                reviews_count = len(reviews_data.get("results", []))
+                summary_text = (
+                    f"📝 *电视剧《{tv_title}》用户评价*\n\n"
+                    f"📊 共 {reviews_count} 条评价\n"
+                    f"📄 **完整评价列表**: 由于内容较长，已发布到Telegraph\n"
+                    f"🔗 **查看链接**: {telegraph_url}\n\n"
+                    f"💡 使用 `/tv_detail {tv_id}` 查看电视剧详情"
+                )
+                await message.edit_text(
+                    foldable_text_with_markdown_v2(summary_text),
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
+            else:
+                # Telegraph发布失败，发送截断的消息
+                truncated_text = result_text[:TELEGRAM_MESSAGE_LIMIT - 200] + "\n\n⚠️ 内容过长已截断，完整评价请查看详情页面"
+                await message.edit_text(
+                    foldable_text_with_markdown_v2(truncated_text),
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
+        else:
+            # 内容不长，直接发送
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+        
+    except Exception as e:
+        logger.error(f"获取电视剧评价失败: {e}")
+        await message.edit_text("❌ 获取电视剧评价时发生错误")
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
@@ -2932,6 +3248,7 @@ command_factory.register_command("movie_hot", movie_hot_command, permission=Perm
 command_factory.register_command("movie_detail", movie_detail_command, permission=Permission.USER, description="获取电影详情")
 command_factory.register_command("movie_rec", movie_rec_command, permission=Permission.USER, description="获取电影推荐")
 command_factory.register_command("movie_videos", movie_videos_command, permission=Permission.USER, description="获取电影预告片")
+command_factory.register_command("movie_reviews", movie_reviews_command, permission=Permission.USER, description="获取电影用户评价")
 command_factory.register_command("movie_cleancache", movie_clean_cache_command, permission=Permission.ADMIN, description="清理电影和电视剧查询缓存")
 
 # 注册电视剧命令
@@ -2940,6 +3257,7 @@ command_factory.register_command("tv_hot", tv_hot_command, permission=Permission
 command_factory.register_command("tv_detail", tv_detail_command, permission=Permission.USER, description="获取电视剧详情")
 command_factory.register_command("tv_rec", tv_rec_command, permission=Permission.USER, description="获取电视剧推荐")
 command_factory.register_command("tv_videos", tv_videos_command, permission=Permission.USER, description="获取电视剧预告片")
+command_factory.register_command("tv_reviews", tv_reviews_command, permission=Permission.USER, description="获取电视剧用户评价")
 command_factory.register_command("tv_season", tv_season_command, permission=Permission.USER, description="获取电视剧季详情")
 command_factory.register_command("tv_episode", tv_episode_command, permission=Permission.USER, description="获取电视剧集详情")
 
