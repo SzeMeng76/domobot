@@ -582,12 +582,26 @@ class MovieService:
         return content
     
     def format_reviews_list(self, reviews_data: Dict) -> str:
-        """格式化评价列表（简短版本）"""
+        """格式化评价列表（智能长度版本）"""
         if not reviews_data or not reviews_data.get("results"):
             return "❌ 暂无用户评价"
         
         reviews = reviews_data["results"][:5]  # 显示前5个评价
         lines = ["📝 *用户评价列表*\n"]
+        
+        # 计算基础内容长度（标题+评价作者信息等固定部分）
+        base_length = len("📝 *用户评价列表*\n\n")
+        for i, review in enumerate(reviews, 1):
+            author = review.get("author", "匿名用户")
+            rating = review.get("author_details", {}).get("rating")
+            rating_text = f" ({rating}/10)" if rating else ""
+            base_length += len(f"{i}. *{author}*{rating_text} 🇺🇸:\n   __\n\n")
+        
+        # 计算每条评价可用的平均字符数
+        available_chars = 3200 - base_length  # 留800字符余量，为提示信息预留空间
+        max_chars_per_review = max(200, available_chars // len(reviews)) if reviews else 200
+        
+        has_truncated = False  # 标记是否有内容被截断
         
         for i, review in enumerate(reviews, 1):
             author = review.get("author", "匿名用户")
@@ -599,8 +613,12 @@ class MovieService:
             is_chinese = chinese_chars > len(content) * 0.3
             lang_flag = "🇨🇳" if is_chinese else "🇺🇸"
             
-            # 截取评价内容，最多150字符
-            content_preview = content[:150] + "..." if len(content) > 150 else content
+            # 动态截取评价内容
+            if len(content) > max_chars_per_review:
+                content_preview = content[:max_chars_per_review] + "..."
+                has_truncated = True
+            else:
+                content_preview = content
             content_preview = content_preview.replace('\n', ' ').replace('\r', ' ')
             
             rating_text = f" ({rating}/10)" if rating else ""
@@ -608,6 +626,11 @@ class MovieService:
             lines.append(f"{i}. *{author}*{rating_text} {lang_flag}:")
             lines.append(f"   _{content_preview}_")
             lines.append("")
+        
+        # 如果有内容被截断，添加提示信息
+        if has_truncated:
+            lines.append("📄 *部分评价内容已截断*")
+            lines.append("💡 使用相应的 `/movie_reviews <ID>` 或 `/tv_reviews <ID>` 命令可能生成完整的Telegraph页面查看所有评价")
         
         return "\n".join(lines)
     
@@ -2550,22 +2573,67 @@ async def movie_reviews_command(update: Update, context: ContextTypes.DEFAULT_TY
         # 格式化评价列表
         result_text = movie_service.format_reviews_list(reviews_data)
         
-        # 检查是否需要使用Telegraph
-        if len(result_text) > TELEGRAM_MESSAGE_LIMIT - 500:  # 留一些余量
+        # 检查是否需要使用Telegraph（更积极的触发条件）
+        reviews_count = len(reviews_data.get("results", []))
+        avg_review_length = sum(len(r.get("content", "")) for r in reviews_data.get("results", [])) / max(reviews_count, 1)
+        
+        # 更积极的Telegraph触发条件：
+        # 1. 消息长度超过2500字符
+        # 2. 有2条以上评价且平均长度超过400字符
+        # 3. 有任何单条评价超过800字符
+        max_single_review = max((len(r.get("content", "")) for r in reviews_data.get("results", [])), default=0)
+        
+        should_use_telegraph = (
+            len(result_text) > 2500 or 
+            (reviews_count >= 2 and avg_review_length > 400) or
+            max_single_review > 800
+        )
+        
+        if should_use_telegraph:
             # 创建Telegraph页面
             telegraph_content = movie_service.format_reviews_for_telegraph(reviews_data, movie_title)
             telegraph_url = await movie_service.create_telegraph_page(f"{movie_title} - 用户评价", telegraph_content)
             
             if telegraph_url:
-                # 发送包含Telegraph链接的简化消息
+                # 发送包含Telegraph链接和简短预览的消息
                 reviews_count = len(reviews_data.get("results", []))
-                summary_text = (
-                    f"📝 *电影《{movie_title}》用户评价*\n\n"
-                    f"📊 共 {reviews_count} 条评价\n"
-                    f"📄 **完整评价列表**: 由于内容较长，已发布到Telegraph\n"
-                    f"🔗 **查看链接**: {telegraph_url}\n\n"
+                
+                # 创建简短的预览版本（只显示前2条评价的更短预览）
+                preview_lines = ["📝 *用户评价预览*\n"]
+                for i, review in enumerate(reviews_data.get("results", [])[:2], 1):
+                    author = review.get("author", "匿名用户")
+                    content = review.get("content", "")
+                    rating = review.get("author_details", {}).get("rating")
+                    
+                    # 语言检测
+                    chinese_chars = len([c for c in content if '\u4e00' <= c <= '\u9fff'])
+                    is_chinese = chinese_chars > len(content) * 0.3
+                    lang_flag = "🇨🇳" if is_chinese else "🇺🇸"
+                    
+                    # 短预览，最多100字符
+                    content_preview = content[:100] + "..." if len(content) > 100 else content
+                    content_preview = content_preview.replace('\n', ' ').replace('\r', ' ')
+                    
+                    rating_text = f" ({rating}/10)" if rating else ""
+                    preview_lines.extend([
+                        f"{i}. *{author}*{rating_text} {lang_flag}:",
+                        f"   _{content_preview}_",
+                        ""
+                    ])
+                
+                if reviews_count > 2:
+                    preview_lines.append(f"... 还有 {reviews_count - 2} 条评价")
+                
+                preview_lines.extend([
+                    "",
+                    f"📊 *总共 {reviews_count} 条评价*",
+                    f"📄 **完整评价内容**: 由于内容较长，已生成Telegraph页面",
+                    f"🔗 **查看完整评价**: {telegraph_url}",
+                    "",
                     f"💡 使用 `/movie_detail {movie_id}` 查看电影详情"
-                )
+                ])
+                
+                summary_text = "\n".join(preview_lines)
                 await message.edit_text(
                     foldable_text_with_markdown_v2(summary_text),
                     parse_mode=ParseMode.MARKDOWN_V2
@@ -2714,22 +2782,67 @@ async def tv_reviews_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         # 格式化评价列表
         result_text = movie_service.format_reviews_list(reviews_data)
         
-        # 检查是否需要使用Telegraph
-        if len(result_text) > TELEGRAM_MESSAGE_LIMIT - 500:  # 留一些余量
+        # 检查是否需要使用Telegraph（更积极的触发条件）
+        reviews_count = len(reviews_data.get("results", []))
+        avg_review_length = sum(len(r.get("content", "")) for r in reviews_data.get("results", [])) / max(reviews_count, 1)
+        
+        # 更积极的Telegraph触发条件：
+        # 1. 消息长度超过2500字符
+        # 2. 有2条以上评价且平均长度超过400字符
+        # 3. 有任何单条评价超过800字符
+        max_single_review = max((len(r.get("content", "")) for r in reviews_data.get("results", [])), default=0)
+        
+        should_use_telegraph = (
+            len(result_text) > 2500 or 
+            (reviews_count >= 2 and avg_review_length > 400) or
+            max_single_review > 800
+        )
+        
+        if should_use_telegraph:
             # 创建Telegraph页面
             telegraph_content = movie_service.format_reviews_for_telegraph(reviews_data, tv_title)
             telegraph_url = await movie_service.create_telegraph_page(f"{tv_title} - 用户评价", telegraph_content)
             
             if telegraph_url:
-                # 发送包含Telegraph链接的简化消息
+                # 发送包含Telegraph链接和简短预览的消息
                 reviews_count = len(reviews_data.get("results", []))
-                summary_text = (
-                    f"📝 *电视剧《{tv_title}》用户评价*\n\n"
-                    f"📊 共 {reviews_count} 条评价\n"
-                    f"📄 **完整评价列表**: 由于内容较长，已发布到Telegraph\n"
-                    f"🔗 **查看链接**: {telegraph_url}\n\n"
+                
+                # 创建简短的预览版本（只显示前2条评价的更短预览）
+                preview_lines = ["📝 *用户评价预览*\n"]
+                for i, review in enumerate(reviews_data.get("results", [])[:2], 1):
+                    author = review.get("author", "匿名用户")
+                    content = review.get("content", "")
+                    rating = review.get("author_details", {}).get("rating")
+                    
+                    # 语言检测
+                    chinese_chars = len([c for c in content if '\u4e00' <= c <= '\u9fff'])
+                    is_chinese = chinese_chars > len(content) * 0.3
+                    lang_flag = "🇨🇳" if is_chinese else "🇺🇸"
+                    
+                    # 短预览，最多100字符
+                    content_preview = content[:100] + "..." if len(content) > 100 else content
+                    content_preview = content_preview.replace('\n', ' ').replace('\r', ' ')
+                    
+                    rating_text = f" ({rating}/10)" if rating else ""
+                    preview_lines.extend([
+                        f"{i}. *{author}*{rating_text} {lang_flag}:",
+                        f"   _{content_preview}_",
+                        ""
+                    ])
+                
+                if reviews_count > 2:
+                    preview_lines.append(f"... 还有 {reviews_count - 2} 条评价")
+                
+                preview_lines.extend([
+                    "",
+                    f"📊 *总共 {reviews_count} 条评价*",
+                    f"📄 **完整评价内容**: 由于内容较长，已生成Telegraph页面",
+                    f"🔗 **查看完整评价**: {telegraph_url}",
+                    "",
                     f"💡 使用 `/tv_detail {tv_id}` 查看电视剧详情"
-                )
+                ])
+                
+                summary_text = "\n".join(preview_lines)
                 await message.edit_text(
                     foldable_text_with_markdown_v2(summary_text),
                     parse_mode=ParseMode.MARKDOWN_V2
