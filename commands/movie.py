@@ -915,7 +915,7 @@ class MovieService:
         return "\n".join(lines)
     
     def format_tv_season_details(self, season_data: Dict, tv_id: int) -> str:
-        """格式化电视剧季详情"""
+        """格式化电视剧季详情（智能长度版本）"""
         if not season_data:
             return "❌ 获取季详情失败"
         
@@ -935,30 +935,63 @@ class MovieService:
             f"{overview[:300]}{'...' if len(overview) > 300 else ''}" if overview != "暂无简介" else "暂无简介",
         ]
         
-        # 显示前5集信息
         episodes = season_data.get("episodes", [])
         if episodes:
             lines.extend([
                 f"",
-                f"📋 *剧集列表* (显示前5集):",
+                f"📋 *剧集列表*:",
                 f""
             ])
             
-            for ep in episodes[:5]:
+            # 计算基础内容长度（标题+简介等固定部分）
+            base_length = len("\n".join(lines))
+            base_length += len(f"\n\n💡 使用 `/tv_episode {tv_id} {season_number} <集数>` 查看集详情")
+            
+            # 计算每集可用的平均字符数
+            available_chars = 3200 - base_length  # 留800字符余量
+            if len(episodes) > 0:
+                max_chars_per_episode = max(100, available_chars // len(episodes))
+            else:
+                max_chars_per_episode = 200
+            
+            has_truncated = False
+            episode_lines = []
+            
+            for ep in episodes:
                 ep_num = ep.get("episode_number", 0)
                 ep_name = ep.get("name", f"第{ep_num}集")
                 ep_date = ep.get("air_date", "")
                 ep_runtime = ep.get("runtime", 0)
+                ep_overview = ep.get("overview", "")
                 
-                lines.append(f"{ep_num}. *{ep_name}*")
+                # 构建每集的信息
+                episode_info = [f"{ep_num}. *{ep_name}*"]
                 if ep_date:
-                    lines.append(f"   📅 {ep_date}")
+                    episode_info.append(f"   📅 {ep_date}")
                 if ep_runtime:
-                    lines.append(f"   ⏱️ {ep_runtime}分钟")
-                lines.append("")
+                    episode_info.append(f"   ⏱️ {ep_runtime}分钟")
+                
+                # 如果有剧情简介，动态截取
+                if ep_overview:
+                    if len(ep_overview) > max_chars_per_episode:
+                        ep_overview_preview = ep_overview[:max_chars_per_episode] + "..."
+                        has_truncated = True
+                    else:
+                        ep_overview_preview = ep_overview
+                    ep_overview_preview = ep_overview_preview.replace('\n', ' ').replace('\r', ' ')
+                    episode_info.append(f"   📝 _{ep_overview_preview}_")
+                
+                episode_info.append("")
+                episode_lines.extend(episode_info)
             
-            if len(episodes) > 5:
-                lines.append(f"... 还有 {len(episodes) - 5} 集")
+            lines.extend(episode_lines)
+            
+            # 如果有内容被截断，添加提示信息
+            if has_truncated:
+                lines.extend([
+                    "📄 *部分剧集简介已截断*",
+                    f"💡 使用 `/tv_season_full {tv_id} {season_number}` 查看完整剧集列表"
+                ])
         
         lines.extend([
             f"",
@@ -966,6 +999,44 @@ class MovieService:
         ])
         
         return "\n".join(filter(None, lines))
+    
+    
+    def format_season_episodes_for_telegraph(self, season_data: Dict, tv_id: int) -> str:
+        """将剧集列表格式化为Telegraph友好的格式"""
+        if not season_data:
+            return "暂无剧集信息"
+        
+        name = season_data.get("name", "未知季")
+        season_number = season_data.get("season_number", 0)
+        episodes = season_data.get("episodes", [])
+        
+        content = f"{name} (第{season_number}季) - 完整剧集列表\n\n"
+        content += f"共 {len(episodes)} 集\n\n"
+        
+        for ep in episodes:
+            ep_num = ep.get("episode_number", 0)
+            ep_name = ep.get("name", f"第{ep_num}集")
+            ep_date = ep.get("air_date", "")
+            ep_runtime = ep.get("runtime", 0)
+            ep_overview = ep.get("overview", "")
+            vote_average = ep.get("vote_average", 0)
+            vote_count = ep.get("vote_count", 0)
+            
+            content += f"=== 第{ep_num}集：{ep_name} ===\n"
+            if ep_date:
+                content += f"📅 播出日期：{ep_date}\n"
+            if ep_runtime:
+                content += f"⏱️ 时长：{ep_runtime}分钟\n"
+            if vote_count > 0:
+                content += f"⭐ 评分：{vote_average:.1f}/10 ({vote_count}人评价)\n"
+            
+            if ep_overview:
+                content += f"\n📝 剧情简介：\n{ep_overview}\n"
+            
+            content += "\n" + "=" * 50 + "\n\n"
+        
+        content += f"💡 使用 /tv_episode {tv_id} {season_number} <集数> 查看更多集详情"
+        return content
     
     def format_tv_episode_details(self, episode_data: Dict, tv_id: int, season_number: int) -> str:
         """格式化电视剧集详情"""
@@ -2335,7 +2406,7 @@ async def tv_rec_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
 async def tv_season_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """处理 /tv_season 命令 - 获取电视剧季详情"""
+    """处理 /tv_season 命令 - 获取电视剧季详情（智能长度版本）"""
     if not update.message or not update.effective_chat:
         return
     
@@ -2369,20 +2440,109 @@ async def tv_season_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=f"🔍 正在获取第{season_number}季详情 \(电视剧ID: {tv_id}\)\.\.\.",
+        text=f"🔍 正在获取第{season_number}季详情 \\(电视剧ID: {tv_id}\\)\\.\\.\\.",
         parse_mode=ParseMode.MARKDOWN_V2
     )
     
     try:
         season_data = await movie_service.get_tv_season_details(tv_id, season_number)
-        if season_data:
-            result_text = movie_service.format_tv_season_details(season_data, tv_id)
+        if not season_data:
+            await message.edit_text(f"❌ 未找到电视剧ID {tv_id} 的第{season_number}季")
+            return
+        
+        # 获取电视剧基本信息用于Telegraph标题
+        tv_detail_data = await movie_service.get_tv_details(tv_id)
+        tv_title = tv_detail_data.get("name", "未知电视剧") if tv_detail_data else "未知电视剧"
+        
+        # 格式化剧集列表
+        result_text = movie_service.format_tv_season_details(season_data, tv_id)
+        
+        # 检查是否需要使用Telegraph（更积极的触发条件）
+        episodes = season_data.get("episodes", [])
+        episodes_count = len(episodes)
+        
+        # 计算所有剧集简介的总长度
+        total_overview_length = sum(len(ep.get("overview", "")) for ep in episodes)
+        avg_overview_length = total_overview_length / max(episodes_count, 1)
+        
+        # Telegraph触发条件：
+        # 1. 消息长度超过2800字符
+        # 2. 有5集以上且平均简介长度超过150字符
+        # 3. 有任何单集简介超过400字符
+        # 4. 总集数超过15集
+        max_single_overview = max((len(ep.get("overview", "")) for ep in episodes), default=0)
+        
+        should_use_telegraph = (
+            len(result_text) > 2800 or 
+            (episodes_count > 5 and avg_overview_length > 150) or
+            max_single_overview > 400 or
+            episodes_count > 15
+        )
+        
+        if should_use_telegraph:
+            # 创建Telegraph页面
+            telegraph_content = movie_service.format_season_episodes_for_telegraph(season_data, tv_id)
+            season_name = season_data.get("name", f"第{season_number}季")
+            telegraph_url = await movie_service.create_telegraph_page(f"{tv_title} {season_name} - 完整剧集列表", telegraph_content)
+            
+            if telegraph_url:
+                # 发送包含Telegraph链接和简短预览的消息
+                
+                # 创建简短的预览版本（只显示前3集的基本信息）
+                preview_lines = [
+                    f"📺 *{season_data.get('name', f'第{season_number}季')}*",
+                    f"",
+                    f"📅 *播出日期*: {season_data.get('air_date', '') or '未知'}",
+                    f"📚 *集数*: {episodes_count}集",
+                    f"",
+                    f"📖 *简介*:",
+                    f"{season_data.get('overview', '暂无简介')[:200]}{'...' if len(season_data.get('overview', '')) > 200 else ''}",
+                    f"",
+                    f"📋 *剧集预览* (前3集):",
+                    f""
+                ]
+                
+                for ep in episodes[:3]:
+                    ep_num = ep.get("episode_number", 0)
+                    ep_name = ep.get("name", f"第{ep_num}集")
+                    ep_date = ep.get("air_date", "")
+                    
+                    preview_lines.append(f"{ep_num}. *{ep_name}*")
+                    if ep_date:
+                        preview_lines.append(f"   📅 {ep_date}")
+                    preview_lines.append("")
+                
+                if episodes_count > 3:
+                    preview_lines.append(f"... 还有 {episodes_count - 3} 集")
+                
+                preview_lines.extend([
+                    "",
+                    f"📊 *总共 {episodes_count} 集剧集*",
+                    f"📄 **完整剧集列表**: 由于内容较长，已生成Telegraph页面",
+                    f"🔗 **查看完整列表**: {telegraph_url}",
+                    "",
+                    f"💡 使用 `/tv_episode {tv_id} {season_number} <集数>` 查看集详情"
+                ])
+                
+                summary_text = "\n".join(preview_lines)
+                await message.edit_text(
+                    foldable_text_with_markdown_v2(summary_text),
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
+            else:
+                # Telegraph发布失败，发送截断的消息
+                truncated_text = result_text[:TELEGRAM_MESSAGE_LIMIT - 200] + "\n\n⚠️ 内容过长已截断，完整剧集列表请查看详情页面"
+                await message.edit_text(
+                    foldable_text_with_markdown_v2(truncated_text),
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
+        else:
+            # 内容不长，直接发送
             await message.edit_text(
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2
             )
-        else:
-            await message.edit_text(f"❌ 未找到电视剧ID {tv_id} 的第{season_number}季")
+        
     except Exception as e:
         logger.error(f"获取电视剧季详情失败: {e}")
         await message.edit_text("❌ 获取电视剧季详情时发生错误")
