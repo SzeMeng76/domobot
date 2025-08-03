@@ -35,7 +35,7 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 
 -   📺 **Public Streaming Prices:** Available to all users - query subscription prices for Netflix, Disney+, Spotify, and HBO Max across global regions.
 -   👤 **Public User Information:** Available to all users - check Telegram user registration dates, account age, and get user/group IDs.
--   🎬 **Movie & TV Information:** Query movie/TV show details with poster images, ratings, cast, recommendations, trailers, viewing platforms, and season/episode information using TMDB API. Includes trending content discovery and people search functionality. *(Whitelist required)*
+-   🎬 **Movie & TV Information:** Query movie/TV show details with poster images, ratings, cast, recommendations, trailers, user reviews, viewing platforms, and season/episode information using TMDB API. Includes trending content discovery and people search functionality. *(Whitelist required)*
 -   🪙 **Crypto Prices:** Look up real-time cryptocurrency prices with support for custom amounts and currency conversion, including 24h and 7d percentage changes. *(Whitelist required)*
 -   💳 **BIN Lookup:** Query credit card BIN (Bank Identification Number) information including card brand, type, issuing bank, and country details. *(Whitelist required)*
 -   🌦️ **Weather Forecasts:** Detailed, multi-format weather forecasts (real-time, daily, hourly, minutely precipitation, and lifestyle indices). *(Whitelist required)*
@@ -153,6 +153,7 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /movie_detail 299536           # Get movie details (includes trailer links)
 /movie_rec 299536
 /movie_videos 299536           # Get movie trailers and videos
+/movie_reviews 299536          # Get user reviews (with Telegraph for long content)
 /movie_watch 299536            # Get viewing platforms information
 /tv Game of Thrones
 /tv_hot
@@ -160,6 +161,7 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /tv_season 1399 1
 /tv_episode 1399 1 1
 /tv_videos 1399                # Get TV trailers and videos
+/tv_reviews 1399               # Get user reviews (with Telegraph for long content)
 /tv_watch 1399                 # Get viewing platforms information
 
 # Trending content
