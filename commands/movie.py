@@ -283,26 +283,74 @@ class MovieService:
         return data
     
     async def get_tv_season_details(self, tv_id: int, season_number: int) -> Optional[Dict]:
-        """获取电视剧季详情"""
+        """获取电视剧季详情（支持中英文fallback）"""
         cache_key = f"tv_season_{tv_id}_{season_number}"
         cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
         if cached_data:
             return cached_data
             
+        # 获取中文季详情信息
         data = await self._make_tmdb_request(f"tv/{tv_id}/season/{season_number}")
+        
         if data:
+            # 检查剧集的简介是否需要英文补充
+            episodes = data.get("episodes", [])
+            episodes_need_fallback = []
+            
+            for episode in episodes:
+                if not episode.get("overview"):  # 如果剧集简介为空
+                    episodes_need_fallback.append(episode.get("episode_number"))
+            
+            # 如果有剧集需要英文简介补充，获取英文数据
+            if episodes_need_fallback or not data.get("overview"):
+                english_data = await self._make_tmdb_request(f"tv/{tv_id}/season/{season_number}", language="en-US")
+                
+                if english_data:
+                    # 如果中文季简介为空，使用英文季简介
+                    if not data.get("overview") and english_data.get("overview"):
+                        data["overview"] = english_data["overview"]
+                    
+                    # 为没有中文简介的剧集补充英文简介
+                    english_episodes = english_data.get("episodes", [])
+                    english_episodes_dict = {ep.get("episode_number"): ep for ep in english_episodes}
+                    
+                    for episode in episodes:
+                        ep_num = episode.get("episode_number")
+                        if ep_num in episodes_need_fallback and ep_num in english_episodes_dict:
+                            english_ep = english_episodes_dict[ep_num]
+                            if english_ep.get("overview"):
+                                episode["overview"] = english_ep["overview"]
+                            # 也可以补充其他可能为空的字段
+                            if not episode.get("name") and english_ep.get("name"):
+                                episode["name"] = english_ep["name"]
+            
             await cache_manager.save_cache(cache_key, data, subdirectory="movie")
         return data
     
     async def get_tv_episode_details(self, tv_id: int, season_number: int, episode_number: int) -> Optional[Dict]:
-        """获取电视剧集详情"""
+        """获取电视剧集详情（支持中英文fallback）"""
         cache_key = f"tv_episode_{tv_id}_{season_number}_{episode_number}"
         cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
         if cached_data:
             return cached_data
             
+        # 获取中文集详情信息
         data = await self._make_tmdb_request(f"tv/{tv_id}/season/{season_number}/episode/{episode_number}")
+        
         if data:
+            # 如果关键字段为空，获取英文信息补充
+            if not data.get("overview") or not data.get("name"):
+                english_data = await self._make_tmdb_request(f"tv/{tv_id}/season/{season_number}/episode/{episode_number}", language="en-US")
+                
+                if english_data:
+                    # 如果中文简介为空，使用英文简介
+                    if not data.get("overview") and english_data.get("overview"):
+                        data["overview"] = english_data["overview"]
+                    
+                    # 如果中文标题为空，使用英文标题
+                    if not data.get("name") and english_data.get("name"):
+                        data["name"] = english_data["name"]
+            
             await cache_manager.save_cache(cache_key, data, subdirectory="movie")
         return data
     
