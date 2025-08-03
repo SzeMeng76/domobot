@@ -743,11 +743,26 @@ class SteamPriceChecker:
 
                             # 清理option_text，移除HTML标签和内嵌的价格信息
                             clean_option_text = re.sub(r'<.*?>', '', option_text)
-                            # 移除尾部的价格信息（更精确的正则表达式）
-                            clean_name = re.sub(r'\s*-\s*[\$¥€£₹₽₩￥]\s*[\d.,]+\s*(?:[\$¥€£₹₽₩￥]\s*[\d.,]+\s*)*$', '', clean_option_text).strip()
-                            # 如果没有移除任何内容，可能是其他格式的价格，再试一次
-                            if clean_name == clean_option_text:
-                                clean_name = re.sub(r'\s*\(\s*[\$¥€£₹₽₩￥]\s*[\d.,]+\s*\)\s*$', '', clean_option_text).strip()
+                            
+                            # 移除各种可能的价格格式
+                            clean_name = clean_option_text
+                            
+                            # 1. 移除尾部的单个价格: "Game Name - $19.99"
+                            clean_name = re.sub(r'\s*-\s*[\$¥€£₹₽₩￥R][A-Z]*\s*[\d.,]+\s*$', '', clean_name)
+                            
+                            # 2. 移除多个价格（原价+现价）: "Game Name - $39.99 $19.99" 或 "Game Name RM61.00 RM15.25"
+                            clean_name = re.sub(r'\s*[\$¥€£₹₽₩￥R][A-Z]*\s*[\d.,]+\s+[\$¥€£₹₽₩￥R][A-Z]*\s*[\d.,]+\s*$', '', clean_name)
+                            
+                            # 3. 移除单独的价格: "Game Name $19.99"
+                            clean_name = re.sub(r'\s+[\$¥€£₹₽₩￥R][A-Z]*\s*[\d.,]+\s*$', '', clean_name)
+                            
+                            # 4. 移除括号内的价格: "Game Name ($19.99)"
+                            clean_name = re.sub(r'\s*\(\s*[\$¥€£₹₽₩￥R][A-Z]*\s*[\d.,]+\s*\)\s*$', '', clean_name)
+                            
+                            # 5. 移除连续的多个价格格式（如Steam打折显示）
+                            clean_name = re.sub(r'\s*[\$¥€£₹₽₩￥R][A-Z]*\s*[\d.,]+(?:\s+[\$¥€£₹₽₩￥R][A-Z]*\s*[\d.,]+)*\s*$', '', clean_name)
+                            
+                            clean_name = clean_name.strip()
 
                             # 智能价格格式化：根据地区使用正确的货币格式
                             def format_local_price(amount, currency_code, country_code):
