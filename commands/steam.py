@@ -298,11 +298,10 @@ class SteamPriceChecker:
         return detected_currency_code, price_value
 
     def _escape_markdown(self, text: str) -> str:
-        """Escapes markdown special characters in text."""
-        special_chars = ['\\', '`', '*', '_', '{', '}', '[', ']', '(', ')', '#', '+', '-', '.', '!']
-        for char in special_chars:
-            text = text.replace(char, f'\\{char}')
-        return text
+        """Escapes markdown special characters in text for MarkdownV2."""
+        # Use the same smart formatter as app_store.py
+        from utils.formatter import escape_v2
+        return escape_v2(text)
 
     def get_country_code(self, country_input: str) -> str | None:
         """Converts country input (Chinese name or code) to country code."""
@@ -545,7 +544,7 @@ class SteamPriceChecker:
             discount = bundle_data.get('discount_pct', '0')
             savings = bundle_data.get('savings', '0')
             text = [
-                f"🎮 {self._escape_markdown(bundle_data['name'])}",
+                f"🎮 {bundle_data['name']}",
                 f"🔗 链接：{bundle_data['url']}",
                 f"💵 优惠价: {final}",
                 f"💰 原价: {original}" if original and original != final else "",
@@ -556,7 +555,7 @@ class SteamPriceChecker:
             if bundle_data.get('items'):
                 text.append("\n🎮 包含内容:")
                 for it in bundle_data['items']:
-                    text.append(f"• {self._escape_markdown(it['name'])} - {it['price']['final_formatted']}")
+                    text.append(f"• {it['name']} - {it['price']['final_formatted']}")
             return "\n".join([t for t in text if t])
 
         if not rate_converter:
@@ -564,7 +563,7 @@ class SteamPriceChecker:
 
         result = []
 
-        result.append(f"🎮 {self._escape_markdown(bundle_data['name'])}")
+        result.append(f"🎮 {bundle_data['name']}")
         result.append(f"🔗 链接：{bundle_data['url']}")
         result.append(f"🌍 查询地区: {get_country_flag(cc)} {cc}")
 
@@ -614,10 +613,13 @@ class SteamPriceChecker:
             result.append("\n🎮 包含内容:")
             for item in bundle_data['items']:
                 price_item_str = item.get('price', {}).get('final_formatted', '未知价格')
-                item_name = self._escape_markdown(item.get('name', '未知项目'))
+                item_name = item.get('name', '未知项目')
                 result.append(f"• 📄 {item_name} - {price_item_str}")
 
-        return "\n".join(result)
+        from utils.formatter import foldable_text_with_markdown_v2
+        full_message = "\n".join(result)
+        # The calling function will apply proper formatting
+        return full_message
 
     async def format_price_with_cny(self, price_info: dict, country_currency: str, country_code: str = None) -> str:
         """Formats price information and adds CNY conversion."""
@@ -687,7 +689,7 @@ class SteamPriceChecker:
         currency = price_info.get('currency', cc)
 
         result = [
-            f"🎮 {self._escape_markdown(name)} - [Store Page]({store_url})",
+            f"🎮 {name} - [Store Page]({store_url})",
             f"🔑 Steam ID: `{app_id}`",
             f"🌍 国家/地区: {get_country_flag(cc)} {country_info['name']} ({cc})",
             await self.format_price_with_cny(price_info, currency, cc)
@@ -739,8 +741,13 @@ class SteamPriceChecker:
                             package_price_num = package_final_price_cents / 100.0
                             package_currency = package.get('currency', currency)
 
-                            # 清理option_text，移除HTML标签
+                            # 清理option_text，移除HTML标签和内嵌的价格信息
                             clean_option_text = re.sub(r'<.*?>', '', option_text)
+                            # 移除尾部的价格信息（更精确的正则表达式）
+                            clean_name = re.sub(r'\s*-\s*[\$¥€£₹₽₩￥]\s*[\d.,]+\s*(?:[\$¥€£₹₽₩￥]\s*[\d.,]+\s*)*$', '', clean_option_text).strip()
+                            # 如果没有移除任何内容，可能是其他格式的价格，再试一次
+                            if clean_name == clean_option_text:
+                                clean_name = re.sub(r'\s*\(\s*[\$¥€£₹₽₩￥]\s*[\d.,]+\s*\)\s*$', '', clean_option_text).strip()
 
                             # 智能价格格式化：根据地区使用正确的货币格式
                             def format_local_price(amount, currency_code, country_code):
@@ -763,22 +770,21 @@ class SteamPriceChecker:
                             if cc != 'CN' and package_currency != 'CNY' and rate_converter and rate_converter.rates and package_currency in rate_converter.rates:
                                 cny_price = await rate_converter.convert(package_price_num, package_currency, "CNY")
                                 if cny_price is not None:
-                                    price_display += f" - ¥{cny_price:.2f}CNY"
-
-                            # 清理option_text，移除价格信息（支持多种货币符号）
-                            clean_name = re.sub(r'\s*-?\s*([\$¥€£]\s*\d+\.?\d*\s*)*$', '', clean_option_text).strip()
-                            clean_name = re.sub(r'\s*-?\s*[\$¥€£]\s*\d+\.?\d*\s*[\$¥€£]\s*\d+\.?\d*$', '',clean_name).strip()
+                                    price_display += f" (约 ¥{cny_price:.2f} CNY)"
 
                             purchase_options.append(f"• {content_type} {clean_name} - {price_display}")
                         else:
-                            # 价格为0但不是免费许可证的情况
+                            # 价格为0但不是免费许证的情况
                             purchase_options.append(f"• {content_type} {option_text} (暂无价格信息)")
 
         if purchase_options:
             result.append("🛒 购买选项:")
             result.extend(purchase_options)
 
-        return "\n".join(result)
+        from utils.formatter import foldable_text_with_markdown_v2
+        full_message = "\n".join(result)
+        # The calling function will apply proper formatting
+        return full_message
 
     def _select_best_match(self, search_results: list[dict], query: str) -> dict:
         """智能选择最匹配的游戏结果"""
@@ -845,7 +851,7 @@ class SteamPriceChecker:
 
         search_results = await self.search_game(game_query, valid_country_codes[0])
         if not search_results:
-            return f"❌ 未找到相关游戏\\n搜索词: `{game_query}`"
+            return f"❌ 未找到相关游戏\n搜索词: `{game_query}`"
 
         # 智能选择最匹配的游戏
         game = self._select_best_match(search_results, game_query)
@@ -862,7 +868,8 @@ class SteamPriceChecker:
                 error_msg = self.error_handler.handle_network_error(e)
                 results.append(f"❌ {cc}区查询失败: {error_msg}")
 
-        return "\n\n".join(results)
+        full_message = "\n\n".join(results)
+        return full_message
 
     async def search_and_format_all(self, query: str, cc: str) -> str:
         """Performs a comprehensive search for games and bundles."""
@@ -888,31 +895,31 @@ class SteamPriceChecker:
                 return "❌ 搜索失败: JSON解码错误"
 
         if not items:
-            return f"❌ 未找到相关内容\\n搜索词: `{query}`"
+            return f"❌ 未找到相关内容\n搜索词: `{query}`"
 
         country_info = SUPPORTED_COUNTRIES.get(cc, {"name": cc})
         results = [
-            "🔍 Steam搜索结果\\n",
-            f"关键词: `{query}`\\n",
-            f"🌍 搜索地区: {get_country_flag(cc)} {country_info['name']} \\({cc}\\)\\n"
+            "🔍 Steam搜索结果",
+            f"关键词: `{query}`",
+            f"🌍 搜索地区: {get_country_flag(cc)} {country_info['name']} ({cc})"
         ]
 
         apps = []
         bundles = []
 
         for item in items[:self.config.MAX_SEARCH_ITEMS]:
-            name = self._escape_markdown(item.get('name', '未知'))
+            name = item.get('name', '未知')
             logo_url = item.get('logo', '')
 
             if '/apps/' in logo_url:
                 app_id_match = re.search(r'/apps/(\d+)/', logo_url)
                 if app_id_match:
-                    link = self._escape_markdown(f"https://store.steampowered.com/app/{app_id_match.group(1)}")
+                    link = f"https://store.steampowered.com/app/{app_id_match.group(1)}"
                     apps.append(f"• 🎮 {name} - [Store Page]({link})\n  🔑 `{app_id_match.group(1)}`\n")
             elif '/bundles/' in logo_url:
                 bundle_id_match = re.search(r'/bundles/(\d+)/', logo_url)
                 if bundle_id_match:
-                    link = self._escape_markdown(f"https://store.steampowered.com/bundle/{bundle_id_match.group(1)}")
+                    link = f"https://store.steampowered.com/bundle/{bundle_id_match.group(1)}"
                     bundles.append(f"• 🛍 {name} - [Store Page]({link})\n  💎 `{bundle_id_match.group(1)}`\n")
 
         if apps:
@@ -923,7 +930,8 @@ class SteamPriceChecker:
             results.append("🛍 捆绑包:")
             results.extend(bundles)
 
-        return "\\n".join(results)
+        full_message = "\n".join(results)
+        return full_message
 
 steam_checker: SteamPriceChecker | None = None
 
