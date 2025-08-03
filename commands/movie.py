@@ -1905,7 +1905,6 @@ async def movie_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "`/movie_detail <电影ID>` - 获取电影详情\n"
             "`/movie_rec <电影ID>` - 获取相似推荐\n"
             "`/movie_videos <电影ID>` - 获取预告片和视频\n"
-            "`/movie_reviews <电影ID>` - 获取电影用户评价\n"
             "`/movie_watch <电影ID>` - 获取观看平台\n\n"
             "**热门趋势:**\n"
             "`/trending` - 今日全球热门内容\n"
@@ -1915,8 +1914,7 @@ async def movie_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "**示例:**\n"
             "`/movie 复仇者联盟`\n"
             "`/movie_detail 299536`\n"
-            "`/movie_videos 299536`\n"
-            "`/movie_reviews 299536`"
+            "`/movie_videos 299536`"
         )
         message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
@@ -2211,7 +2209,6 @@ async def tv_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             "`/tv_detail <电视剧ID>` - 获取电视剧详情\n"
             "`/tv_rec <电视剧ID>` - 获取相似推荐\n"
             "`/tv_videos <电视剧ID>` - 获取预告片和视频\n"
-            "`/tv_reviews <电视剧ID>` - 获取电视剧用户评价\n"
             "`/tv_watch <电视剧ID>` - 获取观看平台\n"
             "`/tv_season <电视剧ID> <季数>` - 获取季详情\n"
             "`/tv_episode <电视剧ID> <季数> <集数>` - 获取集详情\n\n"
@@ -2222,8 +2219,7 @@ async def tv_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             "`/tv 权力的游戏`\n"
             "`/tv_detail 1399`\n"
             "`/tv_season 1399 1`\n"
-            "`/tv_videos 1399`\n"
-            "`/tv_reviews 1399`"
+            "`/tv_videos 1399`"
         )
         message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
