@@ -41,7 +41,7 @@ class MovieService:
         """获取Trakt API密钥"""
         return config_manager.config.trakt_api_key if hasattr(config_manager.config, 'trakt_api_key') else None
     
-    async def _make_tmdb_request(self, endpoint: str, params: Dict[str, Any] = None, use_english_for_videos: bool = False) -> Optional[Dict]:
+    async def _make_tmdb_request(self, endpoint: str, params: Dict[str, Any] = None, language: str = "zh-CN") -> Optional[Dict]:
         """发起TMDB API请求"""
         api_key = await self._get_tmdb_api_key()
         if not api_key:
@@ -50,8 +50,6 @@ class MovieService:
             
         try:
             url = f"{self.tmdb_base_url}/{endpoint}"
-            # 对于视频相关的API，使用英语以获取更多内容
-            language = "en-US" if use_english_for_videos or "/videos" in endpoint else "zh-CN"
             request_params = {"api_key": api_key, "language": language}
             if params:
                 request_params.update(params)
@@ -91,6 +89,11 @@ class MovieService:
             logger.error(f"Trakt API请求异常: {e}")
             return None
     
+    async def _get_videos_data(self, content_type: str, content_id: int) -> Optional[Dict]:
+        """专门获取视频数据的方法，使用英文API以获取更多内容"""
+        endpoint = f"{content_type}/{content_id}/videos"
+        return await self._make_tmdb_request(endpoint, language="en-US")
+    
     async def search_movies(self, query: str, page: int = 1) -> Optional[Dict]:
         """搜索电影"""
         cache_key = f"movie_search_{query.lower()}_{page}"
@@ -122,10 +125,17 @@ class MovieService:
         if cached_data:
             return cached_data
             
+        # 获取中文详情信息
         data = await self._make_tmdb_request(f"movie/{movie_id}", {
-            "append_to_response": "credits,videos,recommendations,watch/providers"
-        }, use_english_for_videos=True)
+            "append_to_response": "credits,recommendations,watch/providers"
+        })
+        
         if data:
+            # 单独获取英文视频信息以获得更多内容
+            videos_data = await self._get_videos_data("movie", movie_id)
+            if videos_data:
+                data["videos"] = videos_data
+            
             await cache_manager.save_cache(cache_key, data, subdirectory="movie")
         return data
     
@@ -176,10 +186,17 @@ class MovieService:
         if cached_data:
             return cached_data
             
+        # 获取中文详情信息
         data = await self._make_tmdb_request(f"tv/{tv_id}", {
-            "append_to_response": "credits,videos,recommendations,watch/providers"
-        }, use_english_for_videos=True)
+            "append_to_response": "credits,recommendations,watch/providers"
+        })
+        
         if data:
+            # 单独获取英文视频信息以获得更多内容
+            videos_data = await self._get_videos_data("tv", tv_id)
+            if videos_data:
+                data["videos"] = videos_data
+            
             await cache_manager.save_cache(cache_key, data, subdirectory="movie")
         return data
     
@@ -2211,9 +2228,10 @@ async def movie_videos_command(update: Update, context: ContextTypes.DEFAULT_TYP
     )
     
     try:
-        detail_data = await movie_service.get_movie_details(movie_id)
-        if detail_data and detail_data.get("videos"):
-            result_text = movie_service.format_movie_videos(detail_data["videos"])
+        # 直接获取视频数据
+        videos_data = await movie_service._get_videos_data("movie", movie_id)
+        if videos_data:
+            result_text = movie_service.format_movie_videos(videos_data)
             await message.edit_text(
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2
@@ -2269,9 +2287,10 @@ async def tv_videos_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     )
     
     try:
-        detail_data = await movie_service.get_tv_details(tv_id)
-        if detail_data and detail_data.get("videos"):
-            result_text = movie_service.format_tv_videos(detail_data["videos"])
+        # 直接获取视频数据
+        videos_data = await movie_service._get_videos_data("tv", tv_id)
+        if videos_data:
+            result_text = movie_service.format_tv_videos(videos_data)
             await message.edit_text(
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2
