@@ -2268,6 +2268,17 @@ async def movie_rec_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if not update.message or not update.effective_chat:
         return
     
+    user_id = update.effective_user.id if update.effective_user else None
+    if user_id:
+        # 检查并取消活跃的 movie 搜索会话的删除任务
+        if user_id in movie_search_sessions:
+            old_session = movie_search_sessions[user_id]
+            old_session_id = old_session.get("session_id")
+            if old_session_id:
+                from utils.message_manager import cancel_session_deletions
+                cancelled_count = await cancel_session_deletions(old_session_id, context)
+                logger.info(f"🔄 用户 {user_id} 执行 movie_rec，已取消 {cancelled_count} 个movie搜索会话删除任务")
+    
     await delete_user_command(context, update.effective_chat.id, update.message.message_id)
     
     if not context.args:
@@ -2593,6 +2604,17 @@ async def tv_rec_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     """处理 /tv_rec 命令 - 获取电视剧推荐"""
     if not update.message or not update.effective_chat:
         return
+    
+    user_id = update.effective_user.id if update.effective_user else None
+    if user_id:
+        # 检查并取消活跃的 tv 搜索会话的删除任务
+        if user_id in tv_search_sessions:
+            old_session = tv_search_sessions[user_id]
+            old_session_id = old_session.get("session_id")
+            if old_session_id:
+                from utils.message_manager import cancel_session_deletions
+                cancelled_count = await cancel_session_deletions(old_session_id, context)
+                logger.info(f"🔄 用户 {user_id} 执行 tv_rec，已取消 {cancelled_count} 个tv搜索会话删除任务")
     
     await delete_user_command(context, update.effective_chat.id, update.message.message_id)
     
@@ -3730,6 +3752,17 @@ async def movie_watch_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     if not update.message or not update.effective_chat:
         return
     
+    user_id = update.effective_user.id if update.effective_user else None
+    if user_id:
+        # 检查并取消活跃的 movie 搜索会话的删除任务
+        if user_id in movie_search_sessions:
+            old_session = movie_search_sessions[user_id]
+            old_session_id = old_session.get("session_id")
+            if old_session_id:
+                from utils.message_manager import cancel_session_deletions
+                cancelled_count = await cancel_session_deletions(old_session_id, context)
+                logger.info(f"🔄 用户 {user_id} 执行 movie_watch，已取消 {cancelled_count} 个movie搜索会话删除任务")
+    
     await delete_user_command(context, update.effective_chat.id, update.message.message_id)
     
     if not context.args:
@@ -3787,6 +3820,17 @@ async def tv_watch_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     """处理 /tv_watch 命令 - 获取电视剧观看平台"""
     if not update.message or not update.effective_chat:
         return
+    
+    user_id = update.effective_user.id if update.effective_user else None
+    if user_id:
+        # 检查并取消活跃的 tv 搜索会话的删除任务
+        if user_id in tv_search_sessions:
+            old_session = tv_search_sessions[user_id]
+            old_session_id = old_session.get("session_id")
+            if old_session_id:
+                from utils.message_manager import cancel_session_deletions
+                cancelled_count = await cancel_session_deletions(old_session_id, context)
+                logger.info(f"🔄 用户 {user_id} 执行 tv_watch，已取消 {cancelled_count} 个tv搜索会话删除任务")
     
     await delete_user_command(context, update.effective_chat.id, update.message.message_id)
     
@@ -4058,7 +4102,7 @@ async def movie_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                     # 如果有海报URL，发送图片消息
                     if poster_url:
                         try:
-                            await context.bot.send_photo(
+                            detail_message = await context.bot.send_photo(
                                 chat_id=query.message.chat_id,
                                 photo=poster_url,
                                 caption=foldable_text_with_markdown_v2(result_text),
@@ -4066,17 +4110,35 @@ async def movie_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                             )
                             # 删除原来的搜索结果消息
                             await query.delete_message()
+                            
+                            # 为详情消息添加自动删除
+                            from utils.message_manager import _schedule_deletion
+                            from utils.config_manager import get_config
+                            config = get_config()
+                            await _schedule_deletion(context, query.message.chat_id, detail_message.message_id, config.auto_delete_delay)
                         except Exception as photo_error:
                             logger.warning(f"发送海报失败: {photo_error}，改用文本消息")
                             await query.edit_message_text(
                                 foldable_text_with_markdown_v2(result_text),
                                 parse_mode=ParseMode.MARKDOWN_V2
                             )
+                            
+                            # 为编辑后的消息添加自动删除
+                            from utils.message_manager import _schedule_deletion
+                            from utils.config_manager import get_config
+                            config = get_config()
+                            await _schedule_deletion(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
                     else:
                         await query.edit_message_text(
                             foldable_text_with_markdown_v2(result_text),
                             parse_mode=ParseMode.MARKDOWN_V2
                         )
+                        
+                        # 为编辑后的消息添加自动删除
+                        from utils.message_manager import _schedule_deletion
+                        from utils.config_manager import get_config
+                        config = get_config()
+                        await _schedule_deletion(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
                     
                     # 清除用户会话
                     del movie_search_sessions[user_id]
@@ -4166,7 +4228,7 @@ async def tv_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                     # 如果有海报URL，发送图片消息
                     if poster_url:
                         try:
-                            await context.bot.send_photo(
+                            detail_message = await context.bot.send_photo(
                                 chat_id=query.message.chat_id,
                                 photo=poster_url,
                                 caption=foldable_text_with_markdown_v2(result_text),
@@ -4174,17 +4236,35 @@ async def tv_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                             )
                             # 删除原来的搜索结果消息
                             await query.delete_message()
+                            
+                            # 为详情消息添加自动删除
+                            from utils.message_manager import _schedule_deletion
+                            from utils.config_manager import get_config
+                            config = get_config()
+                            await _schedule_deletion(context, query.message.chat_id, detail_message.message_id, config.auto_delete_delay)
                         except Exception as photo_error:
                             logger.warning(f"发送海报失败: {photo_error}，改用文本消息")
                             await query.edit_message_text(
                                 foldable_text_with_markdown_v2(result_text),
                                 parse_mode=ParseMode.MARKDOWN_V2
                             )
+                            
+                            # 为编辑后的消息添加自动删除
+                            from utils.message_manager import _schedule_deletion
+                            from utils.config_manager import get_config
+                            config = get_config()
+                            await _schedule_deletion(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
                     else:
                         await query.edit_message_text(
                             foldable_text_with_markdown_v2(result_text),
                             parse_mode=ParseMode.MARKDOWN_V2
                         )
+                        
+                        # 为编辑后的消息添加自动删除
+                        from utils.message_manager import _schedule_deletion
+                        from utils.config_manager import get_config
+                        config = get_config()
+                        await _schedule_deletion(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
                     
                     # 清除用户会话
                     del tv_search_sessions[user_id]
