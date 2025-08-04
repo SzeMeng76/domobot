@@ -218,8 +218,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - `/tq <城市> [天数/参数]`: 天气预报和空气质量
 
 🎬 *影视查询*
-电影: `/movie`, `/movie_hot`, `/movie_detail <ID>`, `/movie_rec <ID>`, `/movie_videos <ID>`, `/movie_reviews <ID>`, `/movie_watch <ID>`
-电视: `/tv`, `/tv_hot`, `/tv_detail <ID>`, `/tv_rec <ID>`, `/tv_videos <ID>`, `/tv_reviews <ID>`, `/tv_watch <ID>`, `/tv_season <ID> <季数>`, `/tv_episode <ID> <季> <集>`
+搜索: `/movie` 按钮 | `/movies` 文本 | `/tv` 按钮 | `/tvs` 文本
+电影: `/movie_hot`, `/movie_detail <ID>`, `/movie_rec <ID>`, `/movie_videos <ID>`, `/movie_reviews <ID>`, `/movie_watch <ID>`
+电视: `/tv_hot`, `/tv_detail <ID>`, `/tv_rec <ID>`, `/tv_videos <ID>`, `/tv_reviews <ID>`, `/tv_watch <ID>`, `/tv_season <ID> <季数>`, `/tv_episode <ID> <季> <集>`
 趋势: `/trending`, `/trending_week`, `/now_playing`, `/upcoming`, `/tv_airing`, `/tv_on_air`
 人物: `/person <姓名>`, `/person_detail <ID>`
 
