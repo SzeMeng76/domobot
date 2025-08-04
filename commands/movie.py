@@ -2086,8 +2086,16 @@ async def movie_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             # 添加查询词到搜索数据中
             search_data["query"] = query
             
+            # 如果用户已经有活跃的搜索会话，取消旧的删除任务
+            if user_id in movie_search_sessions:
+                old_session = movie_search_sessions[user_id]
+                old_session_id = old_session.get("session_id")
+                if old_session_id:
+                    from utils.message_manager import cancel_session_deletions
+                    cancelled_count = await cancel_session_deletions(old_session_id, context)
+                    logger.info(f"🔄 用户 {user_id} 有现有电影搜索会话，已取消 {cancelled_count} 个旧的删除任务")
+            
             # 存储用户搜索会话
-            user_id = update.effective_user.id
             movie_search_sessions[user_id] = {
                 "search_data": search_data,
                 "timestamp": datetime.now()
@@ -2404,8 +2412,16 @@ async def tv_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             # 添加查询词到搜索数据中
             search_data["query"] = query
             
+            # 如果用户已经有活跃的搜索会话，取消旧的删除任务
+            if user_id in tv_search_sessions:
+                old_session = tv_search_sessions[user_id]
+                old_session_id = old_session.get("session_id")
+                if old_session_id:
+                    from utils.message_manager import cancel_session_deletions
+                    cancelled_count = await cancel_session_deletions(old_session_id, context)
+                    logger.info(f"🔄 用户 {user_id} 有现有电视剧搜索会话，已取消 {cancelled_count} 个旧的删除任务")
+            
             # 存储用户搜索会话
-            user_id = update.effective_user.id
             tv_search_sessions[user_id] = {
                 "search_data": search_data,
                 "timestamp": datetime.now()
