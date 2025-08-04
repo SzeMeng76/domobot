@@ -35,12 +35,12 @@
 
 -   📺 **公开流媒体价格:** 所有用户可用 - 查询Netflix、Disney+、Spotify、HBO Max等流媒体服务在全球各地区的订阅价格。
 -   👤 **公开用户信息查询:** 所有用户可用 - 查询Telegram用户注册日期、账号年龄，以及获取用户/群组ID。
--   🎬 **电影和电视剧信息:** 查询电影/电视剧详情及海报、评分、演员、预告片、评价、观看平台和季集信息。支持Telegraph长内容集成，热门趋势发现和人物搜索功能。*(需要白名单)*
+-   🎬 **电影和电视剧信息:** 查询电影/电视剧详情及海报、评分、演员、预告片、评价、推荐、观看平台和季集信息。支持Telegraph长内容集成，热门趋势发现、人物搜索和热门内容功能。*(需要白名单)*
 -   🪙 **加密货币价格:** 查询实时加密货币价格，支持自定义数量和货币转换，并显示 24 小时和 7 天的价格变化率。*(需要白名单)*
 -   💳 **BIN查询:** 查询信用卡BIN（银行识别号）信息，包括卡片品牌、类型、发卡银行和国家等详细信息。*(需要白名单)*
 -   🌦️ **天气预报:** 提供详细、多格式的天气预报（实时、多日、每小时、分钟级降水和生活指数）。*(需要白名单)*
--   💱 **汇率转换:** 实时汇率查询。*(需要白名单)*
--   🎮 **Steam 价格:** Steam 游戏多区域价格对比。*(需要白名单)*
+-   💱 **汇率转换:** 实时汇率查询，支持数学表达式计算（如 `/rate USD 1+2*3`）。*(需要白名单)*
+-   🎮 **Steam 价格:** Steam 游戏、捆绑包多区域价格对比和综合搜索功能。*(需要白名单)*
 -   📱 **应用商店价格:** 查询 App Store 和 Google Play 的应用价格。*(需要白名单)*
 -   🔐 **管理系统:** 完善的管理员权限系统和用户/群组白名单管理。
 -   📊 **用户缓存与统计:** 缓存用户数据并进行命令使用统计。
@@ -139,13 +139,16 @@ docker-compose down
 /crypto btc
 /crypto eth 0.5 usd
 
-# 汇率转换
+# 汇率转换（支持数学表达式）
 /rate USD 100
 /rate EUR JPY 50
+/rate USD 1+1*2          # 支持数学表达式计算
 
-# 天气预报
-/tq 北京
-/tq 东京 7
+# 天气预报（支持多种格式）
+/tq 北京                # 当前天气和预报
+/tq 东京 7                # 7天天气预报
+/tq 上海 24h             # 24小时逐时预报
+/tq 广州 indices         # 生活指数查询
 
 # 电影和电视剧
 /movie 复仇者联盟            # 搜索电影（按钮选择）
@@ -154,6 +157,7 @@ docker-compose down
 /movie_detail 299536       # 电影详情（包含预告片链接）
 /movie_videos 299536       # 电影预告片和相关视频
 /movie_reviews 299536      # 用户评价（长内容自动生成Telegraph页面）
+/movie_rec 299536          # 电影推荐
 /movie_watch 299536        # 观看平台信息
 /tv 权力的游戏              # 搜索电视剧（按钮选择）
 /tvs 权力的游戏             # 搜索电视剧（文本列表）
@@ -162,7 +166,9 @@ docker-compose down
 /tv_season 1399 1          # 季详情
 /tv_episode 1399 1 1       # 单集详情
 /tv_videos 1399            # 电视剧预告片和相关视频
+/tv_hot                    # 热门电视剧
 /tv_reviews 1399           # 用户评价（长内容自动生成Telegraph页面）
+/tv_rec 1399               # 电视剧推荐
 /tv_watch 1399             # 观看平台信息
 
 # 热门趋势内容
@@ -177,9 +183,11 @@ docker-compose down
 /person 汤姆·汉克斯              # 搜索演员、导演等影视人物
 /person_detail 31              # 获取人物详情和作品履历
 
-# Steam游戏价格
-/steam 赛博朋克
-/steam "荒野大镖客" US
+# Steam游戏价格和捆绑包
+/steam 赛博朋克          # 游戏价格查询
+/steam "荒野大镖客" US      # 多区域游戏价格
+/steamb "Valve Complete"  # Steam捆绑包价格
+/steams cyberpunk         # 综合搜索（游戏+捆绑包）
 
 # 应用商店
 /app 微信
@@ -191,26 +199,43 @@ docker-compose down
 
 #### 管理员命令
 ```bash
+# 用户和群组管理
+/add 123456789            # 添加用户到白名单（也可通过回复使用）
+/addgroup                 # 添加当前群组到白名单
+/admin                    # 打开管理员面板（交互式）
+
 # 数据点管理
 /listpoints [limit]       # 列出已知数据点（默认显示10个，含统计信息）
 /addpoint <用户ID> <日期> [备注] # 添加新的数据点（格式：YYYY-MM-DD）
 /removepoint <用户ID>     # 删除指定数据点
 
 # 用户缓存管理
-/cache                    # 查看用户缓存状态和统计信息（显示用户数量、表大小等）
+/cache                    # 查看用户缓存状态和统计信息
 /cache username           # 检查特定用户是否已缓存
 /cache @username          # 检查特定用户是否已缓存
 /cache 123456789          # 检查特定用户ID是否已缓存
 /cleanid                  # 清理所有用户ID缓存
 /cleanid 30               # 清理30天前的用户缓存
 
-# 其他缓存管理
-/bin_cleancache
-/crypto_cleancache
-/rate_cleancache
-/movie_cleancache
-/max_cleancache
-# ... 其他缓存管理命令
+# 服务缓存管理
+/rate_cleancache          # 清理汇率缓存
+/crypto_cleancache        # 清理加密货币缓存
+/bin_cleancache           # 清理BIN查询缓存
+/movie_cleancache         # 清理电影/电视缓存
+/steamcc                  # 清理Steam缓存
+/nf_cleancache           # 清理Netflix缓存
+/ds_cleancache           # 清理Disney+缓存
+/sp_cleancache           # 清理Spotify缓存
+/max_cleancache          # 清理HBO Max缓存
+/gp_cleancache           # 清理Google Play缓存
+/app_cleancache          # 清理App Store缓存
+/aps_cleancache          # 清理Apple服务缓存
+
+# 天气缓存管理
+/tq_cleancache           # 清理所有天气缓存
+/tq_cleanlocation        # 清理天气位置缓存
+/tq_cleanforecast        # 清理天气预报缓存
+/tq_cleanrealtime        # 清理实时天气缓存
 ```
 
 <details>
@@ -304,6 +329,7 @@ docker-compose down
 - **Redis缓存:** 用于高频数据，如价格信息和天气位置查询。
 - **统一缓存管理:** 通过 `redis_cache_manager.py` 管理。
 - **智能缓存:** 不同服务的缓存时长可配置。
+- **数学表达式缓存:** 汇率转换中数学表达式的安全评估和缓存。
 
 #### 任务调度
 - **Redis任务调度器:** 支持计划性、周期性任务。
@@ -375,6 +401,7 @@ docker-compose down
 - **群组集成:** 将机器人添加到任意 Telegram 群组即可为所有成员启用公开功能
 - **增强的帮助系统:** 根据用户权限级别显示不同的帮助内容
 - **改进的用户体验:** 明确区分免费功能和高级功能
+- **管理员管理工具:** 通过 `/add`、`/addgroup` 和交互式 `/admin` 面板提供全面的用户/群组白名单管理
 - **白名单政策更新:** 申请目前暂不开放，未来考虑推出付费服务计划
 
 #### 用户信息查询功能
@@ -394,6 +421,14 @@ docker-compose down
 - **灵活的缓存清理** 使用 `/cleanid` 命令支持基于时间和完全清理
 - **自动用户数据收集** 从所有监控群组消息中自动收集用户名到ID的映射
 - **增强的用户名支持** 在 `/when` 命令中利用缓存用户数据
+
+#### Steam游戏功能
+- **多格式游戏搜索:** `/steam` 查询单个游戏的多区域价格
+- **捆绑包价格查询:** `/steamb` 查询Steam捆绑包价格和内容信息
+- **综合搜索功能:** `/steams` 同时搜索游戏和捆绑包的综合结果
+- **区域价格对比:** 多国价格对比，帮助找到更优惠的价格
+- **智能缓存系统:** 智能缓存机制提升性能表现
+- **管理员缓存管理:** 专用的 `/steamcc` 命令进行缓存控制
 
 #### BIN查询功能
 - **新增 `/bin` 命令** 用于信用卡BIN信息查询

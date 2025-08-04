@@ -35,12 +35,12 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 
 -   📺 **Public Streaming Prices:** Available to all users - query subscription prices for Netflix, Disney+, Spotify, and HBO Max across global regions.
 -   👤 **Public User Information:** Available to all users - check Telegram user registration dates, account age, and get user/group IDs.
--   🎬 **Movie & TV Information:** Query movie/TV details with posters, ratings, cast, trailers, reviews, viewing platforms, and season/episode info. Features Telegraph integration for long content, trending discovery, and people search. *(Whitelist required)*
+-   🎬 **Movie & TV Information:** Query movie/TV details with posters, ratings, cast, trailers, reviews, recommendations, viewing platforms, and season/episode info. Features Telegraph integration for long content, trending discovery, people search, and hot/popular content. *(Whitelist required)*
 -   🪙 **Crypto Prices:** Look up real-time cryptocurrency prices with support for custom amounts and currency conversion, including 24h and 7d percentage changes. *(Whitelist required)*
 -   💳 **BIN Lookup:** Query credit card BIN (Bank Identification Number) information including card brand, type, issuing bank, and country details. *(Whitelist required)*
 -   🌦️ **Weather Forecasts:** Detailed, multi-format weather forecasts (real-time, daily, hourly, minutely precipitation, and lifestyle indices). *(Whitelist required)*
--   💱 **Currency Conversion:** Real-time exchange rate lookups. *(Whitelist required)*
--   🎮 **Steam Prices:** Multi-region price comparison for Steam games. *(Whitelist required)*
+-   💱 **Currency Conversion:** Real-time exchange rate lookups with mathematical expression support (e.g., `/rate USD 1+2*3`). *(Whitelist required)*
+-   🎮 **Steam Prices:** Multi-region price comparison for Steam games, bundles, and comprehensive search functionality. *(Whitelist required)*
 -   📱 **App Stores:** Application price lookup for the App Store and Google Play. *(Whitelist required)*
 -   🔐 **Admin System:** A comprehensive admin permission system with user/group whitelisting.
 -   📊 **User Caching & Stats:** Caching user data and command usage statistics.
@@ -139,13 +139,16 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /crypto btc
 /crypto eth 0.5 usd
 
-# Currency conversion
+# Currency conversion (supports mathematical expressions)
 /rate USD 100
 /rate EUR JPY 50
+/rate USD 1+1*2          # Mathematical expressions supported
 
-# Weather forecasts
-/tq Beijing
-/tq Tokyo 7
+# Weather forecasts (supports multiple formats)
+/tq Beijing                # Current weather and forecast
+/tq Tokyo 7                # 7-day forecast
+/tq Shanghai 24h           # 24-hour hourly forecast
+/tq Guangzhou indices      # Lifestyle indices
 
 # Movies and TV shows
 /movie Avengers            # Search movies (button selection)
@@ -154,6 +157,7 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /movie_detail 299536       # Movie details with trailers
 /movie_videos 299536       # Movie trailers and videos
 /movie_reviews 299536      # User reviews (Telegraph for long content)
+/movie_rec 299536          # Movie recommendations
 /movie_watch 299536        # Viewing platforms
 /tv Game of Thrones        # Search TV shows (button selection)
 /tvs Game of Thrones       # Search TV shows (text list)
@@ -161,7 +165,9 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /tv_season 1399 1          # Season details
 /tv_episode 1399 1 1       # Episode details
 /tv_videos 1399            # TV trailers and videos
+/tv_hot                    # Popular TV shows
 /tv_reviews 1399           # User reviews (Telegraph for long content)
+/tv_rec 1399               # TV show recommendations
 /tv_watch 1399             # Viewing platforms
 
 # Trending content
@@ -176,9 +182,11 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /person Tom Hanks          # Search for actors, directors, etc.
 /person_detail 31          # Get person details and filmography
 
-# Steam game prices
-/steam Cyberpunk
-/steam "Red Dead" US
+# Steam game prices and bundles
+/steam Cyberpunk          # Game price lookup
+/steam "Red Dead" US      # Multi-region game prices
+/steamb "Valve Complete"  # Steam bundle prices
+/steams cyberpunk         # Comprehensive search (games + bundles)
 
 # App stores
 /app WeChat
@@ -190,26 +198,43 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 
 #### Admin Commands
 ```bash
+# User & Group Management
+/add 123456789            # Add user to whitelist (also works with reply)
+/addgroup                 # Add current group to whitelist
+/admin                    # Open admin panel (interactive)
+
 # Data Points Management
-/listpoints [limit]              # List known data points (default 10, with statistics)
+/listpoints [limit]       # List known data points (default 10, with statistics)
 /addpoint <user_id> <date> [note] # Add new data point (format: YYYY-MM-DD)
-/removepoint <user_id>           # Remove specified data point
+/removepoint <user_id>    # Remove specified data point
 
 # User cache management
-/cache                    # View user cache status and statistics (shows user count, table size, etc.)
+/cache                    # View user cache status and statistics
 /cache username           # Check if specific user is cached
 /cache @username          # Check if specific user is cached
 /cache 123456789          # Check if specific user ID is cached
 /cleanid                  # Clean all user ID cache
 /cleanid 30               # Clean user cache older than 30 days
 
-# Other cache management
-/bin_cleancache
-/crypto_cleancache
-/rate_cleancache
-/movie_cleancache
-/max_cleancache
-# ... other cache management commands
+# Service Cache Management
+/rate_cleancache          # Clear exchange rate cache
+/crypto_cleancache        # Clear cryptocurrency cache
+/bin_cleancache           # Clear BIN query cache
+/movie_cleancache         # Clear movie/TV cache
+/steamcc                  # Clear Steam cache
+/nf_cleancache           # Clear Netflix cache
+/ds_cleancache           # Clear Disney+ cache
+/sp_cleancache           # Clear Spotify cache
+/max_cleancache          # Clear HBO Max cache
+/gp_cleancache           # Clear Google Play cache
+/app_cleancache          # Clear App Store cache
+/aps_cleancache          # Clear Apple services cache
+
+# Weather Cache Management
+/tq_cleancache           # Clear all weather cache
+/tq_cleanlocation        # Clear weather location cache
+/tq_cleanforecast        # Clear weather forecast cache
+/tq_cleanrealtime        # Clear real-time weather cache
 ```
 
 <details>
@@ -310,6 +335,7 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 - **Redis Cache:** Used for high-frequency data like price information and weather location lookups.
 - **Unified Cache Management:** Managed via `redis_cache_manager.py`.
 - **Smart Caching:** Different services have configurable cache durations.
+- **Mathematical Expression Caching:** Safe evaluation and caching of mathematical expressions in currency conversions.
 
 #### Task Scheduling
 
@@ -388,12 +414,15 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 - **Group Integration:** Add the bot to any Telegram group to enable public features for all members
 - **Enhanced Help System:** Different help content displayed based on user permission level
 - **Improved User Experience:** Clear distinction between free and premium features
+- **Admin Management Tools:** Comprehensive user/group whitelist management via `/add`, `/addgroup`, and interactive `/admin` panel
 - **Whitelist Policy Update:** Applications currently closed, future paid service plans under consideration
 
 #### Movie & TV Features
 - **Enhanced Search:** Interactive button-based movie/TV show selection
 - **Rich Details:** Posters, ratings, cast, crew, trailers, and viewing platforms
 - **User Reviews:** Comprehensive review system with Telegraph integration for long content
+- **Recommendation System:** Intelligent movie and TV show recommendations based on content similarity
+- **Hot/Popular Content:** Dedicated commands for trending and popular movies/TV shows
 - **Season/Episode Info:** Detailed TV show breakdowns with intelligent content truncation
 - **Trending Discovery:** Daily/weekly trending content and upcoming releases
 - **People Search:** Actor, director, and crew information with filmography
@@ -406,6 +435,14 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 - **Flexible cache cleanup** with `/cleanid` command supporting time-based and complete cleanup
 - **Automatic user data collection** from all monitored group messages for username-to-ID mapping
 - **Enhanced username support** in `/when` command leveraging cached user data
+
+#### Steam Gaming Features
+- **Multi-format Game Search:** `/steam` for individual games with multi-region pricing
+- **Bundle Price Lookup:** `/steamb` for Steam bundle pricing and content information
+- **Comprehensive Search:** `/steams` for combined games and bundles search results
+- **Region Comparison:** Multi-country price comparison for better deals
+- **Smart Caching:** Intelligent caching system for improved performance
+- **Admin Cache Management:** Dedicated `/steamcc` command for cache control
 
 #### BIN Lookup Feature
 - **New `/bin` command** for credit card BIN information lookup
