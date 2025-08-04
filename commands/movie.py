@@ -2860,6 +2860,17 @@ async def movie_videos_command(update: Update, context: ContextTypes.DEFAULT_TYP
     if not update.message or not update.effective_chat:
         return
     
+    user_id = update.effective_user.id if update.effective_user else None
+    if user_id:
+        # 检查并取消活跃的 movie 搜索会话的删除任务
+        if user_id in movie_search_sessions:
+            old_session = movie_search_sessions[user_id]
+            old_session_id = old_session.get("session_id")
+            if old_session_id:
+                from utils.message_manager import cancel_session_deletions
+                cancelled_count = await cancel_session_deletions(old_session_id, context)
+                logger.info(f"🔄 用户 {user_id} 执行 movie_videos，已取消 {cancelled_count} 个movie搜索会话删除任务")
+    
     await delete_user_command(context, update.effective_chat.id, update.message.message_id)
     
     if not context.args:
@@ -2918,6 +2929,17 @@ async def movie_reviews_command(update: Update, context: ContextTypes.DEFAULT_TY
     """处理 /movie_reviews 命令 - 获取电影评价"""
     if not update.message or not update.effective_chat:
         return
+    
+    user_id = update.effective_user.id if update.effective_user else None
+    if user_id:
+        # 检查并取消活跃的 movie 搜索会话的删除任务
+        if user_id in movie_search_sessions:
+            old_session = movie_search_sessions[user_id]
+            old_session_id = old_session.get("session_id")
+            if old_session_id:
+                from utils.message_manager import cancel_session_deletions
+                cancelled_count = await cancel_session_deletions(old_session_id, context)
+                logger.info(f"🔄 用户 {user_id} 执行 movie_reviews，已取消 {cancelled_count} 个movie搜索会话删除任务")
     
     await delete_user_command(context, update.effective_chat.id, update.message.message_id)
     
@@ -3069,6 +3091,17 @@ async def tv_videos_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if not update.message or not update.effective_chat:
         return
     
+    user_id = update.effective_user.id if update.effective_user else None
+    if user_id:
+        # 检查并取消活跃的 TV 搜索会话的删除任务
+        if user_id in tv_search_sessions:
+            old_session = tv_search_sessions[user_id]
+            old_session_id = old_session.get("session_id")
+            if old_session_id:
+                from utils.message_manager import cancel_session_deletions
+                cancelled_count = await cancel_session_deletions(old_session_id, context)
+                logger.info(f"🔄 用户 {user_id} 执行 tv_videos，已取消 {cancelled_count} 个tv搜索会话删除任务")
+    
     await delete_user_command(context, update.effective_chat.id, update.message.message_id)
     
     if not context.args:
@@ -3127,6 +3160,17 @@ async def tv_reviews_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     """处理 /tv_reviews 命令 - 获取电视剧评价"""
     if not update.message or not update.effective_chat:
         return
+    
+    user_id = update.effective_user.id if update.effective_user else None
+    if user_id:
+        # 检查并取消活跃的 TV 搜索会话的删除任务
+        if user_id in tv_search_sessions:
+            old_session = tv_search_sessions[user_id]
+            old_session_id = old_session.get("session_id")
+            if old_session_id:
+                from utils.message_manager import cancel_session_deletions
+                cancelled_count = await cancel_session_deletions(old_session_id, context)
+                logger.info(f"🔄 用户 {user_id} 执行 tv_reviews，已取消 {cancelled_count} 个tv搜索会话删除任务")
     
     await delete_user_command(context, update.effective_chat.id, update.message.message_id)
     
