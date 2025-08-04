@@ -35,7 +35,7 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 
 -   📺 **Public Streaming Prices:** Available to all users - query subscription prices for Netflix, Disney+, Spotify, and HBO Max across global regions.
 -   👤 **Public User Information:** Available to all users - check Telegram user registration dates, account age, and get user/group IDs.
--   🎬 **Movie & TV Information:** Query movie/TV show details with poster images, ratings, cast, recommendations, trailers, user reviews, viewing platforms, and season/episode information using TMDB API. Includes trending content discovery and people search functionality. *(Whitelist required)*
+-   🎬 **Movie & TV Information:** Query movie/TV details with posters, ratings, cast, trailers, reviews, viewing platforms, and season/episode info. Features Telegraph integration for long content, trending discovery, and people search. *(Whitelist required)*
 -   🪙 **Crypto Prices:** Look up real-time cryptocurrency prices with support for custom amounts and currency conversion, including 24h and 7d percentage changes. *(Whitelist required)*
 -   💳 **BIN Lookup:** Query credit card BIN (Bank Identification Number) information including card brand, type, issuing bank, and country details. *(Whitelist required)*
 -   🌦️ **Weather Forecasts:** Detailed, multi-format weather forecasts (real-time, daily, hourly, minutely precipitation, and lifestyle indices). *(Whitelist required)*
@@ -148,33 +148,33 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /tq Tokyo 7
 
 # Movies and TV shows
-/movie Avengers
-/movie_hot
-/movie_detail 299536           # Get movie details (includes trailer links)
-/movie_rec 299536
-/movie_videos 299536           # Get movie trailers and videos
-/movie_reviews 299536          # Get user reviews (with Telegraph for long content)
-/movie_watch 299536            # Get viewing platforms information
-/tv Game of Thrones
-/tv_hot
-/tv_detail 1399                # Get TV details (includes trailer links)
-/tv_season 1399 1
-/tv_episode 1399 1 1
-/tv_videos 1399                # Get TV trailers and videos
-/tv_reviews 1399               # Get user reviews (with Telegraph for long content)
-/tv_watch 1399                 # Get viewing platforms information
+/movie Avengers            # Search movies (button selection)
+/movies Avengers           # Search movies (text list)
+/movie_hot                 # Popular movies  
+/movie_detail 299536       # Movie details with trailers
+/movie_videos 299536       # Movie trailers and videos
+/movie_reviews 299536      # User reviews (Telegraph for long content)
+/movie_watch 299536        # Viewing platforms
+/tv Game of Thrones        # Search TV shows (button selection)
+/tvs Game of Thrones       # Search TV shows (text list)
+/tv_detail 1399            # TV details with trailers
+/tv_season 1399 1          # Season details
+/tv_episode 1399 1 1       # Episode details
+/tv_videos 1399            # TV trailers and videos
+/tv_reviews 1399           # User reviews (Telegraph for long content)
+/tv_watch 1399             # Viewing platforms
 
 # Trending content
-/trending                      # Today's trending movies, TV shows, and people
-/trending_week                 # This week's trending content
-/now_playing                   # Currently playing movies
-/upcoming                      # Upcoming movie releases
-/tv_airing                     # Today's airing TV shows
-/tv_on_air                     # Currently airing TV shows
+/trending                  # Today's trending movies, TV shows, and people
+/trending_week             # This week's trending content
+/now_playing               # Currently playing movies
+/upcoming                  # Upcoming movie releases
+/tv_airing                 # Today's airing TV shows
+/tv_on_air                 # Currently airing TV shows
 
 # People search
-/person Tom Hanks              # Search for actors, directors, etc.
-/person_detail 31              # Get person details and filmography
+/person Tom Hanks          # Search for actors, directors, etc.
+/person_detail 31          # Get person details and filmography
 
 # Steam game prices
 /steam Cyberpunk
@@ -390,15 +390,14 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 - **Improved User Experience:** Clear distinction between free and premium features
 - **Whitelist Policy Update:** Applications currently closed, future paid service plans under consideration
 
-#### User Information Lookup Feature
-- **Enhanced `/when` command** with username support for Telegram user registration date estimation
-- **Multiple query methods** supporting direct ID input, username lookup (@username or username), and reply-to-message
-- **Intelligent ID-based algorithm** using linear interpolation with real-world data points
-- **User classification system** categorizing users by account age (新兵蛋子, 不如老兵, 老兵, etc.)
-- **Markdown safety features** with proper special character escaping
-- **Accurate age calculation** using year/month difference logic
-- **Enhanced `/id` command** for getting user and group IDs
-- **User caching system** for improved username-to-ID resolution performance
+#### Movie & TV Features
+- **Enhanced Search:** Interactive button-based movie/TV show selection
+- **Rich Details:** Posters, ratings, cast, crew, trailers, and viewing platforms
+- **User Reviews:** Comprehensive review system with Telegraph integration for long content
+- **Season/Episode Info:** Detailed TV show breakdowns with intelligent content truncation
+- **Trending Discovery:** Daily/weekly trending content and upcoming releases
+- **People Search:** Actor, director, and crew information with filmography
+- **Multilingual Support:** Chinese/English content fallback for better coverage
 
 #### User Cache Management System
 - **New user caching infrastructure** with MySQL storage and Redis performance optimization
@@ -422,7 +421,7 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 
 - **CoinMarketCap API:** For cryptocurrency price data
 - **DY.AX BIN API:** For credit card BIN information lookup
-- **TMDB API:** For movie and TV show information
+- **TMDB API:** For movie and TV show information with Telegraph integration
 - **HeFeng Weather API:** For weather forecast data
 - **Steam API:** For game pricing information
 - **Various streaming service APIs:** For subscription pricing
