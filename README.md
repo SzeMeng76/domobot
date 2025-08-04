@@ -19,7 +19,7 @@ Read this in other languages: [简体中文](./README.zh-CN.md)
 - 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`
 - 👥 **Group Friendly:** Works in any Telegram group without requiring whitelist approval
 
-*Advanced features (crypto, weather, Steam prices, etc.) require whitelist access.*
+*Advanced features (crypto, weather, Steam prices, movie/TV info, etc.) require whitelist access.*
 
 </div>
 
@@ -289,7 +289,7 @@ The project has been fully migrated away from SQLite compatibility adapters to a
 #### Permission Levels
 
 1.  **Public Access:** All users and groups (whitelisted or not) can access streaming service pricing (`/nf`, `/ds`, `/sp`) and user information commands (`/when`, `/id`). Simply add the bot to any group to enable these features.
-2.  **Whitelist Access:** Required for advanced features like crypto prices, currency conversion, weather forecasts, Steam prices, BIN lookup, and app store queries. *Whitelist applications are currently closed - future paid service plans may be available.*
+2.  **Whitelist Access:** Required for advanced features like crypto prices, currency conversion, weather forecasts, Steam prices, BIN lookup, movie/TV information, and app store queries. *Contact for whitelist access or future service plans.*
 3.  **Admin:** Stored in the MySQL `admin_permissions` table.
 4.  **Super Admin:** Configured via the `SUPER_ADMIN_ID` environment variable.
 
