@@ -1884,6 +1884,140 @@ class MovieService:
 # 全局服务实例
 movie_service: MovieService = None
 
+# 用户搜索会话管理
+movie_search_sessions = {}
+tv_search_sessions = {}
+
+def create_movie_search_keyboard(search_data: dict) -> InlineKeyboardMarkup:
+    """创建电影搜索结果的内联键盘"""
+    keyboard = []
+    
+    # 电影选择按钮 (每行显示一个电影)
+    results = search_data["results"]
+    for i in range(min(len(results), 10)):  # 显示前10个结果
+        movie = results[i]
+        movie_title = movie.get("title", "未知电影")
+        year = movie.get("release_date", "")[:4] if movie.get("release_date") else ""
+        
+        # 截断过长的电影名称
+        if len(movie_title) > 35:
+            movie_title = movie_title[:32] + "..."
+            
+        callback_data = f"movie_select_{i}_{search_data.get('current_page', 1)}"
+        display_name = f"{i + 1}. 🎬 {movie_title}"
+        if year:
+            display_name += f" ({year})"
+        keyboard.append([InlineKeyboardButton(display_name, callback_data=callback_data)])
+    
+    # 分页控制
+    current_page = search_data.get("current_page", 1)
+    total_pages = search_data.get("total_pages", 1)
+    
+    nav_row = []
+    if current_page > 1:
+        nav_row.append(InlineKeyboardButton("⬅️ 上一页", callback_data=f"movie_page_{current_page - 1}"))
+        
+    nav_row.append(InlineKeyboardButton(f"📄 {current_page}/{total_pages}", callback_data="movie_page_info"))
+    
+    if current_page < total_pages:
+        nav_row.append(InlineKeyboardButton("下一页 ➡️", callback_data=f"movie_page_{current_page + 1}"))
+        
+    if nav_row:
+        keyboard.append(nav_row)
+    
+    # 操作按钮
+    action_row = [
+        InlineKeyboardButton("❌ 关闭", callback_data="movie_close")
+    ]
+    keyboard.append(action_row)
+    
+    return InlineKeyboardMarkup(keyboard)
+
+def create_tv_search_keyboard(search_data: dict) -> InlineKeyboardMarkup:
+    """创建电视剧搜索结果的内联键盘"""
+    keyboard = []
+    
+    # 电视剧选择按钮 (每行显示一个电视剧)
+    results = search_data["results"]
+    for i in range(min(len(results), 10)):  # 显示前10个结果
+        tv = results[i]
+        tv_name = tv.get("name", "未知电视剧")
+        year = tv.get("first_air_date", "")[:4] if tv.get("first_air_date") else ""
+        
+        # 截断过长的电视剧名称
+        if len(tv_name) > 35:
+            tv_name = tv_name[:32] + "..."
+            
+        callback_data = f"tv_select_{i}_{search_data.get('current_page', 1)}"
+        display_name = f"{i + 1}. 📺 {tv_name}"
+        if year:
+            display_name += f" ({year})"
+        keyboard.append([InlineKeyboardButton(display_name, callback_data=callback_data)])
+    
+    # 分页控制
+    current_page = search_data.get("current_page", 1)
+    total_pages = search_data.get("total_pages", 1)
+    
+    nav_row = []
+    if current_page > 1:
+        nav_row.append(InlineKeyboardButton("⬅️ 上一页", callback_data=f"tv_page_{current_page - 1}"))
+        
+    nav_row.append(InlineKeyboardButton(f"📄 {current_page}/{total_pages}", callback_data="tv_page_info"))
+    
+    if current_page < total_pages:
+        nav_row.append(InlineKeyboardButton("下一页 ➡️", callback_data=f"tv_page_{current_page + 1}"))
+        
+    if nav_row:
+        keyboard.append(nav_row)
+    
+    # 操作按钮
+    action_row = [
+        InlineKeyboardButton("❌ 关闭", callback_data="tv_close")
+    ]
+    keyboard.append(action_row)
+    
+    return InlineKeyboardMarkup(keyboard)
+
+def format_movie_search_results_for_keyboard(search_data: dict) -> str:
+    """格式化电影搜索结果消息用于内联键盘显示"""
+    if search_data.get("error"):
+        return f"❌ 搜索失败: {search_data['error']}"
+        
+    results = search_data["results"]
+    query = search_data.get("query", "")
+    total_results = search_data.get("total_results", len(results))
+    current_page = search_data.get("current_page", 1)
+    total_pages = search_data.get("total_pages", 1)
+    
+    header = f"🎬 **电影搜索结果**\n"
+    header += f"🔍 搜索词: *{escape_markdown(query, version=2)}*\n"
+    header += f"📊 找到 {total_results} 部电影\n"
+    if total_pages > 1:
+        header += f"📄 第 {current_page}/{total_pages} 页\n"
+    header += "\n请选择要查看详情的电影:"
+    
+    return header
+
+def format_tv_search_results_for_keyboard(search_data: dict) -> str:
+    """格式化电视剧搜索结果消息用于内联键盘显示"""
+    if search_data.get("error"):
+        return f"❌ 搜索失败: {search_data['error']}"
+        
+    results = search_data["results"]
+    query = search_data.get("query", "")
+    total_results = search_data.get("total_results", len(results))
+    current_page = search_data.get("current_page", 1)
+    total_pages = search_data.get("total_pages", 1)
+    
+    header = f"📺 **电视剧搜索结果**\n"
+    header += f"🔍 搜索词: *{escape_markdown(query, version=2)}*\n"
+    header += f"📊 找到 {total_results} 部电视剧\n"
+    if total_pages > 1:
+        header += f"📄 第 {current_page}/{total_pages} 页\n"
+    header += "\n请选择要查看详情的电视剧:"
+    
+    return header
+
 def init_movie_service():
     """初始化电影服务"""
     global movie_service
@@ -1948,35 +2082,26 @@ async def movie_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     try:
         search_data = await movie_service.search_movies(query)
         if search_data:
-            result_text, poster_url = movie_service.format_movie_search_results(search_data)
+            # 添加查询词到搜索数据中
+            search_data["query"] = query
             
-            # 如果有海报URL，先发送图片再发送文本
-            if poster_url:
-                try:
-                    # 发送海报图片
-                    photo_message = await context.bot.send_photo(
-                        chat_id=update.effective_chat.id,
-                        photo=poster_url,
-                        caption=foldable_text_with_markdown_v2(result_text),
-                        parse_mode=ParseMode.MARKDOWN_V2
-                    )
-                    # 删除原来的加载消息
-                    await message.delete()
-                    # 更新message为新发送的图片消息，用于后续删除调度
-                    message = photo_message
-                except Exception as photo_error:
-                    logger.warning(f"发送海报失败: {photo_error}，改用文本消息")
-                    # 如果图片发送失败，改用文本消息
-                    await message.edit_text(
-                        foldable_text_with_markdown_v2(result_text),
-                        parse_mode=ParseMode.MARKDOWN_V2
-                    )
-            else:
-                # 没有海报，直接发送文本
-                await message.edit_text(
-                    foldable_text_with_markdown_v2(result_text),
-                    parse_mode=ParseMode.MARKDOWN_V2
-                )
+            # 存储用户搜索会话
+            user_id = update.effective_user.id
+            movie_search_sessions[user_id] = {
+                "search_data": search_data,
+                "timestamp": datetime.now()
+            }
+            
+            # 格式化搜索结果消息
+            result_text = format_movie_search_results_for_keyboard(search_data)
+            keyboard = create_movie_search_keyboard(search_data)
+            
+            # 更新消息显示搜索结果和选择按钮
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                reply_markup=keyboard,
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
         else:
             await message.edit_text("❌ 搜索电影失败，请稍后重试")
     except Exception as e:
@@ -2254,35 +2379,26 @@ async def tv_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     try:
         search_data = await movie_service.search_tv_shows(query)
         if search_data:
-            result_text, poster_url = movie_service.format_tv_search_results(search_data)
+            # 添加查询词到搜索数据中
+            search_data["query"] = query
             
-            # 如果有海报URL，先发送图片再发送文本
-            if poster_url:
-                try:
-                    # 发送海报图片
-                    photo_message = await context.bot.send_photo(
-                        chat_id=update.effective_chat.id,
-                        photo=poster_url,
-                        caption=foldable_text_with_markdown_v2(result_text),
-                        parse_mode=ParseMode.MARKDOWN_V2
-                    )
-                    # 删除原来的加载消息
-                    await message.delete()
-                    # 更新message为新发送的图片消息，用于后续删除调度
-                    message = photo_message
-                except Exception as photo_error:
-                    logger.warning(f"发送海报失败: {photo_error}，改用文本消息")
-                    # 如果图片发送失败，改用文本消息
-                    await message.edit_text(
-                        foldable_text_with_markdown_v2(result_text),
-                        parse_mode=ParseMode.MARKDOWN_V2
-                    )
-            else:
-                # 没有海报，直接发送文本
-                await message.edit_text(
-                    foldable_text_with_markdown_v2(result_text),
-                    parse_mode=ParseMode.MARKDOWN_V2
-                )
+            # 存储用户搜索会话
+            user_id = update.effective_user.id
+            tv_search_sessions[user_id] = {
+                "search_data": search_data,
+                "timestamp": datetime.now()
+            }
+            
+            # 格式化搜索结果消息
+            result_text = format_tv_search_results_for_keyboard(search_data)
+            keyboard = create_tv_search_keyboard(search_data)
+            
+            # 更新消息显示搜索结果和选择按钮
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                reply_markup=keyboard,
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
         else:
             await message.edit_text("❌ 搜索电视剧失败，请稍后重试")
     except Exception as e:
@@ -3623,8 +3739,396 @@ async def tv_watch_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
+async def movies_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理 /movies 命令 - 搜索电影（纯文本结果）"""
+    if not update.message or not update.effective_chat:
+        return
+    
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    
+    if not context.args:
+        help_text = (
+            "*🎬 电影文本搜索帮助*\n\n"
+            "`/movies <电影名>` - 搜索电影（文本列表）\n"
+            "`/movie <电影名>` - 搜索电影（按钮选择）\n\n"
+            "**示例:**\n"
+            "`/movies 复仇者联盟`"
+        )
+        message = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=foldable_text_with_markdown_v2(help_text),
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+        from utils.message_manager import _schedule_deletion
+        from utils.config_manager import get_config
+        config = get_config()
+        await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
+        return
+    
+    query = " ".join(context.args)
+    
+    if not movie_service:
+        error_message = "❌ 电影查询服务未初始化"
+        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        return
+    
+    # 显示搜索进度
+    escaped_query = escape_markdown(query, version=2)
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"🔍 正在搜索电影: *{escaped_query}*\\.\\.\\.",
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    
+    try:
+        search_data = await movie_service.search_movies(query)
+        if search_data:
+            # 使用原来的文本格式化函数
+            result_text, poster_url = movie_service.format_movie_search_results(search_data)
+            
+            # 如果有海报URL，先发送图片再发送文本
+            if poster_url:
+                try:
+                    # 发送海报图片
+                    photo_message = await context.bot.send_photo(
+                        chat_id=update.effective_chat.id,
+                        photo=poster_url,
+                        caption=foldable_text_with_markdown_v2(result_text),
+                        parse_mode=ParseMode.MARKDOWN_V2
+                    )
+                    # 删除原来的加载消息
+                    await message.delete()
+                    # 更新message为新发送的图片消息，用于后续删除调度
+                    message = photo_message
+                except Exception as photo_error:
+                    logger.warning(f"发送海报失败: {photo_error}，改用文本消息")
+                    # 如果图片发送失败，改用文本消息
+                    await message.edit_text(
+                        foldable_text_with_markdown_v2(result_text),
+                        parse_mode=ParseMode.MARKDOWN_V2
+                    )
+            else:
+                # 没有海报，直接发送文本
+                await message.edit_text(
+                    foldable_text_with_markdown_v2(result_text),
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
+        else:
+            await message.edit_text("❌ 搜索电影失败，请稍后重试")
+    except Exception as e:
+        logger.error(f"电影搜索失败: {e}")
+        await message.edit_text("❌ 搜索电影时发生错误")
+    
+    # 调度删除机器人回复消息
+    from utils.message_manager import _schedule_deletion
+    from utils.config_manager import get_config
+    config = get_config()
+    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
+
+async def tvs_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理 /tvs 命令 - 搜索电视剧（纯文本结果）"""
+    if not update.message or not update.effective_chat:
+        return
+    
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    
+    if not context.args:
+        help_text = (
+            "*📺 电视剧文本搜索帮助*\n\n"
+            "`/tvs <电视剧名>` - 搜索电视剧（文本列表）\n"
+            "`/tv <电视剧名>` - 搜索电视剧（按钮选择）\n\n"
+            "**示例:**\n"
+            "`/tvs 权力的游戏`"
+        )
+        message = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=foldable_text_with_markdown_v2(help_text),
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+        from utils.message_manager import _schedule_deletion
+        from utils.config_manager import get_config
+        config = get_config()
+        await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
+        return
+    
+    query = " ".join(context.args)
+    
+    if not movie_service:
+        error_message = "❌ 电视剧查询服务未初始化"
+        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        return
+    
+    # 显示搜索进度
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"🔍 正在搜索电视剧: *{escape_markdown(query, version=2)}*\.\.\.",
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    
+    try:
+        search_data = await movie_service.search_tv_shows(query)
+        if search_data:
+            # 使用原来的文本格式化函数
+            result_text, poster_url = movie_service.format_tv_search_results(search_data)
+            
+            # 如果有海报URL，先发送图片再发送文本
+            if poster_url:
+                try:
+                    # 发送海报图片
+                    photo_message = await context.bot.send_photo(
+                        chat_id=update.effective_chat.id,
+                        photo=poster_url,
+                        caption=foldable_text_with_markdown_v2(result_text),
+                        parse_mode=ParseMode.MARKDOWN_V2
+                    )
+                    # 删除原来的加载消息
+                    await message.delete()
+                    # 更新message为新发送的图片消息，用于后续删除调度
+                    message = photo_message
+                except Exception as photo_error:
+                    logger.warning(f"发送海报失败: {photo_error}，改用文本消息")
+                    # 如果图片发送失败，改用文本消息
+                    await message.edit_text(
+                        foldable_text_with_markdown_v2(result_text),
+                        parse_mode=ParseMode.MARKDOWN_V2
+                    )
+            else:
+                # 没有海报，直接发送文本
+                await message.edit_text(
+                    foldable_text_with_markdown_v2(result_text),
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
+        else:
+            await message.edit_text("❌ 搜索电视剧失败，请稍后重试")
+    except Exception as e:
+        logger.error(f"电视剧搜索失败: {e}")
+        await message.edit_text("❌ 搜索电视剧时发生错误")
+    
+    # 调度删除机器人回复消息
+    from utils.message_manager import _schedule_deletion
+    from utils.config_manager import get_config
+    config = get_config()
+    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
+
+async def movie_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理电影搜索结果的内联键盘回调"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = update.effective_user.id
+    callback_data = query.data
+    
+    # 检查用户是否有有效的搜索会话
+    if user_id not in movie_search_sessions:
+        await query.edit_message_text("❌ 搜索会话已过期，请重新搜索")
+        return
+    
+    session = movie_search_sessions[user_id]
+    search_data = session["search_data"]
+    
+    try:
+        if callback_data.startswith("movie_select_"):
+            # 用户选择了一个电影
+            parts = callback_data.split("_")
+            movie_index = int(parts[2])
+            page = int(parts[3])
+            
+            # 获取当前页的搜索结果
+            if page != search_data.get("current_page", 1):
+                # 需要获取指定页面的数据
+                new_search_data = await movie_service.search_movies(
+                    search_data["query"], page=page
+                )
+                if new_search_data:
+                    search_data = new_search_data
+                    movie_search_sessions[user_id]["search_data"] = search_data
+            
+            results = search_data["results"]
+            if movie_index < len(results):
+                selected_movie = results[movie_index]
+                movie_id = selected_movie["id"]
+                
+                # 获取电影详情
+                detail_data = await movie_service.get_movie_details(movie_id)
+                if detail_data:
+                    result_text, poster_url = movie_service.format_movie_details(detail_data)
+                    
+                    # 如果有海报URL，发送图片消息
+                    if poster_url:
+                        try:
+                            await context.bot.send_photo(
+                                chat_id=query.message.chat_id,
+                                photo=poster_url,
+                                caption=foldable_text_with_markdown_v2(result_text),
+                                parse_mode=ParseMode.MARKDOWN_V2
+                            )
+                            # 删除原来的搜索结果消息
+                            await query.delete_message()
+                        except Exception as photo_error:
+                            logger.warning(f"发送海报失败: {photo_error}，改用文本消息")
+                            await query.edit_message_text(
+                                foldable_text_with_markdown_v2(result_text),
+                                parse_mode=ParseMode.MARKDOWN_V2
+                            )
+                    else:
+                        await query.edit_message_text(
+                            foldable_text_with_markdown_v2(result_text),
+                            parse_mode=ParseMode.MARKDOWN_V2
+                        )
+                    
+                    # 清除用户会话
+                    del movie_search_sessions[user_id]
+                else:
+                    await query.edit_message_text("❌ 获取电影详情失败")
+            else:
+                await query.edit_message_text("❌ 选择的电影索引无效")
+                
+        elif callback_data.startswith("movie_page_"):
+            # 处理分页
+            if callback_data == "movie_page_info":
+                return  # 只是显示页面信息，不做任何操作
+            
+            page_num = int(callback_data.split("_")[2])
+            new_search_data = await movie_service.search_movies(
+                search_data["query"], page=page_num
+            )
+            
+            if new_search_data:
+                new_search_data["query"] = search_data["query"]  # 保持原查询词
+                movie_search_sessions[user_id]["search_data"] = new_search_data
+                
+                result_text = format_movie_search_results_for_keyboard(new_search_data)
+                keyboard = create_movie_search_keyboard(new_search_data)
+                
+                await query.edit_message_text(
+                    foldable_text_with_markdown_v2(result_text),
+                    reply_markup=keyboard,
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
+            else:
+                await query.edit_message_text("❌ 获取页面数据失败")
+                
+        elif callback_data == "movie_close":
+            # 关闭搜索结果
+            await query.delete_message()
+            if user_id in movie_search_sessions:
+                del movie_search_sessions[user_id]
+                
+    except Exception as e:
+        logger.error(f"处理电影搜索回调失败: {e}")
+        await query.edit_message_text("❌ 处理选择时发生错误")
+
+async def tv_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理电视剧搜索结果的内联键盘回调"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = update.effective_user.id
+    callback_data = query.data
+    
+    # 检查用户是否有有效的搜索会话
+    if user_id not in tv_search_sessions:
+        await query.edit_message_text("❌ 搜索会话已过期，请重新搜索")
+        return
+    
+    session = tv_search_sessions[user_id]
+    search_data = session["search_data"]
+    
+    try:
+        if callback_data.startswith("tv_select_"):
+            # 用户选择了一个电视剧
+            parts = callback_data.split("_")
+            tv_index = int(parts[2])
+            page = int(parts[3])
+            
+            # 获取当前页的搜索结果
+            if page != search_data.get("current_page", 1):
+                # 需要获取指定页面的数据
+                new_search_data = await movie_service.search_tv_shows(
+                    search_data["query"], page=page
+                )
+                if new_search_data:
+                    search_data = new_search_data
+                    tv_search_sessions[user_id]["search_data"] = search_data
+            
+            results = search_data["results"]
+            if tv_index < len(results):
+                selected_tv = results[tv_index]
+                tv_id = selected_tv["id"]
+                
+                # 获取电视剧详情
+                detail_data = await movie_service.get_tv_details(tv_id)
+                if detail_data:
+                    result_text, poster_url = movie_service.format_tv_details(detail_data)
+                    
+                    # 如果有海报URL，发送图片消息
+                    if poster_url:
+                        try:
+                            await context.bot.send_photo(
+                                chat_id=query.message.chat_id,
+                                photo=poster_url,
+                                caption=foldable_text_with_markdown_v2(result_text),
+                                parse_mode=ParseMode.MARKDOWN_V2
+                            )
+                            # 删除原来的搜索结果消息
+                            await query.delete_message()
+                        except Exception as photo_error:
+                            logger.warning(f"发送海报失败: {photo_error}，改用文本消息")
+                            await query.edit_message_text(
+                                foldable_text_with_markdown_v2(result_text),
+                                parse_mode=ParseMode.MARKDOWN_V2
+                            )
+                    else:
+                        await query.edit_message_text(
+                            foldable_text_with_markdown_v2(result_text),
+                            parse_mode=ParseMode.MARKDOWN_V2
+                        )
+                    
+                    # 清除用户会话
+                    del tv_search_sessions[user_id]
+                else:
+                    await query.edit_message_text("❌ 获取电视剧详情失败")
+            else:
+                await query.edit_message_text("❌ 选择的电视剧索引无效")
+                
+        elif callback_data.startswith("tv_page_"):
+            # 处理分页
+            if callback_data == "tv_page_info":
+                return  # 只是显示页面信息，不做任何操作
+            
+            page_num = int(callback_data.split("_")[2])
+            new_search_data = await movie_service.search_tv_shows(
+                search_data["query"], page=page_num
+            )
+            
+            if new_search_data:
+                new_search_data["query"] = search_data["query"]  # 保持原查询词
+                tv_search_sessions[user_id]["search_data"] = new_search_data
+                
+                result_text = format_tv_search_results_for_keyboard(new_search_data)
+                keyboard = create_tv_search_keyboard(new_search_data)
+                
+                await query.edit_message_text(
+                    foldable_text_with_markdown_v2(result_text),
+                    reply_markup=keyboard,
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
+            else:
+                await query.edit_message_text("❌ 获取页面数据失败")
+                
+        elif callback_data == "tv_close":
+            # 关闭搜索结果
+            await query.delete_message()
+            if user_id in tv_search_sessions:
+                del tv_search_sessions[user_id]
+                
+    except Exception as e:
+        logger.error(f"处理电视剧搜索回调失败: {e}")
+        await query.edit_message_text("❌ 处理选择时发生错误")
+
 # 注册命令
-command_factory.register_command("movie", movie_command, permission=Permission.USER, description="搜索电影信息")
+command_factory.register_command("movie", movie_command, permission=Permission.USER, description="搜索电影信息（按钮选择）")
+command_factory.register_command("movies", movies_command, permission=Permission.USER, description="搜索电影信息（文本列表）")
 command_factory.register_command("movie_hot", movie_hot_command, permission=Permission.USER, description="获取热门电影")
 command_factory.register_command("movie_detail", movie_detail_command, permission=Permission.USER, description="获取电影详情")
 command_factory.register_command("movie_rec", movie_rec_command, permission=Permission.USER, description="获取电影推荐")
@@ -3633,7 +4137,8 @@ command_factory.register_command("movie_reviews", movie_reviews_command, permiss
 command_factory.register_command("movie_cleancache", movie_clean_cache_command, permission=Permission.ADMIN, description="清理电影和电视剧查询缓存")
 
 # 注册电视剧命令
-command_factory.register_command("tv", tv_command, permission=Permission.USER, description="搜索电视剧信息")
+command_factory.register_command("tv", tv_command, permission=Permission.USER, description="搜索电视剧信息（按钮选择）")
+command_factory.register_command("tvs", tvs_command, permission=Permission.USER, description="搜索电视剧信息（文本列表）")
 command_factory.register_command("tv_hot", tv_hot_command, permission=Permission.USER, description="获取热门电视剧")
 command_factory.register_command("tv_detail", tv_detail_command, permission=Permission.USER, description="获取电视剧详情")
 command_factory.register_command("tv_rec", tv_rec_command, permission=Permission.USER, description="获取电视剧推荐")
@@ -3657,3 +4162,7 @@ command_factory.register_command("person_detail", person_detail_command, permiss
 # 注册观看平台命令
 command_factory.register_command("movie_watch", movie_watch_command, permission=Permission.USER, description="获取电影观看平台")
 command_factory.register_command("tv_watch", tv_watch_command, permission=Permission.USER, description="获取电视剧观看平台")
+
+# 注册回调处理器
+command_factory.register_callback(r"^movie_", movie_callback_handler, permission=Permission.USER, description="电影搜索结果选择")
+command_factory.register_callback(r"^tv_", tv_callback_handler, permission=Permission.USER, description="电视剧搜索结果选择")
