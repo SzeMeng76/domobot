@@ -2028,7 +2028,8 @@ async def movie_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if not update.message or not update.effective_chat:
         return
     
-    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    # 获取用户ID用于会话管理
+    user_id = update.effective_user.id
     
     if not context.args:
         help_text = (
@@ -2096,12 +2097,32 @@ async def movie_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             result_text = format_movie_search_results_for_keyboard(search_data)
             keyboard = create_movie_search_keyboard(search_data)
             
-            # 更新消息显示搜索结果和选择按钮
-            await message.edit_text(
-                foldable_text_with_markdown_v2(result_text),
+            # 删除搜索进度消息
+            await message.delete()
+            
+            # 生成会话ID用于消息管理
+            import time
+            session_id = f"movie_search_{user_id}_{int(time.time())}"
+            
+            # 使用统一的消息发送API发送搜索结果
+            from utils.message_manager import send_message_with_auto_delete, MessageType
+            new_message = await send_message_with_auto_delete(
+                context,
+                update.effective_chat.id,
+                foldable_text_v2(result_text),
+                MessageType.SEARCH_RESULT,
+                session_id=session_id,
                 reply_markup=keyboard,
-                parse_mode=ParseMode.MARKDOWN_V2
+                parse_mode="MarkdownV2"
             )
+            
+            # 更新会话中的消息ID
+            if new_message:
+                movie_search_sessions[user_id]["message_id"] = new_message.message_id
+                movie_search_sessions[user_id]["session_id"] = session_id
+            
+            # 删除用户命令消息
+            await delete_user_command(context, update.effective_chat.id, update.message.message_id, session_id=session_id)
         else:
             await message.edit_text("❌ 搜索电影失败，请稍后重试")
     except Exception as e:
@@ -2325,7 +2346,8 @@ async def tv_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if not update.message or not update.effective_chat:
         return
     
-    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    # 获取用户ID用于会话管理
+    user_id = update.effective_user.id
     
     if not context.args:
         help_text = (
@@ -2393,12 +2415,32 @@ async def tv_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             result_text = format_tv_search_results_for_keyboard(search_data)
             keyboard = create_tv_search_keyboard(search_data)
             
-            # 更新消息显示搜索结果和选择按钮
-            await message.edit_text(
-                foldable_text_with_markdown_v2(result_text),
+            # 删除搜索进度消息
+            await message.delete()
+            
+            # 生成会话ID用于消息管理
+            import time
+            session_id = f"tv_search_{user_id}_{int(time.time())}"
+            
+            # 使用统一的消息发送API发送搜索结果
+            from utils.message_manager import send_message_with_auto_delete, MessageType
+            new_message = await send_message_with_auto_delete(
+                context,
+                update.effective_chat.id,
+                foldable_text_v2(result_text),
+                MessageType.SEARCH_RESULT,
+                session_id=session_id,
                 reply_markup=keyboard,
-                parse_mode=ParseMode.MARKDOWN_V2
+                parse_mode="MarkdownV2"
             )
+            
+            # 更新会话中的消息ID
+            if new_message:
+                tv_search_sessions[user_id]["message_id"] = new_message.message_id
+                tv_search_sessions[user_id]["session_id"] = session_id
+            
+            # 删除用户命令消息
+            await delete_user_command(context, update.effective_chat.id, update.message.message_id, session_id=session_id)
         else:
             await message.edit_text("❌ 搜索电视剧失败，请稍后重试")
     except Exception as e:
