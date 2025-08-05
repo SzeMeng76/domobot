@@ -100,12 +100,11 @@ class MovieService:
         return await self._make_tmdb_request(endpoint, language="en-US")
     
     async def _get_reviews_data(self, content_type: str, content_id: int) -> Optional[Dict]:
-        """获取评价数据的方法，优先中文评价，不足时补充英文评价"""
-        # 先获取中文评价
-        chinese_reviews = await self._make_tmdb_request(f"{content_type}/{content_id}/reviews", language="zh-CN")
-        
-        # 如果中文评价少于2个，再获取英文评价补充
+        """获取评价数据的方法，整合TMDB和Trakt的评价数据"""
         all_reviews = []
+        
+        # 获取TMDB评价（先中文后英文）
+        chinese_reviews = await self._make_tmdb_request(f"{content_type}/{content_id}/reviews", language="zh-CN")
         if chinese_reviews and chinese_reviews.get("results"):
             all_reviews.extend(chinese_reviews["results"])
         
@@ -113,15 +112,116 @@ class MovieService:
         if len(all_reviews) < 2:
             english_reviews = await self._make_tmdb_request(f"{content_type}/{content_id}/reviews", language="en-US")
             if english_reviews and english_reviews.get("results"):
-                # 添加英文评价，但避免重复
                 existing_ids = {review.get("id") for review in all_reviews}
                 for review in english_reviews["results"]:
                     if review.get("id") not in existing_ids and len(all_reviews) < 4:
                         all_reviews.append(review)
         
+        # 获取Trakt评论数据（如果评价仍然不足）
+        if len(all_reviews) < 3:
+            try:
+                # 查找对应的Trakt ID
+                trakt_id = None
+                if content_type == "movie":
+                    trakt_id = await self._find_trakt_movie_id(content_id)
+                elif content_type == "tv":
+                    trakt_id = await self._find_trakt_tv_id(content_id)
+                
+                if trakt_id:
+                    # 获取Trakt评论
+                    trakt_comments = None
+                    if content_type == "movie":
+                        trakt_comments = await self._get_trakt_movie_comments(trakt_id)
+                    elif content_type == "tv":
+                        trakt_comments = await self._get_trakt_tv_comments(trakt_id)
+                    
+                    if trakt_comments and isinstance(trakt_comments, list):
+                        # 转换Trakt评论格式为TMDB格式
+                        for comment in trakt_comments[:2]:  # 最多添加2条Trakt评论
+                            if len(all_reviews) >= 6:  # 总评价数量限制
+                                break
+                            
+                            # 转换格式
+                            trakt_review = {
+                                "id": f"trakt_{comment.get('id', '')}",
+                                "author": comment.get("user", {}).get("username", "Trakt用户"),
+                                "content": comment.get("comment", ""),
+                                "created_at": comment.get("created_at", ""),
+                                "author_details": {
+                                    "rating": None  # Trakt评论不包含评分
+                                },
+                                "source": "trakt"  # 标记来源
+                            }
+                            all_reviews.append(trakt_review)
+                            
+            except Exception as e:
+                logger.warning(f"获取Trakt评论时出错: {e}")
+        
         # 构造返回数据
         if all_reviews:
-            return {"results": all_reviews}
+            return {"results": all_reviews, "total_results": len(all_reviews)}
+        return None
+    
+    async def _get_trakt_movie_stats(self, movie_id: int) -> Optional[Dict]:
+        """获取电影在Trakt上的统计数据"""
+        endpoint = f"movies/{movie_id}/stats"
+        return await self._make_trakt_request(endpoint)
+    
+    async def _get_trakt_tv_stats(self, tv_id: int) -> Optional[Dict]:
+        """获取电视剧在Trakt上的统计数据"""
+        endpoint = f"shows/{tv_id}/stats"
+        return await self._make_trakt_request(endpoint)
+    
+    async def _get_trakt_movie_comments(self, movie_id: int, sort: str = "newest") -> Optional[List]:
+        """获取电影在Trakt上的评论"""
+        endpoint = f"movies/{movie_id}/comments/{sort}"
+        return await self._make_trakt_request(endpoint)
+    
+    async def _get_trakt_tv_comments(self, tv_id: int, sort: str = "newest") -> Optional[List]:
+        """获取电视剧在Trakt上的评论"""
+        endpoint = f"shows/{tv_id}/comments/{sort}"
+        return await self._make_trakt_request(endpoint)
+    
+    async def _get_trakt_trending_movies(self, limit: int = 10) -> Optional[List]:
+        """获取Trakt热门电影"""
+        endpoint = f"movies/trending"
+        params = {"limit": limit}
+        return await self._make_trakt_request(endpoint, params)
+    
+    async def _get_trakt_trending_tv(self, limit: int = 10) -> Optional[List]:
+        """获取Trakt热门电视剧"""
+        endpoint = f"shows/trending"
+        params = {"limit": limit}
+        return await self._make_trakt_request(endpoint, params)
+    
+    async def _get_trakt_movie_related(self, movie_id: int, limit: int = 10) -> Optional[List]:
+        """获取Trakt相关电影推荐"""
+        endpoint = f"movies/{movie_id}/related"
+        params = {"limit": limit}
+        return await self._make_trakt_request(endpoint, params)
+    
+    async def _get_trakt_tv_related(self, tv_id: int, limit: int = 10) -> Optional[List]:
+        """获取Trakt相关电视剧推荐"""
+        endpoint = f"shows/{tv_id}/related"
+        params = {"limit": limit}
+        return await self._make_trakt_request(endpoint, params)
+    
+    async def _find_trakt_movie_id(self, tmdb_id: int) -> Optional[int]:
+        """通过TMDB ID查找对应的Trakt ID"""
+        endpoint = f"search/tmdb/{tmdb_id}"
+        params = {"type": "movie"}
+        result = await self._make_trakt_request(endpoint, params)
+        if result and len(result) > 0:
+            return result[0].get("movie", {}).get("ids", {}).get("trakt")
+        return None
+    
+    async def _find_trakt_tv_id(self, tmdb_id: int) -> Optional[int]:
+        """通过TMDB ID查找对应的Trakt ID"""
+        endpoint = f"search/tmdb/{tmdb_id}"
+        params = {"type": "show"}
+        result = await self._make_trakt_request(endpoint, params)
+        if result and len(result) > 0:
+            return result[0].get("show", {}).get("ids", {}).get("trakt")
         return None
     
     async def search_movies(self, query: str, page: int = 1) -> Optional[Dict]:
@@ -185,6 +285,16 @@ class MovieService:
             reviews_data = await self._get_reviews_data("movie", movie_id)
             if reviews_data:
                 data["reviews"] = reviews_data
+            
+            # 获取Trakt统计数据
+            try:
+                trakt_id = await self._find_trakt_movie_id(movie_id)
+                if trakt_id:
+                    trakt_stats = await self._get_trakt_movie_stats(trakt_id)
+                    if trakt_stats:
+                        data["trakt_stats"] = trakt_stats
+            except Exception as e:
+                logger.warning(f"获取电影Trakt统计数据时出错: {e}")
             
             await cache_manager.save_cache(cache_key, data, subdirectory="movie")
         return data
@@ -266,6 +376,16 @@ class MovieService:
             reviews_data = await self._get_reviews_data("tv", tv_id)
             if reviews_data:
                 data["reviews"] = reviews_data
+            
+            # 获取Trakt统计数据
+            try:
+                trakt_id = await self._find_trakt_tv_id(tv_id)
+                if trakt_id:
+                    trakt_stats = await self._get_trakt_tv_stats(trakt_id)
+                    if trakt_stats:
+                        data["trakt_stats"] = trakt_stats
+            except Exception as e:
+                logger.warning(f"获取电视剧Trakt统计数据时出错: {e}")
             
             await cache_manager.save_cache(cache_key, data, subdirectory="movie")
         return data
@@ -542,6 +662,7 @@ class MovieService:
             author = review.get("author", "匿名用户")
             content = review.get("content", "")
             rating = review.get("author_details", {}).get("rating")
+            source = review.get("source", "tmdb")  # 默认为TMDB
             
             if content:
                 # 截取评价内容，最多200字符
@@ -553,14 +674,185 @@ class MovieService:
                 chinese_chars = len([c for c in content if '\u4e00' <= c <= '\u9fff'])
                 is_chinese = chinese_chars > len(content) * 0.3  # 如果中文字符超过30%认为是中文
                 
+                # 语言标识和来源标识
                 lang_flag = "🇨🇳" if is_chinese else "🇺🇸"
+                source_flag = "📺" if source == "trakt" else "🎬"
+                
                 rating_text = f" ({rating}/10)" if rating else ""
                 
                 lines.append(f"")
-                lines.append(f"👤 *{author}*{rating_text} {lang_flag}:")
+                lines.append(f"👤 *{author}*{rating_text} {lang_flag}{source_flag}:")
                 lines.append(f"_{content_preview}_")
         
         return "\n".join(lines) if len(lines) > 2 else ""
+    
+    def _format_trakt_stats(self, trakt_stats: Dict) -> str:
+        """格式化Trakt统计数据"""
+        if not trakt_stats:
+            return ""
+        
+        watchers = trakt_stats.get("watchers", 0)
+        plays = trakt_stats.get("plays", 0)
+        collectors = trakt_stats.get("collectors", 0)
+        comments = trakt_stats.get("comments", 0)
+        lists = trakt_stats.get("lists", 0)
+        votes = trakt_stats.get("votes", 0)
+        
+        # 构建统计信息行
+        stats_parts = []
+        
+        if watchers > 0:
+            stats_parts.append(f"👥 {watchers:,}人观看")
+        
+        if collectors > 0:
+            stats_parts.append(f"⭐ {collectors:,}人收藏")
+        
+        if plays > 0 and plays != watchers:  # 播放次数与观看人数不同时才显示
+            stats_parts.append(f"▶️ {plays:,}次播放")
+        
+        if comments > 0:
+            stats_parts.append(f"💬 {comments}条评论")
+        
+        if lists > 0:
+            stats_parts.append(f"📋 {lists}个清单")
+        
+        if votes > 0:
+            stats_parts.append(f"🗳️ {votes}票")
+        
+        if stats_parts:
+            return f"📊 *Trakt数据*: {' | '.join(stats_parts)}"
+        
+        return ""
+    
+    def format_trakt_trending_movies(self, trending_data: List) -> str:
+        """格式化Trakt热门电影数据"""
+        if not trending_data:
+            return "❌ 暂无热门电影数据"
+        
+        lines = ["🔥 *Trakt热门电影榜*\n"]
+        
+        for i, item in enumerate(trending_data[:10], 1):
+            movie = item.get("movie", {})
+            title = movie.get("title", "未知标题")
+            year = movie.get("year", "")
+            watchers = item.get("watchers", 0)
+            
+            # TMDB ID用于获取详情
+            tmdb_id = movie.get("ids", {}).get("tmdb")
+            
+            year_text = f" ({year})" if year else ""
+            watchers_text = f" - 👥{watchers:,}人观看" if watchers > 0 else ""
+            
+            if tmdb_id:
+                lines.append(f"{i}. *{title}*{year_text}{watchers_text}")
+                lines.append(f"   `/movie_detail {tmdb_id}`")
+            else:
+                lines.append(f"{i}. *{title}*{year_text}{watchers_text}")
+            
+            lines.append("")
+        
+        lines.extend([
+            "💡 *使用说明*:",
+            "点击命令链接查看详情，或使用 `/movie_detail <ID>` 获取完整信息"
+        ])
+        
+        return "\n".join(lines)
+    
+    def format_trakt_trending_tv(self, trending_data: List) -> str:
+        """格式化Trakt热门电视剧数据"""
+        if not trending_data:
+            return "❌ 暂无热门电视剧数据"
+        
+        lines = ["🔥 *Trakt热门电视剧榜*\n"]
+        
+        for i, item in enumerate(trending_data[:10], 1):
+            show = item.get("show", {})
+            title = show.get("title", "未知标题")
+            year = show.get("year", "")
+            watchers = item.get("watchers", 0)
+            
+            # TMDB ID用于获取详情
+            tmdb_id = show.get("ids", {}).get("tmdb")
+            
+            year_text = f" ({year})" if year else ""
+            watchers_text = f" - 👥{watchers:,}人观看" if watchers > 0 else ""
+            
+            if tmdb_id:
+                lines.append(f"{i}. *{title}*{year_text}{watchers_text}")
+                lines.append(f"   `/tv_detail {tmdb_id}`")
+            else:
+                lines.append(f"{i}. *{title}*{year_text}{watchers_text}")
+            
+            lines.append("")
+        
+        lines.extend([
+            "💡 *使用说明*:",
+            "点击命令链接查看详情，或使用 `/tv_detail <ID>` 获取完整信息"
+        ])
+        
+        return "\n".join(lines)
+    
+    def format_trakt_related_movies(self, related_data: List, original_title: str) -> str:
+        """格式化Trakt相关电影推荐数据"""
+        if not related_data:
+            return f"❌ 未找到与《{original_title}》相关的电影推荐"
+        
+        lines = [f"🔗 *与《{original_title}》相关的电影*\n"]
+        
+        for i, movie in enumerate(related_data[:8], 1):
+            title = movie.get("title", "未知标题")
+            year = movie.get("year", "")
+            
+            # TMDB ID用于获取详情
+            tmdb_id = movie.get("ids", {}).get("tmdb")
+            
+            year_text = f" ({year})" if year else ""
+            
+            if tmdb_id:
+                lines.append(f"{i}. *{title}*{year_text}")
+                lines.append(f"   `/movie_detail {tmdb_id}`")
+            else:
+                lines.append(f"{i}. *{title}*{year_text}")
+            
+            lines.append("")
+        
+        lines.extend([
+            "💡 *使用说明*:",
+            "点击命令链接查看详情，或使用 `/movie_detail <ID>` 获取完整信息"
+        ])
+        
+        return "\n".join(lines)
+    
+    def format_trakt_related_tv(self, related_data: List, original_title: str) -> str:
+        """格式化Trakt相关电视剧推荐数据"""
+        if not related_data:
+            return f"❌ 未找到与《{original_title}》相关的电视剧推荐"
+        
+        lines = [f"🔗 *与《{original_title}》相关的电视剧*\n"]
+        
+        for i, show in enumerate(related_data[:8], 1):
+            title = show.get("title", "未知标题")
+            year = show.get("year", "")
+            
+            # TMDB ID用于获取详情
+            tmdb_id = show.get("ids", {}).get("tmdb")
+            
+            year_text = f" ({year})" if year else ""
+            
+            if tmdb_id:
+                lines.append(f"{i}. *{title}*{year_text}")
+                lines.append(f"   `/tv_detail {tmdb_id}`")
+            else:
+                lines.append(f"{i}. *{title}*{year_text}")
+            
+            lines.append("")
+        
+        lines.extend([
+            "💡 *使用说明*:",
+            "点击命令链接查看详情，或使用 `/tv_detail <ID>` 获取完整信息"
+        ])
+        
+        return "\n".join(lines)
     
     async def create_telegraph_page(self, title: str, content: str) -> Optional[str]:
         """创建Telegraph页面"""
@@ -901,6 +1193,16 @@ class MovieService:
             f"⏱️ *单集时长*: {runtime_text}",
             f"🎭 *类型*: {genre_text}",
             f"⭐ *评分*: {vote_average:.1f}/10 ({vote_count:,}人评价)",
+        ])
+        
+        # 添加Trakt统计数据
+        trakt_stats = detail_data.get("trakt_stats")
+        if trakt_stats:
+            trakt_info = self._format_trakt_stats(trakt_stats)
+            if trakt_info:
+                lines.append(trakt_info)
+        
+        lines.extend([
             f"📺 *播出网络*: {network_text}",
             f"🏢 *制作公司*: {company_text}",
         ])
@@ -1230,8 +1532,16 @@ class MovieService:
             f"⏱️ *片长*: {runtime}分钟" if runtime else "⏱️ *片长*: 未知",
             f"🎭 *类型*: {genre_text}",
             f"⭐ *评分*: {vote_average:.1f}/10 ({vote_count:,}人评价)",
-            f"🏢 *制作公司*: {company_text}",
         ])
+        
+        # 添加Trakt统计数据
+        trakt_stats = detail_data.get("trakt_stats")
+        if trakt_stats:
+            trakt_info = self._format_trakt_stats(trakt_stats)
+            if trakt_info:
+                lines.append(trakt_info)
+        
+        lines.append(f"🏢 *制作公司*: {company_text}")
         
         if budget > 0:
             lines.append(f"💰 *制作成本*: ${budget:,}")
@@ -2110,6 +2420,8 @@ async def movie_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "`/movie_rec <电影ID>` - 获取相似推荐\n"
             "`/movie_videos <电影ID>` - 获取预告片和视频\n"
             "`/movie_reviews <电影ID>` - 获取电影用户评价\n"
+            "`/movie_trending` - 获取Trakt热门电影\n"
+            "`/movie_related <电影ID>` - 获取Trakt相关电影推荐\n"
             "`/movie_watch <电影ID>` - 获取观看平台\n\n"
             "**热门趋势:**\n"
             "`/trending` - 今日全球热门内容\n"
@@ -2451,6 +2763,8 @@ async def tv_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             "`/tv_rec <电视剧ID>` - 获取相似推荐\n"
             "`/tv_videos <电视剧ID>` - 获取预告片和视频\n"
             "`/tv_reviews <电视剧ID>` - 获取电视剧用户评价\n"
+            "`/tv_trending` - 获取Trakt热门电视剧\n"
+            "`/tv_related <电视剧ID>` - 获取Trakt相关电视剧推荐\n"
             "`/tv_watch <电视剧ID>` - 获取观看平台\n"
             "`/tv_season <电视剧ID> <季数>` - 获取季详情\n"
             "`/tv_episode <电视剧ID> <季数> <集数>` - 获取集详情\n\n"
@@ -3014,6 +3328,212 @@ async def movie_videos_command(update: Update, context: ContextTypes.DEFAULT_TYP
     except Exception as e:
         logger.error(f"获取电影视频失败: {e}")
         await message.edit_text("❌ 获取电影视频时发生错误")
+    
+    # 调度删除机器人回复消息
+    from utils.message_manager import _schedule_deletion
+    from utils.config_manager import get_config
+    config = get_config()
+    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
+
+async def movie_trending_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理 /movie_trending 命令 - 获取Trakt热门电影"""
+    if not update.message or not update.effective_chat:
+        return
+    
+    if not movie_service:
+        error_message = "❌ 电影查询服务未初始化"
+        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        return
+    
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="🔥 正在获取Trakt热门电影\.\.\.",
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    
+    try:
+        # 获取Trakt热门电影
+        trending_data = await movie_service._get_trakt_trending_movies(10)
+        if trending_data:
+            result_text = movie_service.format_trakt_trending_movies(trending_data)
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+        else:
+            await message.edit_text("❌ 无法获取Trakt热门电影数据")
+    except Exception as e:
+        logger.error(f"获取Trakt热门电影失败: {e}")
+        await message.edit_text("❌ 获取热门电影时发生错误")
+    
+    # 调度删除机器人回复消息
+    from utils.message_manager import _schedule_deletion
+    from utils.config_manager import get_config
+    config = get_config()
+    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
+
+async def tv_trending_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理 /tv_trending 命令 - 获取Trakt热门电视剧"""
+    if not update.message or not update.effective_chat:
+        return
+    
+    if not movie_service:
+        error_message = "❌ 电视剧查询服务未初始化"
+        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        return
+    
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="🔥 正在获取Trakt热门电视剧\.\.\.",
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    
+    try:
+        # 获取Trakt热门电视剧
+        trending_data = await movie_service._get_trakt_trending_tv(10)
+        if trending_data:
+            result_text = movie_service.format_trakt_trending_tv(trending_data)
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+        else:
+            await message.edit_text("❌ 无法获取Trakt热门电视剧数据")
+    except Exception as e:
+        logger.error(f"获取Trakt热门电视剧失败: {e}")
+        await message.edit_text("❌ 获取热门电视剧时发生错误")
+    
+    # 调度删除机器人回复消息
+    from utils.message_manager import _schedule_deletion
+    from utils.config_manager import get_config
+    config = get_config()
+    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
+
+async def movie_related_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理 /movie_related 命令 - 获取Trakt相关电影推荐"""
+    if not update.message or not update.effective_chat:
+        return
+    
+    # 检查参数
+    if not context.args or len(context.args) == 0:
+        await send_error(
+            context, 
+            update.effective_chat.id, 
+            foldable_text_v2("❌ 请提供电影ID\n\n用法: `/movie_related <电影ID>`"), 
+            parse_mode="MarkdownV2"
+        )
+        return
+    
+    try:
+        movie_id = int(context.args[0])
+    except ValueError:
+        await send_error(
+            context, 
+            update.effective_chat.id, 
+            foldable_text_v2("❌ 电影ID必须是数字"), 
+            parse_mode="MarkdownV2"
+        )
+        return
+    
+    if not movie_service:
+        error_message = "❌ 电影查询服务未初始化"
+        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        return
+    
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"🔍 正在获取相关电影推荐 \(ID: {movie_id}\)\.\.\.",
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    
+    try:
+        # 先获取电影基本信息用于显示标题
+        movie_detail = await movie_service.get_movie_details(movie_id)
+        movie_title = movie_detail.get("title", f"ID {movie_id}") if movie_detail else f"ID {movie_id}"
+        
+        # 获取Trakt相关推荐
+        trakt_id = await movie_service._find_trakt_movie_id(movie_id)
+        if trakt_id:
+            related_data = await movie_service._get_trakt_movie_related(trakt_id)
+            if related_data:
+                result_text = movie_service.format_trakt_related_movies(related_data, movie_title)
+                await message.edit_text(
+                    foldable_text_with_markdown_v2(result_text),
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
+            else:
+                await message.edit_text(f"❌ 未找到电影《{movie_title}》的相关推荐")
+        else:
+            await message.edit_text(f"❌ 在Trakt上未找到电影《{movie_title}》")
+    except Exception as e:
+        logger.error(f"获取电影相关推荐失败: {e}")
+        await message.edit_text("❌ 获取相关推荐时发生错误")
+    
+    # 调度删除机器人回复消息
+    from utils.message_manager import _schedule_deletion
+    from utils.config_manager import get_config
+    config = get_config()
+    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
+
+async def tv_related_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理 /tv_related 命令 - 获取Trakt相关电视剧推荐"""
+    if not update.message or not update.effective_chat:
+        return
+    
+    # 检查参数
+    if not context.args or len(context.args) == 0:
+        await send_error(
+            context, 
+            update.effective_chat.id, 
+            foldable_text_v2("❌ 请提供电视剧ID\n\n用法: `/tv_related <电视剧ID>`"), 
+            parse_mode="MarkdownV2"
+        )
+        return
+    
+    try:
+        tv_id = int(context.args[0])
+    except ValueError:
+        await send_error(
+            context, 
+            update.effective_chat.id, 
+            foldable_text_v2("❌ 电视剧ID必须是数字"), 
+            parse_mode="MarkdownV2"
+        )
+        return
+    
+    if not movie_service:
+        error_message = "❌ 电视剧查询服务未初始化"
+        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        return
+    
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"🔍 正在获取相关电视剧推荐 \(ID: {tv_id}\)\.\.\.",
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    
+    try:
+        # 先获取电视剧基本信息用于显示标题
+        tv_detail = await movie_service.get_tv_details(tv_id)
+        tv_title = tv_detail.get("name", f"ID {tv_id}") if tv_detail else f"ID {tv_id}"
+        
+        # 获取Trakt相关推荐
+        trakt_id = await movie_service._find_trakt_tv_id(tv_id)
+        if trakt_id:
+            related_data = await movie_service._get_trakt_tv_related(trakt_id)
+            if related_data:
+                result_text = movie_service.format_trakt_related_tv(related_data, tv_title)
+                await message.edit_text(
+                    foldable_text_with_markdown_v2(result_text),
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
+            else:
+                await message.edit_text(f"❌ 未找到电视剧《{tv_title}》的相关推荐")
+        else:
+            await message.edit_text(f"❌ 在Trakt上未找到电视剧《{tv_title}》")
+    except Exception as e:
+        logger.error(f"获取电视剧相关推荐失败: {e}")
+        await message.edit_text("❌ 获取相关推荐时发生错误")
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
@@ -4630,6 +5150,8 @@ command_factory.register_command("movie_detail", movie_detail_command, permissio
 command_factory.register_command("movie_rec", movie_rec_command, permission=Permission.USER, description="获取电影推荐")
 command_factory.register_command("movie_videos", movie_videos_command, permission=Permission.USER, description="获取电影预告片")
 command_factory.register_command("movie_reviews", movie_reviews_command, permission=Permission.USER, description="获取电影用户评价")
+command_factory.register_command("movie_trending", movie_trending_command, permission=Permission.USER, description="获取Trakt热门电影")
+command_factory.register_command("movie_related", movie_related_command, permission=Permission.USER, description="获取Trakt相关电影推荐")
 command_factory.register_command("movie_cleancache", movie_clean_cache_command, permission=Permission.ADMIN, description="清理电影和电视剧查询缓存")
 
 # 注册电视剧命令
@@ -4640,6 +5162,8 @@ command_factory.register_command("tv_detail", tv_detail_command, permission=Perm
 command_factory.register_command("tv_rec", tv_rec_command, permission=Permission.USER, description="获取电视剧推荐")
 command_factory.register_command("tv_videos", tv_videos_command, permission=Permission.USER, description="获取电视剧预告片")
 command_factory.register_command("tv_reviews", tv_reviews_command, permission=Permission.USER, description="获取电视剧用户评价")
+command_factory.register_command("tv_trending", tv_trending_command, permission=Permission.USER, description="获取Trakt热门电视剧")
+command_factory.register_command("tv_related", tv_related_command, permission=Permission.USER, description="获取Trakt相关电视剧推荐")
 command_factory.register_command("tv_season", tv_season_command, permission=Permission.USER, description="获取电视剧季详情")
 command_factory.register_command("tv_episode", tv_episode_command, permission=Permission.USER, description="获取电视剧集详情")
 
