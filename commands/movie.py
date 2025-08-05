@@ -1886,6 +1886,7 @@ movie_service: MovieService = None
 
 # 用户搜索会话管理
 movie_search_sessions = {}
+person_search_sessions = {}
 tv_search_sessions = {}
 
 def create_movie_search_keyboard(search_data: dict) -> InlineKeyboardMarkup:
@@ -1978,6 +1979,51 @@ def create_tv_search_keyboard(search_data: dict) -> InlineKeyboardMarkup:
     
     return InlineKeyboardMarkup(keyboard)
 
+def create_person_search_keyboard(search_data: dict) -> InlineKeyboardMarkup:
+    """创建人物搜索结果的内联键盘"""
+    keyboard = []
+    
+    # 人物选择按钮 (每行显示一个人物)
+    results = search_data["results"]
+    for i in range(min(len(results), 10)):  # 显示前10个结果
+        person = results[i]
+        person_name = person.get("name", "未知人物")
+        known_for = person.get("known_for_department", "")
+        
+        # 截断过长的人物名称
+        if len(person_name) > 35:
+            person_name = person_name[:32] + "..."
+            
+        callback_data = f"person_select_{i}_{search_data.get('current_page', 1)}"
+        display_name = f"{i + 1}. 👤 {person_name}"
+        if known_for:
+            display_name += f" ({known_for})"
+        keyboard.append([InlineKeyboardButton(display_name, callback_data=callback_data)])
+    
+    # 分页控制
+    current_page = search_data.get("current_page", 1)
+    total_pages = search_data.get("total_pages", 1)
+    
+    nav_row = []
+    if current_page > 1:
+        nav_row.append(InlineKeyboardButton("⬅️ 上一页", callback_data=f"person_page_{current_page - 1}"))
+        
+    nav_row.append(InlineKeyboardButton(f"📄 {current_page}/{total_pages}", callback_data="person_page_info"))
+    
+    if current_page < total_pages:
+        nav_row.append(InlineKeyboardButton("下一页 ➡️", callback_data=f"person_page_{current_page + 1}"))
+        
+    if nav_row:
+        keyboard.append(nav_row)
+    
+    # 操作按钮
+    action_row = [
+        InlineKeyboardButton("❌ 关闭", callback_data="person_close")
+    ]
+    keyboard.append(action_row)
+    
+    return InlineKeyboardMarkup(keyboard)
+
 def format_movie_search_results_for_keyboard(search_data: dict) -> str:
     """格式化电影搜索结果消息用于内联键盘显示"""
     if search_data.get("error"):
@@ -2015,6 +2061,26 @@ def format_tv_search_results_for_keyboard(search_data: dict) -> str:
     if total_pages > 1:
         header += f"📄 第 {current_page}/{total_pages} 页\n"
     header += "\n请选择要查看详情的电视剧:"
+    
+    return header
+
+def format_person_search_results_for_keyboard(search_data: dict) -> str:
+    """格式化人物搜索结果消息用于内联键盘显示"""
+    if search_data.get("error"):
+        return f"❌ 搜索失败: {search_data['error']}"
+        
+    results = search_data["results"]
+    query = search_data.get("query", "")
+    total_results = search_data.get("total_results", len(results))
+    current_page = search_data.get("current_page", 1)
+    total_pages = search_data.get("total_pages", 1)
+    
+    header = f"👤 **人物搜索结果**\n"
+    header += f"🔍 搜索词: *{escape_markdown(query, version=2)}*\n"
+    header += f"📊 找到 {total_results} 位人物\n"
+    if total_pages > 1:
+        header += f"📄 第 {current_page}/{total_pages} 页\n"
+    header += "\n请选择要查看详情的人物:"
     
     return header
 
@@ -3583,15 +3649,18 @@ async def person_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not update.message or not update.effective_chat:
         return
     
-    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    # 获取用户ID用于会话管理
+    user_id = update.effective_user.id
     
     if not context.args:
         help_text = (
             "*👤 人物信息查询帮助*\n\n"
-            "`/person <人物名>` - 搜索人物\n"
+            "`/person <人物名>` - 搜索人物（按钮选择）\n"
+            "`/persons <人物名>` - 搜索人物（文本列表）\n"
             "`/person_detail <人物ID>` - 获取人物详情\n\n"
             "**示例:**\n"
             "`/person 汤姆·汉克斯`\n"
+            "`/persons 汤姆·汉克斯`\n"
             "`/person_detail 31`"
         )
         message = await context.bot.send_message(
@@ -3624,46 +3693,69 @@ async def person_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     try:
         search_data = await movie_service.search_person(query)
         if search_data:
-            result_text, profile_url = movie_service.format_person_search_results(search_data)
+            # 添加查询词到搜索数据中
+            search_data["query"] = query
             
-            # 如果有头像URL，先发送图片再发送文本
-            if profile_url:
-                try:
-                    # 发送头像图片
-                    photo_message = await context.bot.send_photo(
-                        chat_id=update.effective_chat.id,
-                        photo=profile_url,
-                        caption=foldable_text_with_markdown_v2(result_text),
-                        parse_mode=ParseMode.MARKDOWN_V2
-                    )
-                    # 删除原来的加载消息
-                    await message.delete()
-                    # 更新message为新发送的图片消息，用于后续删除调度
-                    message = photo_message
-                except Exception as photo_error:
-                    logger.warning(f"发送头像失败: {photo_error}，改用文本消息")
-                    # 如果图片发送失败，改用文本消息
-                    await message.edit_text(
-                        foldable_text_with_markdown_v2(result_text),
-                        parse_mode=ParseMode.MARKDOWN_V2
-                    )
-            else:
-                # 没有头像，直接发送文本
-                await message.edit_text(
-                    foldable_text_with_markdown_v2(result_text),
-                    parse_mode=ParseMode.MARKDOWN_V2
-                )
+            # 如果用户已经有活跃的搜索会话，取消旧的删除任务
+            if user_id in person_search_sessions:
+                old_session = person_search_sessions[user_id]
+                old_session_id = old_session.get("session_id")
+                if old_session_id:
+                    from utils.message_manager import cancel_session_deletions
+                    cancelled_count = await cancel_session_deletions(old_session_id, context)
+                    logger.info(f"🔄 用户 {user_id} 有现有人物搜索会话，已取消 {cancelled_count} 个旧的删除任务")
+            
+            # 存储用户搜索会话
+            person_search_sessions[user_id] = {
+                "search_data": search_data,
+                "timestamp": datetime.now()
+            }
+            
+            # 格式化搜索结果消息
+            result_text = format_person_search_results_for_keyboard(search_data)
+            keyboard = create_person_search_keyboard(search_data)
+            
+            # 删除搜索进度消息
+            await message.delete()
+            
+            # 生成会话ID用于消息管理
+            import time
+            session_id = f"person_search_{user_id}_{int(time.time())}"
+            
+            # 使用统一的消息发送API发送搜索结果
+            from utils.message_manager import send_message_with_auto_delete, MessageType
+            new_message = await send_message_with_auto_delete(
+                context,
+                update.effective_chat.id,
+                foldable_text_v2(result_text),
+                MessageType.SEARCH_RESULT,
+                session_id=session_id,
+                reply_markup=keyboard,
+                parse_mode="MarkdownV2"
+            )
+            
+            # 更新会话中的消息ID
+            if new_message:
+                person_search_sessions[user_id]["message_id"] = new_message.message_id
+                person_search_sessions[user_id]["session_id"] = session_id
+            
+            # 删除用户命令消息
+            await delete_user_command(context, update.effective_chat.id, update.message.message_id, session_id=session_id)
         else:
             await message.edit_text("❌ 搜索人物失败，请稍后重试")
+            # 调度删除机器人回复消息
+            from utils.message_manager import _schedule_deletion
+            from utils.config_manager import get_config
+            config = get_config()
+            await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
     except Exception as e:
         logger.error(f"人物搜索失败: {e}")
         await message.edit_text("❌ 搜索人物时发生错误")
-    
-    # 调度删除机器人回复消息
-    from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
-    config = get_config()
-    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
+        # 调度删除机器人回复消息
+        from utils.message_manager import _schedule_deletion
+        from utils.config_manager import get_config
+        config = get_config()
+        await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
 async def person_detail_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理 /person_detail 命令 - 获取人物详情"""
@@ -4056,6 +4148,92 @@ async def tvs_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
+async def persons_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理 /persons 命令 - 搜索人物（纯文本结果）"""
+    if not update.message or not update.effective_chat:
+        return
+    
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    
+    if not context.args:
+        help_text = (
+            "*👤 人物文本搜索帮助*\n\n"
+            "`/persons <人物名>` - 搜索人物（文本列表）\n"
+            "`/person <人物名>` - 搜索人物（按钮选择）\n\n"
+            "**示例:**\n"
+            "`/persons 汤姆·汉克斯`"
+        )
+        message = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=foldable_text_with_markdown_v2(help_text),
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+        from utils.message_manager import _schedule_deletion
+        from utils.config_manager import get_config
+        config = get_config()
+        await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
+        return
+    
+    query = " ".join(context.args)
+    
+    if not movie_service:
+        error_message = "❌ 人物查询服务未初始化"
+        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        return
+    
+    # 显示搜索进度
+    escaped_query = escape_markdown(query, version=2)
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"🔍 正在搜索人物: *{escaped_query}*\\.\\.\\.",
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    
+    try:
+        search_data = await movie_service.search_person(query)
+        if search_data:
+            # 使用原来的文本格式化函数
+            result_text, profile_url = movie_service.format_person_search_results(search_data)
+            
+            # 如果有头像URL，先发送图片再发送文本
+            if profile_url:
+                try:
+                    # 发送头像图片
+                    photo_message = await context.bot.send_photo(
+                        chat_id=update.effective_chat.id,
+                        photo=profile_url,
+                        caption=foldable_text_with_markdown_v2(result_text),
+                        parse_mode=ParseMode.MARKDOWN_V2
+                    )
+                    # 删除原来的加载消息
+                    await message.delete()
+                    # 更新message为新发送的图片消息，用于后续删除调度
+                    message = photo_message
+                except Exception as photo_error:
+                    logger.warning(f"发送头像失败: {photo_error}，改用文本消息")
+                    # 如果图片发送失败，改用文本消息
+                    await message.edit_text(
+                        foldable_text_with_markdown_v2(result_text),
+                        parse_mode=ParseMode.MARKDOWN_V2
+                    )
+            else:
+                # 没有头像，直接发送文本
+                await message.edit_text(
+                    foldable_text_with_markdown_v2(result_text),
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
+        else:
+            await message.edit_text("❌ 搜索人物失败，请稍后重试")
+    except Exception as e:
+        logger.error(f"人物搜索失败: {e}")
+        await message.edit_text("❌ 搜索人物时发生错误")
+    
+    # 调度删除机器人回复消息
+    from utils.message_manager import _schedule_deletion
+    from utils.config_manager import get_config
+    config = get_config()
+    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
+
 async def movie_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理电影搜索结果的内联键盘回调"""
     query = update.callback_query
@@ -4308,6 +4486,132 @@ async def tv_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.error(f"处理电视剧搜索回调失败: {e}")
         await query.edit_message_text("❌ 处理选择时发生错误")
 
+async def person_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理人物搜索结果的内联键盘回调"""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = update.effective_user.id
+    callback_data = query.data
+    
+    # 检查用户是否有有效的搜索会话
+    if user_id not in person_search_sessions:
+        await query.edit_message_text("❌ 搜索会话已过期，请重新搜索")
+        return
+    
+    session = person_search_sessions[user_id]
+    search_data = session["search_data"]
+    
+    try:
+        if callback_data.startswith("person_select_"):
+            # 用户选择了一个人物
+            parts = callback_data.split("_")
+            person_index = int(parts[2])
+            page = int(parts[3])
+            
+            # 获取当前页的搜索结果
+            if page != search_data.get("current_page", 1):
+                # 需要获取指定页面的数据
+                new_search_data = await movie_service.search_person(
+                    search_data["query"], page=page
+                )
+                if new_search_data:
+                    search_data = new_search_data
+                    person_search_sessions[user_id]["search_data"] = search_data
+            
+            results = search_data["results"]
+            if person_index < len(results):
+                selected_person = results[person_index]
+                person_id = selected_person["id"]
+                
+                # 获取人物详情
+                detail_data = await movie_service.get_person_details(person_id)
+                if detail_data:
+                    result_text, profile_url = movie_service.format_person_details(detail_data)
+                    
+                    # 如果有头像URL，发送图片消息
+                    if profile_url:
+                        try:
+                            detail_message = await context.bot.send_photo(
+                                chat_id=query.message.chat_id,
+                                photo=profile_url,
+                                caption=foldable_text_with_markdown_v2(result_text),
+                                parse_mode=ParseMode.MARKDOWN_V2
+                            )
+                            # 删除原来的搜索结果消息
+                            await query.delete_message()
+                            
+                            # 为详情消息添加自动删除
+                            from utils.message_manager import _schedule_deletion
+                            from utils.config_manager import get_config
+                            config = get_config()
+                            await _schedule_deletion(context, query.message.chat_id, detail_message.message_id, config.auto_delete_delay)
+                        except Exception as photo_error:
+                            logger.warning(f"发送头像失败: {photo_error}，改用文本消息")
+                            await query.edit_message_text(
+                                foldable_text_with_markdown_v2(result_text),
+                                parse_mode=ParseMode.MARKDOWN_V2
+                            )
+                            
+                            # 为编辑后的消息添加自动删除
+                            from utils.message_manager import _schedule_deletion
+                            from utils.config_manager import get_config
+                            config = get_config()
+                            await _schedule_deletion(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
+                    else:
+                        await query.edit_message_text(
+                            foldable_text_with_markdown_v2(result_text),
+                            parse_mode=ParseMode.MARKDOWN_V2
+                        )
+                        
+                        # 为编辑后的消息添加自动删除
+                        from utils.message_manager import _schedule_deletion
+                        from utils.config_manager import get_config
+                        config = get_config()
+                        await _schedule_deletion(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
+                    
+                    # 清除用户会话
+                    del person_search_sessions[user_id]
+                else:
+                    await query.edit_message_text("❌ 获取人物详情失败")
+            else:
+                await query.edit_message_text("❌ 选择的人物索引无效")
+                
+        elif callback_data.startswith("person_page_"):
+            # 处理分页
+            if callback_data == "person_page_info":
+                return  # 只是显示页面信息，不做任何操作
+            
+            page_num = int(callback_data.split("_")[2])
+            new_search_data = await movie_service.search_person(
+                search_data["query"], page=page_num
+            )
+            
+            if new_search_data:
+                new_search_data["query"] = search_data["query"]  # 保持原查询词
+                person_search_sessions[user_id]["search_data"] = new_search_data
+                
+                result_text = format_person_search_results_for_keyboard(new_search_data)
+                keyboard = create_person_search_keyboard(new_search_data)
+                
+                await query.edit_message_text(
+                    foldable_text_with_markdown_v2(result_text),
+                    reply_markup=keyboard,
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
+            else:
+                await query.edit_message_text("❌ 获取页面数据失败")
+                
+        elif callback_data == "person_close":
+            # 关闭搜索结果
+            await query.delete_message()
+            if user_id in person_search_sessions:
+                del person_search_sessions[user_id]
+                
+    except Exception as e:
+        logger.error(f"处理人物搜索回调失败: {e}")
+        await query.edit_message_text("❌ 处理选择时发生错误")
+
 # 注册命令
 command_factory.register_command("movie", movie_command, permission=Permission.USER, description="搜索电影信息（按钮选择）")
 command_factory.register_command("movies", movies_command, permission=Permission.USER, description="搜索电影信息（文本列表）")
@@ -4338,7 +4642,8 @@ command_factory.register_command("tv_airing", tv_airing_command, permission=Perm
 command_factory.register_command("tv_on_air", tv_on_air_command, permission=Permission.USER, description="获取正在播出的电视剧")
 
 # 注册人物搜索命令
-command_factory.register_command("person", person_command, permission=Permission.USER, description="搜索人物信息")
+command_factory.register_command("person", person_command, permission=Permission.USER, description="搜索人物信息（按钮选择）")
+command_factory.register_command("persons", persons_command, permission=Permission.USER, description="搜索人物信息（文本列表）")
 command_factory.register_command("person_detail", person_detail_command, permission=Permission.USER, description="获取人物详情")
 
 # 注册观看平台命令
@@ -4348,3 +4653,4 @@ command_factory.register_command("tv_watch", tv_watch_command, permission=Permis
 # 注册回调处理器
 command_factory.register_callback(r"^movie_", movie_callback_handler, permission=Permission.USER, description="电影搜索结果选择")
 command_factory.register_callback(r"^tv_", tv_callback_handler, permission=Permission.USER, description="电视剧搜索结果选择")
+command_factory.register_callback(r"^person_", person_callback_handler, permission=Permission.USER, description="人物搜索结果选择")
