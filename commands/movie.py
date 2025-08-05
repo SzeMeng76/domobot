@@ -692,12 +692,12 @@ class MovieService:
         if not trakt_stats:
             return ""
         
-        watchers = trakt_stats.get("watchers", 0)
-        plays = trakt_stats.get("plays", 0)
-        collectors = trakt_stats.get("collectors", 0)
-        comments = trakt_stats.get("comments", 0)
-        lists = trakt_stats.get("lists", 0)
-        votes = trakt_stats.get("votes", 0)
+        watchers = trakt_stats.get("watchers") or 0
+        plays = trakt_stats.get("plays") or 0
+        collectors = trakt_stats.get("collectors") or 0
+        comments = trakt_stats.get("comments") or 0
+        lists = trakt_stats.get("lists") or 0
+        votes = trakt_stats.get("votes") or 0
         
         # 构建统计信息行
         stats_parts = []
@@ -736,7 +736,7 @@ class MovieService:
             movie = item.get("movie", {})
             title = movie.get("title", "未知标题")
             year = movie.get("year", "")
-            watchers = item.get("watchers", 0)
+            watchers = item.get("watchers") or 0
             
             # TMDB ID用于获取详情
             tmdb_id = movie.get("ids", {}).get("tmdb")
@@ -770,7 +770,7 @@ class MovieService:
             show = item.get("show", {})
             title = show.get("title", "未知标题")
             year = show.get("year", "")
-            watchers = item.get("watchers", 0)
+            watchers = item.get("watchers") or 0
             
             # TMDB ID用于获取详情
             tmdb_id = show.get("ids", {}).get("tmdb")
