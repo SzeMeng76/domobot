@@ -58,7 +58,7 @@ class BotConfig:
         self.spotify_cache_duration = 86400 * 8  # 8天，配合周日清理
         self.disney_cache_duration = 86400 * 8  # 8天，配合周日清理
         self.max_cache_duration = 86400 * 8  # 8天，配合周日清理
-        self.movie_cache_duration = 7200   # 6小时，电影和电视剧缓存
+        self.movie_cache_duration = 7200   # 2小时，电影和电视剧缓存
 
         # 定时清理配置
         self.spotify_weekly_cleanup = True  # 默认启用
