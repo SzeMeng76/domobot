@@ -58,7 +58,7 @@ class BotConfig:
         self.spotify_cache_duration = 86400 * 8  # 8天，配合周日清理
         self.disney_cache_duration = 86400 * 8  # 8天，配合周日清理
         self.max_cache_duration = 86400 * 8  # 8天，配合周日清理
-        self.movie_cache_duration = 86400 * 3  # 3天，电影和电视剧缓存
+        self.movie_cache_duration = 86400   # 3天，电影和电视剧缓存
 
         # 定时清理配置
         self.spotify_weekly_cleanup = True  # 默认启用
@@ -210,7 +210,7 @@ class ConfigManager:
         self.config.steam_cache_duration = get_int_env("STEAM_CACHE_DURATION", "259200")
         self.config.netflix_cache_duration = get_int_env("NETFLIX_CACHE_DURATION", "86400")
         self.config.crypto_cache_duration = get_int_env("CRYPTO_CACHE_DURATION", "60")
-        self.config.movie_cache_duration = get_int_env("MOVIE_CACHE_DURATION", str(86400 * 3))
+        self.config.movie_cache_duration = get_int_env("MOVIE_CACHE_DURATION", "86400")
 
         # 定时清理配置
         self.config.spotify_weekly_cleanup = get_bool_env("SPOTIFY_WEEKLY_CLEANUP")
