@@ -64,7 +64,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 观看: `/movie_watch <ID>` | `/tv_watch <ID>`
 季集: `/tv_season <ID> <季>` | `/tv_episode <ID> <季> <集>`
 推荐: `/movie_rec <ID>` | `/tv_rec <ID>`
-人物: `/person` | `/person_detail <ID>`
+人物: `/person` 按钮 | `/persons` 文本 | `/person_detail <ID>`
 趋势: `/trending` | `/now_playing` | `/upcoming`
 
 🎮 *Steam 价格查询*
@@ -113,7 +113,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - `/tv 权力的游戏`: 搜索电视剧
 - `/movie_videos 299534`: 查看预告片
 - `/trending`: 查看今日热门
-- `/person 汤姆·汉克斯`: 搜索影视人物。
+- `/person 汤姆·汉克斯`: 搜索影视人物（按钮选择）。
+- `/persons 汤姆·汉克斯`: 搜索影视人物（文本列表）。
 - `/steam 赛博朋克`: 查询《赛博朋克2077》价格。
 - `/nf`: 查看Netflix全球价格排名。
 - `/ds`: 查看Disney+全球价格排名。
@@ -222,7 +223,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 电影: `/movie_hot`, `/movie_detail <ID>`, `/movie_rec <ID>`, `/movie_videos <ID>`, `/movie_reviews <ID>`, `/movie_watch <ID>`
 电视: `/tv_hot`, `/tv_detail <ID>`, `/tv_rec <ID>`, `/tv_videos <ID>`, `/tv_reviews <ID>`, `/tv_watch <ID>`, `/tv_season <ID> <季数>`, `/tv_episode <ID> <季> <集>`
 趋势: `/trending`, `/trending_week`, `/now_playing`, `/upcoming`, `/tv_airing`, `/tv_on_air`
-人物: `/person <姓名>`, `/person_detail <ID>`
+人物: `/person <姓名>` 按钮 | `/persons <姓名>` 文本, `/person_detail <ID>`
 
 🎮 *Steam游戏*
 - `/steam <游戏名> [国家]`: 游戏价格查询

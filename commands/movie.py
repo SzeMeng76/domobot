@@ -2097,6 +2097,8 @@ async def movie_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     # 获取用户ID用于会话管理
     user_id = update.effective_user.id
     
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    
     if not context.args:
         help_text = (
             "*🎬 电影信息查询帮助*\n\n"
@@ -2433,6 +2435,8 @@ async def tv_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     
     # 获取用户ID用于会话管理
     user_id = update.effective_user.id
+    
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
     
     if not context.args:
         help_text = (
@@ -3651,6 +3655,8 @@ async def person_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     # 获取用户ID用于会话管理
     user_id = update.effective_user.id
+    
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
     
     if not context.args:
         help_text = (

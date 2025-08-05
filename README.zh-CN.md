@@ -180,7 +180,8 @@ docker-compose down
 /tv_on_air                 # 正在播出的电视剧
 
 # 人物搜索
-/person 汤姆·汉克斯          # 搜索演员、导演等
+/person 汤姆·汉克斯          # 搜索演员、导演等（按钮选择）
+/persons 汤姆·汉克斯         # 搜索演员、导演等（文本列表）
 /person_detail 31          # 获取人物详情和履历
 
 # Steam游戏价格和捆绑包

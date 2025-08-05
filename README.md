@@ -179,7 +179,8 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /tv_on_air                 # Currently airing TV shows
 
 # People search
-/person Tom Hanks          # Search for actors, directors, etc.
+/person Tom Hanks          # Search for actors, directors, etc. (button selection)
+/persons Tom Hanks         # Search for actors, directors, etc. (text list)
 /person_detail 31          # Get person details and filmography
 
 # Steam game prices and bundles
