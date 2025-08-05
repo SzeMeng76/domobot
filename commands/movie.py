@@ -108,54 +108,49 @@ class MovieService:
         if chinese_reviews and chinese_reviews.get("results"):
             all_reviews.extend(chinese_reviews["results"])
         
-        # 如果需要更多评价，获取英文评价
-        if len(all_reviews) < 2:
-            english_reviews = await self._make_tmdb_request(f"{content_type}/{content_id}/reviews", language="en-US")
-            if english_reviews and english_reviews.get("results"):
-                existing_ids = {review.get("id") for review in all_reviews}
-                for review in english_reviews["results"]:
-                    if review.get("id") not in existing_ids and len(all_reviews) < 4:
-                        all_reviews.append(review)
+        # 获取英文评价
+        english_reviews = await self._make_tmdb_request(f"{content_type}/{content_id}/reviews", language="en-US")
+        if english_reviews and english_reviews.get("results"):
+            existing_ids = {review.get("id") for review in all_reviews}
+            for review in english_reviews["results"]:
+                if review.get("id") not in existing_ids:
+                    all_reviews.append(review)
         
-        # 获取Trakt评论数据（如果评价仍然不足）
-        if len(all_reviews) < 3:
-            try:
-                # 查找对应的Trakt ID
-                trakt_id = None
+        # 总是尝试获取Trakt评论数据
+        try:
+            # 查找对应的Trakt ID
+            trakt_id = None
+            if content_type == "movie":
+                trakt_id = await self._find_trakt_movie_id(content_id)
+            elif content_type == "tv":
+                trakt_id = await self._find_trakt_tv_id(content_id)
+            
+            if trakt_id:
+                # 获取Trakt评论
+                trakt_comments = None
                 if content_type == "movie":
-                    trakt_id = await self._find_trakt_movie_id(content_id)
+                    trakt_comments = await self._get_trakt_movie_comments(trakt_id)
                 elif content_type == "tv":
-                    trakt_id = await self._find_trakt_tv_id(content_id)
+                    trakt_comments = await self._get_trakt_tv_comments(trakt_id)
                 
-                if trakt_id:
-                    # 获取Trakt评论
-                    trakt_comments = None
-                    if content_type == "movie":
-                        trakt_comments = await self._get_trakt_movie_comments(trakt_id)
-                    elif content_type == "tv":
-                        trakt_comments = await self._get_trakt_tv_comments(trakt_id)
-                    
-                    if trakt_comments and isinstance(trakt_comments, list):
-                        # 转换Trakt评论格式为TMDB格式
-                        for comment in trakt_comments[:2]:  # 最多添加2条Trakt评论
-                            if len(all_reviews) >= 6:  # 总评价数量限制
-                                break
-                            
-                            # 转换格式
-                            trakt_review = {
-                                "id": f"trakt_{comment.get('id', '')}",
-                                "author": comment.get("user", {}).get("username", "Trakt用户"),
-                                "content": comment.get("comment", ""),
-                                "created_at": comment.get("created_at", ""),
-                                "author_details": {
-                                    "rating": None  # Trakt评论不包含评分
-                                },
-                                "source": "trakt"  # 标记来源
-                            }
-                            all_reviews.append(trakt_review)
-                            
-            except Exception as e:
-                logger.warning(f"获取Trakt评论时出错: {e}")
+                if trakt_comments and isinstance(trakt_comments, list):
+                    # 转换Trakt评论格式为TMDB格式
+                    for comment in trakt_comments:  # 获取所有Trakt评论
+                        # 转换格式
+                        trakt_review = {
+                            "id": f"trakt_{comment.get('id', '')}",
+                            "author": comment.get("user", {}).get("username", "Trakt用户"),
+                            "content": comment.get("comment", ""),
+                            "created_at": comment.get("created_at", ""),
+                            "author_details": {
+                                "rating": None  # Trakt评论不包含评分
+                            },
+                            "source": "trakt"  # 标记来源
+                        }
+                        all_reviews.append(trakt_review)
+                        
+        except Exception as e:
+            logger.warning(f"获取Trakt评论时出错: {e}")
         
         # 构造返回数据
         if all_reviews:
@@ -652,13 +647,33 @@ class MovieService:
         if not reviews_data or not reviews_data.get("results"):
             return ""
         
-        reviews = reviews_data["results"][:2]  # 只显示前2个评价
+        reviews = reviews_data["results"]
         if not reviews:
+            return ""
+        
+        # 分别筛选TMDB和Trakt评论
+        tmdb_reviews = [r for r in reviews if r.get("source", "tmdb") == "tmdb"]
+        trakt_reviews = [r for r in reviews if r.get("source") == "trakt"]
+        
+        # 选择显示的评论：1个TMDB + 1个Trakt
+        selected_reviews = []
+        if tmdb_reviews:
+            selected_reviews.append(tmdb_reviews[0])
+        if trakt_reviews:
+            selected_reviews.append(trakt_reviews[0])
+        
+        # 如果没有足够的评论，补充其他评论
+        if len(selected_reviews) < 2:
+            for review in reviews:
+                if review not in selected_reviews and len(selected_reviews) < 2:
+                    selected_reviews.append(review)
+        
+        if not selected_reviews:
             return ""
         
         lines = ["", "📝 *用户评价*:"]
         
-        for i, review in enumerate(reviews, 1):
+        for i, review in enumerate(selected_reviews, 1):
             author = review.get("author", "匿名用户")
             content = review.get("content", "")
             rating = review.get("author_details", {}).get("rating")
