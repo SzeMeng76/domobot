@@ -677,11 +677,12 @@ class MovieService:
                 # 语言标识和来源标识
                 lang_flag = "🇨🇳" if is_chinese else "🇺🇸"
                 source_flag = "📺" if source == "trakt" else "🎬"
+                source_text = "Trakt" if source == "trakt" else "TMDB"
                 
                 rating_text = f" ({rating}/10)" if rating else ""
                 
                 lines.append(f"")
-                lines.append(f"👤 *{author}*{rating_text} {lang_flag}{source_flag}:")
+                lines.append(f"👤 *{author}*{rating_text} {lang_flag}{source_flag} _({source_text})_:")
                 lines.append(f"_{content_preview}_")
         
         return "\n".join(lines) if len(lines) > 2 else ""
@@ -917,17 +918,22 @@ class MovieService:
             review_content = review.get("content", "")
             rating = review.get("author_details", {}).get("rating")
             created_at = review.get("created_at", "")
+            source = review.get("source", "tmdb")  # 获取来源信息
             
             # 简单检测语言
             chinese_chars = len([c for c in review_content if '\u4e00' <= c <= '\u9fff'])
             is_chinese = chinese_chars > len(review_content) * 0.3
             lang_flag = "🇨🇳" if is_chinese else "🇺🇸"
             
+            # 来源标识
+            source_flag = "📺" if source == "trakt" else "🎬"
+            source_text = "Trakt" if source == "trakt" else "TMDB"
+            
             rating_text = f" ({rating}/10)" if rating else ""
             date_text = f" - {created_at[:10]}" if created_at else ""
             
-            content += f"=== 评价 {i} ===\n"
-            content += f"👤 {author}{rating_text} {lang_flag}{date_text}\n\n"
+            content += f"=== 评价 {i} ({source_text}) ===\n"
+            content += f"👤 {author}{rating_text} {lang_flag}{source_flag} 来源: {source_text}{date_text}\n\n"
             content += f"{review_content}\n\n"
             content += "=" * 50 + "\n\n"
         
@@ -959,11 +965,16 @@ class MovieService:
             author = review.get("author", "匿名用户")
             content = review.get("content", "")
             rating = review.get("author_details", {}).get("rating")
+            source = review.get("source", "tmdb")  # 获取来源信息
             
             # 简单检测语言
             chinese_chars = len([c for c in content if '\u4e00' <= c <= '\u9fff'])
             is_chinese = chinese_chars > len(content) * 0.3
             lang_flag = "🇨🇳" if is_chinese else "🇺🇸"
+            
+            # 来源标识
+            source_flag = "📺" if source == "trakt" else "🎬"
+            source_text = "Trakt" if source == "trakt" else "TMDB"
             
             # 动态截取评价内容
             if len(content) > max_chars_per_review:
@@ -975,7 +986,7 @@ class MovieService:
             
             rating_text = f" ({rating}/10)" if rating else ""
             
-            lines.append(f"{i}. *{author}*{rating_text} {lang_flag}:")
+            lines.append(f"{i}. *{author}*{rating_text} {lang_flag}{source_flag} _({source_text})_:")
             lines.append(f"   _{content_preview}_")
             lines.append("")
         
@@ -1244,7 +1255,8 @@ class MovieService:
         lines.extend([
             f"",
             f"💡 使用 `/tv_rec {tv_id}` 获取相似推荐",
-            f"💡 使用 `/tv_videos {tv_id}` 查看预告片",
+            f"💡 使用 `/tv_related {tv_id}` 获取Trakt相关推荐",
+            f"💡 使用 `/tv_videos {tv_id}` 查看预告片", 
             f"💡 使用 `/tv_reviews {tv_id}` 查看用户评价",
             f"💡 使用 `/tv_season {tv_id} <季数>` 查看季详情",
             f"💡 使用 `/tv_watch {tv_id}` 查看完整观看平台"
@@ -1585,6 +1597,7 @@ class MovieService:
         lines.extend([
             f"",
             f"💡 使用 `/movie_rec {movie_id}` 获取相似推荐",
+            f"💡 使用 `/movie_related {movie_id}` 获取Trakt相关推荐",
             f"💡 使用 `/movie_videos {movie_id}` 查看预告片",
             f"💡 使用 `/movie_reviews {movie_id}` 查看用户评价",
             f"💡 使用 `/movie_watch {movie_id}` 查看完整观看平台"
@@ -3340,6 +3353,8 @@ async def movie_trending_command(update: Update, context: ContextTypes.DEFAULT_T
     if not update.message or not update.effective_chat:
         return
     
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    
     if not movie_service:
         error_message = "❌ 电影查询服务未初始化"
         await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
@@ -3377,6 +3392,8 @@ async def tv_trending_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     if not update.message or not update.effective_chat:
         return
     
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    
     if not movie_service:
         error_message = "❌ 电视剧查询服务未初始化"
         await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
@@ -3413,6 +3430,8 @@ async def movie_related_command(update: Update, context: ContextTypes.DEFAULT_TY
     """处理 /movie_related 命令 - 获取Trakt相关电影推荐"""
     if not update.message or not update.effective_chat:
         return
+    
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
     
     # 检查参数
     if not context.args or len(context.args) == 0:
@@ -3479,6 +3498,8 @@ async def tv_related_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     """处理 /tv_related 命令 - 获取Trakt相关电视剧推荐"""
     if not update.message or not update.effective_chat:
         return
+    
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
     
     # 检查参数
     if not context.args or len(context.args) == 0:
@@ -3644,11 +3665,16 @@ async def movie_reviews_command(update: Update, context: ContextTypes.DEFAULT_TY
                     author = review.get("author", "匿名用户")
                     content = review.get("content", "")
                     rating = review.get("author_details", {}).get("rating")
+                    source = review.get("source", "tmdb")  # 获取来源信息
                     
                     # 语言检测
                     chinese_chars = len([c for c in content if '\u4e00' <= c <= '\u9fff'])
                     is_chinese = chinese_chars > len(content) * 0.3
                     lang_flag = "🇨🇳" if is_chinese else "🇺🇸"
+                    
+                    # 来源标识
+                    source_flag = "📺" if source == "trakt" else "🎬"
+                    source_text = "Trakt" if source == "trakt" else "TMDB"
                     
                     # 短预览，最多100字符
                     content_preview = content[:100] + "..." if len(content) > 100 else content
@@ -3656,7 +3682,7 @@ async def movie_reviews_command(update: Update, context: ContextTypes.DEFAULT_TY
                     
                     rating_text = f" ({rating}/10)" if rating else ""
                     preview_lines.extend([
-                        f"{i}. *{author}*{rating_text} {lang_flag}:",
+                        f"{i}. *{author}*{rating_text} {lang_flag}{source_flag} _({source_text})_:",
                         f"   _{content_preview}_",
                         ""
                     ])
@@ -3875,11 +3901,16 @@ async def tv_reviews_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     author = review.get("author", "匿名用户")
                     content = review.get("content", "")
                     rating = review.get("author_details", {}).get("rating")
+                    source = review.get("source", "tmdb")  # 获取来源信息
                     
                     # 语言检测
                     chinese_chars = len([c for c in content if '\u4e00' <= c <= '\u9fff'])
                     is_chinese = chinese_chars > len(content) * 0.3
                     lang_flag = "🇨🇳" if is_chinese else "🇺🇸"
+                    
+                    # 来源标识
+                    source_flag = "📺" if source == "trakt" else "🎬"
+                    source_text = "Trakt" if source == "trakt" else "TMDB"
                     
                     # 短预览，最多100字符
                     content_preview = content[:100] + "..." if len(content) > 100 else content
@@ -3887,7 +3918,7 @@ async def tv_reviews_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     
                     rating_text = f" ({rating}/10)" if rating else ""
                     preview_lines.extend([
-                        f"{i}. *{author}*{rating_text} {lang_flag}:",
+                        f"{i}. *{author}*{rating_text} {lang_flag}{source_flag} _({source_text})_:",
                         f"   _{content_preview}_",
                         ""
                     ])
