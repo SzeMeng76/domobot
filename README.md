@@ -35,7 +35,7 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 
 -   📺 **Public Streaming Prices:** Available to all users - query subscription prices for Netflix, Disney+, Spotify, and HBO Max across global regions.
 -   👤 **Public User Information:** Available to all users - check Telegram user registration dates, account age, and get user/group IDs.
--   🎬 **Movie & TV Information:** Query movie/TV details with posters, ratings, cast, trailers, reviews, recommendations, viewing platforms, and season/episode info. Features Telegraph integration for long content, trending discovery, people search, and hot/popular content. *(Whitelist required)*
+-   🎬 **Movie & TV Information:** Query movie/TV details with posters, ratings, cast, trailers, reviews, recommendations, viewing platforms, and season/episode info. Features multi-source data aggregation (TMDB + Trakt), Telegraph integration for long content, trending discovery, people search, and enhanced statistics with watch counts and community data. *(Whitelist required)*
 -   🪙 **Crypto Prices:** Look up real-time cryptocurrency prices with support for custom amounts and currency conversion, including 24h and 7d percentage changes. *(Whitelist required)*
 -   💳 **BIN Lookup:** Query credit card BIN (Bank Identification Number) information including card brand, type, issuing bank, and country details. *(Whitelist required)*
 -   🌦️ **Weather Forecasts:** Detailed, multi-format weather forecasts (real-time, daily, hourly, minutely precipitation, and lifestyle indices). *(Whitelist required)*
@@ -83,6 +83,7 @@ All configurations are managed via the `.env` file. You must copy `.env.example`
 | `CMC_API_KEY`               | **(Optional)** API Key from CoinMarketCap for the `/crypto` command.        |                         |
 | `BIN_API_KEY`               | **(Optional)** API Key from DY.AX for the `/bin` command.                   |                         |
 | `TMDB_API_KEY`              | **(Optional)** API Key from TMDB for the `/movie` and `/tv` commands.       |                         |
+| `TRAKT_API_KEY`             | **(Optional)** API Key from Trakt for enhanced movie/TV statistics and trending data. |                         |
 | `QWEATHER_API_KEY`          | **(Optional)** API Key from HeFeng Weather for the `/tq` command.           |                         |
 | `EXCHANGE_RATE_API_KEYS`    | **(Optional)** API Keys from openexchangerates.org for the `/rate` command. Multiple keys separated by commas. |                         |
 | `ENABLE_USER_CACHE`         | **(Optional)** Enable user caching system (`true`/`false`).                 | `false`                 |
@@ -159,6 +160,8 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /movie_reviews 299536      # User reviews (Telegraph for long content)
 /movie_rec 299536          # Movie recommendations
 /movie_watch 299536        # Viewing platforms
+/movie_trending            # Trakt trending movies
+/movie_related 299536      # Trakt related movies
 /tv Game of Thrones        # Search TV shows (button selection)
 /tvs Game of Thrones       # Search TV shows (text list)
 /tv_detail 1399            # TV details with trailers
@@ -169,6 +172,8 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /tv_reviews 1399           # User reviews (Telegraph for long content)
 /tv_rec 1399               # TV show recommendations
 /tv_watch 1399             # Viewing platforms
+/tv_trending               # Trakt trending TV shows
+/tv_related 1399           # Trakt related TV shows
 
 # Trending content
 /trending                  # Today's trending movies, TV shows, and people
@@ -419,14 +424,17 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 - **Whitelist Policy Update:** Applications currently closed, future paid service plans under consideration
 
 #### Movie & TV Features
+- **Multi-Source Data Integration:** Combines TMDB and Trakt APIs for comprehensive movie/TV information
 - **Enhanced Search:** Interactive button-based movie/TV show selection
 - **Rich Details:** Posters, ratings, cast, crew, trailers, and viewing platforms
-- **User Reviews:** Comprehensive review system with Telegraph integration for long content
-- **Recommendation System:** Intelligent movie and TV show recommendations based on content similarity
+- **Community Statistics:** Trakt integration provides watch counts, collector stats, and community engagement data
+- **User Reviews:** Multi-source review system (TMDB + Trakt) with Telegraph integration for long content
+- **Recommendation System:** Intelligent movie and TV show recommendations with Trakt-powered related content
+- **Trending Discovery:** Real-time Trakt trending data with daily refresh for accuracy
 - **Hot/Popular Content:** Dedicated commands for trending and popular movies/TV shows
 - **Season/Episode Info:** Detailed TV show breakdowns with intelligent content truncation
-- **Trending Discovery:** Daily/weekly trending content and upcoming releases
 - **People Search:** Actor, director, and crew information with filmography
+- **Source Transparency:** Clear indicators showing data sources (🎬 TMDB, 📺 Trakt) in all displays
 - **Multilingual Support:** Chinese/English content fallback for better coverage
 
 #### User Cache Management System
@@ -460,6 +468,7 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 - **CoinMarketCap API:** For cryptocurrency price data
 - **DY.AX BIN API:** For credit card BIN information lookup
 - **TMDB API:** For movie and TV show information with Telegraph integration
+- **Trakt API:** For enhanced movie/TV statistics, trending data, and community insights
 - **HeFeng Weather API:** For weather forecast data
 - **Steam API:** For game pricing information
 - **Various streaming service APIs:** For subscription pricing

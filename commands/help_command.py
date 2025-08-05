@@ -57,13 +57,13 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 🎬 *影视查询*
 搜索: `/movie` 按钮 | `/movies` 文本 | `/tv` 按钮 | `/tvs` 文本
-热门: `/movie_hot` | `/tv_hot`
+热门: `/movie_hot` | `/tv_hot` | `/movie_trending` | `/tv_trending`
 详情: `/movie_detail <ID>` | `/tv_detail <ID>`
 视频: `/movie_videos <ID>` | `/tv_videos <ID>`
 评价: `/movie_reviews <ID>` | `/tv_reviews <ID>`
 观看: `/movie_watch <ID>` | `/tv_watch <ID>`
 季集: `/tv_season <ID> <季>` | `/tv_episode <ID> <季> <集>`
-推荐: `/movie_rec <ID>` | `/tv_rec <ID>`
+推荐: `/movie_rec <ID>` | `/tv_rec <ID>` | `/movie_related <ID>` | `/tv_related <ID>`
 人物: `/person` 按钮 | `/persons` 文本 | `/person_detail <ID>`
 趋势: `/trending` | `/now_playing` | `/upcoming`
 
@@ -220,8 +220,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 🎬 *影视查询*
 搜索: `/movie` 按钮 | `/movies` 文本 | `/tv` 按钮 | `/tvs` 文本
-电影: `/movie_hot`, `/movie_detail <ID>`, `/movie_rec <ID>`, `/movie_videos <ID>`, `/movie_reviews <ID>`, `/movie_watch <ID>`
-电视: `/tv_hot`, `/tv_detail <ID>`, `/tv_rec <ID>`, `/tv_videos <ID>`, `/tv_reviews <ID>`, `/tv_watch <ID>`, `/tv_season <ID> <季数>`, `/tv_episode <ID> <季> <集>`
+电影: `/movie_hot`, `/movie_trending`, `/movie_detail <ID>`, `/movie_rec <ID>`, `/movie_related <ID>`, `/movie_videos <ID>`, `/movie_reviews <ID>`, `/movie_watch <ID>`
+电视: `/tv_hot`, `/tv_trending`, `/tv_detail <ID>`, `/tv_rec <ID>`, `/tv_related <ID>`, `/tv_videos <ID>`, `/tv_reviews <ID>`, `/tv_watch <ID>`, `/tv_season <ID> <季数>`, `/tv_episode <ID> <季> <集>`
 趋势: `/trending`, `/trending_week`, `/now_playing`, `/upcoming`, `/tv_airing`, `/tv_on_air`
 人物: `/person <姓名>` 按钮 | `/persons <姓名>` 文本, `/person_detail <ID>`
 
