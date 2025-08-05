@@ -167,15 +167,17 @@ class MovieService:
         endpoint = f"shows/{tv_id}/stats"
         return await self._make_trakt_request(endpoint)
     
-    async def _get_trakt_movie_comments(self, movie_id: int, sort: str = "newest") -> Optional[List]:
+    async def _get_trakt_movie_comments(self, movie_id: int, sort: str = "newest", limit: int = 50) -> Optional[List]:
         """获取电影在Trakt上的评论"""
         endpoint = f"movies/{movie_id}/comments/{sort}"
-        return await self._make_trakt_request(endpoint)
+        params = {"limit": limit}
+        return await self._make_trakt_request(endpoint, params)
     
-    async def _get_trakt_tv_comments(self, tv_id: int, sort: str = "newest") -> Optional[List]:
+    async def _get_trakt_tv_comments(self, tv_id: int, sort: str = "newest", limit: int = 50) -> Optional[List]:
         """获取电视剧在Trakt上的评论"""
         endpoint = f"shows/{tv_id}/comments/{sort}"
-        return await self._make_trakt_request(endpoint)
+        params = {"limit": limit}
+        return await self._make_trakt_request(endpoint, params)
     
     async def _get_trakt_trending_movies(self, limit: int = 10) -> Optional[List]:
         """获取Trakt热门电影"""
