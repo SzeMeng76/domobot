@@ -21,9 +21,9 @@ logger = logging.getLogger(__name__)
 
 
 class NetflixPriceBot(PriceQueryService):
-    PRICE_URL = "https://opensheet.elk.sh/1b3qotAFrjHai7ny3AGGCTHsZ1xyl4yXviPU3Grqt940/by+regions"
+    PRICE_URL = "https://raw.githubusercontent.com/SzeMeng76/netflix-pricing-scraper/refs/heads/main/netflix_prices_processed.json"
 
-    async def _fetch_data(self, context: ContextTypes.DEFAULT_TYPE) -> list[dict[str, Any]] | None:
+    async def _fetch_data(self, context: ContextTypes.DEFAULT_TYPE) -> dict[str, Any] | None:
         """Fetches Netflix price data from the specified URL."""
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
@@ -47,75 +47,72 @@ class NetflixPriceBot(PriceQueryService):
         mapping = {}
         if not self.data:
             return mapping
-        for item in self.data:
-            if item.get("Translation"):
-                mapping[item["Translation"]] = item
-            if item.get("Code"):
-                code_upper = item["Code"].upper()
-                mapping[code_upper] = item
-                # Use English name from central source if available
-                if code_upper in SUPPORTED_COUNTRIES and "name" in SUPPORTED_COUNTRIES[code_upper]:
-                    mapping[SUPPORTED_COUNTRIES[code_upper]["name"]] = item
-            if item.get("Country"):
-                mapping[item["Country"]] = item
+        
+        for country_code, country_data in self.data.items():
+            if country_code.startswith("_"):
+                continue
+            
+            code_upper = country_code.upper()
+            mapping[code_upper] = {
+                "code": code_upper,
+                "name_cn": country_data.get("name_cn", ""),
+                "plans": country_data.get("plans", [])
+            }
+            
+            if code_upper in SUPPORTED_COUNTRIES and "name" in SUPPORTED_COUNTRIES[code_upper]:
+                mapping[SUPPORTED_COUNTRIES[code_upper]["name"]] = mapping[code_upper]
+            
+            if country_data.get("name_cn"):
+                mapping[country_data["name_cn"]] = mapping[code_upper]
+                
         return mapping
 
     async def _format_price_message(self, country_code: str, price_info: dict) -> str:
         """Formats the price information for a single country as raw text."""
         country_info = SUPPORTED_COUNTRIES.get(country_code.upper(), {})
-        country_name = country_info.get("name_cn", price_info.get("Translation", country_code))
+        country_name = price_info.get("name_cn", country_code)
         country_flag = get_country_flag(country_code)
-        currency = price_info.get("Currency", "")
-
+        
         lines = [f"📍 国家/地区: {country_name} ({country_code.upper()}) {country_flag}"]
-
-        plan_map = {
-            "Mobile": ("移动版", "MobileUSD"),
-            "Standard with ads": ("标准广告版", "With_Ads_USD"),
-            "Basic": ("基础版", "BasicUSD"),
-            "Standard": ("标准版", "StandardUSD"),
-            "Premium": ("高级版", "PremiumUSD"),
+        
+        plans = price_info.get("plans", [])
+        
+        plan_name_mapping = {
+            "Mobile": "移动版",
+            "Standard with ads": "标准广告版", 
+            "Basic": "基础版",
+            "Standard": "标准版",
+            "Premium": "高级版"
         }
-
-        plan_keys = list(plan_map.keys())
-
-        # Filter out plans that are not available in the price_info
-        available_plans = [key for key in plan_keys if price_info.get(key) and price_info.get(key) != "N/A"]
-
-        for _i, key in enumerate(available_plans):
-            name, usd_key = plan_map[key]
-            cny_price_str = ""
-            try:
-                usd_val = float(price_info[usd_key] or 0)
-                if usd_val > 0:
-                    cny_price = await self.rate_converter.convert(usd_val, "USD", "CNY")
-                    if cny_price:
-                        cny_price_str = f" ≈ ¥{cny_price:.2f}"
-            except (ValueError, TypeError, KeyError):
-                pass  # Ignore if conversion fails
-
-            lines.append(f"  • {name}：{price_info[key]} {currency}{cny_price_str}")
-
-        has_extra_members = price_info.get("Extra member slots") and price_info.get("Extra member slots") != "N/A"
-        if has_extra_members:
-            # Process extra member slots format: "Standard: 1 / Premium: 2"
-            extra_members_text = price_info["Extra member slots"]
-            # Add currency to numbers in the format
-            import re
-
-            # Replace numbers with number + currency
-            extra_members_formatted = re.sub(r"(\d+)", r"\1 " + currency, extra_members_text)
-            lines.append(f"  • 额外会员：{extra_members_formatted}")
-
+        
+        for plan in plans:
+            plan_name = plan.get("plan_name", "")
+            chinese_name = plan_name_mapping.get(plan_name, plan_name)
+            original_price = plan.get("monthly_price_original", "")
+            cny_price = plan.get("monthly_price_cny", "")
+            
+            if original_price and cny_price:
+                price_display = f"{original_price} ≈ {cny_price}"
+            elif original_price:
+                price_display = original_price
+            else:
+                continue
+                
+            lines.append(f"  • {chinese_name}：{price_display}")
+        
         return "\n".join(lines)
 
     def _extract_comparison_price(self, item: dict) -> float | None:
-        """Extracts the Premium plan's USD price for ranking."""
-        if item.get("PremiumUSD") and item.get("PremiumUSD") != "N/A":
-            try:
-                return float(item["PremiumUSD"])
-            except (ValueError, TypeError):
-                pass
+        """Extracts the Premium plan's CNY price for ranking."""
+        plans = item.get("plans", [])
+        for plan in plans:
+            if plan.get("plan_name") == "Premium":
+                cny_price_str = plan.get("monthly_price_cny", "")
+                if cny_price_str and cny_price_str.startswith("CNY "):
+                    try:
+                        return float(cny_price_str.replace("CNY ", ""))
+                    except (ValueError, TypeError):
+                        pass
         return None
 
     async def query_prices(self, query_list: list[str]) -> str:
@@ -137,7 +134,7 @@ class NetflixPriceBot(PriceQueryService):
                 not_found.append(query)
                 continue
 
-            country_code = price_info.get("Code")
+            country_code = price_info.get("code")
             if country_code:
                 formatted_message = await self._format_price_message(country_code, price_info)
                 if formatted_message:
@@ -183,10 +180,20 @@ class NetflixPriceBot(PriceQueryService):
             return foldable_text_v2(error_message)
 
         countries_with_prices = []
-        for item in self.data:
-            premium_usd = self._extract_comparison_price(item)
-            if premium_usd is not None:
-                countries_with_prices.append({"data": item, "price": premium_usd})
+        for country_code, country_data in self.data.items():
+            if country_code.startswith("_"):
+                continue
+            
+            premium_cny = self._extract_comparison_price(country_data)
+            if premium_cny is not None:
+                countries_with_prices.append({
+                    "data": {
+                        "code": country_code.upper(),
+                        "name_cn": country_data.get("name_cn", country_code),
+                        "plans": country_data.get("plans", [])
+                    }, 
+                    "price": premium_cny
+                })
 
         countries_with_prices.sort(key=lambda x: x["price"])
         top_countries = countries_with_prices[:top_n]
@@ -198,13 +205,18 @@ class NetflixPriceBot(PriceQueryService):
 
         for idx, country_data in enumerate(top_countries, 1):
             item = country_data["data"]
-            country_code = item.get("Code", "N/A").upper()
+            country_code = item.get("code", "N/A")
             country_info = SUPPORTED_COUNTRIES.get(country_code, {})
-            country_name = country_info.get("name_cn", item.get("Translation", country_code))
+            country_name = item.get("name_cn", country_code)
             country_flag = get_country_flag(country_code)
-            premium_cny = await self.rate_converter.convert(country_data["price"], "USD", "CNY") or 0.0
-            premium_local = item.get("Premium", "")
-            currency = item.get("Currency", "")
+            premium_cny = country_data["price"]
+            
+            # Find premium plan to get original price
+            premium_original = ""
+            for plan in item.get("plans", []):
+                if plan.get("plan_name") == "Premium":
+                    premium_original = plan.get("monthly_price_original", "")
+                    break
 
             # Rank emoji
             rank_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
@@ -219,7 +231,7 @@ class NetflixPriceBot(PriceQueryService):
             else:
                 rank_emoji = f"{idx}."
 
-            country_block = f"{rank_emoji} {country_name} ({country_code}) {country_flag}\n💰 高级版: {premium_local} {currency} ≈ ¥{premium_cny:.2f}"
+            country_block = f"{rank_emoji} {country_name} ({country_code}) {country_flag}\n💰 高级版: {premium_original} ≈ ¥{premium_cny:.2f}"
             raw_message_parts.append(country_block)
 
             # Add blank line between countries (except for the last one)
