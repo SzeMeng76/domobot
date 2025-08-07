@@ -2260,18 +2260,41 @@ class MovieService:
         
         # 处理 JustWatch 提供的观影平台信息
         try:
-            # JustWatch 数据结构可能不同，需要根据实际返回的数据调整
             if isinstance(justwatch_data, dict) and justwatch_data:
                 lines.append("\n🌟 *JustWatch 补充信息*:")
                 
-                # 这里需要根据 JustWatch API 实际返回的数据结构来解析
-                # 暂时添加原始数据的简单展示
-                for key, value in justwatch_data.items():
-                    if key != "justwatch_raw" and value:
-                        lines.append(f"• {key}: {str(value)[:50]}...")
+                # 遍历各个地区的数据
+                for region, offers in justwatch_data.items():
+                    if region == "justwatch_raw":
+                        continue
+                        
+                    if offers and isinstance(offers, list):
+                        # 提取平台名称
+                        platform_names = []
+                        for offer in offers:
+                            if hasattr(offer, 'package') and hasattr(offer.package, 'technical_name'):
+                                platform_name = offer.package.technical_name
+                                if platform_name and platform_name not in platform_names:
+                                    platform_names.append(platform_name)
+                            elif hasattr(offer, 'provider_id'):
+                                # 备选方案：使用 provider_id
+                                provider_id = str(offer.provider_id)
+                                if provider_id not in platform_names:
+                                    platform_names.append(provider_id)
+                        
+                        if platform_names:
+                            lines.append(f"• {region.upper()}: {', '.join(platform_names)}")
+                        else:
+                            lines.append(f"• {region.upper()}: 有观看选项可用")
+                    elif offers:
+                        lines.append(f"• {region.upper()}: 有观看选项可用")
                         
         except Exception as e:
             logger.warning(f"格式化 JustWatch 数据失败: {e}")
+            # 如果解析失败，至少显示有数据可用
+            if justwatch_data:
+                lines.append("\n🌟 *JustWatch 补充信息*:")
+                lines.append("• 有额外观看选项可用")
         
         return "\n".join(lines)
 
