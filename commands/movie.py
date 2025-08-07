@@ -3639,14 +3639,14 @@ async def movie_detail_command(update: Update, context: ContextTypes.DEFAULT_TYP
                 movie_id, "movie", movie_title
             )
             
+            # 始终传递enhanced_providers以启用后备机制，即使它为None
+            detail_data["enhanced_providers"] = enhanced_providers
+            
             # 将增强的观影平台数据合并到详情数据中
             if enhanced_providers:
                 combined_providers = enhanced_providers.get("combined") or enhanced_providers.get("tmdb")
                 if combined_providers:
                     detail_data["watch/providers"] = combined_providers
-                
-                # 传递完整的增强数据
-                detail_data["enhanced_providers"] = enhanced_providers
                 
                 # 传递JustWatch MediaEntry数据
                 if enhanced_providers.get("justwatch_media_entry"):
