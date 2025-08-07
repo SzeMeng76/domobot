@@ -751,25 +751,13 @@ class MovieService:
             # 获取 JustWatch 数据作为补充
             if JUSTWATCH_AVAILABLE and title:
                 logger.info(f"JustWatch: 开始搜索 {title}")
-                justwatch_results = await self._search_justwatch_content(title, content_type)
+                justwatch_results = await self._enhanced_justwatch_search(detail_data, title, content_type)
                 
                 if justwatch_results and len(justwatch_results) > 0:
-                    logger.info(f"JustWatch: 找到 {len(justwatch_results)} 个搜索结果")
+                    logger.info(f"JustWatch: 找到 {len(justwatch_results)} 个有效搜索结果")
                     
-                    # 寻找真正的 MediaEntry 对象
-                    best_match = None
-                    for search_result in justwatch_results:
-                        # 优先选择有entry_id的MediaEntry对象（不管是否有offers）
-                        if hasattr(search_result, 'entry_id'):
-                            best_match = search_result
-                            break
-                        elif isinstance(search_result, list):
-                            for sub_result in search_result:
-                                if hasattr(sub_result, 'entry_id'):
-                                    best_match = sub_result
-                                    break
-                            if best_match:
-                                break
+                    # _enhanced_justwatch_search 已经返回经过验证的结果，直接使用第一个
+                    best_match = justwatch_results[0]
                     
                     logger.info(f"JustWatch: best_match = {best_match}")
                     if best_match:
@@ -805,6 +793,129 @@ class MovieService:
         
         
         return result
+    
+    def _calculate_title_similarity(self, search_title: str, result_title: str) -> float:
+        """计算标题相似度"""
+        if not search_title or not result_title:
+            return 0.0
+        
+        # 导入difflib用于相似度计算
+        from difflib import SequenceMatcher
+        
+        # 转换为小写进行比较
+        search_lower = search_title.lower().strip()
+        result_lower = result_title.lower().strip()
+        
+        # 基本相似度
+        basic_similarity = SequenceMatcher(None, search_lower, result_lower).ratio()
+        
+        # 如果完全匹配，返回1.0
+        if search_lower == result_lower:
+            return 1.0
+        
+        # 检查是否包含关系（一个标题包含另一个）
+        if search_lower in result_lower or result_lower in search_lower:
+            return max(0.6, basic_similarity)
+        
+        return basic_similarity
+    
+    def _is_likely_english(self, text: str) -> bool:
+        """检测文本是否可能是英文"""
+        if not text:
+            return False
+        
+        # 简单的英文检测：如果大部分字符是ASCII，认为是英文
+        ascii_chars = sum(1 for char in text if ord(char) < 128)
+        total_chars = len(text)
+        
+        # 如果80%以上是ASCII字符，认为是英文
+        return (ascii_chars / total_chars) >= 0.8 if total_chars > 0 else False
+    
+    def _should_use_justwatch_result(self, search_title: str, result) -> bool:
+        """判断是否应该使用JustWatch结果"""
+        if not result or not hasattr(result, 'title'):
+            return False
+        
+        result_title = getattr(result, 'title', '')
+        if not result_title:
+            return False
+        
+        similarity = self._calculate_title_similarity(search_title, result_title)
+        
+        # 相似度阈值：
+        # - 0.5+ : 很可能是正确匹配
+        # - 0.3-0.5 : 可能匹配，但需要谨慎
+        # - <0.3 : 很可能是错误匹配
+        if similarity < 0.3:
+            logger.info(f"JustWatch匹配度过低，跳过: '{search_title}' vs '{result_title}' (相似度: {similarity:.2f})")
+            return False
+        elif similarity < 0.5:
+            logger.info(f"JustWatch匹配度较低，但仍使用: '{search_title}' vs '{result_title}' (相似度: {similarity:.2f})")
+        else:
+            logger.info(f"JustWatch匹配度良好: '{search_title}' vs '{result_title}' (相似度: {similarity:.2f})")
+        
+        return True
+    
+    async def _enhanced_justwatch_search(self, tmdb_data: Dict, primary_title: str, content_type: str) -> Optional[List]:
+        """增强的JustWatch搜索策略 - 尝试多个标题"""
+        titles_to_try = []
+        
+        # 从TMDB数据中提取所有可能的标题
+        if content_type == "movie":
+            original_title = tmdb_data.get("original_title", "")
+            local_title = tmdb_data.get("title", "")
+        else:
+            original_title = tmdb_data.get("original_name", "")
+            local_title = tmdb_data.get("name", "")
+        
+        # 构建搜索标题列表，按优先级排序
+        # 优先级：1. 英文原标题 2. 主要标题 3. 本地化标题
+        if original_title and self._is_likely_english(original_title):
+            titles_to_try.append(original_title)
+            if local_title and local_title != original_title:
+                titles_to_try.append(local_title)
+        else:
+            # 如果原标题不是英文（如中文），先尝试本地标题，再尝试原标题
+            if primary_title and primary_title not in titles_to_try:
+                titles_to_try.append(primary_title)
+            if local_title and local_title != primary_title and local_title not in titles_to_try:
+                titles_to_try.append(local_title)
+            if original_title and original_title not in titles_to_try:
+                titles_to_try.append(original_title)
+        
+        # 去重并过滤空标题
+        titles_to_try = [title.strip() for title in titles_to_try if title and title.strip()]
+        
+        logger.info(f"JustWatch: 将尝试搜索标题: {titles_to_try}")
+        
+        # 依次尝试每个标题
+        for i, title_to_search in enumerate(titles_to_try):
+            logger.info(f"JustWatch: 尝试搜索标题 {i+1}/{len(titles_to_try)}: '{title_to_search}'")
+            
+            try:
+                results = await self._search_justwatch_content(title_to_search, content_type)
+                
+                if results and isinstance(results, list) and len(results) > 0:
+                    # 检查是否有有效匹配
+                    valid_results = []
+                    for result in results:
+                        if hasattr(result, 'entry_id') and self._should_use_justwatch_result(title_to_search, result):
+                            valid_results.append(result)
+                    
+                    if valid_results:
+                        logger.info(f"JustWatch: 标题 '{title_to_search}' 找到 {len(valid_results)} 个有效结果")
+                        return valid_results
+                    else:
+                        logger.info(f"JustWatch: 标题 '{title_to_search}' 无有效匹配结果")
+                else:
+                    logger.info(f"JustWatch: 标题 '{title_to_search}' 无搜索结果")
+                    
+            except Exception as e:
+                logger.warning(f"JustWatch: 搜索标题 '{title_to_search}' 时出错: {e}")
+                continue
+        
+        logger.info(f"JustWatch: 所有标题搜索完毕，未找到有效匹配")
+        return None
 
     def _merge_watch_providers(self, tmdb_data: Optional[Dict], justwatch_data: Optional[Dict]) -> Dict:
         """合并 TMDB 和 JustWatch 观影平台数据 - 优化版"""
