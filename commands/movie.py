@@ -22,6 +22,7 @@ except ImportError:
 
 from utils.command_factory import command_factory
 from utils.config_manager import config_manager
+from utils.country_data import SUPPORTED_COUNTRIES, get_country_flag
 from utils.formatter import foldable_text_v2, foldable_text_with_markdown_v2
 from utils.message_manager import delete_user_command, send_error, send_success
 from utils.permissions import Permission
@@ -660,30 +661,20 @@ class MovieService:
                 return None
             
             if results and isinstance(results, list) and len(results) > 0:
-                logger.info(f"JustWatch: API返回 {len(results)} 个原始结果")
-                
                 # 过滤匹配的内容类型
                 filtered_results = []
-                for i, item in enumerate(results):
+                for item in results:
                     if not item:
-                        logger.info(f"JustWatch: 结果{i+1} 为空，跳过")
                         continue
-                    
-                    logger.info(f"JustWatch: 结果{i+1} 类型={type(item)}")
                     
                     # JustWatch 返回的是 MediaEntry 对象，不是字典
                     if hasattr(item, 'object_type'):
                         item_object_type = getattr(item, 'object_type', '').upper()
-                        logger.info(f"JustWatch: 结果{i+1} object_type={item_object_type}, content_type={content_type}")
                         
                         if content_type == "movie" and item_object_type == "MOVIE":
                             filtered_results.append(item)
-                            logger.info(f"JustWatch: 结果{i+1} 匹配电影类型，已添加")
                         elif content_type == "tv" and item_object_type == "SHOW":
                             filtered_results.append(item)
-                            logger.info(f"JustWatch: 结果{i+1} 匹配电视剧类型，已添加")
-                        else:
-                            logger.info(f"JustWatch: 结果{i+1} 类型不匹配，跳过")
                     else:
                         logger.warning(f"JustWatch 项目无 object_type 属性: {type(item)}")
                 
@@ -692,7 +683,6 @@ class MovieService:
                 if filtered_results:
                     # 暂时禁用JustWatch搜索缓存，因为MediaEntry对象序列化会有问题
                     # await cache_manager.save_cache(cache_key, filtered_results, subdirectory="movie")
-                    logger.info(f"JustWatch: 跳过缓存保存，避免MediaEntry序列化问题")
                     return filtered_results
             
                 
@@ -717,19 +707,12 @@ class MovieService:
             #     return cached_data
             
             # 获取多地区观影平台信息 - 添加超时保护
-            logger.info(f"JustWatch: 开始获取offers数据 node_id={node_id}, regions={regions}")
             try:
                 loop = asyncio.get_event_loop()
                 offers_data = await asyncio.wait_for(
                     loop.run_in_executor(None, justwatch_offers, node_id, set(regions), "en", False),  # 改为 False 获取所有选项
                     timeout=10.0  # 10秒超时
                 )
-                logger.info(f"JustWatch: offers_data类型={type(offers_data)}, 是否为dict={isinstance(offers_data, dict)}")
-                if offers_data and isinstance(offers_data, dict):
-                    total_offers = sum(len(offers) for offers in offers_data.values() if offers)
-                    logger.info(f"JustWatch: 成功获取offers数据，总计{total_offers}个offers，覆盖{len(offers_data)}个地区")
-                else:
-                    logger.warning(f"JustWatch: offers_data为空或格式错误: {offers_data}")
             except asyncio.TimeoutError:
                 logger.warning(f"JustWatch 观影平台查询超时: {node_id}")
                 return None
@@ -740,7 +723,6 @@ class MovieService:
             if offers_data and isinstance(offers_data, dict):
                 # 暂时禁用JustWatch offers缓存，可能也有序列化问题
                 # await cache_manager.save_cache(cache_key, offers_data, subdirectory="movie")
-                logger.info(f"JustWatch: 跳过offers缓存保存，避免序列化问题")
                 return offers_data
                 
         except Exception as e:
@@ -773,28 +755,18 @@ class MovieService:
                 
                 if justwatch_results and len(justwatch_results) > 0:
                     logger.info(f"JustWatch: 找到 {len(justwatch_results)} 个搜索结果")
-                    logger.info(f"JustWatch: 搜索结果类型={type(justwatch_results)}")
                     
                     # 寻找真正的 MediaEntry 对象
                     best_match = None
-                    for i, search_result in enumerate(justwatch_results):
-                        logger.info(f"JustWatch: 结果{i+1} 类型={type(search_result)}")
-                        has_entry_id = hasattr(search_result, 'entry_id')
-                        has_offers = hasattr(search_result, 'offers')
-                        logger.info(f"JustWatch: 检查结果{i+1} - has_entry_id={has_entry_id}, has_offers={has_offers}")
-                        
+                    for search_result in justwatch_results:
                         # 优先选择有entry_id的MediaEntry对象（不管是否有offers）
-                        if has_entry_id:
+                        if hasattr(search_result, 'entry_id'):
                             best_match = search_result
-                            logger.info(f"JustWatch: 选择结果{i+1}作为best_match (有entry_id)")
                             break
                         elif isinstance(search_result, list):
-                            logger.info(f"JustWatch: 结果{i+1}是列表，检查子项")
-                            for j, sub_result in enumerate(search_result):
-                                logger.info(f"JustWatch: 子项{j+1} 类型={type(sub_result)}")
+                            for sub_result in search_result:
                                 if hasattr(sub_result, 'entry_id'):
                                     best_match = sub_result
-                                    logger.info(f"JustWatch: 从列表中选择子项{j+1}作为best_match")
                                     break
                             if best_match:
                                 break
@@ -2544,24 +2516,21 @@ class MovieService:
         
         lines = []
         
-        # 国家名称映射
-        country_names = {
-            'US': '🇺🇸 美国',
-            'GB': '🇬🇧 英国', 
-            'DE': '🇩🇪 德国',
-            'FR': '🇫🇷 法国',
-            'JP': '🇯🇵 日本',
-            'KR': '🇰🇷 韩国',
-            'AU': '🇦🇺 澳大利亚',
-            'CA': '🇨🇦 加拿大'
-        }
+        # 使用完整的国家数据映射
+        def get_country_display_name(country_code):
+            """获取国家的显示名称（包含国旗和中文名）"""
+            if country_code in SUPPORTED_COUNTRIES:
+                country_info = SUPPORTED_COUNTRIES[country_code]
+                flag = get_country_flag(country_code)
+                name = country_info.get('name', country_code)
+                return f"{flag} {name}"
+            else:
+                flag = get_country_flag(country_code)
+                return f"{flag} {country_code}"
         
         # 处理 JustWatch 提供的观影平台信息
         try:
             if isinstance(justwatch_data, dict) and justwatch_data:
-                logger.info(f"JustWatch: 开始格式化观看平台数据，国家数={len(justwatch_data)}")
-                logger.info(f"JustWatch: 可用国家列表={list(justwatch_data.keys())}")
-                
                 lines.append("")
                 lines.append("🔍 *JustWatch 数据*:")
                 
@@ -2572,10 +2541,9 @@ class MovieService:
                 for country in country_order:
                     if country in justwatch_data:
                         offers = justwatch_data[country]
-                        logger.info(f"JustWatch: 国家{country}的offers类型={type(offers)}, 数量={len(offers) if isinstance(offers, list) else 'N/A'}")
                         if offers and isinstance(offers, list) and len(offers) > 0:
                             displayed_countries.append(country)
-                            country_display_name = country_names.get(country, f'🏳️ {country}')
+                            country_display_name = get_country_display_name(country)
                             
                             # 按观看类型分组平台信息
                             offer_types = {}
@@ -2667,24 +2635,22 @@ class MovieService:
             if region not in sorted_regions:
                 sorted_regions.append(region)
         
-        region_names = {
-            "CN": "🇨🇳 中国大陆",
-            "US": "🇺🇸 美国", 
-            "GB": "🇬🇧 英国",
-            "JP": "🇯🇵 日本",
-            "KR": "🇰🇷 韩国",
-            "HK": "🇭🇰 香港",
-            "TW": "🇹🇼 台湾",
-            "CA": "🇨🇦 加拿大",
-            "AU": "🇦🇺 澳大利亚",
-            "DE": "🇩🇪 德国",
-            "FR": "🇫🇷 法国"
-        }
+        # 使用完整的国家数据映射（适用于TMDB区域）
+        def get_region_display_name(region_code):
+            """获取区域的显示名称（包含国旗和中文名）"""
+            if region_code in SUPPORTED_COUNTRIES:
+                country_info = SUPPORTED_COUNTRIES[region_code]
+                flag = get_country_flag(region_code)
+                name = country_info.get('name', region_code)
+                return f"{flag} {name}"
+            else:
+                flag = get_country_flag(region_code)
+                return f"{flag} {region_code}"
         
         found_any = False
         for region in sorted_regions[:5]:  # 最多显示5个地区
             region_data = results[region]
-            region_name = region_names.get(region, f"🌍 {region}")
+            region_name = get_region_display_name(region)
             
             # 检查是否有任何观看方式
             has_content = any([
@@ -2784,7 +2750,7 @@ class MovieService:
                     platforms.append(platform_name)
                 
                 if platforms:
-                    region_name = region_names.get(region, f"🌍{region}")
+                    region_name = get_region_display_name(region)
                     lines.append(f"{prefix}: {', '.join(platforms)} ({region_name})")
                     found_any = True
                     break  # 找到第一个有平台的地区就停止
