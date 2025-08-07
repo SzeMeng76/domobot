@@ -779,6 +779,9 @@ class MovieService:
                         entry_id = best_match.entry_id
                         logger.info(f"JustWatch: 找到 entry_id = {entry_id}")
                         
+                        # 保存完整的 MediaEntry 数据（包含评分、技术规格等）
+                        result["justwatch_media_entry"] = best_match
+                        
                         # 支持的国家列表
                         supported_countries = {"US", "GB", "DE", "FR", "JP", "KR", "AU", "CA"}
                         
@@ -1589,8 +1592,21 @@ class MovieService:
             f"📚 *季数*: {number_of_seasons}季 | *总集数*: {number_of_episodes}集",
             f"⏱️ *单集时长*: {runtime_text}",
             f"🎭 *类型*: {genre_text}",
-            f"⭐ *评分*: {vote_average:.1f}/10 ({vote_count:,}人评价)",
         ])
+        
+        # 添加增强评分信息（如果有JustWatch数据）
+        justwatch_entry = detail_data.get("justwatch_media_entry")
+        enhanced_ratings = self._format_enhanced_ratings(detail_data, justwatch_entry)
+        if enhanced_ratings:
+            lines.append(enhanced_ratings)
+        else:
+            # 如果没有JustWatch数据，显示基础TMDB评分
+            lines.append(f"⭐ *评分*: {vote_average:.1f}/10 ({vote_count:,}人评价)")
+        
+        # 添加流媒体热度信息
+        streaming_info = self._format_streaming_charts_info(justwatch_entry)
+        if streaming_info:
+            lines.append(streaming_info)
         
         # 添加Trakt统计数据
         trakt_stats = detail_data.get("trakt_stats")
@@ -1924,8 +1940,21 @@ class MovieService:
             f"📅 *上映日期*: {release_date or '未知'}",
             f"⏱️ *片长*: {runtime}分钟" if runtime else "⏱️ *片长*: 未知",
             f"🎭 *类型*: {genre_text}",
-            f"⭐ *评分*: {vote_average:.1f}/10 ({vote_count:,}人评价)",
         ])
+        
+        # 添加增强评分信息（如果有JustWatch数据）
+        justwatch_entry = detail_data.get("justwatch_media_entry")
+        enhanced_ratings = self._format_enhanced_ratings(detail_data, justwatch_entry)
+        if enhanced_ratings:
+            lines.append(enhanced_ratings)
+        else:
+            # 如果没有JustWatch数据，显示基础TMDB评分
+            lines.append(f"⭐ *评分*: {vote_average:.1f}/10 ({vote_count:,}人评价)")
+        
+        # 添加流媒体热度信息
+        streaming_info = self._format_streaming_charts_info(justwatch_entry)
+        if streaming_info:
+            lines.append(streaming_info)
         
         # 添加Trakt统计数据
         trakt_stats = detail_data.get("trakt_stats")
@@ -1953,10 +1982,23 @@ class MovieService:
         
         # 添加观看平台信息
         watch_providers = detail_data.get("watch/providers")
+        enhanced_providers = detail_data.get("enhanced_providers")
+        
         if watch_providers:
             provider_info = self.format_watch_providers_compact(watch_providers, "movie")
             if provider_info:
                 lines.append(provider_info)
+        
+        # 添加技术规格信息
+        if enhanced_providers:
+            tech_specs = self._format_technical_specs(enhanced_providers)
+            if tech_specs:
+                lines.append(tech_specs)
+            
+            # 添加价格信息
+            price_info = self._format_price_info(enhanced_providers)
+            if price_info:
+                lines.append(price_info)
             
         lines.extend([
             director_info,
@@ -2649,50 +2691,197 @@ class MovieService:
         results = providers_data["results"]
         lines = []
         
-        # 优先显示中国大陆和美国
-        priority_regions = ["CN", "US", "GB"]
-        region_names = {"CN": "🇨🇳中国", "US": "🇺🇸美国", "GB": "🇬🇧英国"}
+        # 扩展地区检查，按优先级排序
+        priority_regions = ["CN", "US", "GB", "FR", "DE", "JP", "KR", "AU", "CA", "ES", "IT", "BE", "LU", "NL"]
+        region_names = {
+            "CN": "🇨🇳中国", "US": "🇺🇸美国", "GB": "🇬🇧英国", 
+            "FR": "🇫🇷法国", "DE": "🇩🇪德国", "JP": "🇯🇵日本",
+            "KR": "🇰🇷韩国", "AU": "🇦🇺澳大利亚", "CA": "🇨🇦加拿大",
+            "ES": "🇪🇸西班牙", "IT": "🇮🇹意大利", "BE": "🇧🇪比利时",
+            "LU": "🇱🇺卢森堡", "NL": "🇳🇱荷兰"
+        }
         found_any = False
         
-        for region in priority_regions:
-            if region not in results:
-                continue
-                
-            region_data = results[region]
-            region_name = region_names.get(region, f"🌍{region}")
-            
-            # 只显示订阅平台（最常用）
-            if region_data.get("flatrate"):
-                platforms = []
-                for p in region_data["flatrate"][:3]:
-                    platform_name = p["provider_name"]
-                    platforms.append(platform_name)
-                
-                if platforms:
-                    found_any = True
-                    lines.append(f"📺 *观看平台*: {', '.join(platforms)} ({region_name})")
-                    break  # 只显示第一个有平台的地区
+        # 按优先级寻找平台：订阅 > 免费 > 租赁 > 购买
+        platform_types = [
+            ("flatrate", "📺 *观看平台*", "订阅"),
+            ("free", "🆓 *免费平台*", "免费"),
+            ("ads", "📺 *免费含广告*", "含广告"),
+            ("rent", "🏪 *租赁平台*", "租赁"),
+            ("buy", "💰 *购买平台*", "购买")
+        ]
         
-        if not found_any:
-            # 如果没有订阅平台，尝试显示购买平台
+        for platform_type, prefix, type_name in platform_types:
+            if found_any:
+                break
+                
             for region in priority_regions:
                 if region not in results:
                     continue
                     
                 region_data = results[region]
-                region_name = region_names.get(region, f"🌍{region}")
-                
-                if region_data.get("buy"):
-                    platforms = []
-                    for p in region_data["buy"][:2]:
-                        platform_name = p["provider_name"]
-                        platforms.append(platform_name)
+                if not region_data.get(platform_type):
+                    continue
                     
-                    if platforms:
-                        lines.append(f"💰 *购买平台*: {', '.join(platforms)} ({region_name})")
-                        break
+                platforms = []
+                for p in region_data[platform_type][:3]:  # 最多显示3个平台
+                    platform_name = p["provider_name"]
+                    platforms.append(platform_name)
+                
+                if platforms:
+                    region_name = region_names.get(region, f"🌍{region}")
+                    lines.append(f"{prefix}: {', '.join(platforms)} ({region_name})")
+                    found_any = True
+                    break  # 找到第一个有平台的地区就停止
         
         return "\n".join(lines) if lines else ""
+    
+    def _format_enhanced_ratings(self, tmdb_data: Dict, justwatch_entry: any = None) -> str:
+        """格式化增强评分信息（整合TMDB和JustWatch评分）"""
+        lines = []
+        
+        # TMDB评分
+        tmdb_rating = tmdb_data.get("vote_average", 0)
+        tmdb_votes = tmdb_data.get("vote_count", 0)
+        if tmdb_rating > 0:
+            lines.append(f"   • TMDB: ⭐ {tmdb_rating:.1f}/10 ({tmdb_votes:,}人评价)")
+        
+        # JustWatch评分数据
+        if justwatch_entry and hasattr(justwatch_entry, 'scoring') and justwatch_entry.scoring:
+            scoring = justwatch_entry.scoring
+            
+            # IMDB评分
+            if scoring.imdb_score and scoring.imdb_score > 0:
+                votes_text = f" ({scoring.imdb_votes:,}票)" if scoring.imdb_votes else ""
+                lines.append(f"   • IMDB: ⭐ {scoring.imdb_score:.1f}/10{votes_text}")
+            
+            # TMDB人气和评分（JustWatch版本，可能更准确）
+            if scoring.tmdb_score and scoring.tmdb_score > 0:
+                popularity_text = f" (人气: {scoring.tmdb_popularity:.1f})" if scoring.tmdb_popularity else ""
+                lines.append(f"   • TMDB: ⭐ {scoring.tmdb_score:.1f}/10{popularity_text}")
+            
+            # 烂番茄评分
+            if scoring.tomatometer and scoring.tomatometer > 0:
+                fresh_text = " 🍅认证新鲜" if scoring.certified_fresh else ""
+                lines.append(f"   • 烂番茄: 🍅 {scoring.tomatometer}%{fresh_text}")
+            
+            # JustWatch评分
+            if scoring.jw_rating and scoring.jw_rating > 0:
+                jw_score = scoring.jw_rating * 10  # 转换为10分制
+                lines.append(f"   • JustWatch: ⭐ {jw_score:.1f}/10")
+        
+        # JustWatch用户互动
+        if justwatch_entry and hasattr(justwatch_entry, 'interactions') and justwatch_entry.interactions:
+            interactions = justwatch_entry.interactions
+            if interactions.likes and interactions.dislikes:
+                total = interactions.likes + interactions.dislikes
+                like_percent = (interactions.likes / total * 100) if total > 0 else 0
+                lines.append(f"   • 用户反馈: 👍 {interactions.likes:,}  👎 {interactions.dislikes:,} ({like_percent:.1f}%好评)")
+        
+        if lines:
+            return "📊 *综合评分*:\n" + "\n".join(lines)
+        return ""
+    
+    def _format_streaming_charts_info(self, justwatch_entry: any = None) -> str:
+        """格式化流媒体热度排名信息"""
+        if not justwatch_entry or not hasattr(justwatch_entry, 'streaming_charts') or not justwatch_entry.streaming_charts:
+            return ""
+        
+        charts = justwatch_entry.streaming_charts
+        lines = []
+        
+        # 当前排名和趋势
+        if charts.rank:
+            trend_emoji = {"UP": "📈", "DOWN": "📉", "STABLE": "➡️"}.get(charts.trend, "")
+            trend_text = ""
+            if charts.trend_difference:
+                if charts.trend == "UP":
+                    trend_text = f" (上升{charts.trend_difference}位)"
+                elif charts.trend == "DOWN":
+                    trend_text = f" (下降{charts.trend_difference}位)"
+            
+            lines.append(f"   • 当前排名: #{charts.rank:,} {trend_emoji}{trend_text}")
+        
+        # 历史最高排名
+        if charts.top_rank:
+            lines.append(f"   • 历史最高: #{charts.top_rank}")
+        
+        # 榜单停留天数
+        if charts.days_in_top_10 > 0:
+            lines.append(f"   • 前10榜单: {charts.days_in_top_10}天")
+        elif charts.days_in_top_100 > 0:
+            lines.append(f"   • 前100榜单: {charts.days_in_top_100}天")
+        
+        if lines:
+            return "📈 *流媒体热度*:\n" + "\n".join(lines)
+        return ""
+    
+    def _format_technical_specs(self, enhanced_providers: Dict) -> str:
+        """格式化技术规格信息"""
+        if not enhanced_providers or not enhanced_providers.get("justwatch"):
+            return ""
+        
+        justwatch_data = enhanced_providers["justwatch"]
+        lines = []
+        specs_found = set()
+        
+        # 收集所有技术规格
+        for country, offers in justwatch_data.items():
+            if not offers:
+                continue
+            for offer in offers:
+                # 视频技术
+                if hasattr(offer, 'video_technology') and offer.video_technology:
+                    specs_found.update(offer.video_technology)
+                # 音频技术
+                if hasattr(offer, 'audio_technology') and offer.audio_technology:
+                    specs_found.update(offer.audio_technology)
+        
+        if specs_found:
+            tech_map = {
+                "DOLBY_VISION": "🎭 杜比视界",
+                "DOLBY_ATMOS": "🔊 杜比全景声",
+                "_4K": "📱 4K超高清",
+                "HDR": "🌈 HDR",
+                "HDR10": "🌈 HDR10"
+            }
+            tech_list = [tech_map.get(spec, spec) for spec in specs_found if spec in tech_map]
+            if tech_list:
+                lines.append("🎬 *技术规格*: " + " | ".join(tech_list))
+        
+        return "\n".join(lines) if lines else ""
+    
+    def _format_price_info(self, enhanced_providers: Dict) -> str:
+        """格式化价格信息"""
+        if not enhanced_providers or not enhanced_providers.get("justwatch"):
+            return ""
+        
+        justwatch_data = enhanced_providers["justwatch"]
+        price_info = []
+        
+        # 收集价格信息
+        for country, offers in justwatch_data.items():
+            if not offers:
+                continue
+            for offer in offers:
+                if hasattr(offer, 'price_string') and offer.price_string:
+                    platform_name = offer.package.name if hasattr(offer, 'package') and offer.package else "未知平台"
+                    price_text = offer.price_string
+                    
+                    # 价格变化提醒
+                    if hasattr(offer, 'last_change_retail_price_value') and offer.last_change_retail_price_value:
+                        if offer.price_value < offer.last_change_retail_price_value:
+                            change = offer.last_change_retail_price_value - offer.price_value
+                            price_text += f" ↓(降${change:.2f})"
+                        elif offer.price_value > offer.last_change_retail_price_value:
+                            change = offer.price_value - offer.last_change_retail_price_value
+                            price_text += f" ↑(涨${change:.2f})"
+                    
+                    price_info.append(f"{platform_name}: {price_text}")
+        
+        if price_info:
+            return "💰 *价格信息*: " + " | ".join(price_info[:3])  # 最多显示3个
+        return ""
 
 # 全局服务实例
 movie_service: MovieService = None
@@ -3107,6 +3296,25 @@ async def movie_detail_command(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         detail_data = await movie_service.get_movie_details(movie_id)
         if detail_data:
+            # 获取增强的观影平台数据
+            movie_title = detail_data.get("title") or detail_data.get("original_title", "")
+            enhanced_providers = await movie_service.get_enhanced_watch_providers(
+                movie_id, "movie", movie_title
+            )
+            
+            # 将增强的观影平台数据合并到详情数据中
+            if enhanced_providers:
+                combined_providers = enhanced_providers.get("combined") or enhanced_providers.get("tmdb")
+                if combined_providers:
+                    detail_data["watch/providers"] = combined_providers
+                
+                # 传递完整的增强数据
+                detail_data["enhanced_providers"] = enhanced_providers
+                
+                # 传递JustWatch MediaEntry数据
+                if enhanced_providers.get("justwatch_media_entry"):
+                    detail_data["justwatch_media_entry"] = enhanced_providers["justwatch_media_entry"]
+            
             result_text, poster_url = movie_service.format_movie_details(detail_data)
             
             # 如果有海报URL，先发送图片再发送文本
@@ -3454,6 +3662,25 @@ async def tv_detail_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     try:
         detail_data = await movie_service.get_tv_details(tv_id)
         if detail_data:
+            # 获取增强的观影平台数据
+            tv_title = detail_data.get("name") or detail_data.get("original_name", "")
+            enhanced_providers = await movie_service.get_enhanced_watch_providers(
+                tv_id, "tv", tv_title
+            )
+            
+            # 将增强的观影平台数据合并到详情数据中
+            if enhanced_providers:
+                combined_providers = enhanced_providers.get("combined") or enhanced_providers.get("tmdb")
+                if combined_providers:
+                    detail_data["watch/providers"] = combined_providers
+                
+                # 传递完整的增强数据
+                detail_data["enhanced_providers"] = enhanced_providers
+                
+                # 传递JustWatch MediaEntry数据
+                if enhanced_providers.get("justwatch_media_entry"):
+                    detail_data["justwatch_media_entry"] = enhanced_providers["justwatch_media_entry"]
+            
             result_text, poster_url = movie_service.format_tv_details(detail_data)
             
             # 如果有海报URL，先发送图片再发送文本
