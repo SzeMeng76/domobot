@@ -1017,12 +1017,12 @@ class MovieService:
         return tmdb_format
     
     def _convert_justwatch_preferred_types(self, justwatch_data: Dict) -> Dict:
-        """转换JustWatch数据，只显示优选类型"""
+        """转换JustWatch数据，优先显示主要平台类型，同时保留影院信息"""
         if not justwatch_data:
             return {}
         
-        # 类型优先级：免费 > 订阅 > 租赁 > 购买 > 电影院
-        type_priority = ['FREE', 'ADS', 'FLATRATE', 'SUBSCRIPTION', 'RENT', 'BUY', 'CINEMA']
+        # 主要平台类型优先级：免费 > 订阅 > 租赁 > 购买
+        main_type_priority = ['FREE', 'ADS', 'FLATRATE', 'SUBSCRIPTION', 'RENT', 'BUY']
         
         tmdb_format = {
             "id": 0,
@@ -1053,26 +1053,39 @@ class MovieService:
             type_groups = {}
             for offer in offers:
                 monetization_type = getattr(offer, 'monetization_type', '')
-                if monetization_type in type_priority:
+                if monetization_type:  # 接受所有类型
                     if monetization_type not in type_groups:
                         type_groups[monetization_type] = []
                     type_groups[monetization_type].append(offer)
             
-            # 选择优先级最高的类型
-            selected_type = None
-            for pref_type in type_priority:
+            country_data = {}
+            
+            # 选择优先级最高的主要平台类型
+            selected_main_type = None
+            for pref_type in main_type_priority:
                 if pref_type in type_groups:
-                    selected_type = pref_type
+                    selected_main_type = pref_type
                     break
             
-            # 只转换选中的类型
-            if selected_type:
-                country_data = self._convert_single_type_to_tmdb(
-                    type_groups[selected_type], selected_type
+            # 转换选中的主要类型
+            if selected_main_type:
+                main_data = self._convert_single_type_to_tmdb(
+                    type_groups[selected_main_type], selected_main_type
                 )
-                if country_data:
-                    country_data["link"] = f"https://www.justwatch.com/{country_code.lower()}"
-                    tmdb_format["results"][country_code] = country_data
+                if main_data:
+                    country_data.update(main_data)
+            
+            # 同时转换影院信息（如果存在）
+            if 'CINEMA' in type_groups:
+                cinema_data = self._convert_single_type_to_tmdb(
+                    type_groups['CINEMA'], 'CINEMA'
+                )
+                if cinema_data:
+                    country_data.update(cinema_data)
+            
+            if country_data:
+                country_data["link"] = f"https://www.justwatch.com/{country_code.lower()}"
+                tmdb_format["results"][country_code] = country_data
         
         return tmdb_format
     
