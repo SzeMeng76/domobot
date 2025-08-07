@@ -647,17 +647,23 @@ class MovieService:
                 logger.warning(f"JustWatch 搜索超时: {title}")
                 return None
             
-            if results and isinstance(results, list):
+            if results and isinstance(results, list) and len(results) > 0:
                 # 过滤匹配的内容类型
                 filtered_results = []
                 for item in results:
+                    if not item or not isinstance(item, dict):
+                        continue
+                    
                     if content_type == "movie" and item.get("object_type") == "movie":
                         filtered_results.append(item)
                     elif content_type == "tv" and item.get("object_type") == "show":
                         filtered_results.append(item)
                 
-                await cache_manager.save_cache(cache_key, filtered_results, subdirectory="movie")
-                return filtered_results
+                if filtered_results:
+                    await cache_manager.save_cache(cache_key, filtered_results, subdirectory="movie")
+                    return filtered_results
+            
+            logger.debug(f"JustWatch 搜索无结果: {title}, 返回数据: {results}")
                 
         except Exception as e:
             logger.warning(f"JustWatch 搜索失败 {title}: {e}")
@@ -689,9 +695,11 @@ class MovieService:
                 logger.warning(f"JustWatch 观影平台查询超时: {node_id}")
                 return None
             
-            if offers_data:
+            if offers_data and isinstance(offers_data, dict):
                 await cache_manager.save_cache(cache_key, offers_data, subdirectory="movie")
                 return offers_data
+            else:
+                logger.debug(f"JustWatch 观影平台无数据: {node_id}, 返回数据: {offers_data}")
                 
         except Exception as e:
             logger.warning(f"获取 JustWatch 观影平台失败 {node_id}: {e}")
@@ -722,11 +730,12 @@ class MovieService:
                 if justwatch_results and len(justwatch_results) > 0:
                     # 选择最匹配的结果
                     best_match = justwatch_results[0]
-                    node_id = best_match.get("node_id")
-                    
-                    if node_id:
-                        justwatch_offers = await self._get_justwatch_offers(node_id)
-                        result["justwatch"] = justwatch_offers
+                    if best_match and isinstance(best_match, dict):
+                        node_id = best_match.get("node_id")
+                        
+                        if node_id:
+                            justwatch_offers = await self._get_justwatch_offers(node_id)
+                            result["justwatch"] = justwatch_offers
             
             # 合并数据，优先显示 TMDB 数据，JustWatch 作为补充
             result["combined"] = self._merge_watch_providers(tmdb_data, result.get("justwatch"))
