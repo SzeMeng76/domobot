@@ -799,16 +799,34 @@ class MovieService:
         try:
             search_results = []
             
-            # 搜索热门内容，选择有多平台支持的
-            for query in ["popular movies", "popular tv shows", "trending"]:
+            # 搜索真正的热门内容，使用通用查询策略
+            search_queries = [
+                "new releases",  # 新上架内容
+                "trending movies",  # 热门电影
+                "trending tv shows",  # 热门剧集
+                "top rated movies",  # 高评分电影
+                "top rated tv",  # 高评分剧集
+                "action movies",  # 流行类型
+                "comedy movies",
+                "drama series",
+                "blockbuster movies",  # 大片
+                "award winning"  # 获奖内容
+            ]
+            
+            for query in search_queries:
                 try:
-                    results = justwatch_search(query, country, "en", 30, True)
+                    results = justwatch_search(query, country, "en", 20, True)
                     
                     for entry in results:
                         # 只选择有多个平台支持的内容（便于跨平台对比）
                         platform_count = len(set(offer.package.technical_name for offer in entry.offers))
                         
-                        if platform_count >= 3:  # 至少3个平台
+                        # 提高质量标准：至少4个平台，且有一定评分
+                        if (platform_count >= 4 and 
+                            entry.scoring and 
+                            ((entry.scoring.imdb_score and entry.scoring.imdb_score >= 6.0) or
+                             (entry.scoring.tmdb_score and entry.scoring.tmdb_score >= 6.0))):
+                            
                             # 避免重复添加
                             if not any(existing.tmdb_id == entry.tmdb_id for existing in search_results if hasattr(existing, 'tmdb_id') and hasattr(entry, 'tmdb_id')):
                                 search_results.append(entry)
