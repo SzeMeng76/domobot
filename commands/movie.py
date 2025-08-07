@@ -2850,18 +2850,19 @@ class MovieService:
         }
         found_any = False
         
-        # 按优先级寻找平台：订阅 > 免费 > 租赁 > 购买 > 影院
-        platform_types = [
+        # 分两个阶段：先显示主要观影方式，再显示影院信息
+        main_platforms = [
             ("flatrate", "📺 *观看平台*", "订阅"),
             ("free", "🆓 *免费平台*", "免费"),
             ("ads", "📺 *免费含广告*", "含广告"),
             ("rent", "🏪 *租赁平台*", "租赁"),
-            ("buy", "💰 *购买平台*", "购买"),
-            ("cinema", "🎬 *影院上映*", "影院")
+            ("buy", "💰 *购买平台*", "购买")
         ]
         
-        for platform_type, prefix, type_name in platform_types:
-            if found_any:
+        # 第一阶段：查找主要观影方式
+        main_found = False
+        for platform_type, prefix, type_name in main_platforms:
+            if main_found:
                 break
                 
             for region in priority_regions:
@@ -2888,8 +2889,37 @@ class MovieService:
                         flag = get_country_flag(region)
                         region_name = f"{flag} {region}"
                     lines.append(f"{prefix}: {', '.join(platforms)} ({region_name})")
+                    main_found = True
                     found_any = True
                     break  # 找到第一个有平台的地区就停止
+        
+        # 第二阶段：专门查找影院信息
+        for region in priority_regions:
+            if region not in results:
+                continue
+                
+            region_data = results[region]
+            if not region_data.get("cinema"):
+                continue
+                
+            platforms = []
+            for p in region_data["cinema"][:3]:  # 最多显示3个影院
+                platform_name = p["provider_name"]
+                platforms.append(platform_name)
+            
+            if platforms:
+                # 获取区域的显示名称（包含国旗和中文名）
+                if region in SUPPORTED_COUNTRIES:
+                    country_info = SUPPORTED_COUNTRIES[region]
+                    flag = get_country_flag(region)
+                    name = country_info.get('name', region)
+                    region_name = f"{flag} {name}"
+                else:
+                    flag = get_country_flag(region)
+                    region_name = f"{flag} {region}"
+                lines.append(f"🎬 *影院上映*: {', '.join(platforms)} ({region_name})")
+                found_any = True
+                break  # 找到第一个有影院的地区就停止
         
         return "\n".join(lines) if lines else ""
     
