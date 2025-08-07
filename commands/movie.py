@@ -746,8 +746,17 @@ class MovieService:
                 
                 logger.info(f"JustWatch 搜索结果: {len(justwatch_results) if justwatch_results else 0} 个结果")
                 if justwatch_results and len(justwatch_results) > 0:
-                    # 选择最匹配的结果
-                    best_match = justwatch_results[0]
+                    # JustWatch 搜索可能返回嵌套列表，需要处理这种情况
+                    first_result = justwatch_results[0]
+                    
+                    # 如果第一个结果是列表，取列表的第一个元素
+                    if isinstance(first_result, list) and len(first_result) > 0:
+                        best_match = first_result[0]
+                        logger.info(f"JustWatch 返回嵌套列表，使用第一个子结果")
+                    else:
+                        best_match = first_result
+                        logger.info(f"JustWatch 返回直接结果")
+                    
                     if best_match:
                         # 调试：打印对象的所有属性
                         logger.info(f"JustWatch 结果对象类型: {type(best_match)}")
