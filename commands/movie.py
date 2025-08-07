@@ -764,10 +764,12 @@ class MovieService:
                 
                 if justwatch_results and len(justwatch_results) > 0:
                     logger.info(f"JustWatch: 找到 {len(justwatch_results)} 个搜索结果")
+                    logger.info(f"JustWatch: 搜索结果类型={type(justwatch_results)}")
                     
                     # 寻找真正的 MediaEntry 对象
                     best_match = None
                     for i, search_result in enumerate(justwatch_results):
+                        logger.info(f"JustWatch: 结果{i+1} 类型={type(search_result)}")
                         has_entry_id = hasattr(search_result, 'entry_id')
                         has_offers = hasattr(search_result, 'offers')
                         logger.info(f"JustWatch: 检查结果{i+1} - has_entry_id={has_entry_id}, has_offers={has_offers}")
@@ -779,10 +781,11 @@ class MovieService:
                             break
                         elif isinstance(search_result, list):
                             logger.info(f"JustWatch: 结果{i+1}是列表，检查子项")
-                            for sub_result in search_result:
+                            for j, sub_result in enumerate(search_result):
+                                logger.info(f"JustWatch: 子项{j+1} 类型={type(sub_result)}")
                                 if hasattr(sub_result, 'entry_id'):
                                     best_match = sub_result
-                                    logger.info(f"JustWatch: 从列表中选择子项作为best_match")
+                                    logger.info(f"JustWatch: 从列表中选择子项{j+1}作为best_match")
                                     break
                             if best_match:
                                 break
