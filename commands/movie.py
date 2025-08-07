@@ -928,56 +928,20 @@ class MovieService:
 
     def _merge_watch_providers(self, tmdb_data: Optional[Dict], justwatch_data: Optional[Dict]) -> Dict:
         """合并 TMDB 和 JustWatch 观影平台数据 - 优化版"""
-        merged = {"results": {}}
+        merged = {}
         
-        # 调试：输出输入数据
-        logger.info(f"MERGE DEBUG: tmdb_data is None: {tmdb_data is None}")
-        if tmdb_data:
-            logger.info(f"MERGE DEBUG: tmdb_data keys: {list(tmdb_data.keys())}")
-            if tmdb_data.get("results"):
-                logger.info(f"MERGE DEBUG: tmdb_data has {len(tmdb_data['results'])} countries")
-            else:
-                logger.info(f"MERGE DEBUG: tmdb_data has no results or empty results")
-        
-        logger.info(f"MERGE DEBUG: justwatch_data is None: {justwatch_data is None}")
-        if justwatch_data:
-            logger.info(f"MERGE DEBUG: justwatch_data has {len(justwatch_data)} countries")
-        
-        # 首先添加 TMDB 数据
+        # 如果 TMDB 有数据，优先使用
         if tmdb_data and tmdb_data.get("results"):
             merged = tmdb_data.copy()
-            logger.info(f"MERGE DEBUG: Used TMDB data, merged now has {len(merged.get('results', {}))} countries")
-        
-        # 然后添加/补充 JustWatch 数据
-        if justwatch_data:
-            justwatch_converted = self._convert_justwatch_preferred_types(justwatch_data)
-            logger.info(f"MERGE DEBUG: JustWatch converted has {len(justwatch_converted.get('results', {}))} countries")
-            if justwatch_converted.get("results"):
-                # 如果merged还没有results，直接使用JustWatch数据
-                if not merged.get("results"):
-                    merged = justwatch_converted.copy()
-                    logger.info(f"MERGE DEBUG: Used JustWatch data only, merged now has {len(merged.get('results', {}))} countries")
-                else:
-                    # 合并两个数据源的结果
-                    for country, jw_data in justwatch_converted["results"].items():
-                        if country not in merged["results"]:
-                            # 如果TMDB没有这个国家的数据，直接添加JustWatch数据
-                            merged["results"][country] = jw_data
-                            logger.info(f"MERGE DEBUG: Added JustWatch country {country}")
-                        else:
-                            # 如果TMDB有这个国家的数据，补充JustWatch的额外类型（特别是影院）
-                            tmdb_country_data = merged["results"][country]
-                            for platform_type, platforms in jw_data.items():
-                                if platform_type != "link" and platform_type not in tmdb_country_data:
-                                    # 添加TMDB没有的平台类型（比如cinema）
-                                    tmdb_country_data[platform_type] = platforms
-                                    logger.info(f"MERGE DEBUG: Added {platform_type} to {country}")
+            
+        # 如果 TMDB 没有数据，使用 JustWatch 优选数据
+        elif justwatch_data:
+            merged = self._convert_justwatch_preferred_types(justwatch_data)
             
         # 保存原始 JustWatch 数据供后续处理
         if justwatch_data:
             merged["justwatch_raw"] = justwatch_data
-        
-        logger.info(f"MERGE DEBUG: Final merged has {len(merged.get('results', {}))} countries")
+            
         return merged
     
     def _convert_justwatch_to_tmdb_format(self, justwatch_data: Dict) -> Dict:
@@ -1053,12 +1017,12 @@ class MovieService:
         return tmdb_format
     
     def _convert_justwatch_preferred_types(self, justwatch_data: Dict) -> Dict:
-        """转换JustWatch数据，优先显示主要平台类型，同时保留影院信息"""
+        """转换JustWatch数据，只显示优选类型"""
         if not justwatch_data:
             return {}
         
-        # 主要平台类型优先级：免费 > 订阅 > 租赁 > 购买
-        main_type_priority = ['FREE', 'ADS', 'FLATRATE', 'SUBSCRIPTION', 'RENT', 'BUY']
+        # 类型优先级：免费 > 订阅 > 租赁 > 购买 > 电影院
+        type_priority = ['FREE', 'ADS', 'FLATRATE', 'SUBSCRIPTION', 'RENT', 'BUY', 'CINEMA']
         
         tmdb_format = {
             "id": 0,
@@ -1089,39 +1053,26 @@ class MovieService:
             type_groups = {}
             for offer in offers:
                 monetization_type = getattr(offer, 'monetization_type', '')
-                if monetization_type:  # 接受所有类型
+                if monetization_type in type_priority:
                     if monetization_type not in type_groups:
                         type_groups[monetization_type] = []
                     type_groups[monetization_type].append(offer)
             
-            country_data = {}
-            
-            # 选择优先级最高的主要平台类型
-            selected_main_type = None
-            for pref_type in main_type_priority:
+            # 选择优先级最高的类型
+            selected_type = None
+            for pref_type in type_priority:
                 if pref_type in type_groups:
-                    selected_main_type = pref_type
+                    selected_type = pref_type
                     break
             
-            # 转换选中的主要类型
-            if selected_main_type:
-                main_data = self._convert_single_type_to_tmdb(
-                    type_groups[selected_main_type], selected_main_type
+            # 只转换选中的类型
+            if selected_type:
+                country_data = self._convert_single_type_to_tmdb(
+                    type_groups[selected_type], selected_type
                 )
-                if main_data:
-                    country_data.update(main_data)
-            
-            # 同时转换影院信息（如果存在）
-            if 'CINEMA' in type_groups:
-                cinema_data = self._convert_single_type_to_tmdb(
-                    type_groups['CINEMA'], 'CINEMA'
-                )
-                if cinema_data:
-                    country_data.update(cinema_data)
-            
-            if country_data:
-                country_data["link"] = f"https://www.justwatch.com/{country_code.lower()}"
-                tmdb_format["results"][country_code] = country_data
+                if country_data:
+                    country_data["link"] = f"https://www.justwatch.com/{country_code.lower()}"
+                    tmdb_format["results"][country_code] = country_data
         
         return tmdb_format
     
@@ -2168,36 +2119,14 @@ class MovieService:
             if trailer_url:
                 lines.append(f"🎬 *预告片*: [观看]({trailer_url})")
         
-        # 添加观看平台信息 - 直接使用movie_watch的逻辑
+        # 添加观看平台信息
+        watch_providers = detail_data.get("watch/providers")
         enhanced_providers = detail_data.get("enhanced_providers")
         
-        # 调试信息
-        logger.info(f"MOVIE_DETAIL DEBUG: enhanced_providers is None: {enhanced_providers is None}")
-        if enhanced_providers:
-            logger.info(f"MOVIE_DETAIL DEBUG: enhanced_providers keys: {list(enhanced_providers.keys())}")
-            combined = enhanced_providers.get("combined")
-            tmdb = enhanced_providers.get("tmdb")
-            logger.info(f"MOVIE_DETAIL DEBUG: combined is None: {combined is None}")
-            logger.info(f"MOVIE_DETAIL DEBUG: tmdb is None: {tmdb is None}")
-        
-        # 使用与movie_watch完全相同的逻辑
-        providers_data = None
-        if enhanced_providers:
-            providers_data = enhanced_providers.get("combined") or enhanced_providers.get("tmdb")
-            logger.info(f"MOVIE_DETAIL DEBUG: providers_data found: {providers_data is not None}")
-        else:
-            logger.info("MOVIE_DETAIL DEBUG: enhanced_providers is None, no provider data")
-        
-        if providers_data:
-            logger.info("MOVIE_DETAIL DEBUG: About to format watch providers")
-            provider_info = self.format_watch_providers(providers_data, "movie")
+        if watch_providers:
+            provider_info = self.format_watch_providers_compact(watch_providers, "movie")
             if provider_info:
                 lines.append(provider_info)
-                logger.info("MOVIE_DETAIL DEBUG: Added provider info to lines")
-            else:
-                logger.info("MOVIE_DETAIL DEBUG: format_watch_providers returned empty")
-        else:
-            logger.info("MOVIE_DETAIL DEBUG: No providers_data, skipping watch providers")
         
         # 添加技术规格信息
         if enhanced_providers:
@@ -2921,19 +2850,18 @@ class MovieService:
         }
         found_any = False
         
-        # 分两个阶段：先显示主要观影方式，再显示影院信息
-        main_platforms = [
+        # 按优先级寻找平台：订阅 > 免费 > 租赁 > 购买 > 影院
+        platform_types = [
             ("flatrate", "📺 *观看平台*", "订阅"),
             ("free", "🆓 *免费平台*", "免费"),
             ("ads", "📺 *免费含广告*", "含广告"),
             ("rent", "🏪 *租赁平台*", "租赁"),
-            ("buy", "💰 *购买平台*", "购买")
+            ("buy", "💰 *购买平台*", "购买"),
+            ("cinema", "🎬 *影院上映*", "影院")
         ]
         
-        # 第一阶段：查找主要观影方式
-        main_found = False
-        for platform_type, prefix, type_name in main_platforms:
-            if main_found:
+        for platform_type, prefix, type_name in platform_types:
+            if found_any:
                 break
                 
             for region in priority_regions:
@@ -2960,37 +2888,8 @@ class MovieService:
                         flag = get_country_flag(region)
                         region_name = f"{flag} {region}"
                     lines.append(f"{prefix}: {', '.join(platforms)} ({region_name})")
-                    main_found = True
                     found_any = True
                     break  # 找到第一个有平台的地区就停止
-        
-        # 第二阶段：专门查找影院信息
-        for region in priority_regions:
-            if region not in results:
-                continue
-                
-            region_data = results[region]
-            if not region_data.get("cinema"):
-                continue
-                
-            platforms = []
-            for p in region_data["cinema"][:3]:  # 最多显示3个影院
-                platform_name = p["provider_name"]
-                platforms.append(platform_name)
-            
-            if platforms:
-                # 获取区域的显示名称（包含国旗和中文名）
-                if region in SUPPORTED_COUNTRIES:
-                    country_info = SUPPORTED_COUNTRIES[region]
-                    flag = get_country_flag(region)
-                    name = country_info.get('name', region)
-                    region_name = f"{flag} {name}"
-                else:
-                    flag = get_country_flag(region)
-                    region_name = f"{flag} {region}"
-                lines.append(f"🎬 *影院上映*: {', '.join(platforms)} ({region_name})")
-                found_any = True
-                break  # 找到第一个有影院的地区就停止
         
         return "\n".join(lines) if lines else ""
     
@@ -3601,23 +3500,21 @@ async def movie_detail_command(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         detail_data = await movie_service.get_movie_details(movie_id)
         if detail_data:
-            # 获取增强的观影平台数据 - 使用与movie_watch相同的方式
+            # 获取增强的观影平台数据
             movie_title = detail_data.get("original_title") or detail_data.get("title", "")
             logger.info(f"Movie title for JustWatch search: {movie_title}")
-            
-            # 直接获取观影平台数据，不依赖详情API中的数据
             enhanced_providers = await movie_service.get_enhanced_watch_providers(
                 movie_id, "movie", movie_title
             )
-            
-            # 始终传递enhanced_providers
-            detail_data["enhanced_providers"] = enhanced_providers
             
             # 将增强的观影平台数据合并到详情数据中
             if enhanced_providers:
                 combined_providers = enhanced_providers.get("combined") or enhanced_providers.get("tmdb")
                 if combined_providers:
                     detail_data["watch/providers"] = combined_providers
+                
+                # 传递完整的增强数据
+                detail_data["enhanced_providers"] = enhanced_providers
                 
                 # 传递JustWatch MediaEntry数据
                 if enhanced_providers.get("justwatch_media_entry"):
