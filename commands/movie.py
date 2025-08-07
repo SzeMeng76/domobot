@@ -2850,20 +2850,19 @@ class MovieService:
         }
         found_any = False
         
-        # 按优先级寻找平台：订阅 > 免费 > 租赁 > 购买 > 影院
+        # 按优先级寻找平台：影院 > 订阅 > 免费 > 租赁 > 购买
         platform_types = [
+            ("cinema", "🎬 *影院上映*", "影院"),
             ("flatrate", "📺 *观看平台*", "订阅"),
             ("free", "🆓 *免费平台*", "免费"),
             ("ads", "📺 *免费含广告*", "含广告"),
             ("rent", "🏪 *租赁平台*", "租赁"),
-            ("buy", "💰 *购买平台*", "购买"),
-            ("cinema", "🎬 *影院上映*", "影院")
+            ("buy", "💰 *购买平台*", "购买")
         ]
         
+        lines = []
         for platform_type, prefix, type_name in platform_types:
-            if found_any:
-                break
-                
+            platform_found = False
             for region in priority_regions:
                 if region not in results:
                     continue
@@ -2888,8 +2887,12 @@ class MovieService:
                         flag = get_country_flag(region)
                         region_name = f"{flag} {region}"
                     lines.append(f"{prefix}: {', '.join(platforms)} ({region_name})")
-                    found_any = True
-                    break  # 找到第一个有平台的地区就停止
+                    platform_found = True
+                    break  # 找到第一个有平台的地区就停止（对于这个平台类型）
+            
+            # 如果找到了这个类型的平台，标记为找到
+            if platform_found:
+                found_any = True
         
         return "\n".join(lines) if lines else ""
     
