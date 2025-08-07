@@ -626,9 +626,15 @@ class MovieService:
             return None
             
         try:
-            # 转换地区代码（CN -> 中国地区使用 CN，其他可能需要调整）
-            country_code = region.upper() if region else "CN"
-            language_code = "zh" if region == "CN" else "en"
+            # JustWatch 支持的国家代码 - 中国可能不被直接支持，使用美国作为默认
+            # 常见的支持国家：US, GB, DE, FR, JP, KR, AU, CA 等
+            if region and region.upper() in ["US", "GB", "DE", "FR", "JP", "KR", "AU", "CA"]:
+                country_code = region.upper()
+                language_code = "en"  # 大多数国家使用英语
+            else:
+                # 默认使用美国，因为它有最全的数据
+                country_code = "US"
+                language_code = "en"
             
             cache_key = f"justwatch_search_{title}_{content_type}_{country_code}"
             cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
@@ -639,9 +645,11 @@ class MovieService:
             try:
                 # 使用 asyncio.wait_for 添加超时保护
                 loop = asyncio.get_event_loop()
+                # 根据文档，正确的参数顺序：title, country, language, count, best_only
+                logger.info(f"JustWatch 搜索参数: title='{title}', country='{country_code}', language='{language_code}'")
                 results = await asyncio.wait_for(
-                    loop.run_in_executor(None, justwatch_search, title, country_code, language_code, 5, True),
-                    timeout=10.0  # 10秒超时
+                    loop.run_in_executor(None, justwatch_search, title, country_code, language_code, 10, True),
+                    timeout=15.0  # 15秒超时
                 )
             except asyncio.TimeoutError:
                 logger.warning(f"JustWatch 搜索超时: {title}")
@@ -677,7 +685,7 @@ class MovieService:
             
         try:
             if not regions:
-                regions = ["CN", "US", "GB"]  # 默认检查中国、美国、英国
+                regions = ["US", "GB", "DE"]  # 默认检查美国、英国、德国（JustWatch 支持的主要地区）
                 
             cache_key = f"justwatch_offers_{node_id}_{'_'.join(regions)}"
             cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
