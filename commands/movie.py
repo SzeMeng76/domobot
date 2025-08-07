@@ -2140,8 +2140,21 @@ class MovieService:
         if watch_providers:
             logger.info(f"watch_providers keys: {list(watch_providers.keys()) if isinstance(watch_providers, dict) else type(watch_providers)}")
             if isinstance(watch_providers, dict) and "results" in watch_providers:
-                for country, data in watch_providers["results"].items():
-                    logger.info(f"Country {country} has types: {list(data.keys()) if isinstance(data, dict) else type(data)}")
+                results = watch_providers["results"]
+                logger.info(f"results has {len(results)} countries: {list(results.keys())}")
+                for country, data in results.items():
+                    if isinstance(data, dict):
+                        data_keys = [k for k in data.keys() if k != "link"]
+                        logger.info(f"Country {country} has types: {data_keys}")
+                        # 专门检查是否有cinema
+                        if "cinema" in data:
+                            logger.info(f"Country {country} HAS CINEMA DATA with {len(data['cinema'])} entries")
+                        else:
+                            logger.info(f"Country {country} NO CINEMA DATA")
+                    else:
+                        logger.info(f"Country {country} data type: {type(data)}")
+            else:
+                logger.info("No results in watch_providers or not dict")
         
         if watch_providers:
             provider_info = self.format_watch_providers_compact(watch_providers, "movie")
