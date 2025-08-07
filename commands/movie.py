@@ -1632,10 +1632,28 @@ class MovieService:
         
         # 添加观看平台信息
         watch_providers = detail_data.get("watch/providers")
+        enhanced_providers = detail_data.get("enhanced_providers")
+        
         if watch_providers:
             provider_info = self.format_watch_providers_compact(watch_providers, "tv")
             if provider_info:
                 lines.append(provider_info)
+        
+        # 添加技术规格信息
+        if enhanced_providers:
+            tech_specs = self._format_technical_specs(enhanced_providers)
+            if tech_specs:
+                lines.append(tech_specs)
+            
+            # 添加价格信息
+            price_info = self._format_price_info(enhanced_providers)
+            if price_info:
+                lines.append(price_info)
+            
+            # 添加语言支持信息
+            language_support = self._format_language_support(enhanced_providers)
+            if language_support:
+                lines.append(language_support)
             
         lines.extend([
             creator_info,
@@ -1999,6 +2017,11 @@ class MovieService:
             price_info = self._format_price_info(enhanced_providers)
             if price_info:
                 lines.append(price_info)
+            
+            # 添加语言支持信息
+            language_support = self._format_language_support(enhanced_providers)
+            if language_support:
+                lines.append(language_support)
             
         lines.extend([
             director_info,
@@ -2740,7 +2763,7 @@ class MovieService:
         """格式化增强评分信息（整合TMDB和JustWatch评分）"""
         lines = []
         
-        # TMDB评分
+        # 优先使用原始TMDB评分
         tmdb_rating = tmdb_data.get("vote_average", 0)
         tmdb_votes = tmdb_data.get("vote_count", 0)
         if tmdb_rating > 0:
@@ -2754,11 +2777,6 @@ class MovieService:
             if scoring.imdb_score and scoring.imdb_score > 0:
                 votes_text = f" ({scoring.imdb_votes:,}票)" if scoring.imdb_votes else ""
                 lines.append(f"   • IMDB: ⭐ {scoring.imdb_score:.1f}/10{votes_text}")
-            
-            # TMDB人气和评分（JustWatch版本，可能更准确）
-            if scoring.tmdb_score and scoring.tmdb_score > 0:
-                popularity_text = f" (人气: {scoring.tmdb_popularity:.1f})" if scoring.tmdb_popularity else ""
-                lines.append(f"   • TMDB: ⭐ {scoring.tmdb_score:.1f}/10{popularity_text}")
             
             # 烂番茄评分
             if scoring.tomatometer and scoring.tomatometer > 0:
@@ -2881,6 +2899,58 @@ class MovieService:
         
         if price_info:
             return "💰 *价格信息*: " + " | ".join(price_info[:3])  # 最多显示3个
+        return ""
+    
+    def _format_language_support(self, enhanced_providers: Dict) -> str:
+        """格式化语言支持信息"""
+        if not enhanced_providers or not enhanced_providers.get("justwatch"):
+            return ""
+        
+        justwatch_data = enhanced_providers["justwatch"]
+        language_info = {}
+        
+        # 语言代码映射
+        language_map = {
+            "zh": "中文", "en": "英语", "ja": "日语", "ko": "韩语",
+            "fr": "法语", "de": "德语", "es": "西班牙语", "pt": "葡萄牙语",
+            "it": "意大利语", "ru": "俄语", "ar": "阿拉伯语", "hi": "印地语"
+        }
+        
+        # 收集语言信息
+        for country, offers in justwatch_data.items():
+            if not offers:
+                continue
+            for offer in offers:
+                platform_name = offer.package.name if hasattr(offer, 'package') and offer.package else "未知平台"
+                
+                # 音频语言
+                audio_langs = []
+                if hasattr(offer, 'audio_languages') and offer.audio_languages:
+                    audio_langs = [language_map.get(lang, lang.upper()) for lang in offer.audio_languages[:3]]
+                
+                # 字幕语言  
+                subtitle_langs = []
+                if hasattr(offer, 'subtitle_languages') and offer.subtitle_languages:
+                    subtitle_langs = [language_map.get(lang, lang.upper()) for lang in offer.subtitle_languages[:3]]
+                
+                if audio_langs or subtitle_langs:
+                    if platform_name not in language_info:
+                        language_info[platform_name] = {"audio": set(), "subtitle": set()}
+                    
+                    language_info[platform_name]["audio"].update(audio_langs)
+                    language_info[platform_name]["subtitle"].update(subtitle_langs)
+        
+        # 格式化输出
+        if language_info:
+            lines = []
+            for platform, langs in list(language_info.items())[:3]:  # 最多显示3个平台
+                audio_text = "/".join(sorted(langs["audio"])) if langs["audio"] else "N/A"
+                subtitle_text = "/".join(sorted(langs["subtitle"])) if langs["subtitle"] else "N/A"
+                lines.append(f"   • {platform}: 🗣️ {audio_text} | 🎬 {subtitle_text}字幕")
+            
+            if lines:
+                return "🌐 *语言支持*:\n" + "\n".join(lines)
+        
         return ""
 
 # 全局服务实例
