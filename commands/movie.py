@@ -848,7 +848,7 @@ class MovieService:
             final_results = search_results[:limit]
             
             if final_results:
-                await cache_manager.save_cache(cache_key, final_results, subdirectory="movie", hours=6)  # 缓存6小时
+                await cache_manager.save_cache(cache_key, final_results, subdirectory="movie")
                 logger.info(f"获取跨平台对比热门内容成功: {len(final_results)} 个结果")
             
             return final_results
