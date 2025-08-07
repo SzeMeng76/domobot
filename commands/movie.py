@@ -812,7 +812,11 @@ class MovieService:
                         
                         if justwatch_data:
                             logger.info(f"成功处理 JustWatch 数据: {list(justwatch_data.keys())}")
-                            result["justwatch"] = justwatch_data
+                            logger.info(f"result 类型检查: {type(result)}")
+                            if isinstance(result, dict):
+                                result["justwatch"] = justwatch_data
+                            else:
+                                logger.error(f"result 不是字典类型: {type(result)}")
                         else:
                             logger.warning(f"JustWatch offers 处理后无数据")
                     else:
@@ -823,6 +827,15 @@ class MovieService:
             
         except Exception as e:
             logger.error(f"获取增强观影平台数据失败: {e}")
+        
+        # 防御性检查：确保返回正确的数据结构
+        if not isinstance(result, dict):
+            logger.error(f"result 变量被意外修改为 {type(result)}，重新初始化")
+            result = {
+                "tmdb": None,
+                "justwatch": None,
+                "combined": {}
+            }
         
         return result
 
