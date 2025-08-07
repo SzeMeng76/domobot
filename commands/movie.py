@@ -739,9 +739,12 @@ class MovieService:
             result["tmdb"] = tmdb_data
             
             # 获取 JustWatch 数据作为补充
+            logger.info(f"JustWatch 可用性检查: JUSTWATCH_AVAILABLE={JUSTWATCH_AVAILABLE}, title='{title}'")
             if JUSTWATCH_AVAILABLE and title:
+                logger.info(f"开始 JustWatch 搜索: {title}, 类型: {content_type}")
                 justwatch_results = await self._search_justwatch_content(title, content_type)
                 
+                logger.info(f"JustWatch 搜索结果: {len(justwatch_results) if justwatch_results else 0} 个结果")
                 if justwatch_results and len(justwatch_results) > 0:
                     # 选择最匹配的结果
                     best_match = justwatch_results[0]
@@ -755,7 +758,13 @@ class MovieService:
                         if node_id:
                             logger.info(f"使用 JustWatch node_id: {node_id} 获取观影平台")
                             justwatch_offers = await self._get_justwatch_offers(node_id)
+                            if justwatch_offers:
+                                logger.info(f"成功获取 JustWatch 数据: {list(justwatch_offers.keys()) if isinstance(justwatch_offers, dict) else type(justwatch_offers)}")
+                            else:
+                                logger.warning(f"未获取到 JustWatch 观影平台数据")
                             result["justwatch"] = justwatch_offers
+                        else:
+                            logger.warning(f"JustWatch 搜索结果中未找到有效的 node_id")
             
             # 合并数据，优先显示 TMDB 数据，JustWatch 作为补充
             result["combined"] = self._merge_watch_providers(tmdb_data, result.get("justwatch"))
@@ -2269,21 +2278,43 @@ class MovieService:
                         continue
                         
                     if offers and isinstance(offers, list):
-                        # 提取平台名称
-                        platform_names = []
+                        # 按观看类型分组平台信息
+                        offer_types = {}
                         for offer in offers:
-                            if hasattr(offer, 'package') and hasattr(offer.package, 'technical_name'):
+                            # 获取平台名称
+                            platform_name = None
+                            if hasattr(offer, 'package') and hasattr(offer.package, 'name'):
+                                platform_name = offer.package.name
+                            elif hasattr(offer, 'package') and hasattr(offer.package, 'technical_name'):
                                 platform_name = offer.package.technical_name
-                                if platform_name and platform_name not in platform_names:
-                                    platform_names.append(platform_name)
                             elif hasattr(offer, 'provider_id'):
-                                # 备选方案：使用 provider_id
-                                provider_id = str(offer.provider_id)
-                                if provider_id not in platform_names:
-                                    platform_names.append(provider_id)
+                                platform_name = str(offer.provider_id)
+                            
+                            # 获取观看类型
+                            monetization_type = getattr(offer, 'monetization_type', 'UNKNOWN')
+                            
+                            if platform_name:
+                                if monetization_type not in offer_types:
+                                    offer_types[monetization_type] = []
+                                if platform_name not in offer_types[monetization_type]:
+                                    offer_types[monetization_type].append(platform_name)
                         
-                        if platform_names:
-                            lines.append(f"• {region.upper()}: {', '.join(platform_names)}")
+                        # 格式化输出
+                        if offer_types:
+                            type_display = {
+                                'FLATRATE': '🎬 订阅观看',
+                                'RENT': '🏪 租赁',  
+                                'BUY': '💰 购买',
+                                'CINEMA': '🎭 影院',
+                                'FREE': '🆓 免费观看'
+                            }
+                            
+                            region_lines = [f"• **{region.upper()}**:"]
+                            for offer_type, platforms in offer_types.items():
+                                display_name = type_display.get(offer_type, f'📱 {offer_type}')
+                                region_lines.append(f"  {display_name}: {', '.join(platforms)}")
+                            
+                            lines.extend(region_lines)
                         else:
                             lines.append(f"• {region.upper()}: 有观看选项可用")
                     elif offers:
