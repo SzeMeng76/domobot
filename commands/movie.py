@@ -804,16 +804,16 @@ class MovieService:
         return result
 
     def _merge_watch_providers(self, tmdb_data: Optional[Dict], justwatch_data: Optional[Dict]) -> Dict:
-        """合并 TMDB 和 JustWatch 观影平台数据"""
+        """合并 TMDB 和 JustWatch 观影平台数据 - 优化版"""
         merged = {}
         
         # 如果 TMDB 有数据，优先使用
         if tmdb_data and tmdb_data.get("results"):
             merged = tmdb_data.copy()
             
-        # 如果 TMDB 没有数据但 JustWatch 有数据，转换 JustWatch 数据为标准格式
+        # 如果 TMDB 没有数据，使用 JustWatch 优选数据
         elif justwatch_data:
-            merged = self._convert_justwatch_to_tmdb_format(justwatch_data)
+            merged = self._convert_justwatch_preferred_types(justwatch_data)
             
         # 保存原始 JustWatch 数据供后续处理
         if justwatch_data:
@@ -892,6 +892,96 @@ class MovieService:
                 tmdb_format["results"][country_code] = country_data
         
         return tmdb_format
+    
+    def _convert_justwatch_preferred_types(self, justwatch_data: Dict) -> Dict:
+        """转换JustWatch数据，只显示优选类型"""
+        if not justwatch_data:
+            return {}
+        
+        # 类型优先级：免费 > 订阅 > 租赁 > 购买
+        type_priority = ['FREE', 'ADS', 'FLATRATE', 'SUBSCRIPTION', 'RENT', 'BUY']
+        
+        tmdb_format = {
+            "id": 0,
+            "results": {}
+        }
+        
+        # 国家代码映射
+        country_mapping = {
+            "US": "US",
+            "GB": "GB", 
+            "DE": "DE",
+            "FR": "FR",
+            "JP": "JP",
+            "KR": "KR",
+            "AU": "AU",
+            "CA": "CA"
+        }
+        
+        for country_code in country_mapping.keys():
+            if country_code not in justwatch_data:
+                continue
+                
+            offers = justwatch_data[country_code]
+            if not offers or not isinstance(offers, list):
+                continue
+                
+            # 按类型分组
+            type_groups = {}
+            for offer in offers:
+                monetization_type = getattr(offer, 'monetization_type', '')
+                if monetization_type in type_priority:
+                    if monetization_type not in type_groups:
+                        type_groups[monetization_type] = []
+                    type_groups[monetization_type].append(offer)
+            
+            # 选择优先级最高的类型
+            selected_type = None
+            for pref_type in type_priority:
+                if pref_type in type_groups:
+                    selected_type = pref_type
+                    break
+            
+            # 只转换选中的类型
+            if selected_type:
+                country_data = self._convert_single_type_to_tmdb(
+                    type_groups[selected_type], selected_type
+                )
+                if country_data:
+                    country_data["link"] = f"https://www.justwatch.com/{country_code.lower()}"
+                    tmdb_format["results"][country_code] = country_data
+        
+        return tmdb_format
+    
+    def _convert_single_type_to_tmdb(self, offers: list, monetization_type: str) -> Dict:
+        """将单一类型的JustWatch数据转换为TMDB格式"""
+        if not offers:
+            return {}
+        
+        # 平台类型映射
+        monetization_mapping = {
+            "FLATRATE": "flatrate",
+            "SUBSCRIPTION": "flatrate",
+            "RENT": "rent",
+            "BUY": "buy",
+            "FREE": "free",
+            "ADS": "ads"
+        }
+        
+        tmdb_type = monetization_mapping.get(monetization_type, "flatrate")
+        platforms = []
+        
+        for offer in offers:
+            if hasattr(offer, 'package') and offer.package:
+                platform_info = {
+                    "display_priority": len(platforms) + 1,
+                    "logo_path": f"/justwatch_{offer.package.technical_name}.png",
+                    "provider_id": getattr(offer.package, 'package_id', 0),
+                    "provider_name": getattr(offer.package, 'name', 'Unknown')
+                }
+                platforms.append(platform_info)
+        
+        return {tmdb_type: platforms} if platforms else {}
     
     def _get_first_trailer_url(self, videos_data: Dict) -> Optional[str]:
         """获取第一个预告片的YouTube链接"""
@@ -1399,16 +1489,11 @@ class MovieService:
             vote_average = tv.get("vote_average", 0)
             tv_id = tv.get("id")
             
-            # 排名图标
-            if i <= 3:
-                rank_icons = ["🥇", "🥈", "🥉"]
-                rank = rank_icons[i-1]
-            else:
-                rank = f"{i}."
-            
             year_text = f" ({year})" if year else ""
-            lines.append(f"{rank} *{name}*{year_text}")
-            lines.append(f"     ⭐ {vote_average:.1f}/10 | 🆔 `{tv_id}`")
+            rating_text = f" - ⭐ {vote_average:.1f}/10" if vote_average > 0 else ""
+            
+            lines.append(f"{i}. *{name}*{year_text}{rating_text}")
+            lines.append(f"   `/tv_detail {tv_id}`")
             lines.append("")
         
         lines.append("💡 使用 `/tv_detail <ID>` 查看详细信息")
@@ -1769,16 +1854,11 @@ class MovieService:
             vote_average = movie.get("vote_average", 0)
             movie_id = movie.get("id")
             
-            # 排名图标
-            if i <= 3:
-                rank_icons = ["🥇", "🥈", "🥉"]
-                rank = rank_icons[i-1]
-            else:
-                rank = f"{i}."
-            
             year_text = f" ({year})" if year else ""
-            lines.append(f"{rank} *{title}*{year_text}")
-            lines.append(f"     ⭐ {vote_average:.1f}/10 | 🆔 `{movie_id}`")
+            rating_text = f" - ⭐ {vote_average:.1f}/10" if vote_average > 0 else ""
+            
+            lines.append(f"{i}. *{title}*{year_text}{rating_text}")
+            lines.append(f"   `/movie_detail {movie_id}`")
             lines.append("")
         
         lines.append("💡 使用 `/movie_detail <ID>` 查看详细信息")
@@ -2055,20 +2135,17 @@ class MovieService:
             vote_average = item.get("vote_average", 0)
             item_id = item.get("id")
             
-            # 排名图标
-            if i <= 3:
-                rank_icons = ["🥇", "🥈", "🥉"]
-                rank = rank_icons[i-1]
-            else:
-                rank = f"{i}."
-            
             year_text = f" ({year})" if year else ""
-            lines.append(f"{rank} {emoji} *{title}*{year_text}")
+            rating_text = f" - ⭐ {vote_average:.1f}/10" if vote_average > 0 and media_type != "person" else ""
             
-            if media_type != "person":
-                lines.append(f"     ⭐ {vote_average:.1f}/10 | 🆔 `{item_id}`")
-            else:
-                lines.append(f"     👤 人物 | 🆔 `{item_id}`")
+            lines.append(f"{i}. {emoji} *{title}*{year_text}{rating_text}")
+            
+            if media_type == "movie":
+                lines.append(f"   `/movie_detail {item_id}`")
+            elif media_type == "tv":
+                lines.append(f"   `/tv_detail {item_id}`")
+            elif media_type == "person":
+                lines.append(f"   `/person_detail {item_id}`")
             lines.append("")
         
         lines.append("💡 使用命令查看详细信息：")
@@ -2094,8 +2171,10 @@ class MovieService:
             movie_id = movie.get("id")
             
             year_text = f" ({year})" if year else ""
-            lines.append(f"{i}. *{title}*{year_text}")
-            lines.append(f"   ⭐ {vote_average:.1f}/10 | 🆔 `{movie_id}`")
+            rating_text = f" - ⭐ {vote_average:.1f}/10" if vote_average > 0 else ""
+            
+            lines.append(f"{i}. *{title}*{year_text}{rating_text}")
+            lines.append(f"   `/movie_detail {movie_id}`")
             lines.append("")
         
         lines.append("💡 使用 `/movie_detail <ID>` 查看详细信息")
@@ -2118,12 +2197,10 @@ class MovieService:
             movie_id = movie.get("id")
             
             release_text = f" (上映: {release_date})" if release_date else ""
-            lines.append(f"{i}. *{title}*{release_text}")
+            rating_text = f" - ⭐ {vote_average:.1f}/10" if vote_average > 0 else ""
             
-            if vote_average > 0:
-                lines.append(f"   ⭐ {vote_average:.1f}/10 | 🆔 `{movie_id}`")
-            else:
-                lines.append(f"   🆔 `{movie_id}`")
+            lines.append(f"{i}. *{title}*{release_text}{rating_text}")
+            lines.append(f"   `/movie_detail {movie_id}`")
             lines.append("")
         
         lines.append("💡 使用 `/movie_detail <ID>` 查看详细信息")
@@ -2147,8 +2224,10 @@ class MovieService:
             tv_id = tv.get("id")
             
             year_text = f" ({year})" if year else ""
-            lines.append(f"{i}. *{name}*{year_text}")
-            lines.append(f"   ⭐ {vote_average:.1f}/10 | 🆔 `{tv_id}`")
+            rating_text = f" - ⭐ {vote_average:.1f}/10" if vote_average > 0 else ""
+            
+            lines.append(f"{i}. *{name}*{year_text}{rating_text}")
+            lines.append(f"   `/tv_detail {tv_id}`")
             lines.append("")
         
         lines.append("💡 使用 `/tv_detail <ID>` 查看详细信息")
@@ -2172,8 +2251,10 @@ class MovieService:
             tv_id = tv.get("id")
             
             year_text = f" ({year})" if year else ""
-            lines.append(f"{i}. *{name}*{year_text}")
-            lines.append(f"   ⭐ {vote_average:.1f}/10 | 🆔 `{tv_id}`")
+            rating_text = f" - ⭐ {vote_average:.1f}/10" if vote_average > 0 else ""
+            
+            lines.append(f"{i}. *{name}*{year_text}{rating_text}")
+            lines.append(f"   `/tv_detail {tv_id}`")
             lines.append("")
         
         lines.append("💡 使用 `/tv_detail <ID>` 查看详细信息")
