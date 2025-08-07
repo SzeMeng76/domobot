@@ -2180,8 +2180,6 @@ class MovieService:
             provider_info = self.format_watch_providers(providers_data, "movie")
             if provider_info:
                 lines.append(provider_info)
-            if provider_info:
-                lines.append(provider_info)
         
         # 添加技术规格信息
         if enhanced_providers:
