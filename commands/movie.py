@@ -3601,22 +3601,16 @@ async def movie_detail_command(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         detail_data = await movie_service.get_movie_details(movie_id)
         if detail_data:
-            # 获取增强的观影平台数据
+            # 获取增强的观影平台数据 - 使用与movie_watch相同的方式
             movie_title = detail_data.get("original_title") or detail_data.get("title", "")
             logger.info(f"Movie title for JustWatch search: {movie_title}")
-            try:
-                enhanced_providers = await movie_service.get_enhanced_watch_providers(
-                    movie_id, "movie", movie_title
-                )
-                logger.info(f"MOVIE_DETAIL: get_enhanced_watch_providers returned: {type(enhanced_providers)}")
-                if enhanced_providers is None:
-                    logger.error("MOVIE_DETAIL: get_enhanced_watch_providers returned None, creating empty dict")
-                    enhanced_providers = {"tmdb": None, "justwatch": None, "combined": {}}
-            except Exception as e:
-                logger.error(f"MOVIE_DETAIL: Error getting enhanced providers: {e}")
-                enhanced_providers = {"tmdb": None, "justwatch": None, "combined": {}}
             
-            # 始终传递enhanced_providers以启用后备机制，即使它为None
+            # 直接获取观影平台数据，不依赖详情API中的数据
+            enhanced_providers = await movie_service.get_enhanced_watch_providers(
+                movie_id, "movie", movie_title
+            )
+            
+            # 始终传递enhanced_providers
             detail_data["enhanced_providers"] = enhanced_providers
             
             # 将增强的观影平台数据合并到详情数据中
