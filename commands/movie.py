@@ -2809,6 +2809,13 @@ class MovieService:
             
             lines.append(f"{i}. {media_emoji} *{title}* ({year}){rating_text}{rank_text}")
             
+            # 添加详情链接
+            if entry.tmdb_id:
+                if entry.object_type == "MOVIE":
+                    lines.append(f"   `/movie_detail {entry.tmdb_id}`")
+                elif entry.object_type == "SHOW":
+                    lines.append(f"   `/tv_detail {entry.tmdb_id}`")
+            
             # 添加观看选项
             monetization_types = set(offer.monetization_type for offer in entry.offers)
             if "FLATRATE" in monetization_types:
@@ -2821,6 +2828,13 @@ class MovieService:
             
             lines.append("")
         
+        lines.extend([
+            "💡 *使用说明*:",
+            "   🎬 电影详情: `/movie_detail <ID>`",
+            "   📺 电视剧详情: `/tv_detail <ID>`",
+            "",
+            "📊 数据来源: JustWatch"
+        ])
         return "\n".join(lines)
     
     def format_cross_platform_charts(self, cross_data: Dict) -> str:
@@ -2918,9 +2932,22 @@ class MovieService:
                 if platforms:
                     lines.append(f"   🎯 可观看: {', '.join(platforms)}")
             
+            # 添加详情链接
+            if entry.tmdb_id:
+                if entry.object_type == "MOVIE":
+                    lines.append(f"   `/movie_detail {entry.tmdb_id}`")
+                elif entry.object_type == "SHOW":
+                    lines.append(f"   `/tv_detail {entry.tmdb_id}`")
+            
             lines.append("")
         
-        lines.append("📊 数据来源: JustWatch")
+        lines.extend([
+            "💡 *使用说明*:",
+            "   🎬 电影详情: `/movie_detail <ID>`", 
+            "   📺 电视剧详情: `/tv_detail <ID>`",
+            "",
+            "📊 数据来源: JustWatch"
+        ])
         return "\n".join(lines)
 
     def format_new_releases(self, new_data: List) -> str:
@@ -2949,9 +2976,22 @@ class MovieService:
             if entry.release_date:
                 lines.append(f"   📅 上映: {entry.release_date}")
             
+            # 添加详情链接
+            if entry.tmdb_id:
+                if entry.object_type == "MOVIE":
+                    lines.append(f"   `/movie_detail {entry.tmdb_id}`")
+                elif entry.object_type == "SHOW":
+                    lines.append(f"   `/tv_detail {entry.tmdb_id}`")
+            
             lines.append("")
         
-        lines.append("📊 数据来源: JustWatch")
+        lines.extend([
+            "💡 *使用说明*:",
+            "   🎬 电影详情: `/movie_detail <ID>`",
+            "   📺 电视剧详情: `/tv_detail <ID>`",
+            "",
+            "📊 数据来源: JustWatch"
+        ])
         return "\n".join(lines)
 
     def format_high_rated_content(self, high_rated_data: List) -> str:
@@ -2978,9 +3018,23 @@ class MovieService:
                     rating_text = f" - ⭐ {' | '.join(scores)}"
             
             lines.append(f"{i}. {media_emoji} *{title}* ({year}){rating_text}")
+            
+            # 添加详情链接
+            if entry.tmdb_id:
+                if entry.object_type == "MOVIE":
+                    lines.append(f"   `/movie_detail {entry.tmdb_id}`")
+                elif entry.object_type == "SHOW":
+                    lines.append(f"   `/tv_detail {entry.tmdb_id}`")
+            
             lines.append("")
         
-        lines.append("📊 数据来源: JustWatch (评分7.0+)")
+        lines.extend([
+            "💡 *使用说明*:",
+            "   🎬 电影详情: `/movie_detail <ID>`",
+            "   📺 电视剧详情: `/tv_detail <ID>`",
+            "",
+            "📊 数据来源: JustWatch (评分7.0+)"
+        ])
         return "\n".join(lines)
 
     def format_rank_filtered_content(self, rank_data: List, rank_title: str) -> str:
@@ -3020,6 +3074,13 @@ class MovieService:
             
             lines.append(f"{i}. {media_emoji} *{title}* ({year}){rank_info}{rating_text}")
             
+            # 添加详情链接
+            if entry.tmdb_id:
+                if entry.object_type == "MOVIE":
+                    lines.append(f"   `/movie_detail {entry.tmdb_id}`")
+                elif entry.object_type == "SHOW":
+                    lines.append(f"   `/tv_detail {entry.tmdb_id}`")
+            
             # 添加在榜天数信息（对长期霸榜类型）
             if entry.streaming_charts and "long_term" in rank_title.lower():
                 days = entry.streaming_charts.days_in_top_100
@@ -3027,7 +3088,13 @@ class MovieService:
             
             lines.append("")
         
-        lines.append("📊 数据来源: JustWatch")
+        lines.extend([
+            "💡 *使用说明*:",
+            "   🎬 电影详情: `/movie_detail <ID>`",
+            "   📺 电视剧详情: `/tv_detail <ID>`",
+            "",
+            "📊 数据来源: JustWatch"
+        ])
         return "\n".join(lines)
 
     def format_genre_trending(self, genre_data: List, genre_title: str) -> str:
@@ -3056,9 +3123,23 @@ class MovieService:
                 rank_text = f" #{entry.streaming_charts.rank}"
             
             lines.append(f"{i}. {media_emoji} *{title}* ({year}){rating_text}{rank_text}")
+            
+            # 添加详情链接
+            if entry.tmdb_id:
+                if entry.object_type == "MOVIE":
+                    lines.append(f"   `/movie_detail {entry.tmdb_id}`")
+                elif entry.object_type == "SHOW":
+                    lines.append(f"   `/tv_detail {entry.tmdb_id}`")
+            
             lines.append("")
         
-        lines.append("📊 数据来源: JustWatch")
+        lines.extend([
+            "💡 *使用说明*:",
+            "   🎬 电影详情: `/movie_detail <ID>`",
+            "   📺 电视剧详情: `/tv_detail <ID>`",
+            "",
+            "📊 数据来源: JustWatch"
+        ])
         return "\n".join(lines)
 
     # ========================================
