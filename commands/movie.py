@@ -649,7 +649,7 @@ class MovieService:
                 # 根据文档，正确的参数顺序：title, country, language, count, best_only
                 logger.info(f"JustWatch 搜索参数: title='{title}', country='{country_code}', language='{language_code}'")
                 results = await asyncio.wait_for(
-                    loop.run_in_executor(None, justwatch_search, title, country_code, language_code, 10, True),
+                    loop.run_in_executor(None, justwatch_search, title, country_code, language_code, 10, False),  # 改为 False 获取所有选项
                     timeout=15.0  # 15秒超时
                 )
                 
@@ -713,7 +713,7 @@ class MovieService:
             try:
                 loop = asyncio.get_event_loop()
                 offers_data = await asyncio.wait_for(
-                    loop.run_in_executor(None, justwatch_offers, node_id, set(regions), "en", True),
+                    loop.run_in_executor(None, justwatch_offers, node_id, set(regions), "en", False),  # 改为 False 获取所有选项
                     timeout=10.0  # 10秒超时
                 )
             except asyncio.TimeoutError:
@@ -721,6 +721,23 @@ class MovieService:
                 return None
             
             if offers_data and isinstance(offers_data, dict):
+                # 调试：显示获取到的国家和数据概况
+                country_summary = {}
+                all_monetization_types = set()
+                
+                for country, offers in offers_data.items():
+                    if offers and isinstance(offers, list):
+                        country_summary[country] = len(offers)
+                        # 收集该国家的所有 monetization_type
+                        for offer in offers:
+                            if hasattr(offer, 'monetization_type'):
+                                all_monetization_types.add(offer.monetization_type)
+                    else:
+                        country_summary[country] = 0
+                
+                logger.info(f"JustWatch 多国家数据概况: {country_summary}")
+                logger.info(f"发现的所有 monetization_type: {list(all_monetization_types)}")
+                
                 await cache_manager.save_cache(cache_key, offers_data, subdirectory="movie")
                 return offers_data
             else:
@@ -731,22 +748,6 @@ class MovieService:
         
         return None
 
-    def _process_justwatch_offers(self, offers: List) -> Optional[Dict]:
-        """处理 JustWatch offers 数据，按地区分组"""
-        if not offers:
-            return None
-        
-        try:
-            # 由于搜索时指定了地区（如US），所有offers都是该地区的
-            # 这里暂时将所有offers归类到US地区
-            region_data = {"US": offers}
-            
-            logger.info(f"处理 {len(offers)} 个 JustWatch offers")
-            return region_data
-            
-        except Exception as e:
-            logger.warning(f"处理 JustWatch offers 失败: {e}")
-            return None
 
     async def get_enhanced_watch_providers(self, content_id: int, content_type: str = "movie", title: str = "") -> Dict:
         """获取增强的观影平台信息，整合 TMDB 和 JustWatch 数据"""
@@ -802,16 +803,19 @@ class MovieService:
                             if best_match:
                                 break
                     
-                    if best_match and hasattr(best_match, 'offers'):
+                    if best_match and hasattr(best_match, 'entry_id'):
                         logger.info(f"JustWatch 结果对象类型: {type(best_match)}")
-                        logger.info(f"找到 {len(best_match.offers)} 个观看选项")
+                        entry_id = best_match.entry_id
+                        logger.info(f"找到 JustWatch entry_id: {entry_id}")
                         
-                        # 直接使用搜索结果中的 offers 数据，不需要额外的API调用
-                        # 按地区整理 offers 数据
-                        justwatch_data = self._process_justwatch_offers(best_match.offers)
+                        # 支持的国家列表
+                        supported_countries = {"US", "GB", "DE", "FR", "JP", "KR", "AU", "CA"}
+                        
+                        # 使用 offers_for_countries API 获取多国家数据
+                        justwatch_data = await self._get_justwatch_offers(entry_id, list(supported_countries))
                         
                         if justwatch_data:
-                            logger.info(f"成功处理 JustWatch 数据: {list(justwatch_data.keys())}")
+                            logger.info(f"成功获取多国家 JustWatch 数据: {list(justwatch_data.keys())}")
                             logger.info(f"result 类型检查: {type(result)}")
                             if isinstance(result, dict):
                                 result["justwatch"] = justwatch_data
@@ -2332,58 +2336,84 @@ class MovieService:
         
         lines = []
         
+        # 国家名称映射
+        country_names = {
+            'US': '🇺🇸 美国',
+            'GB': '🇬🇧 英国', 
+            'DE': '🇩🇪 德国',
+            'FR': '🇫🇷 法国',
+            'JP': '🇯🇵 日本',
+            'KR': '🇰🇷 韩国',
+            'AU': '🇦🇺 澳大利亚',
+            'CA': '🇨🇦 加拿大'
+        }
+        
         # 处理 JustWatch 提供的观影平台信息
         try:
             if isinstance(justwatch_data, dict) and justwatch_data:
                 lines.append("\n🌟 *JustWatch 补充信息*:")
                 
-                # 遍历各个地区的数据
-                for region, offers in justwatch_data.items():
-                    if region == "justwatch_raw":
-                        continue
-                        
-                    if offers and isinstance(offers, list):
-                        # 按观看类型分组平台信息
-                        offer_types = {}
-                        for offer in offers:
-                            # 获取平台名称
-                            platform_name = None
-                            if hasattr(offer, 'package') and hasattr(offer.package, 'name'):
-                                platform_name = offer.package.name
-                            elif hasattr(offer, 'package') and hasattr(offer.package, 'technical_name'):
-                                platform_name = offer.package.technical_name
-                            elif hasattr(offer, 'provider_id'):
-                                platform_name = str(offer.provider_id)
+                # 按国家顺序显示（优先显示主要国家）
+                country_order = ['US', 'GB', 'DE', 'FR', 'JP', 'KR', 'AU', 'CA']
+                displayed_countries = []
+                
+                for country in country_order:
+                    if country in justwatch_data:
+                        offers = justwatch_data[country]
+                        if offers and isinstance(offers, list) and len(offers) > 0:
+                            displayed_countries.append(country)
+                            country_display_name = country_names.get(country, f'🏳️ {country}')
                             
-                            # 获取观看类型
-                            monetization_type = getattr(offer, 'monetization_type', 'UNKNOWN')
+                            # 按观看类型分组平台信息
+                            offer_types = {}
+                            for offer in offers:
+                                # 获取平台名称
+                                platform_name = None
+                                if hasattr(offer, 'package') and hasattr(offer.package, 'name'):
+                                    platform_name = offer.package.name
+                                elif hasattr(offer, 'package') and hasattr(offer.package, 'technical_name'):
+                                    platform_name = offer.package.technical_name
+                                elif hasattr(offer, 'provider_id'):
+                                    platform_name = str(offer.provider_id)
+                                
+                                # 获取观看类型
+                                monetization_type = getattr(offer, 'monetization_type', 'UNKNOWN')
+                                
+                                if platform_name:
+                                    if monetization_type not in offer_types:
+                                        offer_types[monetization_type] = []
+                                    if platform_name not in offer_types[monetization_type]:
+                                        offer_types[monetization_type].append(platform_name)
                             
-                            if platform_name:
-                                if monetization_type not in offer_types:
-                                    offer_types[monetization_type] = []
-                                if platform_name not in offer_types[monetization_type]:
-                                    offer_types[monetization_type].append(platform_name)
-                        
-                        # 格式化输出
-                        if offer_types:
-                            type_display = {
-                                'FLATRATE': '🎬 订阅观看',
-                                'RENT': '🏪 租赁',  
-                                'BUY': '💰 购买',
-                                'CINEMA': '🎭 影院',
-                                'FREE': '🆓 免费观看'
-                            }
-                            
-                            region_lines = [f"• **{region.upper()}**:"]
-                            for offer_type, platforms in offer_types.items():
-                                display_name = type_display.get(offer_type, f'📱 {offer_type}')
-                                region_lines.append(f"  {display_name}: {', '.join(platforms)}")
-                            
-                            lines.extend(region_lines)
-                        else:
-                            lines.append(f"• {region.upper()}: 有观看选项可用")
-                    elif offers:
-                        lines.append(f"• {region.upper()}: 有观看选项可用")
+                            # 格式化输出
+                            if offer_types:
+                                type_display = {
+                                    'FLATRATE': '🎬 订阅观看',
+                                    'RENT': '🏪 租赁',  
+                                    'BUY': '💰 购买',
+                                    'CINEMA': '🎭 影院',
+                                    'FREE': '🆓 免费观看',
+                                    'ADS': '📺 免费含广告'
+                                }
+                                
+                                lines.append(f"• **{country_display_name}**:")
+                                # 按类型优先级排序显示
+                                type_order = ['FLATRATE', 'FREE', 'ADS', 'RENT', 'BUY', 'CINEMA']
+                                for offer_type in type_order:
+                                    if offer_type in offer_types:
+                                        platforms = offer_types[offer_type]
+                                        display_name = type_display.get(offer_type, f'📱 {offer_type}')
+                                        lines.append(f"  {display_name}: {', '.join(platforms)}")
+                                
+                                # 显示其他未知类型
+                                for offer_type, platforms in offer_types.items():
+                                    if offer_type not in type_order:
+                                        display_name = type_display.get(offer_type, f'📱 {offer_type}')
+                                        lines.append(f"  {display_name}: {', '.join(platforms)}")
+                
+                # 如果没有找到任何国家的数据
+                if not displayed_countries:
+                    lines.append("• 暂无支持地区的观看选项")
                         
         except Exception as e:
             logger.warning(f"格式化 JustWatch 数据失败: {e}")
