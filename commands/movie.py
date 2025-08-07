@@ -520,18 +520,78 @@ class MovieService:
             
             # 定义平台technical_name的所有变体（基于调试发现）
             platform_variants = {
+                # Netflix 系列 (143个内容)
                 "netflix": ["netflix", "netflixbasicwithads"],
-                "amazon": ["amazon", "amazonprime", "amazonprimevideowithads"],
-                "disneyplus": ["disneyplus"],  # Disney+数据确实很少
-                "max": ["max"],  # HBO Max
-                "itunes": ["itunes"],  # Apple TV
+                
+                # Amazon 系列 (121个内容)
+                "amazon": ["amazon", "amazonprime", "amazonprimevideowithads", "amazonimdbtv"],
+                
+                # Disney+ (2个内容 - 确实很少)
+                "disneyplus": ["disneyplus"],
+                
+                # HBO Max/Max
+                "max": ["max"],
+                
+                # Apple TV 系列 (70个内容)
+                "itunes": ["itunes"],
+                
+                # Hulu
                 "hulu": ["hulu"],
+                
+                # Paramount+ 系列 (12个内容)
                 "paramountplusshowtime": ["paramountplusshowtime", "amazonparamountplus", "appletvparamountplus", "rokuchannelparamountplus"],
+                
+                # Peacock 系列
                 "peacocktvpremium": ["peacocktvpremium"],
+                
+                # Roku Channel
                 "rokuchannel": ["rokuchannel"],
+                
+                # Pluto TV (3个内容)
                 "plutotv": ["plutotv"],
+                
+                # Tubi TV (11个内容)
                 "tubitv": ["tubitv"],
-                "vudu": ["vudu", "vudufree"]
+                
+                # Vudu/Fandango (47+6=53个内容)
+                "vudu": ["vudu", "vudufree"],
+                
+                # Google Play Movies (31个内容)
+                "play": ["play"],
+                
+                # YouTube 系列 (29+1=30个内容) 
+                "youtube": ["youtube", "youtubefree"],
+                
+                # Plex 系列 (18个内容)
+                "plex": ["plex", "plexplayer", "justwatchplexchannel", "plexfast"],
+                
+                # Starz 系列 (10个内容)
+                "starz": ["starz", "amazonstarz", "appletvstarz", "rokuchannelstarz"],
+                
+                # AMC+ 系列 (6个内容)
+                "amcplus": ["amcplus", "amazonamcplus", "appletvamcplus"],
+                
+                # 免费平台
+                "fawesometv": ["fawesometv"],  # 16个内容
+                "hoopla": ["hoopla"],  # 11个内容
+                "kanopy": ["kanopy"],  # 8个内容
+                "philo": ["philo"],  # 8个内容
+                "fubotv": ["fubotv"],  # 8个内容
+                "spectrumondemand": ["spectrumondemand"],  # 6个内容
+                "ondemandkorea": ["ondemandkorea"],  # 4个内容
+                "justwatchtv": ["justwatchtv"],  # 4个内容
+                "viki": ["viki"],  # 3个内容
+                "sundancenow": ["sundancenow"],  # 2个内容
+                "mubi": ["mubi", "amazonmubi"],  # 2+2=4个内容
+                "kocowa": ["kocowa", "amazonkcpglobal"],  # 2+2=4个内容
+                "thecw": ["thecw"],  # 2个内容
+                "cineverse": ["cineverse"],  # 2个内容
+                "darkroom": ["darkroom"],  # 2个内容
+                "kinofilmcollection": ["kinofilmcollection"],  # 2个内容
+                "distrotv": ["distrotv"],  # 2个内容
+                "mometu": ["mometu"],  # 2个内容
+                "discoveryplusus": ["discoveryplusus", "amazondiscoveryplus"],  # 2+2=4个内容
+                "filmzie": ["filmzie"]  # 2个内容
             }
             
             # 1. 优先使用 "new releases" 查询（显示最新上架内容）
@@ -557,6 +617,7 @@ class MovieService:
             # 2. 如果新上架内容不够，使用平台名称查询作为补充
             if len(search_results) < limit:
                 platform_query_names = {
+                    # 主要平台
                     "netflix": ["netflix"],
                     "amazon": ["amazon prime", "prime video"],
                     "disneyplus": ["disney+", "disney plus"],
@@ -568,7 +629,28 @@ class MovieService:
                     "rokuchannel": ["roku channel"],
                     "plutotv": ["pluto tv"],
                     "tubitv": ["tubi"],
-                    "vudu": ["vudu", "fandango at home"]
+                    "vudu": ["vudu", "fandango at home"],
+                    
+                    # 新增平台
+                    "play": ["google play", "google play movies"],
+                    "youtube": ["youtube"],
+                    "plex": ["plex"],
+                    "starz": ["starz"],
+                    "amcplus": ["amc+", "amc plus"],
+                    "fawesometv": ["fawesome"],
+                    "hoopla": ["hoopla"],
+                    "kanopy": ["kanopy"],
+                    "philo": ["philo"],
+                    "fubotv": ["fubotv", "fubo tv"],
+                    "spectrumondemand": ["spectrum on demand"],
+                    "ondemandkorea": ["ondemandkorea"],
+                    "viki": ["viki", "rakuten viki"],
+                    "sundancenow": ["sundance now"],
+                    "mubi": ["mubi"],
+                    "kocowa": ["kocowa"],
+                    "thecw": ["the cw", "cw"],
+                    "cineverse": ["cineverse"],
+                    "discoveryplusus": ["discovery+", "discovery plus"]
                 }
                 
                 query_names = platform_query_names.get(platform.lower(), [platform])
@@ -5943,20 +6025,26 @@ async def charts_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             InlineKeyboardButton("📺 电视剧榜", callback_data="chart_tv_trending"),
             InlineKeyboardButton("🎬 电影榜", callback_data="chart_movie_trending")
         ],
+        # 🎯 最热门平台 (按数据量排序)
         [
             InlineKeyboardButton("🔴 Netflix", callback_data="chart_platform_netflix"),
             InlineKeyboardButton("📦 Amazon", callback_data="chart_platform_amazon"),
+            InlineKeyboardButton("🍎 Apple TV", callback_data="chart_platform_itunes")
+        ],
+        [
+            InlineKeyboardButton("🎬 Vudu", callback_data="chart_platform_vudu"),
+            InlineKeyboardButton("▶️ YouTube", callback_data="chart_platform_youtube"),
             InlineKeyboardButton("🏰 Disney+", callback_data="chart_platform_disney")
         ],
         [
             InlineKeyboardButton("🔵 HBO Max", callback_data="chart_platform_max"),
-            InlineKeyboardButton("🍎 Apple TV", callback_data="chart_platform_apple"),
+            InlineKeyboardButton("⭐ Paramount+", callback_data="chart_platform_paramount"),
             InlineKeyboardButton("🟢 Hulu", callback_data="chart_platform_hulu")
         ],
         [
-            InlineKeyboardButton("⭐ Paramount+", callback_data="chart_platform_paramount"),
-            InlineKeyboardButton("🦚 Peacock", callback_data="chart_platform_peacock"),
-            InlineKeyboardButton("🎵 其他平台", callback_data="chart_more_platforms")
+            InlineKeyboardButton("🎵 更多订阅平台", callback_data="chart_subscription_platforms"),
+            InlineKeyboardButton("🆓 免费平台", callback_data="chart_free_platforms"),
+            InlineKeyboardButton("🛒 租赁平台", callback_data="chart_rental_platforms")
         ],
         [
             InlineKeyboardButton("🏆 排名专区", callback_data="chart_rank_zone"),
@@ -5980,7 +6068,7 @@ async def charts_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         "🏆 *流媒体排行榜中心*\n\n"
         "选择你想查看的排行榜类型：\n\n"
         "📊 **热门榜单**：全球热门内容\n"
-        "🎯 **平台专属**：各流媒体平台独家排行\n"
+        "🎯 **平台专属**：各流媒体平台最新上架内容\n"
         "🌐 **地区排行**：不同国家地区的热门内容\n"
         "🔍 **跨平台对比**：查看内容在各平台的情况"
     )
@@ -6341,20 +6429,26 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                     InlineKeyboardButton("📺 电视剧榜", callback_data="chart_tv_trending"),
                     InlineKeyboardButton("🎬 电影榜", callback_data="chart_movie_trending")
                 ],
+                # 🎯 最热门平台 (按数据量排序)
                 [
                     InlineKeyboardButton("🔴 Netflix", callback_data="chart_platform_netflix"),
                     InlineKeyboardButton("📦 Amazon", callback_data="chart_platform_amazon"),
+                    InlineKeyboardButton("🍎 Apple TV", callback_data="chart_platform_itunes")
+                ],
+                [
+                    InlineKeyboardButton("🎬 Vudu", callback_data="chart_platform_vudu"),
+                    InlineKeyboardButton("▶️ YouTube", callback_data="chart_platform_youtube"),
                     InlineKeyboardButton("🏰 Disney+", callback_data="chart_platform_disney")
                 ],
                 [
                     InlineKeyboardButton("🔵 HBO Max", callback_data="chart_platform_max"),
-                    InlineKeyboardButton("🍎 Apple TV", callback_data="chart_platform_apple"),
+                    InlineKeyboardButton("⭐ Paramount+", callback_data="chart_platform_paramount"),
                     InlineKeyboardButton("🟢 Hulu", callback_data="chart_platform_hulu")
                 ],
                 [
-                    InlineKeyboardButton("⭐ Paramount+", callback_data="chart_platform_paramount"),
-                    InlineKeyboardButton("🦚 Peacock", callback_data="chart_platform_peacock"),
-                    InlineKeyboardButton("🎵 其他平台", callback_data="chart_more_platforms")
+                    InlineKeyboardButton("🎵 更多订阅平台", callback_data="chart_subscription_platforms"),
+                    InlineKeyboardButton("🆓 免费平台", callback_data="chart_free_platforms"),
+                    InlineKeyboardButton("🛒 租赁平台", callback_data="chart_rental_platforms")
                 ],
                 [
                     InlineKeyboardButton("🏆 排名专区", callback_data="chart_rank_zone"),
@@ -6395,16 +6489,23 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             await query.delete_message()
             return
             
-        elif callback_data == "chart_more_platforms":
-            # 显示更多平台选择
-            more_platforms_keyboard = InlineKeyboardMarkup([
+        elif callback_data == "chart_subscription_platforms":
+            # 显示订阅平台
+            subscription_keyboard = InlineKeyboardMarkup([
                 [
-                    InlineKeyboardButton("📱 Roku Channel", callback_data="chart_platform_rokuchannel"),
-                    InlineKeyboardButton("🎪 Pluto TV", callback_data="chart_platform_plutotv")
+                    InlineKeyboardButton("🦚 Peacock", callback_data="chart_platform_peacocktvpremium"),
+                    InlineKeyboardButton("🎭 Starz", callback_data="chart_platform_starz"),
+                    InlineKeyboardButton("🎬 AMC+", callback_data="chart_platform_amcplus")
                 ],
                 [
-                    InlineKeyboardButton("📺 Tubi", callback_data="chart_platform_tubi"),
-                    InlineKeyboardButton("🎬 Vudu", callback_data="chart_platform_vudu")
+                    InlineKeyboardButton("🎥 MUBI", callback_data="chart_platform_mubi"),
+                    InlineKeyboardButton("📺 Philo", callback_data="chart_platform_philo"),
+                    InlineKeyboardButton("⚽ fuboTV", callback_data="chart_platform_fubotv")
+                ],
+                [
+                    InlineKeyboardButton("🔍 Discovery+", callback_data="chart_platform_discoveryplusus"),
+                    InlineKeyboardButton("🎞️ Sundance Now", callback_data="chart_platform_sundancenow"),
+                    InlineKeyboardButton("🌐 Spectrum", callback_data="chart_platform_spectrumondemand")
                 ],
                 [
                     InlineKeyboardButton("🔙 返回主菜单", callback_data="chart_main_menu")
@@ -6412,8 +6513,71 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             ])
             
             await query.edit_message_text(
-                "🎵 *其他流媒体平台*\n\n选择你想查看的平台：",
-                reply_markup=more_platforms_keyboard,
+                "🎵 *订阅制流媒体平台*\n\n选择你想查看的平台：",
+                reply_markup=subscription_keyboard,
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+            
+        elif callback_data == "chart_free_platforms":
+            # 显示免费平台
+            free_keyboard = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("🎮 Plex", callback_data="chart_platform_plex"),
+                    InlineKeyboardButton("📺 Roku Channel", callback_data="chart_platform_rokuchannel"),
+                    InlineKeyboardButton("🎪 Pluto TV", callback_data="chart_platform_plutotv")
+                ],
+                [
+                    InlineKeyboardButton("📱 Tubi", callback_data="chart_platform_tubitv"),
+                    InlineKeyboardButton("⭐ Fawesome", callback_data="chart_platform_fawesometv"),
+                    InlineKeyboardButton("📚 Hoopla", callback_data="chart_platform_hoopla")
+                ],
+                [
+                    InlineKeyboardButton("🎓 Kanopy", callback_data="chart_platform_kanopy"),
+                    InlineKeyboardButton("🎬 JustWatch TV", callback_data="chart_platform_justwatchtv"),
+                    InlineKeyboardButton("📺 The CW", callback_data="chart_platform_thecw")
+                ],
+                [
+                    InlineKeyboardButton("🌸 Viki", callback_data="chart_platform_viki"),
+                    InlineKeyboardButton("🇰🇷 OnDemandKorea", callback_data="chart_platform_ondemandkorea"),
+                    InlineKeyboardButton("🎥 Cineverse", callback_data="chart_platform_cineverse")
+                ],
+                [
+                    InlineKeyboardButton("🔙 返回主菜单", callback_data="chart_main_menu")
+                ]
+            ])
+            
+            await query.edit_message_text(
+                "🆓 *免费流媒体平台*\n\n选择你想查看的平台：",
+                reply_markup=free_keyboard,
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+            
+        elif callback_data == "chart_rental_platforms":
+            # 显示租赁平台
+            rental_keyboard = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("🎬 Google Play", callback_data="chart_platform_play"),
+                    InlineKeyboardButton("🎵 YouTube", callback_data="chart_platform_youtube"),
+                    InlineKeyboardButton("🎪 Microsoft Store", callback_data="chart_platform_microsoft")
+                ],
+                [
+                    InlineKeyboardButton("🎭 Darkroom", callback_data="chart_platform_darkroom"),
+                    InlineKeyboardButton("🎬 Kino Film", callback_data="chart_platform_kinofilmcollection"),
+                    InlineKeyboardButton("📺 DistroTV", callback_data="chart_platform_distrotv")
+                ],
+                [
+                    InlineKeyboardButton("🎮 Filmzie", callback_data="chart_platform_filmzie"),
+                    InlineKeyboardButton("🇰🇷 Kocowa", callback_data="chart_platform_kocowa"),
+                    InlineKeyboardButton("📱 Mometu", callback_data="chart_platform_mometu")
+                ],
+                [
+                    InlineKeyboardButton("🔙 返回主菜单", callback_data="chart_main_menu")
+                ]
+            ])
+            
+            await query.edit_message_text(
+                "🛒 *租赁/购买平台*\n\n选择你想查看的平台：",
+                reply_markup=rental_keyboard,
                 parse_mode=ParseMode.MARKDOWN_V2
             )
             
