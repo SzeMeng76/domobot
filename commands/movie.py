@@ -2851,19 +2851,48 @@ class MovieService:
         }
         found_any = False
         
-        # 按优先级寻找平台：影院 > 订阅 > 免费 > 租赁 > 购买
-        platform_types = [
-            ("cinema", "🎬 *影院上映*", "影院"),
-            ("flatrate", "📺 *观看平台*", "订阅"),
-            ("free", "🆓 *免费平台*", "免费"),
-            ("ads", "📺 *免费含广告*", "含广告"),
-            ("rent", "🏪 *租赁平台*", "租赁"),
-            ("buy", "💰 *购买平台*", "购买")
+        # 分两步显示：1. 影院上映  2. 其他平台（订阅/免费/租赁/购买）
+        lines = []
+        
+        # 第一步：检查影院上映
+        for region in priority_regions:
+            if region not in results:
+                continue
+                
+            region_data = results[region]
+            if not region_data.get("cinema"):
+                continue
+                
+            platforms = []
+            for p in region_data["cinema"][:3]:
+                platform_name = p["provider_name"]
+                platforms.append(platform_name)
+            
+            if platforms:
+                # 获取区域显示名称
+                if region in SUPPORTED_COUNTRIES:
+                    country_info = SUPPORTED_COUNTRIES[region]
+                    flag = get_country_flag(region)
+                    name = country_info.get('name', region)
+                    region_name = f"{flag} {name}"
+                else:
+                    flag = get_country_flag(region)
+                    region_name = f"{flag} {region}"
+                
+                lines.append(f"🎬 *影院上映*: {', '.join(platforms)} ({region_name})")
+                break  # 只显示第一个有影院数据的地区
+        
+        # 第二步：检查其他观看平台（订阅 > 免费 > 租赁 > 购买）
+        other_platform_types = [
+            ("flatrate", "📺 *观看平台*"),
+            ("free", "🆓 *免费平台*"),
+            ("ads", "📺 *免费含广告*"),
+            ("rent", "🏪 *租赁平台*"),
+            ("buy", "💰 *购买平台*")
         ]
         
-        lines = []
-        for platform_type, prefix, type_name in platform_types:
-            platform_found = False            
+        for platform_type, prefix in other_platform_types:
+            platform_found = False
             for region in priority_regions:
                 if region not in results:
                     continue
@@ -2873,12 +2902,12 @@ class MovieService:
                     continue
                     
                 platforms = []
-                for p in region_data[platform_type][:3]:  # 最多显示3个平台
+                for p in region_data[platform_type][:3]:
                     platform_name = p["provider_name"]
                     platforms.append(platform_name)
                 
                 if platforms:
-                    # 获取区域的显示名称（包含国旗和中文名）
+                    # 获取区域显示名称
                     if region in SUPPORTED_COUNTRIES:
                         country_info = SUPPORTED_COUNTRIES[region]
                         flag = get_country_flag(region)
@@ -2890,11 +2919,10 @@ class MovieService:
                     
                     lines.append(f"{prefix}: {', '.join(platforms)} ({region_name})")
                     platform_found = True
-                    break  # 找到第一个有平台的地区就停止（对于这个平台类型）
+                    break  # 找到第一个有这种类型平台的地区就停止
             
-            # 如果找到了这个类型的平台，标记为找到
             if platform_found:
-                found_any = True
+                break  # 找到任何一种其他平台类型就停止
         
         return "\n".join(lines) if lines else ""
     
