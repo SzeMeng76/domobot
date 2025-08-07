@@ -2125,6 +2125,7 @@ class MovieService:
         
         if watch_providers:
             provider_info = self.format_watch_providers_compact(watch_providers, "movie")
+            logger.info(f"Movie detail provider_info result: '{provider_info}' from data keys: {list(watch_providers.get('results', {}).keys()) if watch_providers.get('results') else 'no results'}")
             if provider_info:
                 lines.append(provider_info)
         
