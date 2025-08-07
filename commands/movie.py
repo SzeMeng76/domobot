@@ -2750,7 +2750,15 @@ class MovieService:
                     platforms.append(platform_name)
                 
                 if platforms:
-                    region_name = get_region_display_name(region)
+                    # 获取区域的显示名称（包含国旗和中文名）
+                    if region in SUPPORTED_COUNTRIES:
+                        country_info = SUPPORTED_COUNTRIES[region]
+                        flag = get_country_flag(region)
+                        name = country_info.get('name', region)
+                        region_name = f"{flag} {name}"
+                    else:
+                        flag = get_country_flag(region)
+                        region_name = f"{flag} {region}"
                     lines.append(f"{prefix}: {', '.join(platforms)} ({region_name})")
                     found_any = True
                     break  # 找到第一个有平台的地区就停止
