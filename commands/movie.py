@@ -1,6 +1,7 @@
 import logging
 import json
 import asyncio
+import base64
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -6312,7 +6313,10 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                         title = entry.title
                         # 限制标题长度，避免按钮过长
                         display_title = title if len(title) <= 12 else title[:12] + "..."
-                        callback_data = f"chart_compare_dynamic_{entry.tmdb_id}"
+                        # 将标题编码到callback_data中，避免TMDB ID混淆
+                        # 使用base64编码标题以避免特殊字符问题
+                        encoded_title = base64.b64encode(title.encode('utf-8')).decode('ascii')
+                        callback_data = f"chart_compare_title_{encoded_title}"
                         
                         button = InlineKeyboardButton(
                             f"{media_emoji} {display_title}", 
@@ -6739,7 +6743,7 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                     parse_mode=ParseMode.MARKDOWN_V2
                 )
             elif callback_data.startswith("chart_compare_dynamic_"):
-                # 处理动态获取的热门内容（通过TMDB ID）
+                # 处理动态获取的热门内容（通过TMDB ID） - 向后兼容
                 tmdb_id = callback_data.replace("chart_compare_dynamic_", "")
                 await query.edit_message_text("🔍 正在获取跨平台对比数据...")
                 
@@ -6756,6 +6760,38 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                     else:
                         await query.edit_message_text("❌ 获取内容信息失败")
                         return
+                    
+                    # 使用标题进行跨平台对比搜索
+                    cross_data = await movie_service.get_cross_platform_charts(title)
+                    if cross_data:
+                        result_text = movie_service.format_cross_platform_charts(cross_data)
+                        
+                        # 添加返回按钮
+                        back_keyboard = InlineKeyboardMarkup([
+                            [InlineKeyboardButton("🔙 返回跨平台菜单", callback_data="chart_cross_platform")]
+                        ])
+                        
+                        await query.edit_message_text(
+                            result_text, 
+                            parse_mode="MarkdownV2", 
+                            reply_markup=back_keyboard, 
+                            disable_web_page_preview=True
+                        )
+                    else:
+                        await query.edit_message_text("❌ 获取跨平台对比数据失败")
+                        
+                except Exception as e:
+                    logger.error(f"动态跨平台对比失败: {e}")
+                    await query.edit_message_text("❌ 获取跨平台对比数据时发生错误")
+            
+            elif callback_data.startswith("chart_compare_title_"):
+                # 处理通过标题编码的跨平台对比
+                encoded_title = callback_data.replace("chart_compare_title_", "")
+                await query.edit_message_text("🔍 正在获取跨平台对比数据...")
+                
+                try:
+                    # 解码标题
+                    title = base64.b64decode(encoded_title.encode('ascii')).decode('utf-8')
                     
                     # 使用标题进行跨平台对比搜索
                     cross_data = await movie_service.get_cross_platform_charts(title)
