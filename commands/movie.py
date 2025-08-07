@@ -2125,7 +2125,6 @@ class MovieService:
         
         if watch_providers:
             provider_info = self.format_watch_providers_compact(watch_providers, "movie")
-            logger.info(f"Movie detail provider_info result: '{provider_info}' from data keys: {list(watch_providers.get('results', {}).keys()) if watch_providers.get('results') else 'no results'}")
             if provider_info:
                 lines.append(provider_info)
         
@@ -2840,8 +2839,8 @@ class MovieService:
         results = providers_data["results"]
         lines = []
         
-        # 使用与完整版相同的地区优先级，优先显示有数据的主要地区
-        priority_regions = ["US", "GB", "DE", "FR", "AU", "CA", "JP", "KR", "CN", "ES", "IT", "BE", "LU", "NL"]
+        # 扩展地区检查，按优先级排序
+        priority_regions = ["CN", "US", "GB", "FR", "DE", "JP", "KR", "AU", "CA", "ES", "IT", "BE", "LU", "NL"]
         region_names = {
             "CN": "🇨🇳中国", "US": "🇺🇸美国", "GB": "🇬🇧英国", 
             "FR": "🇫🇷法国", "DE": "🇩🇪德国", "JP": "🇯🇵日本",
@@ -2851,48 +2850,20 @@ class MovieService:
         }
         found_any = False
         
-        # 分两步显示：1. 影院上映  2. 其他平台（订阅/免费/租赁/购买）
-        lines = []
-        
-        # 第一步：检查影院上映
-        for region in priority_regions:
-            if region not in results:
-                continue
-                
-            region_data = results[region]
-            if not region_data.get("cinema"):
-                continue
-                
-            platforms = []
-            for p in region_data["cinema"][:3]:
-                platform_name = p["provider_name"]
-                platforms.append(platform_name)
-            
-            if platforms:
-                # 获取区域显示名称
-                if region in SUPPORTED_COUNTRIES:
-                    country_info = SUPPORTED_COUNTRIES[region]
-                    flag = get_country_flag(region)
-                    name = country_info.get('name', region)
-                    region_name = f"{flag} {name}"
-                else:
-                    flag = get_country_flag(region)
-                    region_name = f"{flag} {region}"
-                
-                lines.append(f"🎬 *影院上映*: {', '.join(platforms)} ({region_name})")
-                break  # 只显示第一个有影院数据的地区
-        
-        # 第二步：检查其他观看平台（订阅 > 免费 > 租赁 > 购买）
-        other_platform_types = [
-            ("flatrate", "📺 *观看平台*"),
-            ("free", "🆓 *免费平台*"),
-            ("ads", "📺 *免费含广告*"),
-            ("rent", "🏪 *租赁平台*"),
-            ("buy", "💰 *购买平台*")
+        # 按优先级寻找平台：订阅 > 免费 > 租赁 > 购买 > 影院
+        platform_types = [
+            ("flatrate", "📺 *观看平台*", "订阅"),
+            ("free", "🆓 *免费平台*", "免费"),
+            ("ads", "📺 *免费含广告*", "含广告"),
+            ("rent", "🏪 *租赁平台*", "租赁"),
+            ("buy", "💰 *购买平台*", "购买"),
+            ("cinema", "🎬 *影院上映*", "影院")
         ]
         
-        for platform_type, prefix in other_platform_types:
-            platform_found = False
+        for platform_type, prefix, type_name in platform_types:
+            if found_any:
+                break
+                
             for region in priority_regions:
                 if region not in results:
                     continue
@@ -2902,12 +2873,12 @@ class MovieService:
                     continue
                     
                 platforms = []
-                for p in region_data[platform_type][:3]:
+                for p in region_data[platform_type][:3]:  # 最多显示3个平台
                     platform_name = p["provider_name"]
                     platforms.append(platform_name)
                 
                 if platforms:
-                    # 获取区域显示名称
+                    # 获取区域的显示名称（包含国旗和中文名）
                     if region in SUPPORTED_COUNTRIES:
                         country_info = SUPPORTED_COUNTRIES[region]
                         flag = get_country_flag(region)
@@ -2916,13 +2887,9 @@ class MovieService:
                     else:
                         flag = get_country_flag(region)
                         region_name = f"{flag} {region}"
-                    
                     lines.append(f"{prefix}: {', '.join(platforms)} ({region_name})")
-                    platform_found = True
-                    break  # 找到第一个有这种类型平台的地区就停止
-            
-            if platform_found:
-                break  # 找到任何一种其他平台类型就停止
+                    found_any = True
+                    break  # 找到第一个有平台的地区就停止
         
         return "\n".join(lines) if lines else ""
     
