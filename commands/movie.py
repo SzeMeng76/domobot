@@ -930,23 +930,40 @@ class MovieService:
         """合并 TMDB 和 JustWatch 观影平台数据 - 优化版"""
         merged = {"results": {}}
         
+        # 调试：输出输入数据
+        logger.info(f"MERGE DEBUG: tmdb_data is None: {tmdb_data is None}")
+        if tmdb_data:
+            logger.info(f"MERGE DEBUG: tmdb_data keys: {list(tmdb_data.keys())}")
+            if tmdb_data.get("results"):
+                logger.info(f"MERGE DEBUG: tmdb_data has {len(tmdb_data['results'])} countries")
+            else:
+                logger.info(f"MERGE DEBUG: tmdb_data has no results or empty results")
+        
+        logger.info(f"MERGE DEBUG: justwatch_data is None: {justwatch_data is None}")
+        if justwatch_data:
+            logger.info(f"MERGE DEBUG: justwatch_data has {len(justwatch_data)} countries")
+        
         # 首先添加 TMDB 数据
         if tmdb_data and tmdb_data.get("results"):
             merged = tmdb_data.copy()
+            logger.info(f"MERGE DEBUG: Used TMDB data, merged now has {len(merged.get('results', {}))} countries")
         
         # 然后添加/补充 JustWatch 数据
         if justwatch_data:
             justwatch_converted = self._convert_justwatch_preferred_types(justwatch_data)
+            logger.info(f"MERGE DEBUG: JustWatch converted has {len(justwatch_converted.get('results', {}))} countries")
             if justwatch_converted.get("results"):
                 # 如果merged还没有results，直接使用JustWatch数据
                 if not merged.get("results"):
                     merged = justwatch_converted.copy()
+                    logger.info(f"MERGE DEBUG: Used JustWatch data only, merged now has {len(merged.get('results', {}))} countries")
                 else:
                     # 合并两个数据源的结果
                     for country, jw_data in justwatch_converted["results"].items():
                         if country not in merged["results"]:
                             # 如果TMDB没有这个国家的数据，直接添加JustWatch数据
                             merged["results"][country] = jw_data
+                            logger.info(f"MERGE DEBUG: Added JustWatch country {country}")
                         else:
                             # 如果TMDB有这个国家的数据，补充JustWatch的额外类型（特别是影院）
                             tmdb_country_data = merged["results"][country]
@@ -954,11 +971,13 @@ class MovieService:
                                 if platform_type != "link" and platform_type not in tmdb_country_data:
                                     # 添加TMDB没有的平台类型（比如cinema）
                                     tmdb_country_data[platform_type] = platforms
+                                    logger.info(f"MERGE DEBUG: Added {platform_type} to {country}")
             
         # 保存原始 JustWatch 数据供后续处理
         if justwatch_data:
             merged["justwatch_raw"] = justwatch_data
-            
+        
+        logger.info(f"MERGE DEBUG: Final merged has {len(merged.get('results', {}))} countries")
         return merged
     
     def _convert_justwatch_to_tmdb_format(self, justwatch_data: Dict) -> Dict:
@@ -2152,6 +2171,11 @@ class MovieService:
         # 添加观看平台信息
         watch_providers = detail_data.get("watch/providers")
         enhanced_providers = detail_data.get("enhanced_providers")
+        
+        # 添加回退机制，与movie_watch保持一致
+        if enhanced_providers and not watch_providers:
+            watch_providers = enhanced_providers.get("combined") or enhanced_providers.get("tmdb")
+            logger.info(f"DETAIL DEBUG: Used fallback, watch_providers now from enhanced_providers")
         
         # 调试：输出观看平台数据结构
         if watch_providers:
