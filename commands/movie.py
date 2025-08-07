@@ -721,6 +721,23 @@ class MovieService:
         
         return None
 
+    def _process_justwatch_offers(self, offers: List) -> Optional[Dict]:
+        """处理 JustWatch offers 数据，按地区分组"""
+        if not offers:
+            return None
+        
+        try:
+            # 由于搜索时指定了地区（如US），所有offers都是该地区的
+            # 这里暂时将所有offers归类到US地区
+            region_data = {"US": offers}
+            
+            logger.info(f"处理 {len(offers)} 个 JustWatch offers")
+            return region_data
+            
+        except Exception as e:
+            logger.warning(f"处理 JustWatch offers 失败: {e}")
+            return None
+
     async def get_enhanced_watch_providers(self, content_id: int, content_type: str = "movie", title: str = "") -> Dict:
         """获取增强的观影平台信息，整合 TMDB 和 JustWatch 数据"""
         result = {
@@ -757,38 +774,21 @@ class MovieService:
                         best_match = first_result
                         logger.info(f"JustWatch 返回直接结果")
                     
-                    if best_match:
-                        # 调试：打印对象的所有属性
+                    if best_match and hasattr(best_match, 'offers'):
                         logger.info(f"JustWatch 结果对象类型: {type(best_match)}")
-                        if hasattr(best_match, '__dict__'):
-                            logger.info(f"JustWatch 结果对象属性: {list(best_match.__dict__.keys())}")
-                        else:
-                            logger.info(f"JustWatch 结果对象属性: {dir(best_match)}")
+                        logger.info(f"找到 {len(best_match.offers)} 个观看选项")
                         
-                        # JustWatch 返回 MediaEntry 对象，使用 getattr 获取属性
-                        node_id = None
-                        if hasattr(best_match, 'node_id'):
-                            node_id = getattr(best_match, 'node_id')
-                            logger.info(f"找到 node_id: {node_id}")
-                        elif hasattr(best_match, 'id'):
-                            node_id = getattr(best_match, 'id')
-                            logger.info(f"使用 id 作为 node_id: {node_id}")
-                        elif hasattr(best_match, 'entry_id'):
-                            node_id = getattr(best_match, 'entry_id')
-                            logger.info(f"使用 entry_id 作为 node_id: {node_id}")
-                        else:
-                            logger.warning(f"未找到任何 ID 属性: {dir(best_match)}")
+                        # 直接使用搜索结果中的 offers 数据，不需要额外的API调用
+                        # 按地区整理 offers 数据
+                        justwatch_data = self._process_justwatch_offers(best_match.offers)
                         
-                        if node_id:
-                            logger.info(f"使用 JustWatch node_id: {node_id} 获取观影平台")
-                            justwatch_offers = await self._get_justwatch_offers(node_id)
-                            if justwatch_offers:
-                                logger.info(f"成功获取 JustWatch 数据: {list(justwatch_offers.keys()) if isinstance(justwatch_offers, dict) else type(justwatch_offers)}")
-                            else:
-                                logger.warning(f"未获取到 JustWatch 观影平台数据")
-                            result["justwatch"] = justwatch_offers
+                        if justwatch_data:
+                            logger.info(f"成功处理 JustWatch 数据: {list(justwatch_data.keys())}")
+                            result["justwatch"] = justwatch_data
                         else:
-                            logger.warning(f"JustWatch 搜索结果中未找到有效的 node_id")
+                            logger.warning(f"JustWatch offers 处理后无数据")
+                    else:
+                        logger.warning(f"JustWatch 搜索结果中未找到 offers 属性")
             
             # 合并数据，优先显示 TMDB 数据，JustWatch 作为补充
             result["combined"] = self._merge_watch_providers(tmdb_data, result.get("justwatch"))
