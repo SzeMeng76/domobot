@@ -660,18 +660,26 @@ class MovieService:
                 
                 # 过滤匹配的内容类型
                 filtered_results = []
-                for item in results:
+                for i, item in enumerate(results):
                     if not item:
+                        logger.info(f"JustWatch: 结果{i+1} 为空，跳过")
                         continue
+                    
+                    logger.info(f"JustWatch: 结果{i+1} 类型={type(item)}")
                     
                     # JustWatch 返回的是 MediaEntry 对象，不是字典
                     if hasattr(item, 'object_type'):
                         item_object_type = getattr(item, 'object_type', '').upper()
+                        logger.info(f"JustWatch: 结果{i+1} object_type={item_object_type}, content_type={content_type}")
                         
                         if content_type == "movie" and item_object_type == "MOVIE":
                             filtered_results.append(item)
+                            logger.info(f"JustWatch: 结果{i+1} 匹配电影类型，已添加")
                         elif content_type == "tv" and item_object_type == "SHOW":
                             filtered_results.append(item)
+                            logger.info(f"JustWatch: 结果{i+1} 匹配电视剧类型，已添加")
+                        else:
+                            logger.info(f"JustWatch: 结果{i+1} 类型不匹配，跳过")
                     else:
                         logger.warning(f"JustWatch 项目无 object_type 属性: {type(item)}")
                 
@@ -702,14 +710,24 @@ class MovieService:
                 return cached_data
             
             # 获取多地区观影平台信息 - 添加超时保护
+            logger.info(f"JustWatch: 开始获取offers数据 node_id={node_id}, regions={regions}")
             try:
                 loop = asyncio.get_event_loop()
                 offers_data = await asyncio.wait_for(
                     loop.run_in_executor(None, justwatch_offers, node_id, set(regions), "en", False),  # 改为 False 获取所有选项
                     timeout=10.0  # 10秒超时
                 )
+                logger.info(f"JustWatch: offers_data类型={type(offers_data)}, 是否为dict={isinstance(offers_data, dict)}")
+                if offers_data and isinstance(offers_data, dict):
+                    total_offers = sum(len(offers) for offers in offers_data.values() if offers)
+                    logger.info(f"JustWatch: 成功获取offers数据，总计{total_offers}个offers，覆盖{len(offers_data)}个地区")
+                else:
+                    logger.warning(f"JustWatch: offers_data为空或格式错误: {offers_data}")
             except asyncio.TimeoutError:
                 logger.warning(f"JustWatch 观影平台查询超时: {node_id}")
+                return None
+            except Exception as e:
+                logger.error(f"JustWatch offers查询异常: {e}")
                 return None
             
             if offers_data and isinstance(offers_data, dict):
