@@ -928,15 +928,32 @@ class MovieService:
 
     def _merge_watch_providers(self, tmdb_data: Optional[Dict], justwatch_data: Optional[Dict]) -> Dict:
         """合并 TMDB 和 JustWatch 观影平台数据 - 优化版"""
-        merged = {}
+        merged = {"results": {}}
         
-        # 如果 TMDB 有数据，优先使用
+        # 首先添加 TMDB 数据
         if tmdb_data and tmdb_data.get("results"):
             merged = tmdb_data.copy()
-            
-        # 如果 TMDB 没有数据，使用 JustWatch 优选数据
-        elif justwatch_data:
-            merged = self._convert_justwatch_preferred_types(justwatch_data)
+        
+        # 然后添加/补充 JustWatch 数据
+        if justwatch_data:
+            justwatch_converted = self._convert_justwatch_preferred_types(justwatch_data)
+            if justwatch_converted.get("results"):
+                # 如果merged还没有results，直接使用JustWatch数据
+                if not merged.get("results"):
+                    merged = justwatch_converted.copy()
+                else:
+                    # 合并两个数据源的结果
+                    for country, jw_data in justwatch_converted["results"].items():
+                        if country not in merged["results"]:
+                            # 如果TMDB没有这个国家的数据，直接添加JustWatch数据
+                            merged["results"][country] = jw_data
+                        else:
+                            # 如果TMDB有这个国家的数据，补充JustWatch的额外类型（特别是影院）
+                            tmdb_country_data = merged["results"][country]
+                            for platform_type, platforms in jw_data.items():
+                                if platform_type != "link" and platform_type not in tmdb_country_data:
+                                    # 添加TMDB没有的平台类型（比如cinema）
+                                    tmdb_country_data[platform_type] = platforms
             
         # 保存原始 JustWatch 数据供后续处理
         if justwatch_data:
