@@ -703,7 +703,7 @@ class MovieService:
             try:
                 loop = asyncio.get_event_loop()
                 offers_data = await asyncio.wait_for(
-                    loop.run_in_executor(None, justwatch_offers, node_id, set(regions), "zh", True),
+                    loop.run_in_executor(None, justwatch_offers, node_id, set(regions), "en", True),
                     timeout=10.0  # 10秒超时
                 )
             except asyncio.TimeoutError:
@@ -747,13 +747,13 @@ class MovieService:
                     best_match = justwatch_results[0]
                     if best_match:
                         # JustWatch 返回 MediaEntry 对象，使用 getattr 获取属性
-                        if hasattr(best_match, 'entry_id'):
-                            node_id = getattr(best_match, 'entry_id')
+                        if hasattr(best_match, 'node_id'):
+                            node_id = getattr(best_match, 'node_id')
                         else:
                             node_id = None
                         
                         if node_id:
-                            logger.info(f"使用 JustWatch entry_id: {node_id} 获取观影平台")
+                            logger.info(f"使用 JustWatch node_id: {node_id} 获取观影平台")
                             justwatch_offers = await self._get_justwatch_offers(node_id)
                             result["justwatch"] = justwatch_offers
             
