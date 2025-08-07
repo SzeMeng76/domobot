@@ -751,7 +751,16 @@ class MovieService:
             # 获取 JustWatch 数据作为补充
             if JUSTWATCH_AVAILABLE and title:
                 logger.info(f"JustWatch: 开始搜索 {title}")
-                justwatch_results = await self._enhanced_justwatch_search(detail_data, title, content_type)
+                # 由于我们只有基本信息，创建简化的数据结构用于搜索
+                search_data = {}
+                if content_type == "movie":
+                    search_data["original_title"] = title
+                    search_data["title"] = title
+                else:
+                    search_data["original_name"] = title
+                    search_data["name"] = title
+                
+                justwatch_results = await self._enhanced_justwatch_search(search_data, title, content_type)
                 
                 if justwatch_results and len(justwatch_results) > 0:
                     logger.info(f"JustWatch: 找到 {len(justwatch_results)} 个有效搜索结果")
