@@ -709,10 +709,8 @@ class MovieService:
                 return None
             
             if offers_data and isinstance(offers_data, dict):
-                
                 await cache_manager.save_cache(cache_key, offers_data, subdirectory="movie")
                 return offers_data
-            else:
                 
         except Exception as e:
             logger.warning(f"获取 JustWatch 观影平台失败 {node_id}: {e}")
