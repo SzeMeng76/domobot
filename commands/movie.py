@@ -794,7 +794,13 @@ class MovieService:
         cache_key = f"popular_cross_platform_{country}_{limit}"
         cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
         if cached_data:
-            return cached_data
+            # 验证缓存数据的完整性
+            if isinstance(cached_data, list) and all(hasattr(item, 'object_type') for item in cached_data if not isinstance(item, list)):
+                return cached_data
+            else:
+                logger.warning(f"缓存数据格式异常，将重新获取: {type(cached_data)}")
+                # 清除有问题的缓存
+                await cache_manager.clear_cache(cache_key, subdirectory="movie")
             
         try:
             search_results = []
@@ -817,7 +823,20 @@ class MovieService:
                 try:
                     results = justwatch_search(query, country, "en", 20, True)
                     
+                    # 防御性检查：确保results是列表且不为空
+                    if not results or not isinstance(results, list):
+                        logger.warning(f"查询 '{query}' 返回了无效结果: {type(results)}")
+                        continue
+                    
                     for entry in results:
+                        # 防御性检查：确保entry不是列表且有必要的属性  
+                        if isinstance(entry, list):
+                            logger.warning(f"跳过列表类型的entry: {type(entry)}")
+                            continue
+                        if not hasattr(entry, 'object_type') or not hasattr(entry, 'offers'):
+                            logger.warning(f"跳过缺少必要属性的entry: {type(entry)}")
+                            continue
+                        
                         # 只选择有多个平台支持的内容（便于跨平台对比）
                         platform_count = len(set(offer.package.technical_name for offer in entry.offers))
                         
@@ -6306,6 +6325,14 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                     # 动态创建按钮
                     buttons = []
                     for i, entry in enumerate(popular_content[:6]):  # 最多6个
+                        # 防御性检查：确保entry不是列表且有必要的属性
+                        if isinstance(entry, list):
+                            logger.warning(f"跳过列表类型的entry: {type(entry)}")
+                            continue
+                        if not hasattr(entry, 'object_type'):
+                            logger.warning(f"跳过没有object_type属性的entry: {type(entry)}")
+                            continue
+                        
                         media_emoji = "🎬" if entry.object_type == "MOVIE" else "📺"
                         title = entry.title
                         # 限制标题长度，避免按钮过长
