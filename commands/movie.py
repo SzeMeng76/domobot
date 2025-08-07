@@ -2163,9 +2163,12 @@ class MovieService:
                     if isinstance(data, dict):
                         data_keys = [k for k in data.keys() if k != "link"]
                         logger.info(f"Country {country} has types: {data_keys}")
-                        # 专门检查是否有cinema
-                        if "cinema" in data:
-                            logger.info(f"Country {country} HAS CINEMA DATA with {len(data['cinema'])} entries")
+                        # 专门检查是否有cinema相关的键
+                        cinema_keys = [k for k in data.keys() if 'cinema' in k.lower() or k in ['cinema', 'theatres', 'theater']]
+                        if cinema_keys:
+                            logger.info(f"Country {country} HAS CINEMA-LIKE DATA: {cinema_keys}")
+                            for key in cinema_keys:
+                                logger.info(f"  {key}: {len(data[key])} entries")
                         else:
                             logger.info(f"Country {country} NO CINEMA DATA")
                     else:
