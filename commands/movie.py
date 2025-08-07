@@ -4421,12 +4421,15 @@ async def movie_clean_cache_command(update: Update, context: ContextTypes.DEFAUL
             "tv_season_", "tv_episode_", "tv_watch_providers_",
             "trending_",
             "person_search_", "person_detail_",
-            "justwatch_search_", "justwatch_offers_"
+            "justwatch_search_", "justwatch_offers_",
+            # 新增charts相关缓存
+            "platform_trending_", "cross_platform_", "country_trending_",
+            "new_releases_", "high_rated_", "rank_filtered_", "genre_trending_"
         ]
         for prefix in prefixes:
             await cache_manager.clear_cache(subdirectory="movie", key_prefix=prefix)
         
-        success_message = "✅ 所有影视内容查询缓存已清理（包括电影、电视剧、人物、观看平台、JustWatch数据）。"
+        success_message = "✅ 所有影视内容查询缓存已清理（包括电影、电视剧、人物、观看平台、JustWatch数据、排行榜数据）。"
         await send_success(context, update.effective_chat.id, foldable_text_v2(success_message), parse_mode="MarkdownV2")
         await delete_user_command(context, update.effective_chat.id, update.message.message_id)
     except Exception as e:
@@ -5831,6 +5834,16 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         await query.edit_message_text("❌ 电影查询服务未初始化")
         return
     
+    async def schedule_chart_deletion():
+        """为charts消息调度删除"""
+        try:
+            from utils.message_manager import _schedule_deletion
+            from utils.config_manager import get_config
+            config = get_config()
+            await _schedule_deletion(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
+        except Exception as e:
+            logger.warning(f"调度删除charts消息失败: {e}")
+    
     try:
         if callback_data == "chart_global_trending":
             # 全球热门内容
@@ -5842,6 +5855,7 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                     foldable_text_with_markdown_v2(result_text),
                     parse_mode=ParseMode.MARKDOWN_V2
                 )
+                await schedule_chart_deletion()
             else:
                 await query.edit_message_text("❌ 获取全球热门内容失败")
                 
@@ -5855,6 +5869,7 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                     foldable_text_with_markdown_v2(result_text),
                     parse_mode=ParseMode.MARKDOWN_V2
                 )
+                await schedule_chart_deletion()
             else:
                 await query.edit_message_text("❌ 获取热门电视剧失败")
                 
@@ -5868,6 +5883,7 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                     foldable_text_with_markdown_v2(result_text),
                     parse_mode=ParseMode.MARKDOWN_V2
                 )
+                await schedule_chart_deletion()
             else:
                 await query.edit_message_text("❌ 获取热门电影失败")
                 
@@ -5877,24 +5893,25 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             platform_names = {
                 "netflix": "Netflix",
                 "amazon": "Amazon Prime", 
-                "disney": "Disney+",
+                "disneyplus": "Disney+",  # 修正：Disney+的正确technical_name
                 "max": "HBO Max",
-                "itunes": "Apple TV",  # 修正：Apple TV的technical_name是itunes
+                "itunes": "Apple TV",
                 "hulu": "Hulu",
-                "paramount": "Paramount+",
-                "peacock": "Peacock",
+                "paramountplusshowtime": "Paramount+",  # 修正：Paramount+的主要technical_name
+                "peacocktvpremium": "Peacock",  # 修正：Peacock的正确technical_name
                 "rokuchannel": "Roku Channel",
                 "plutotv": "Pluto TV",
-                "tubi": "Tubi",
+                "tubitv": "Tubi TV",  # 修正：Tubi的正确technical_name
                 "vudu": "Vudu"
             }
             
             # 修正platform映射
             platform_mapping = {
                 "apple": "itunes",  # Apple TV按钮映射到itunes
-                "disney": "disney",  # Disney+先试试disney
-                "paramount": "paramountplus",  # Paramount+可能的technical_name
-                "peacock": "peacock",  # Peacock可能的technical_name
+                "disney": "disneyplus",  # Disney+映射到正确的technical_name
+                "paramount": "paramountplusshowtime",  # Paramount+映射到主要版本
+                "peacock": "peacocktvpremium",  # Peacock映射到正确的technical_name
+                "tubi": "tubitv",  # Tubi映射到正确的technical_name
             }
             
             actual_platform = platform_mapping.get(platform, platform)
@@ -5908,12 +5925,14 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                     foldable_text_with_markdown_v2(result_text),
                     parse_mode=ParseMode.MARKDOWN_V2
                 )
+                await schedule_chart_deletion()
             else:
                 # 如果失败，尝试其他可能的technical_name
                 alternative_names = {
-                    "disney": ["disneyplus", "disney"],
-                    "paramountplus": ["paramount", "paramountnetwork"],
-                    "peacock": ["peacocktv", "nbcpeacock"]
+                    "disneyplus": ["disney"],  # Disney+的备用名称
+                    "paramountplusshowtime": ["amazonparamountplus", "appletvparamountplus", "rokuchannelparamountplus"],  # Paramount+的其他渠道
+                    "peacocktvpremium": ["peacock"],  # Peacock的可能备用名称
+                    "hulu": ["hulupluspremium", "hulu"]  # Hulu可能的名称（虽然没在结果中看到）
                 }
                 
                 tried_alternatives = False
@@ -5927,6 +5946,7 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                                     foldable_text_with_markdown_v2(result_text),
                                     parse_mode=ParseMode.MARKDOWN_V2
                                 )
+                                await schedule_chart_deletion()
                                 tried_alternatives = True
                                 break
                 
@@ -6015,6 +6035,7 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                     foldable_text_with_markdown_v2(result_text),
                     parse_mode=ParseMode.MARKDOWN_V2
                 )
+                await schedule_chart_deletion()
             else:
                 await query.edit_message_text("❌ 获取最新上架内容失败")
                 
@@ -6029,6 +6050,7 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                     foldable_text_with_markdown_v2(result_text),
                     parse_mode=ParseMode.MARKDOWN_V2
                 )
+                await schedule_chart_deletion()
             else:
                 await query.edit_message_text("❌ 获取高分内容失败")
                 
@@ -6054,6 +6076,7 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                     foldable_text_with_markdown_v2(result_text),
                     parse_mode=ParseMode.MARKDOWN_V2
                 )
+                await schedule_chart_deletion()
             else:
                 await query.edit_message_text(f"❌ 获取{rank_title}失败")
                 
@@ -6081,6 +6104,7 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                     foldable_text_with_markdown_v2(result_text),
                     parse_mode=ParseMode.MARKDOWN_V2
                 )
+                await schedule_chart_deletion()
             else:
                 await query.edit_message_text(f"❌ 获取{genre_title}失败")
                 
@@ -6133,6 +6157,7 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                     foldable_text_with_markdown_v2(result_text),
                     parse_mode=ParseMode.MARKDOWN_V2
                 )
+                await schedule_chart_deletion()
             else:
                 await query.edit_message_text(f"❌ 获取{country_display}热门内容失败")
                 
@@ -6179,6 +6204,7 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                     foldable_text_with_markdown_v2(result_text),
                     parse_mode=ParseMode.MARKDOWN_V2
                 )
+                await schedule_chart_deletion()
             else:
                 await query.edit_message_text("❌ 获取平台调试信息失败")
             
