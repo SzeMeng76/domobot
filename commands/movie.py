@@ -749,11 +749,26 @@ class MovieService:
                     # 选择最匹配的结果
                     best_match = justwatch_results[0]
                     if best_match:
+                        # 调试：打印对象的所有属性
+                        logger.info(f"JustWatch 结果对象类型: {type(best_match)}")
+                        if hasattr(best_match, '__dict__'):
+                            logger.info(f"JustWatch 结果对象属性: {list(best_match.__dict__.keys())}")
+                        else:
+                            logger.info(f"JustWatch 结果对象属性: {dir(best_match)}")
+                        
                         # JustWatch 返回 MediaEntry 对象，使用 getattr 获取属性
+                        node_id = None
                         if hasattr(best_match, 'node_id'):
                             node_id = getattr(best_match, 'node_id')
+                            logger.info(f"找到 node_id: {node_id}")
+                        elif hasattr(best_match, 'id'):
+                            node_id = getattr(best_match, 'id')
+                            logger.info(f"使用 id 作为 node_id: {node_id}")
+                        elif hasattr(best_match, 'entry_id'):
+                            node_id = getattr(best_match, 'entry_id')
+                            logger.info(f"使用 entry_id 作为 node_id: {node_id}")
                         else:
-                            node_id = None
+                            logger.warning(f"未找到任何 ID 属性: {dir(best_match)}")
                         
                         if node_id:
                             logger.info(f"使用 JustWatch node_id: {node_id} 获取观影平台")
