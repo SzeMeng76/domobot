@@ -2136,6 +2136,13 @@ class MovieService:
         watch_providers = detail_data.get("watch/providers")
         enhanced_providers = detail_data.get("enhanced_providers")
         
+        # 调试：输出观看平台数据结构
+        if watch_providers:
+            logger.info(f"watch_providers keys: {list(watch_providers.keys()) if isinstance(watch_providers, dict) else type(watch_providers)}")
+            if isinstance(watch_providers, dict) and "results" in watch_providers:
+                for country, data in watch_providers["results"].items():
+                    logger.info(f"Country {country} has types: {list(data.keys()) if isinstance(data, dict) else type(data)}")
+        
         if watch_providers:
             provider_info = self.format_watch_providers_compact(watch_providers, "movie")
             if provider_info:
