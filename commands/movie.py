@@ -500,7 +500,7 @@ class MovieService:
     # ========================================
     
     async def get_platform_trending(self, platform: str, limit: int = 15, country: str = "US") -> Optional[List]:
-        """获取指定平台的热门内容排行榜
+        """获取指定平台的热门内容排行榜 - 改进版
         Args:
             platform: 平台技术名称 (netflix, amazon, disney, hulu, max等)
             limit: 返回数量限制
@@ -516,32 +516,119 @@ class MovieService:
             return cached_data
             
         try:
-            # 搜索热门内容，然后按平台筛选
             search_results = []
             
-            # 搜索热门电影和电视剧
-            for media_type in ["movie", "tv"]:
-                # 使用通用热门查询，然后筛选平台
-                popular_query = f"popular {media_type}s"
-                results = justwatch_search(popular_query, country, "en", 50, True)
+            # 定义平台technical_name的所有变体（基于调试发现）
+            platform_variants = {
+                "netflix": ["netflix", "netflixbasicwithads"],
+                "amazon": ["amazon", "amazonprime", "amazonprimevideowithads"],
+                "disneyplus": ["disneyplus"],  # Disney+数据确实很少
+                "max": ["max"],  # HBO Max
+                "itunes": ["itunes"],  # Apple TV
+                "hulu": ["hulu"],
+                "paramountplusshowtime": ["paramountplusshowtime", "amazonparamountplus", "appletvparamountplus", "rokuchannelparamountplus"],
+                "peacocktvpremium": ["peacocktvpremium"],
+                "rokuchannel": ["rokuchannel"],
+                "plutotv": ["plutotv"],
+                "tubitv": ["tubitv"],
+                "vudu": ["vudu", "vudufree"]
+            }
+            
+            # 1. 优先使用 "new releases" 查询（显示最新上架内容）
+            try:
+                new_releases_results = justwatch_search("new releases", country, "en", 100, True)
+                target_platforms = platform_variants.get(platform.lower(), [platform])
                 
-                for entry in results:
-                    # 检查是否有该平台的观看选项
+                for entry in new_releases_results:
                     has_platform = any(
-                        offer.package.technical_name.lower() == platform.lower() 
+                        offer.package.technical_name.lower() in [tp.lower() for tp in target_platforms]
                         for offer in entry.offers
                     )
                     
                     if has_platform:
                         search_results.append(entry)
                         
+                    if len(search_results) >= limit:
+                        break
+                        
+            except Exception as e:
+                logger.warning(f"New releases查询失败: {e}")
+            
+            # 2. 如果新上架内容不够，使用平台名称查询作为补充
+            if len(search_results) < limit:
+                platform_query_names = {
+                    "netflix": ["netflix"],
+                    "amazon": ["amazon prime", "prime video"],
+                    "disneyplus": ["disney+", "disney plus"],
+                    "max": ["hbo max", "max"],
+                    "itunes": ["apple tv"],
+                    "hulu": ["hulu"],
+                    "paramountplusshowtime": ["paramount+", "paramount plus"],
+                    "peacocktvpremium": ["peacock"],
+                    "rokuchannel": ["roku channel"],
+                    "plutotv": ["pluto tv"],
+                    "tubitv": ["tubi"],
+                    "vudu": ["vudu", "fandango at home"]
+                }
+                
+                query_names = platform_query_names.get(platform.lower(), [platform])
+                
+                for query_name in query_names:
+                    try:
+                        results = justwatch_search(query_name, country, "en", 100, True)
+                        target_platforms = platform_variants.get(platform.lower(), [platform])
+                        
+                        for entry in results:
+                            has_platform = any(
+                                offer.package.technical_name.lower() in [tp.lower() for tp in target_platforms]
+                                for offer in entry.offers
+                            )
+                            
+                            if has_platform:
+                                # 避免重复添加
+                                if not any(existing.tmdb_id == entry.tmdb_id for existing in search_results if hasattr(existing, 'tmdb_id') and hasattr(entry, 'tmdb_id')):
+                                    search_results.append(entry)
+                                    
+                                if len(search_results) >= limit:
+                                    break
+                                    
                         if len(search_results) >= limit:
                             break
                             
-                if len(search_results) >= limit:
-                    break
+                    except Exception as e:
+                        logger.warning(f"平台查询 '{query_name}' 失败: {e}")
+                        continue
             
-            # 按流媒体热度排序（如果有streaming_charts数据）
+            # 3. 如果还是不够，使用传统的"popular"方法作为最后备选
+            if len(search_results) < limit:
+                for media_type in ["movie", "tv"]:
+                    try:
+                        popular_query = f"popular {media_type}s"
+                        results = justwatch_search(popular_query, country, "en", 50, True)
+                        target_platforms = platform_variants.get(platform.lower(), [platform])
+                        
+                        for entry in results:
+                            has_platform = any(
+                                offer.package.technical_name.lower() in [tp.lower() for tp in target_platforms]
+                                for offer in entry.offers
+                            )
+                            
+                            if has_platform:
+                                # 避免重复添加
+                                if not any(existing.tmdb_id == entry.tmdb_id for existing in search_results if hasattr(existing, 'tmdb_id') and hasattr(entry, 'tmdb_id')):
+                                    search_results.append(entry)
+                                    
+                                if len(search_results) >= limit:
+                                    break
+                                    
+                        if len(search_results) >= limit:
+                            break
+                            
+                    except Exception as e:
+                        logger.warning(f"Popular {media_type}s查询失败: {e}")
+                        continue
+            
+            # 按流媒体热度排序
             search_results.sort(key=lambda x: (
                 x.streaming_charts.rank if x.streaming_charts else 99999,
                 -(x.scoring.tmdb_popularity if x.scoring and x.scoring.tmdb_popularity else 0)
@@ -551,6 +638,9 @@ class MovieService:
             
             if final_results:
                 await cache_manager.save_cache(cache_key, final_results, subdirectory="movie")
+                logger.info(f"获取 {platform} 平台内容成功: {len(final_results)} 个结果")
+            else:
+                logger.warning(f"未找到 {platform} 平台的内容")
             
             return final_results
             
@@ -2767,9 +2857,9 @@ class MovieService:
     # ========================================
     
     def format_platform_trending(self, platform_data: List, platform_name: str) -> str:
-        """格式化平台热门内容排行榜"""
+        """格式化平台最新上架内容"""
         if not platform_data:
-            return f"❌ 暂无{platform_name}平台热门内容数据"
+            return f"❌ 暂无{platform_name}平台最新内容数据"
         
         # 平台表情映射
         platform_emojis = {
@@ -2785,7 +2875,7 @@ class MovieService:
         }
         
         platform_emoji = platform_emojis.get(platform_name.lower(), "📱")
-        lines = [f"{platform_emoji} *{platform_name.title()} 热门排行榜*\n"]
+        lines = [f"{platform_emoji} *{platform_name} 最新上架*\n"]
         
         for i, entry in enumerate(platform_data, 1):
             title = entry.title
