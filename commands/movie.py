@@ -659,14 +659,20 @@ class MovieService:
                 # 过滤匹配的内容类型
                 filtered_results = []
                 for item in results:
-                    if not item or not isinstance(item, dict):
+                    if not item:
                         continue
                     
-                    item_object_type = item.get("object_type", "").upper()
-                    if content_type == "movie" and item_object_type == "MOVIE":
-                        filtered_results.append(item)
-                    elif content_type == "tv" and item_object_type == "SHOW":
-                        filtered_results.append(item)
+                    # JustWatch 返回的是 MediaEntry 对象，不是字典
+                    if hasattr(item, 'object_type'):
+                        item_object_type = getattr(item, 'object_type', '').upper()
+                        logger.info(f"JustWatch 项目类型: {item_object_type}, 标题: {getattr(item, 'title', 'Unknown')}")
+                        
+                        if content_type == "movie" and item_object_type == "MOVIE":
+                            filtered_results.append(item)
+                        elif content_type == "tv" and item_object_type == "SHOW":
+                            filtered_results.append(item)
+                    else:
+                        logger.warning(f"JustWatch 项目无 object_type 属性: {type(item)}")
                 
                 if filtered_results:
                     await cache_manager.save_cache(cache_key, filtered_results, subdirectory="movie")
@@ -739,8 +745,12 @@ class MovieService:
                 if justwatch_results and len(justwatch_results) > 0:
                     # 选择最匹配的结果
                     best_match = justwatch_results[0]
-                    if best_match and isinstance(best_match, dict):
-                        node_id = best_match.get("entry_id")  # JustWatch 使用 entry_id
+                    if best_match:
+                        # JustWatch 返回 MediaEntry 对象，使用 getattr 获取属性
+                        if hasattr(best_match, 'entry_id'):
+                            node_id = getattr(best_match, 'entry_id')
+                        else:
+                            node_id = None
                         
                         if node_id:
                             logger.info(f"使用 JustWatch entry_id: {node_id} 获取观影平台")
