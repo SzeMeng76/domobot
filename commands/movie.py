@@ -631,7 +631,7 @@ class MovieService:
             language_code = "zh" if region == "CN" else "en"
             
             cache_key = f"justwatch_search_{title}_{content_type}_{country_code}"
-            cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie", expire_hours=24)
+            cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
             if cached_data:
                 return cached_data
             
@@ -674,7 +674,7 @@ class MovieService:
                 regions = ["CN", "US", "GB"]  # 默认检查中国、美国、英国
                 
             cache_key = f"justwatch_offers_{node_id}_{'_'.join(regions)}"
-            cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie", expire_hours=12)
+            cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
             if cached_data:
                 return cached_data
             
