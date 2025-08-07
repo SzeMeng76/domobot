@@ -832,13 +832,14 @@ class MovieService:
         
         # 平台类型映射
         monetization_mapping = {
-            "FLATRATE": "flatrate",  # 订阅流媒体
-            "RENT": "rent",          # 租赁
-            "BUY": "buy",           # 购买
-            "FREE": "free",         # 免费
-            "ADS": "ads",           # 广告支持免费
-            "FAST": "fast",         # 免费广告支持电视
-            "CINEMA": "cinema"      # 影院
+            "FLATRATE": "flatrate",      # 订阅流媒体
+            "SUBSCRIPTION": "flatrate",  # 订阅（另一种表示）
+            "RENT": "rent",              # 租赁
+            "BUY": "buy",               # 购买
+            "FREE": "free",             # 免费
+            "ADS": "ads",               # 广告支持免费
+            "FAST": "fast",             # 免费广告支持电视
+            "CINEMA": "cinema"          # 影院
         }
         
         # 转换每个国家的数据
