@@ -903,6 +903,76 @@ class MovieService:
             logger.error(f"获取类型热门内容失败: {e}")
             return None
 
+    async def debug_available_platforms(self, country: str = "US", limit: int = 50) -> Optional[Dict]:
+        """调试：获取JustWatch中实际可用的平台technical_name"""
+        if not JUSTWATCH_AVAILABLE:
+            return None
+            
+        try:
+            # 搜索热门内容来获取平台信息
+            search_results = []
+            queries = ["popular", "trending", "netflix", "disney", "hulu"]
+            
+            for query in queries:
+                try:
+                    results = justwatch_search(query, country, "en", 30, False)  # False获取所有选项
+                    search_results.extend(results)
+                    if len(search_results) >= limit:
+                        break
+                except Exception:
+                    continue
+            
+            # 统计所有出现的平台
+            platforms_found = {}
+            for entry in search_results:
+                for offer in entry.offers:
+                    tech_name = offer.package.technical_name
+                    display_name = offer.package.name
+                    
+                    if tech_name not in platforms_found:
+                        platforms_found[tech_name] = {
+                            'display_name': display_name,
+                            'count': 0,
+                            'monetization_types': set()
+                        }
+                    
+                    platforms_found[tech_name]['count'] += 1
+                    platforms_found[tech_name]['monetization_types'].add(offer.monetization_type)
+            
+            # 按出现次数排序
+            sorted_platforms = dict(sorted(
+                platforms_found.items(), 
+                key=lambda x: x[1]['count'], 
+                reverse=True
+            ))
+            
+            return sorted_platforms
+            
+        except Exception as e:
+            logger.error(f"调试平台信息失败: {e}")
+            return None
+
+    def format_debug_platforms(self, platforms_data: Dict) -> str:
+        """格式化调试平台信息"""
+        if not platforms_data:
+            return "❌ 未找到平台信息"
+        
+        lines = ["🔧 *JustWatch可用平台调试信息*\n"]
+        lines.append("格式: `technical_name` - 显示名称 (出现次数) [观看方式]")
+        lines.append("")
+        
+        for tech_name, info in platforms_data.items():
+            display_name = info['display_name']
+            count = info['count']
+            monetization = ', '.join(sorted(info['monetization_types']))
+            
+            lines.append(f"`{tech_name}` - {display_name} ({count}) [{monetization}]")
+        
+        lines.append("")
+        lines.append("💡 使用上述technical_name来修正平台映射")
+        
+        return "\n".join(lines)
+
     # ========================================
     # 趋势内容相关方法
     # ========================================
@@ -5727,7 +5797,8 @@ async def charts_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             InlineKeyboardButton("🔄 跨平台对比", callback_data="chart_cross_platform")
         ],
         [
-            InlineKeyboardButton("❌ 关闭", callback_data="chart_close")
+            InlineKeyboardButton("❌ 关闭", callback_data="chart_close"),
+            InlineKeyboardButton("🔧 调试平台", callback_data="chart_debug_platforms")
         ]
     ])
     
@@ -5821,7 +5892,9 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             # 修正platform映射
             platform_mapping = {
                 "apple": "itunes",  # Apple TV按钮映射到itunes
-                "disney": "disneyplus",  # Disney+可能的technical_name
+                "disney": "disney",  # Disney+先试试disney
+                "paramount": "paramountplus",  # Paramount+可能的technical_name
+                "peacock": "peacock",  # Peacock可能的technical_name
             }
             
             actual_platform = platform_mapping.get(platform, platform)
@@ -5836,7 +5909,36 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                     parse_mode=ParseMode.MARKDOWN_V2
                 )
             else:
-                await query.edit_message_text(f"❌ 获取{platform_display}排行榜失败，可能该平台在此地区没有足够的热门内容")
+                # 如果失败，尝试其他可能的technical_name
+                alternative_names = {
+                    "disney": ["disneyplus", "disney"],
+                    "paramountplus": ["paramount", "paramountnetwork"],
+                    "peacock": ["peacocktv", "nbcpeacock"]
+                }
+                
+                tried_alternatives = False
+                if actual_platform in alternative_names:
+                    for alt_name in alternative_names[actual_platform]:
+                        if alt_name != actual_platform:  # 避免重复尝试
+                            alt_data = await movie_service.get_platform_trending(alt_name, limit=15)
+                            if alt_data:
+                                result_text = movie_service.format_platform_trending(alt_data, platform_display)
+                                await query.edit_message_text(
+                                    foldable_text_with_markdown_v2(result_text),
+                                    parse_mode=ParseMode.MARKDOWN_V2
+                                )
+                                tried_alternatives = True
+                                break
+                
+                if not tried_alternatives:
+                    await query.edit_message_text(
+                        f"❌ 获取{platform_display}排行榜失败\n\n"
+                        f"可能的原因：\n"
+                        f"• 该平台在当前地区没有足够的热门内容\n"
+                        f"• 平台名称映射需要调整 (当前尝试: `{actual_platform}`)\n"
+                        f"• JustWatch API中该平台的technical_name可能不同\n\n"
+                        f"💡 请尝试其他平台或稍后再试"
+                    )
                 
         elif callback_data == "chart_cross_platform":
             # 跨平台对比 - 需要用户输入内容标题
@@ -6065,6 +6167,20 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 reply_markup=more_platforms_keyboard,
                 parse_mode=ParseMode.MARKDOWN_V2
             )
+            
+        elif callback_data == "chart_debug_platforms":
+            # 调试平台信息
+            await query.edit_message_text("🔍 正在获取JustWatch平台信息...")
+            
+            debug_data = await movie_service.debug_available_platforms()
+            if debug_data:
+                result_text = movie_service.format_debug_platforms(debug_data)
+                await query.edit_message_text(
+                    foldable_text_with_markdown_v2(result_text),
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
+            else:
+                await query.edit_message_text("❌ 获取平台调试信息失败")
             
     except Exception as e:
         logger.error(f"处理排行榜回调失败: {e}")
