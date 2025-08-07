@@ -2839,8 +2839,8 @@ class MovieService:
         results = providers_data["results"]
         lines = []
         
-        # 扩展地区检查，按优先级排序
-        priority_regions = ["CN", "US", "GB", "FR", "DE", "JP", "KR", "AU", "CA", "ES", "IT", "BE", "LU", "NL"]
+        # 使用与完整版相同的地区优先级，优先显示有数据的主要地区
+        priority_regions = ["US", "GB", "DE", "FR", "AU", "CA", "JP", "KR", "CN", "ES", "IT", "BE", "LU", "NL"]
         region_names = {
             "CN": "🇨🇳中国", "US": "🇺🇸美国", "GB": "🇬🇧英国", 
             "FR": "🇫🇷法国", "DE": "🇩🇪德国", "JP": "🇯🇵日本",
@@ -2862,7 +2862,7 @@ class MovieService:
         
         lines = []
         for platform_type, prefix, type_name in platform_types:
-            platform_found = False
+            platform_found = False            
             for region in priority_regions:
                 if region not in results:
                     continue
@@ -2886,6 +2886,7 @@ class MovieService:
                     else:
                         flag = get_country_flag(region)
                         region_name = f"{flag} {region}"
+                    
                     lines.append(f"{prefix}: {', '.join(platforms)} ({region_name})")
                     platform_found = True
                     break  # 找到第一个有平台的地区就停止（对于这个平台类型）
