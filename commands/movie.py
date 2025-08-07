@@ -757,6 +757,10 @@ class MovieService:
                             if best_match:
                                 break
                     
+                    logger.info(f"JustWatch: best_match = {best_match}")
+                    if best_match:
+                        logger.info(f"JustWatch: best_match 有 entry_id: {hasattr(best_match, 'entry_id')}")
+                    
                     if best_match and hasattr(best_match, 'entry_id'):
                         entry_id = best_match.entry_id
                         logger.info(f"JustWatch: 找到 entry_id = {entry_id}")
@@ -773,6 +777,8 @@ class MovieService:
                             result["justwatch"] = justwatch_data
                         else:
                             logger.info(f"JustWatch: 未获取到观看数据")
+                    else:
+                        logger.warning(f"JustWatch: 没有找到有效的 best_match 或缺少 entry_id")
             
             # 合并数据，优先显示 TMDB 数据，JustWatch 作为补充
             result["combined"] = self._merge_watch_providers(tmdb_data, result.get("justwatch"))
@@ -826,11 +832,12 @@ class MovieService:
         
         # 平台类型映射
         monetization_mapping = {
-            "FLATRATE": "flatrate",  # 订阅
+            "FLATRATE": "flatrate",  # 订阅流媒体
             "RENT": "rent",          # 租赁
             "BUY": "buy",           # 购买
-            "ADS": "ads",           # 广告支持
             "FREE": "free",         # 免费
+            "ADS": "ads",           # 广告支持免费
+            "FAST": "fast",         # 免费广告支持电视
             "CINEMA": "cinema"      # 影院
         }
         
