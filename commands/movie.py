@@ -711,9 +711,10 @@ class MovieService:
                 regions = ["US", "GB", "DE"]  # 默认检查美国、英国、德国（JustWatch 支持的主要地区）
                 
             cache_key = f"justwatch_offers_{node_id}_{'_'.join(regions)}"
-            cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
-            if cached_data:
-                return cached_data
+            # 暂时禁用JustWatch offers缓存，可能也有序列化问题
+            # cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
+            # if cached_data:
+            #     return cached_data
             
             # 获取多地区观影平台信息 - 添加超时保护
             logger.info(f"JustWatch: 开始获取offers数据 node_id={node_id}, regions={regions}")
@@ -737,7 +738,9 @@ class MovieService:
                 return None
             
             if offers_data and isinstance(offers_data, dict):
-                await cache_manager.save_cache(cache_key, offers_data, subdirectory="movie")
+                # 暂时禁用JustWatch offers缓存，可能也有序列化问题
+                # await cache_manager.save_cache(cache_key, offers_data, subdirectory="movie")
+                logger.info(f"JustWatch: 跳过offers缓存保存，避免序列化问题")
                 return offers_data
                 
         except Exception as e:
