@@ -1,5 +1,6 @@
 import logging
 import json
+import asyncio
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -8,6 +9,16 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 from telegram.helpers import escape_markdown
+
+# JustWatch API
+try:
+    from simplejustwatchapi.justwatch import search as justwatch_search
+    from simplejustwatchapi.justwatch import details as justwatch_details
+    from simplejustwatchapi.justwatch import offers_for_countries as justwatch_offers
+    JUSTWATCH_AVAILABLE = True
+except ImportError:
+    JUSTWATCH_AVAILABLE = False
+    logger.warning("JustWatch API 不可用，将仅使用 TMDB 观影平台数据")
 
 from utils.command_factory import command_factory
 from utils.config_manager import config_manager
@@ -608,6 +619,138 @@ class MovieService:
         if data:
             await cache_manager.save_cache(cache_key, data, subdirectory="movie")
         return data
+
+    async def _search_justwatch_content(self, title: str, content_type: str = "movie", region: str = "CN") -> Optional[List]:
+        """通过 JustWatch API 搜索内容"""
+        if not JUSTWATCH_AVAILABLE:
+            return None
+            
+        try:
+            # 转换地区代码（CN -> 中国地区使用 CN，其他可能需要调整）
+            country_code = region.upper() if region else "CN"
+            language_code = "zh" if region == "CN" else "en"
+            
+            cache_key = f"justwatch_search_{title}_{content_type}_{country_code}"
+            cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie", expire_hours=24)
+            if cached_data:
+                return cached_data
+            
+            # 搜索内容 - 添加超时保护
+            try:
+                # 使用 asyncio.wait_for 添加超时保护
+                loop = asyncio.get_event_loop()
+                results = await asyncio.wait_for(
+                    loop.run_in_executor(None, justwatch_search, title, country_code, language_code, 5, True),
+                    timeout=10.0  # 10秒超时
+                )
+            except asyncio.TimeoutError:
+                logger.warning(f"JustWatch 搜索超时: {title}")
+                return None
+            
+            if results and isinstance(results, list):
+                # 过滤匹配的内容类型
+                filtered_results = []
+                for item in results:
+                    if content_type == "movie" and item.get("object_type") == "movie":
+                        filtered_results.append(item)
+                    elif content_type == "tv" and item.get("object_type") == "show":
+                        filtered_results.append(item)
+                
+                await cache_manager.save_cache(cache_key, filtered_results, subdirectory="movie")
+                return filtered_results
+                
+        except Exception as e:
+            logger.warning(f"JustWatch 搜索失败 {title}: {e}")
+        
+        return None
+
+    async def _get_justwatch_offers(self, node_id: str, regions: List[str] = None) -> Optional[Dict]:
+        """获取 JustWatch 观影平台信息"""
+        if not JUSTWATCH_AVAILABLE or not node_id:
+            return None
+            
+        try:
+            if not regions:
+                regions = ["CN", "US", "GB"]  # 默认检查中国、美国、英国
+                
+            cache_key = f"justwatch_offers_{node_id}_{'_'.join(regions)}"
+            cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie", expire_hours=12)
+            if cached_data:
+                return cached_data
+            
+            # 获取多地区观影平台信息 - 添加超时保护
+            try:
+                loop = asyncio.get_event_loop()
+                offers_data = await asyncio.wait_for(
+                    loop.run_in_executor(None, justwatch_offers, node_id, set(regions), "zh", True),
+                    timeout=10.0  # 10秒超时
+                )
+            except asyncio.TimeoutError:
+                logger.warning(f"JustWatch 观影平台查询超时: {node_id}")
+                return None
+            
+            if offers_data:
+                await cache_manager.save_cache(cache_key, offers_data, subdirectory="movie")
+                return offers_data
+                
+        except Exception as e:
+            logger.warning(f"获取 JustWatch 观影平台失败 {node_id}: {e}")
+        
+        return None
+
+    async def get_enhanced_watch_providers(self, content_id: int, content_type: str = "movie", title: str = "") -> Dict:
+        """获取增强的观影平台信息，整合 TMDB 和 JustWatch 数据"""
+        result = {
+            "tmdb": None,
+            "justwatch": None,
+            "combined": {}
+        }
+        
+        try:
+            # 获取 TMDB 观影平台数据
+            if content_type == "movie":
+                tmdb_data = await self.get_movie_watch_providers(content_id)
+            else:
+                tmdb_data = await self.get_tv_watch_providers(content_id)
+            
+            result["tmdb"] = tmdb_data
+            
+            # 获取 JustWatch 数据作为补充
+            if JUSTWATCH_AVAILABLE and title:
+                justwatch_results = await self._search_justwatch_content(title, content_type)
+                
+                if justwatch_results and len(justwatch_results) > 0:
+                    # 选择最匹配的结果
+                    best_match = justwatch_results[0]
+                    node_id = best_match.get("node_id")
+                    
+                    if node_id:
+                        justwatch_offers = await self._get_justwatch_offers(node_id)
+                        result["justwatch"] = justwatch_offers
+            
+            # 合并数据，优先显示 TMDB 数据，JustWatch 作为补充
+            result["combined"] = self._merge_watch_providers(tmdb_data, result.get("justwatch"))
+            
+        except Exception as e:
+            logger.error(f"获取增强观影平台数据失败: {e}")
+        
+        return result
+
+    def _merge_watch_providers(self, tmdb_data: Optional[Dict], justwatch_data: Optional[Dict]) -> Dict:
+        """合并 TMDB 和 JustWatch 观影平台数据"""
+        merged = {}
+        
+        # 优先使用 TMDB 数据
+        if tmdb_data and tmdb_data.get("results"):
+            merged = tmdb_data
+            
+        # JustWatch 数据作为补充（如果有更多地区或平台信息）
+        if justwatch_data:
+            # 这里可以根据需要进一步整合 JustWatch 数据
+            # 暂时保存 JustWatch 原始数据供后续处理
+            merged["justwatch_raw"] = justwatch_data
+            
+        return merged
     
     def _get_first_trailer_url(self, videos_data: Dict) -> Optional[str]:
         """获取第一个预告片的YouTube链接"""
@@ -2079,6 +2222,30 @@ class MovieService:
     # 观看平台格式化方法
     # ========================================
     
+    def format_justwatch_data(self, justwatch_data: Dict) -> str:
+        """格式化 JustWatch 数据"""
+        if not justwatch_data:
+            return ""
+        
+        lines = []
+        
+        # 处理 JustWatch 提供的观影平台信息
+        try:
+            # JustWatch 数据结构可能不同，需要根据实际返回的数据调整
+            if isinstance(justwatch_data, dict) and justwatch_data:
+                lines.append("\n🌟 *JustWatch 补充信息*:")
+                
+                # 这里需要根据 JustWatch API 实际返回的数据结构来解析
+                # 暂时添加原始数据的简单展示
+                for key, value in justwatch_data.items():
+                    if key != "justwatch_raw" and value:
+                        lines.append(f"• {key}: {str(value)[:50]}...")
+                        
+        except Exception as e:
+            logger.warning(f"格式化 JustWatch 数据失败: {e}")
+        
+        return "\n".join(lines)
+
     def format_watch_providers(self, providers_data: Dict, content_type: str = "movie") -> str:
         """格式化观看平台信息
         Args:
@@ -2163,7 +2330,13 @@ class MovieService:
         if not found_any:
             return f"❌ 暂无该{content_name}的观看平台信息"
         
-        lines.append("💡 数据来源: JustWatch")
+        # 检查是否有 JustWatch 原始数据
+        justwatch_raw = providers_data.get("justwatch_raw")
+        if justwatch_raw:
+            justwatch_info = self.format_justwatch_data(justwatch_raw)
+            if justwatch_info:
+                lines.append(justwatch_info)
+        
         lines.append("⚠️ 平台可用性可能因时间而变化")
         
         return "\n".join(filter(None, lines))
@@ -4467,9 +4640,29 @@ async def movie_watch_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
     
     try:
-        providers_data = await movie_service.get_movie_watch_providers(movie_id)
+        # 先获取电影基本信息以便获取标题
+        movie_info = await movie_service.get_movie_details(movie_id)
+        movie_title = ""
+        if movie_info:
+            movie_title = movie_info.get("title") or movie_info.get("original_title", "")
+        
+        # 使用增强的观影平台功能
+        enhanced_providers = await movie_service.get_enhanced_watch_providers(
+            movie_id, "movie", movie_title
+        )
+        
+        # 优先使用合并后的数据，如果没有则回退到 TMDB 数据
+        providers_data = enhanced_providers.get("combined") or enhanced_providers.get("tmdb")
+        
         if providers_data:
             result_text = movie_service.format_watch_providers(providers_data, "movie")
+            
+            # 如果有 JustWatch 数据，添加数据源说明
+            if enhanced_providers.get("justwatch"):
+                result_text += "\n\n💡 数据来源: TMDB + JustWatch"
+            else:
+                result_text += "\n\n💡 数据来源: TMDB"
+            
             await message.edit_text(
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2
@@ -4536,9 +4729,29 @@ async def tv_watch_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     )
     
     try:
-        providers_data = await movie_service.get_tv_watch_providers(tv_id)
+        # 先获取电视剧基本信息以便获取标题
+        tv_info = await movie_service.get_tv_details(tv_id)
+        tv_title = ""
+        if tv_info:
+            tv_title = tv_info.get("name") or tv_info.get("original_name", "")
+        
+        # 使用增强的观影平台功能
+        enhanced_providers = await movie_service.get_enhanced_watch_providers(
+            tv_id, "tv", tv_title
+        )
+        
+        # 优先使用合并后的数据，如果没有则回退到 TMDB 数据
+        providers_data = enhanced_providers.get("combined") or enhanced_providers.get("tmdb")
+        
         if providers_data:
             result_text = movie_service.format_watch_providers(providers_data, "tv")
+            
+            # 如果有 JustWatch 数据，添加数据源说明
+            if enhanced_providers.get("justwatch"):
+                result_text += "\n\n💡 数据来源: TMDB + JustWatch"
+            else:
+                result_text += "\n\n💡 数据来源: TMDB"
+            
             await message.edit_text(
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2

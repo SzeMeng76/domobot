@@ -25,3 +25,6 @@ aiomysql==0.2.0
 
 # Internationalization and Number Formatting
 Babel>=2.14.0
+
+# JustWatch API for streaming providers
+simple-justwatch-python-api==1.0.0
