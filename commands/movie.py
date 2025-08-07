@@ -775,26 +775,26 @@ class MovieService:
                 if justwatch_results and len(justwatch_results) > 0:
                     # 详细调试：查看搜索结果的结构
                     logger.info(f"JustWatch 搜索结果结构调试:")
-                    for i, result in enumerate(justwatch_results[:2]):  # 只看前2个结果
-                        logger.info(f"  结果 {i}: 类型={type(result)}, 是否有offers={hasattr(result, 'offers') if hasattr(result, '__dict__') else '不是对象'}")
-                        if hasattr(result, '__dict__'):
-                            logger.info(f"  结果 {i} 属性: {list(result.__dict__.keys())}")
-                        elif isinstance(result, list):
-                            logger.info(f"  结果 {i} 是列表，长度={len(result)}")
-                            if len(result) > 0:
-                                logger.info(f"    列表第一个元素类型: {type(result[0])}")
-                                if hasattr(result[0], '__dict__'):
-                                    logger.info(f"    列表第一个元素属性: {list(result[0].__dict__.keys())}")
+                    for i, search_result in enumerate(justwatch_results[:2]):  # 只看前2个结果
+                        logger.info(f"  结果 {i}: 类型={type(search_result)}, 是否有offers={hasattr(search_result, 'offers') if hasattr(search_result, '__dict__') else '不是对象'}")
+                        if hasattr(search_result, '__dict__'):
+                            logger.info(f"  结果 {i} 属性: {list(search_result.__dict__.keys())}")
+                        elif isinstance(search_result, list):
+                            logger.info(f"  结果 {i} 是列表，长度={len(search_result)}")
+                            if len(search_result) > 0:
+                                logger.info(f"    列表第一个元素类型: {type(search_result[0])}")
+                                if hasattr(search_result[0], '__dict__'):
+                                    logger.info(f"    列表第一个元素属性: {list(search_result[0].__dict__.keys())}")
                     
                     # 寻找真正的 MediaEntry 对象
                     best_match = None
-                    for result in justwatch_results:
-                        if hasattr(result, 'offers'):
-                            best_match = result
+                    for search_result in justwatch_results:
+                        if hasattr(search_result, 'offers'):
+                            best_match = search_result
                             logger.info(f"找到直接的 MediaEntry 对象")
                             break
-                        elif isinstance(result, list):
-                            for sub_result in result:
+                        elif isinstance(search_result, list):
+                            for sub_result in search_result:
                                 if hasattr(sub_result, 'offers'):
                                     best_match = sub_result
                                     logger.info(f"在嵌套列表中找到 MediaEntry 对象")
