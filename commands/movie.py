@@ -2171,15 +2171,33 @@ class MovieService:
         # 添加观看平台信息 - 直接使用movie_watch的逻辑
         enhanced_providers = detail_data.get("enhanced_providers")
         
+        # 调试信息
+        logger.info(f"MOVIE_DETAIL DEBUG: enhanced_providers is None: {enhanced_providers is None}")
+        if enhanced_providers:
+            logger.info(f"MOVIE_DETAIL DEBUG: enhanced_providers keys: {list(enhanced_providers.keys())}")
+            combined = enhanced_providers.get("combined")
+            tmdb = enhanced_providers.get("tmdb")
+            logger.info(f"MOVIE_DETAIL DEBUG: combined is None: {combined is None}")
+            logger.info(f"MOVIE_DETAIL DEBUG: tmdb is None: {tmdb is None}")
+        
         # 使用与movie_watch完全相同的逻辑
         providers_data = None
         if enhanced_providers:
             providers_data = enhanced_providers.get("combined") or enhanced_providers.get("tmdb")
+            logger.info(f"MOVIE_DETAIL DEBUG: providers_data found: {providers_data is not None}")
+        else:
+            logger.info("MOVIE_DETAIL DEBUG: enhanced_providers is None, no provider data")
         
         if providers_data:
+            logger.info("MOVIE_DETAIL DEBUG: About to format watch providers")
             provider_info = self.format_watch_providers(providers_data, "movie")
             if provider_info:
                 lines.append(provider_info)
+                logger.info("MOVIE_DETAIL DEBUG: Added provider info to lines")
+            else:
+                logger.info("MOVIE_DETAIL DEBUG: format_watch_providers returned empty")
+        else:
+            logger.info("MOVIE_DETAIL DEBUG: No providers_data, skipping watch providers")
         
         # 添加技术规格信息
         if enhanced_providers:
