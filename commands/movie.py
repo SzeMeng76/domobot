@@ -637,9 +637,11 @@ class MovieService:
                 language_code = "en"
             
             cache_key = f"justwatch_search_{title}_{content_type}_{country_code}"
-            cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
-            if cached_data:
-                return cached_data
+            # 暂时禁用缓存来调试
+            # cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
+            # if cached_data:
+            #     return cached_data
+            cached_data = None
             
             # 搜索内容 - 添加超时保护
             try:
@@ -656,6 +658,14 @@ class MovieService:
                 return None
             
             if results and isinstance(results, list) and len(results) > 0:
+                logger.info(f"JustWatch: API返回 {len(results)} 个原始结果")
+                
+                # 调试：检查原始结果
+                for i, item in enumerate(results[:3]):
+                    logger.info(f"JustWatch: 原始结果{i+1} - type={type(item)}, has_offers={hasattr(item, 'offers')}, has_entry_id={hasattr(item, 'entry_id')}")
+                    if hasattr(item, 'title'):
+                        logger.info(f"JustWatch: 原始结果{i+1} - title={item.title}")
+                
                 # 过滤匹配的内容类型
                 filtered_results = []
                 for item in results:
@@ -672,6 +682,14 @@ class MovieService:
                             filtered_results.append(item)
                     else:
                         logger.warning(f"JustWatch 项目无 object_type 属性: {type(item)}")
+                
+                logger.info(f"JustWatch: 过滤后 {len(filtered_results)} 个结果")
+                
+                # 调试：检查过滤后结果
+                for i, item in enumerate(filtered_results[:3]):
+                    logger.info(f"JustWatch: 过滤后结果{i+1} - type={type(item)}, has_offers={hasattr(item, 'offers')}, has_entry_id={hasattr(item, 'entry_id')}")
+                    if hasattr(item, 'title'):
+                        logger.info(f"JustWatch: 过滤后结果{i+1} - title={item.title}")
                 
                 if filtered_results:
                     await cache_manager.save_cache(cache_key, filtered_results, subdirectory="movie")
