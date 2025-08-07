@@ -3,6 +3,7 @@
 # currencies, locales, and standard Unicode emoji flags.
 
 SUPPORTED_COUNTRIES = {
+    "AD": {"name": "安道尔", "currency": "EUR", "symbol": "€", "locale": "ca_AD"},
     "AE": {"name": "阿联酋", "currency": "AED", "symbol": "د.إ", "locale": "ar_AE"},
     "AG": {"name": "安提瓜和巴布达", "currency": "XCD", "symbol": "$", "locale": "en_AG"},
     "AI": {"name": "安圭拉", "currency": "XCD", "symbol": "$", "locale": "en_AI"},
@@ -174,6 +175,7 @@ VALID_COUNTRY_INPUTS = set(COUNTRY_NAME_TO_CODE.keys()) | set(SUPPORTED_COUNTRIE
 # Source: https://emojipedia.org/flags
 UNICODE_FLAG_EMOJIS = {
     "AC": "🇦🇨",
+    "AD": "🇦🇩",
     "AE": "🇦🇪",
     "AF": "🇦🇫",
     "AG": "🇦🇬",
