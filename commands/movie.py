@@ -2172,10 +2172,33 @@ class MovieService:
         watch_providers = detail_data.get("watch/providers")
         enhanced_providers = detail_data.get("enhanced_providers")
         
+        # 详细调试每一步
+        logger.info(f"DETAIL DEBUG: watch_providers from detail_data is None: {watch_providers is None}")
+        if watch_providers:
+            logger.info(f"DETAIL DEBUG: watch_providers has {len(watch_providers.get('results', {}))} countries")
+        
+        logger.info(f"DETAIL DEBUG: enhanced_providers is None: {enhanced_providers is None}")
+        if enhanced_providers:
+            logger.info(f"DETAIL DEBUG: enhanced_providers keys: {list(enhanced_providers.keys())}")
+            combined_data = enhanced_providers.get("combined")
+            tmdb_data = enhanced_providers.get("tmdb")
+            logger.info(f"DETAIL DEBUG: combined is None: {combined_data is None}")
+            logger.info(f"DETAIL DEBUG: tmdb is None: {tmdb_data is None}")
+            if combined_data:
+                logger.info(f"DETAIL DEBUG: combined has {len(combined_data.get('results', {}))} countries")
+            if tmdb_data:
+                logger.info(f"DETAIL DEBUG: tmdb has {len(tmdb_data.get('results', {}))} countries")
+        
         # 添加回退机制，与movie_watch保持一致
         if enhanced_providers and not watch_providers:
             watch_providers = enhanced_providers.get("combined") or enhanced_providers.get("tmdb")
             logger.info(f"DETAIL DEBUG: Used fallback, watch_providers now from enhanced_providers")
+        elif enhanced_providers and watch_providers and not watch_providers.get("results"):
+            # 如果watch_providers存在但results为空，也使用回退
+            fallback_data = enhanced_providers.get("combined") or enhanced_providers.get("tmdb")
+            if fallback_data and fallback_data.get("results"):
+                watch_providers = fallback_data
+                logger.info(f"DETAIL DEBUG: Used fallback for empty results, now has {len(watch_providers.get('results', {}))} countries")
         
         # 调试：输出观看平台数据结构
         if watch_providers:
@@ -2199,6 +2222,8 @@ class MovieService:
                         logger.info(f"Country {country} data type: {type(data)}")
             else:
                 logger.info("No results in watch_providers or not dict")
+        else:
+            logger.info("DETAIL DEBUG: Final watch_providers is None")
         
         if watch_providers:
             provider_info = self.format_watch_providers_compact(watch_providers, "movie")
