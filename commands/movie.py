@@ -737,9 +737,11 @@ class MovieService:
             
             # 获取 JustWatch 数据作为补充
             if JUSTWATCH_AVAILABLE and title:
+                logger.info(f"JustWatch: 开始搜索 {title}")
                 justwatch_results = await self._search_justwatch_content(title, content_type)
                 
                 if justwatch_results and len(justwatch_results) > 0:
+                    logger.info(f"JustWatch: 找到 {len(justwatch_results)} 个搜索结果")
                     
                     # 寻找真正的 MediaEntry 对象
                     best_match = None
@@ -757,6 +759,7 @@ class MovieService:
                     
                     if best_match and hasattr(best_match, 'entry_id'):
                         entry_id = best_match.entry_id
+                        logger.info(f"JustWatch: 找到 entry_id = {entry_id}")
                         
                         # 支持的国家列表
                         supported_countries = {"US", "GB", "DE", "FR", "JP", "KR", "AU", "CA"}
@@ -765,7 +768,11 @@ class MovieService:
                         justwatch_data = await self._get_justwatch_offers(entry_id, list(supported_countries))
                         
                         if justwatch_data:
+                            country_count = len([c for c, offers in justwatch_data.items() if offers])
+                            logger.info(f"JustWatch: 获取到 {country_count} 个国家的观看数据")
                             result["justwatch"] = justwatch_data
+                        else:
+                            logger.info(f"JustWatch: 未获取到观看数据")
             
             # 合并数据，优先显示 TMDB 数据，JustWatch 作为补充
             result["combined"] = self._merge_watch_providers(tmdb_data, result.get("justwatch"))
@@ -2284,7 +2291,8 @@ class MovieService:
         # 处理 JustWatch 提供的观影平台信息
         try:
             if isinstance(justwatch_data, dict) and justwatch_data:
-                lines.append("\n🌟 *JustWatch 补充信息*:")
+                lines.append("")
+                lines.append("🔍 *JustWatch 数据*:")
                 
                 # 按国家顺序显示（优先显示主要国家）
                 country_order = ['US', 'GB', 'DE', 'FR', 'JP', 'KR', 'AU', 'CA']
@@ -2369,7 +2377,10 @@ class MovieService:
         
         results = providers_data["results"]
         content_name = "电影" if content_type == "movie" else "电视剧"
-        lines = [f"📺 *{content_name}观看平台*\n"]
+        lines = [f"📺 *{content_name}观看平台*"]
+        lines.append("") 
+        lines.append("📊 *TMDB 数据*:")
+        lines.append("")
         
         # 优先显示的地区
         priority_regions = ["CN", "US", "GB", "JP", "KR", "HK", "TW"]
@@ -2440,9 +2451,11 @@ class MovieService:
             lines.append("")
         
         if not found_any:
-            return f"❌ 暂无该{content_name}的观看平台信息"
+            lines = [f"📺 *{content_name}观看平台*"]
+            lines.append("")
+            lines.append("❌ 暂无 TMDB 观看平台信息")
         
-        # 检查是否有 JustWatch 原始数据
+        # 检查是否有 JustWatch 数据
         justwatch_raw = providers_data.get("justwatch_raw")
         if justwatch_raw:
             justwatch_info = self.format_justwatch_data(justwatch_raw)
