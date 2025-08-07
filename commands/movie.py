@@ -662,9 +662,10 @@ class MovieService:
                     if not item or not isinstance(item, dict):
                         continue
                     
-                    if content_type == "movie" and item.get("object_type") == "movie":
+                    item_object_type = item.get("object_type", "").upper()
+                    if content_type == "movie" and item_object_type == "MOVIE":
                         filtered_results.append(item)
-                    elif content_type == "tv" and item.get("object_type") == "show":
+                    elif content_type == "tv" and item_object_type == "SHOW":
                         filtered_results.append(item)
                 
                 if filtered_results:
@@ -739,9 +740,10 @@ class MovieService:
                     # 选择最匹配的结果
                     best_match = justwatch_results[0]
                     if best_match and isinstance(best_match, dict):
-                        node_id = best_match.get("node_id")
+                        node_id = best_match.get("entry_id")  # JustWatch 使用 entry_id
                         
                         if node_id:
+                            logger.info(f"使用 JustWatch entry_id: {node_id} 获取观影平台")
                             justwatch_offers = await self._get_justwatch_offers(node_id)
                             result["justwatch"] = justwatch_offers
             
