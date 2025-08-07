@@ -787,17 +787,89 @@ class MovieService:
         """合并 TMDB 和 JustWatch 观影平台数据"""
         merged = {}
         
-        # 优先使用 TMDB 数据
+        # 如果 TMDB 有数据，优先使用
         if tmdb_data and tmdb_data.get("results"):
-            merged = tmdb_data
+            merged = tmdb_data.copy()
             
-        # JustWatch 数据作为补充（如果有更多地区或平台信息）
+        # 如果 TMDB 没有数据但 JustWatch 有数据，转换 JustWatch 数据为标准格式
+        elif justwatch_data:
+            merged = self._convert_justwatch_to_tmdb_format(justwatch_data)
+            
+        # 保存原始 JustWatch 数据供后续处理
         if justwatch_data:
-            # 这里可以根据需要进一步整合 JustWatch 数据
-            # 暂时保存 JustWatch 原始数据供后续处理
             merged["justwatch_raw"] = justwatch_data
             
         return merged
+    
+    def _convert_justwatch_to_tmdb_format(self, justwatch_data: Dict) -> Dict:
+        """将 JustWatch 数据转换为 TMDB 格式"""
+        if not justwatch_data:
+            return {}
+            
+        # 创建 TMDB 格式的结构
+        tmdb_format = {
+            "id": 0,  # JustWatch 没有对应的 TMDB ID
+            "results": {}
+        }
+        
+        # 国家代码映射
+        country_mapping = {
+            "US": "US",
+            "GB": "GB", 
+            "DE": "DE",
+            "FR": "FR",
+            "JP": "JP",
+            "KR": "KR",
+            "AU": "AU",
+            "CA": "CA"
+        }
+        
+        # 平台类型映射
+        monetization_mapping = {
+            "FLATRATE": "flatrate",  # 订阅
+            "RENT": "rent",          # 租赁
+            "BUY": "buy",           # 购买
+            "ADS": "ads",           # 广告支持
+            "FREE": "free",         # 免费
+            "CINEMA": "cinema"      # 影院
+        }
+        
+        # 转换每个国家的数据
+        for country, offers in justwatch_data.items():
+            if not offers or country not in country_mapping:
+                continue
+                
+            country_code = country_mapping[country]
+            country_data = {}
+            
+            # 按类型分组
+            type_groups = {}
+            for offer in offers:
+                monetization_type = getattr(offer, 'monetization_type', '')
+                tmdb_type = monetization_mapping.get(monetization_type)
+                
+                if tmdb_type and hasattr(offer, 'package') and offer.package:
+                    if tmdb_type not in type_groups:
+                        type_groups[tmdb_type] = []
+                    
+                    # 构造平台信息
+                    platform_info = {
+                        "display_priority": len(type_groups[tmdb_type]) + 1,
+                        "logo_path": f"/justwatch_{offer.package.technical_name}.png",
+                        "provider_id": getattr(offer.package, 'package_id', 0),
+                        "provider_name": getattr(offer.package, 'name', 'Unknown')
+                    }
+                    type_groups[tmdb_type].append(platform_info)
+            
+            # 添加到国家数据
+            for tmdb_type, platforms in type_groups.items():
+                country_data[tmdb_type] = platforms
+                
+            if country_data:
+                country_data["link"] = f"https://www.justwatch.com/{country.lower()}"
+                tmdb_format["results"][country_code] = country_data
+        
+        return tmdb_format
     
     def _get_first_trailer_url(self, videos_data: Dict) -> Optional[str]:
         """获取第一个预告片的YouTube链接"""
