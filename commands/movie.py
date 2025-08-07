@@ -639,6 +639,9 @@ class MovieService:
             cache_key = f"justwatch_search_{title}_{content_type}_{country_code}"
             cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
             if cached_data:
+                logger.info(f"JustWatch: 使用缓存数据，类型={type(cached_data)}")
+                if cached_data and len(cached_data) > 0:
+                    logger.info(f"JustWatch: 缓存第1项类型={type(cached_data[0])}")
                 return cached_data
             
             # 搜索内容 - 添加超时保护
