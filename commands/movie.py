@@ -6243,8 +6243,61 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 await query.edit_message_text(f"❌ 获取{country_display}热门内容失败")
                 
         elif callback_data == "chart_main_menu":
-            # 返回主菜单
-            await charts_command(update, context)
+            # 返回主菜单 - 直接编辑消息显示主菜单
+            # 创建主菜单keyboard
+            main_keyboard = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("🔥 全球热门", callback_data="chart_global_trending"),
+                    InlineKeyboardButton("📺 电视剧榜", callback_data="chart_tv_trending"),
+                    InlineKeyboardButton("🎬 电影榜", callback_data="chart_movie_trending")
+                ],
+                [
+                    InlineKeyboardButton("🔴 Netflix", callback_data="chart_platform_netflix"),
+                    InlineKeyboardButton("📦 Amazon", callback_data="chart_platform_amazon"),
+                    InlineKeyboardButton("🏰 Disney+", callback_data="chart_platform_disney")
+                ],
+                [
+                    InlineKeyboardButton("🔵 HBO Max", callback_data="chart_platform_max"),
+                    InlineKeyboardButton("🍎 Apple TV", callback_data="chart_platform_apple"),
+                    InlineKeyboardButton("🟢 Hulu", callback_data="chart_platform_hulu")
+                ],
+                [
+                    InlineKeyboardButton("⭐ Paramount+", callback_data="chart_platform_paramount"),
+                    InlineKeyboardButton("🦚 Peacock", callback_data="chart_platform_peacock"),
+                    InlineKeyboardButton("🎵 其他平台", callback_data="chart_more_platforms")
+                ],
+                [
+                    InlineKeyboardButton("🏆 排名专区", callback_data="chart_rank_zone"),
+                    InlineKeyboardButton("🎭 类型专区", callback_data="chart_genre_zone")
+                ],
+                [
+                    InlineKeyboardButton("🆕 最新上架", callback_data="chart_new_releases"),
+                    InlineKeyboardButton("⭐ 高分内容", callback_data="chart_high_rated")
+                ],
+                [
+                    InlineKeyboardButton("🌍 按国家查看", callback_data="chart_by_country"),
+                    InlineKeyboardButton("🔄 跨平台对比", callback_data="chart_cross_platform")
+                ],
+                [
+                    InlineKeyboardButton("❌ 关闭", callback_data="chart_close"),
+                    InlineKeyboardButton("🔧 调试平台", callback_data="chart_debug_platforms")
+                ]
+            ])
+            
+            main_message_text = (
+                "🏆 *流媒体排行榜中心*\n\n"
+                "选择你想查看的排行榜类型：\n\n"
+                "📊 **热门榜单**：全球热门内容\n"
+                "🎯 **平台专属**：各流媒体平台独家排行\n"
+                "🌐 **地区排行**：不同国家地区的热门内容\n"
+                "🔍 **跨平台对比**：查看内容在各平台的情况"
+            )
+            
+            await query.edit_message_text(
+                text=foldable_text_with_markdown_v2(main_message_text),
+                reply_markup=main_keyboard,
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
             return
             
         elif callback_data == "chart_close":
