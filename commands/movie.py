@@ -2556,6 +2556,9 @@ class MovieService:
         # 处理 JustWatch 提供的观影平台信息
         try:
             if isinstance(justwatch_data, dict) and justwatch_data:
+                logger.info(f"JustWatch: 开始格式化观看平台数据，国家数={len(justwatch_data)}")
+                logger.info(f"JustWatch: 可用国家列表={list(justwatch_data.keys())}")
+                
                 lines.append("")
                 lines.append("🔍 *JustWatch 数据*:")
                 
@@ -2566,6 +2569,7 @@ class MovieService:
                 for country in country_order:
                     if country in justwatch_data:
                         offers = justwatch_data[country]
+                        logger.info(f"JustWatch: 国家{country}的offers类型={type(offers)}, 数量={len(offers) if isinstance(offers, list) else 'N/A'}")
                         if offers and isinstance(offers, list) and len(offers) > 0:
                             displayed_countries.append(country)
                             country_display_name = country_names.get(country, f'🏳️ {country}')
