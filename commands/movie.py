@@ -750,21 +750,19 @@ class MovieService:
                     # 寻找真正的 MediaEntry 对象
                     best_match = None
                     for i, search_result in enumerate(justwatch_results):
+                        has_entry_id = hasattr(search_result, 'entry_id')
                         has_offers = hasattr(search_result, 'offers')
-                        logger.info(f"JustWatch: 检查结果{i+1} - has_offers={has_offers}")
+                        logger.info(f"JustWatch: 检查结果{i+1} - has_entry_id={has_entry_id}, has_offers={has_offers}")
                         
-                        if has_offers:
-                            offers = getattr(search_result, 'offers', [])
-                            logger.info(f"JustWatch: 结果{i+1} - offers数量={len(offers) if offers else 0}")
-                            
-                            # 修改条件：只要有 offers 属性就选择，不管 offers 是否为空
+                        # 优先选择有entry_id的MediaEntry对象（不管是否有offers）
+                        if has_entry_id:
                             best_match = search_result
-                            logger.info(f"JustWatch: 选择结果{i+1}作为best_match")
+                            logger.info(f"JustWatch: 选择结果{i+1}作为best_match (有entry_id)")
                             break
                         elif isinstance(search_result, list):
                             logger.info(f"JustWatch: 结果{i+1}是列表，检查子项")
                             for sub_result in search_result:
-                                if hasattr(sub_result, 'offers'):
+                                if hasattr(sub_result, 'entry_id'):
                                     best_match = sub_result
                                     logger.info(f"JustWatch: 从列表中选择子项作为best_match")
                                     break
@@ -3367,7 +3365,8 @@ async def movie_detail_command(update: Update, context: ContextTypes.DEFAULT_TYP
         detail_data = await movie_service.get_movie_details(movie_id)
         if detail_data:
             # 获取增强的观影平台数据
-            movie_title = detail_data.get("title") or detail_data.get("original_title", "")
+            movie_title = detail_data.get("original_title") or detail_data.get("title", "")
+            logger.info(f"Movie title for JustWatch search: {movie_title}")
             enhanced_providers = await movie_service.get_enhanced_watch_providers(
                 movie_id, "movie", movie_title
             )
@@ -3733,7 +3732,8 @@ async def tv_detail_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         detail_data = await movie_service.get_tv_details(tv_id)
         if detail_data:
             # 获取增强的观影平台数据
-            tv_title = detail_data.get("name") or detail_data.get("original_name", "")
+            tv_title = detail_data.get("original_name") or detail_data.get("name", "")
+            logger.info(f"TV title for JustWatch search: {tv_title}")
             enhanced_providers = await movie_service.get_enhanced_watch_providers(
                 tv_id, "tv", tv_title
             )
@@ -5245,7 +5245,9 @@ async def movie_watch_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         movie_info = await movie_service.get_movie_details(movie_id)
         movie_title = ""
         if movie_info:
-            movie_title = movie_info.get("title") or movie_info.get("original_title", "")
+            # 优先使用英文原标题，如果没有再使用本地化标题
+            movie_title = movie_info.get("original_title") or movie_info.get("title", "")
+            logger.info(f"Movie title for JustWatch search: {movie_title}")
         
         # 使用增强的观影平台功能
         enhanced_providers = await movie_service.get_enhanced_watch_providers(
@@ -5334,7 +5336,8 @@ async def tv_watch_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         tv_info = await movie_service.get_tv_details(tv_id)
         tv_title = ""
         if tv_info:
-            tv_title = tv_info.get("name") or tv_info.get("original_name", "")
+            tv_title = tv_info.get("original_name") or tv_info.get("name", "")
+            logger.info(f"TV title for JustWatch search: {tv_title}")
         
         # 使用增强的观影平台功能
         enhanced_providers = await movie_service.get_enhanced_watch_providers(
