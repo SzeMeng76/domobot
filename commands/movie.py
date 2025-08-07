@@ -25,7 +25,7 @@ from utils.command_factory import command_factory
 from utils.config_manager import config_manager
 from utils.country_data import SUPPORTED_COUNTRIES, get_country_flag
 from utils.formatter import foldable_text_v2, foldable_text_with_markdown_v2
-from utils.message_manager import delete_user_command, send_error, send_success
+from utils.message_manager import delete_user_command, send_error, send_success, _schedule_deletion
 from utils.permissions import Permission
 
 logger = logging.getLogger(__name__)
@@ -6196,6 +6196,7 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 await schedule_chart_deletion()
             else:
                 await query.edit_message_text("❌ 获取全球热门内容失败")
+                await schedule_chart_deletion()
                 
         elif callback_data == "chart_tv_trending":
             # 热门电视剧
@@ -6210,6 +6211,7 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 await schedule_chart_deletion()
             else:
                 await query.edit_message_text("❌ 获取热门电视剧失败")
+                await schedule_chart_deletion()
                 
         elif callback_data == "chart_movie_trending":
             # 热门电影
@@ -6224,6 +6226,7 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 await schedule_chart_deletion()
             else:
                 await query.edit_message_text("❌ 获取热门电影失败")
+                await schedule_chart_deletion()
                 
         elif callback_data.startswith("chart_platform_"):
             # 平台专属排行榜
@@ -6297,6 +6300,7 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                         f"• JustWatch API中该平台的technical_name可能不同\n\n"
                         f"💡 请尝试其他平台或稍后再试"
                     )
+                    await schedule_chart_deletion()
                 
         elif callback_data == "chart_cross_platform":
             # 跨平台对比 - 动态获取热门内容
@@ -6375,6 +6379,7 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             except Exception as e:
                 logger.error(f"获取动态热门内容失败: {e}")
                 await query.edit_message_text("❌ 获取热门内容失败，请稍后重试")
+                await schedule_chart_deletion()
             
         elif callback_data == "chart_rank_zone":
             # 排名专区选择
@@ -6444,6 +6449,7 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 await schedule_chart_deletion()
             else:
                 await query.edit_message_text("❌ 获取最新上架内容失败")
+                await schedule_chart_deletion()
                 
         elif callback_data == "chart_high_rated":
             # 高分内容
@@ -6459,6 +6465,7 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 await schedule_chart_deletion()
             else:
                 await query.edit_message_text("❌ 获取高分内容失败")
+                await schedule_chart_deletion()
                 
         elif callback_data.startswith("chart_rank_"):
             # 排名专区处理
@@ -6485,6 +6492,7 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 await schedule_chart_deletion()
             else:
                 await query.edit_message_text(f"❌ 获取{rank_title}失败")
+                await schedule_chart_deletion()
                 
         elif callback_data.startswith("chart_genre_"):
             # 类型专区处理
@@ -6513,6 +6521,7 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 await schedule_chart_deletion()
             else:
                 await query.edit_message_text(f"❌ 获取{genre_title}失败")
+                await schedule_chart_deletion()
                 
         elif callback_data == "chart_by_country":
             # 按国家查看 - 显示国家选择
@@ -6566,6 +6575,7 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 await schedule_chart_deletion()
             else:
                 await query.edit_message_text(f"❌ 获取{country_display}热门内容失败")
+                await schedule_chart_deletion()
                 
         elif callback_data == "chart_main_menu":
             # 返回主菜单 - 直接编辑消息显示主菜单
@@ -6777,12 +6787,15 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                             reply_markup=back_keyboard, 
                             disable_web_page_preview=True
                         )
+                        await schedule_chart_deletion()
                     else:
                         await query.edit_message_text("❌ 获取跨平台对比数据失败")
+                        await schedule_chart_deletion()
                         
                 except Exception as e:
                     logger.error(f"动态跨平台对比失败: {e}")
                     await query.edit_message_text("❌ 获取跨平台对比数据时发生错误")
+                    await schedule_chart_deletion()
             
             elif callback_data.startswith("chart_compare_title_"):
                 # 处理通过标题编码的跨平台对比
@@ -6808,12 +6821,15 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                             reply_markup=back_keyboard,
                             parse_mode=ParseMode.MARKDOWN_V2
                         )
+                        await schedule_chart_deletion()
                     else:
                         await query.edit_message_text(f"❌ 未找到 '{title}' 的跨平台数据")
+                        await schedule_chart_deletion()
                         
                 except Exception as e:
                     logger.error(f"获取动态跨平台对比数据失败: {e}")
                     await query.edit_message_text("❌ 获取跨平台对比数据时发生错误")
+                    await schedule_chart_deletion()
                     
             else:
                 # 处理静态的热门内容（通过标题）
@@ -6835,11 +6851,14 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                             reply_markup=back_keyboard,
                             parse_mode=ParseMode.MARKDOWN_V2
                         )
+                        await schedule_chart_deletion()
                     else:
                         await query.edit_message_text(f"❌ 未找到 '{title}' 的跨平台数据")
+                        await schedule_chart_deletion()
                 except Exception as e:
                     logger.error(f"获取跨平台对比数据失败: {e}")
                     await query.edit_message_text("❌ 获取跨平台对比数据时发生错误")
+                    await schedule_chart_deletion()
         
         elif callback_data == "chart_debug_platforms":
             # 调试平台信息
@@ -6855,10 +6874,12 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 await schedule_chart_deletion()
             else:
                 await query.edit_message_text("❌ 获取平台调试信息失败")
+                await schedule_chart_deletion()
             
     except Exception as e:
         logger.error(f"处理排行榜回调失败: {e}")
         await query.edit_message_text("❌ 处理请求时发生错误，请稍后重试")
+        await schedule_chart_deletion()
 
 async def chart_compare_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理 /chart_compare 命令 - 跨平台对比"""
