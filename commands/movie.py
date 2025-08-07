@@ -637,12 +637,13 @@ class MovieService:
                 language_code = "en"
             
             cache_key = f"justwatch_search_{title}_{content_type}_{country_code}"
-            cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
-            if cached_data:
-                logger.info(f"JustWatch: 使用缓存数据，类型={type(cached_data)}")
-                if cached_data and len(cached_data) > 0:
-                    logger.info(f"JustWatch: 缓存第1项类型={type(cached_data[0])}")
-                return cached_data
+            # 暂时禁用JustWatch搜索缓存读取，因为MediaEntry对象序列化会有问题
+            # cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
+            # if cached_data:
+            #     logger.info(f"JustWatch: 使用缓存数据，类型={type(cached_data)}")
+            #     if cached_data and len(cached_data) > 0:
+            #         logger.info(f"JustWatch: 缓存第1项类型={type(cached_data[0])}")
+            #     return cached_data
             
             # 搜索内容 - 添加超时保护
             try:
@@ -689,7 +690,9 @@ class MovieService:
                 logger.info(f"JustWatch: 过滤后 {len(filtered_results)} 个结果")
                 
                 if filtered_results:
-                    await cache_manager.save_cache(cache_key, filtered_results, subdirectory="movie")
+                    # 暂时禁用JustWatch搜索缓存，因为MediaEntry对象序列化会有问题
+                    # await cache_manager.save_cache(cache_key, filtered_results, subdirectory="movie")
+                    logger.info(f"JustWatch: 跳过缓存保存，避免MediaEntry序列化问题")
                     return filtered_results
             
                 
