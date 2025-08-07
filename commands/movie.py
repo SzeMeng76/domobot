@@ -901,8 +901,8 @@ class MovieService:
         if not justwatch_data:
             return {}
         
-        # 类型优先级：免费 > 订阅 > 租赁 > 购买
-        type_priority = ['FREE', 'ADS', 'FLATRATE', 'SUBSCRIPTION', 'RENT', 'BUY']
+        # 类型优先级：免费 > 订阅 > 租赁 > 购买 > 电影院
+        type_priority = ['FREE', 'ADS', 'FLATRATE', 'SUBSCRIPTION', 'RENT', 'BUY', 'CINEMA']
         
         tmdb_format = {
             "id": 0,
@@ -968,7 +968,8 @@ class MovieService:
             "RENT": "rent",
             "BUY": "buy",
             "FREE": "free",
-            "ADS": "ads"
+            "ADS": "ads",
+            "CINEMA": "cinema"
         }
         
         tmdb_type = monetization_mapping.get(monetization_type, "flatrate")
@@ -2657,7 +2658,8 @@ class MovieService:
                 region_data.get("flatrate"),
                 region_data.get("buy"), 
                 region_data.get("rent"),
-                region_data.get("free")
+                region_data.get("free"),
+                region_data.get("cinema")
             ])
             
             if not has_content:
@@ -2685,6 +2687,11 @@ class MovieService:
             if region_data.get("free"):
                 platforms = [p["provider_name"] for p in region_data["free"][:3]]
                 lines.append(f"🆓 *免费*: {', '.join(platforms)}")
+            
+            # 影院上映
+            if region_data.get("cinema"):
+                platforms = [p["provider_name"] for p in region_data["cinema"][:3]]
+                lines.append(f"🎬 *影院上映*: {', '.join(platforms)}")
             
             lines.append("")
         
@@ -2723,13 +2730,14 @@ class MovieService:
         }
         found_any = False
         
-        # 按优先级寻找平台：订阅 > 免费 > 租赁 > 购买
+        # 按优先级寻找平台：订阅 > 免费 > 租赁 > 购买 > 影院
         platform_types = [
             ("flatrate", "📺 *观看平台*", "订阅"),
             ("free", "🆓 *免费平台*", "免费"),
             ("ads", "📺 *免费含广告*", "含广告"),
             ("rent", "🏪 *租赁平台*", "租赁"),
-            ("buy", "💰 *购买平台*", "购买")
+            ("buy", "💰 *购买平台*", "购买"),
+            ("cinema", "🎬 *影院上映*", "影院")
         ]
         
         for platform_type, prefix, type_name in platform_types:
