@@ -637,11 +637,9 @@ class MovieService:
                 language_code = "en"
             
             cache_key = f"justwatch_search_{title}_{content_type}_{country_code}"
-            # 暂时禁用缓存来调试
-            # cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
-            # if cached_data:
-            #     return cached_data
-            cached_data = None
+            cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
+            if cached_data:
+                return cached_data
             
             # 搜索内容 - 添加超时保护
             try:
@@ -659,12 +657,6 @@ class MovieService:
             
             if results and isinstance(results, list) and len(results) > 0:
                 logger.info(f"JustWatch: API返回 {len(results)} 个原始结果")
-                
-                # 调试：检查原始结果
-                for i, item in enumerate(results[:3]):
-                    logger.info(f"JustWatch: 原始结果{i+1} - type={type(item)}, has_offers={hasattr(item, 'offers')}, has_entry_id={hasattr(item, 'entry_id')}")
-                    if hasattr(item, 'title'):
-                        logger.info(f"JustWatch: 原始结果{i+1} - title={item.title}")
                 
                 # 过滤匹配的内容类型
                 filtered_results = []
@@ -684,12 +676,6 @@ class MovieService:
                         logger.warning(f"JustWatch 项目无 object_type 属性: {type(item)}")
                 
                 logger.info(f"JustWatch: 过滤后 {len(filtered_results)} 个结果")
-                
-                # 调试：检查过滤后结果
-                for i, item in enumerate(filtered_results[:3]):
-                    logger.info(f"JustWatch: 过滤后结果{i+1} - type={type(item)}, has_offers={hasattr(item, 'offers')}, has_entry_id={hasattr(item, 'entry_id')}")
-                    if hasattr(item, 'title'):
-                        logger.info(f"JustWatch: 过滤后结果{i+1} - title={item.title}")
                 
                 if filtered_results:
                     await cache_manager.save_cache(cache_key, filtered_results, subdirectory="movie")
@@ -3156,16 +3142,20 @@ async def movie_clean_cache_command(update: Update, context: ContextTypes.DEFAUL
         return
     
     try:
-        # 清理电影和电视剧相关缓存
+        # 清理所有电影和电视剧相关缓存
         prefixes = [
             "movie_search_", "movie_popular_", "movie_detail_", "movie_rec_",
+            "movie_watch_providers_",
             "tv_search_", "tv_popular_", "tv_detail_", "tv_rec_", 
-            "tv_season_", "tv_episode_"
+            "tv_season_", "tv_episode_", "tv_watch_providers_",
+            "trending_",
+            "person_search_", "person_detail_",
+            "justwatch_search_", "justwatch_offers_"
         ]
         for prefix in prefixes:
             await cache_manager.clear_cache(subdirectory="movie", key_prefix=prefix)
         
-        success_message = "✅ 电影和电视剧查询缓存已清理。"
+        success_message = "✅ 所有影视内容查询缓存已清理（包括电影、电视剧、人物、观看平台、JustWatch数据）。"
         await send_success(context, update.effective_chat.id, foldable_text_v2(success_message), parse_mode="MarkdownV2")
         await delete_user_command(context, update.effective_chat.id, update.message.message_id)
     except Exception as e:
