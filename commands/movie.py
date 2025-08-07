@@ -637,30 +637,20 @@ class MovieService:
                 language_code = "en"
             
             cache_key = f"justwatch_search_{title}_{content_type}_{country_code}"
-            # 暂时跳过缓存以调试数据结构问题
-            # cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
-            # if cached_data:
-            #     return cached_data
+            cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
+            if cached_data:
+                return cached_data
             
             # 搜索内容 - 添加超时保护
             try:
                 # 使用 asyncio.wait_for 添加超时保护
                 loop = asyncio.get_event_loop()
                 # 根据文档，正确的参数顺序：title, country, language, count, best_only
-                logger.info(f"JustWatch 搜索参数: title='{title}', country='{country_code}', language='{language_code}'")
                 results = await asyncio.wait_for(
                     loop.run_in_executor(None, justwatch_search, title, country_code, language_code, 10, False),  # 改为 False 获取所有选项
                     timeout=15.0  # 15秒超时
                 )
                 
-                # 调试：验证返回数据类型
-                logger.info(f"JustWatch 原始返回类型: {type(results)}")
-                if results:
-                    logger.info(f"JustWatch 原始返回长度: {len(results)}")
-                    if len(results) > 0:
-                        logger.info(f"JustWatch 第一个元素类型: {type(results[0])}")
-                        if hasattr(results[0], '__dict__'):
-                            logger.info(f"JustWatch 第一个元素属性: {list(results[0].__dict__.keys())}")
             except asyncio.TimeoutError:
                 logger.warning(f"JustWatch 搜索超时: {title}")
                 return None
@@ -675,7 +665,6 @@ class MovieService:
                     # JustWatch 返回的是 MediaEntry 对象，不是字典
                     if hasattr(item, 'object_type'):
                         item_object_type = getattr(item, 'object_type', '').upper()
-                        logger.info(f"JustWatch 项目类型: {item_object_type}, 标题: {getattr(item, 'title', 'Unknown')}")
                         
                         if content_type == "movie" and item_object_type == "MOVIE":
                             filtered_results.append(item)
@@ -688,7 +677,6 @@ class MovieService:
                     await cache_manager.save_cache(cache_key, filtered_results, subdirectory="movie")
                     return filtered_results
             
-            logger.debug(f"JustWatch 搜索无结果: {title}, 返回数据: {results}")
                 
         except Exception as e:
             logger.warning(f"JustWatch 搜索失败 {title}: {e}")
@@ -721,27 +709,10 @@ class MovieService:
                 return None
             
             if offers_data and isinstance(offers_data, dict):
-                # 调试：显示获取到的国家和数据概况
-                country_summary = {}
-                all_monetization_types = set()
-                
-                for country, offers in offers_data.items():
-                    if offers and isinstance(offers, list):
-                        country_summary[country] = len(offers)
-                        # 收集该国家的所有 monetization_type
-                        for offer in offers:
-                            if hasattr(offer, 'monetization_type'):
-                                all_monetization_types.add(offer.monetization_type)
-                    else:
-                        country_summary[country] = 0
-                
-                logger.info(f"JustWatch 多国家数据概况: {country_summary}")
-                logger.info(f"发现的所有 monetization_type: {list(all_monetization_types)}")
                 
                 await cache_manager.save_cache(cache_key, offers_data, subdirectory="movie")
                 return offers_data
             else:
-                logger.debug(f"JustWatch 观影平台无数据: {node_id}, 返回数据: {offers_data}")
                 
         except Exception as e:
             logger.warning(f"获取 JustWatch 观影平台失败 {node_id}: {e}")
@@ -767,46 +738,27 @@ class MovieService:
             result["tmdb"] = tmdb_data
             
             # 获取 JustWatch 数据作为补充
-            logger.info(f"JustWatch 可用性检查: JUSTWATCH_AVAILABLE={JUSTWATCH_AVAILABLE}, title='{title}'")
             if JUSTWATCH_AVAILABLE and title:
-                logger.info(f"开始 JustWatch 搜索: {title}, 类型: {content_type}")
                 justwatch_results = await self._search_justwatch_content(title, content_type)
                 
-                logger.info(f"JustWatch 搜索结果: {len(justwatch_results) if justwatch_results else 0} 个结果")
                 if justwatch_results and len(justwatch_results) > 0:
-                    # 详细调试：查看搜索结果的结构
-                    logger.info(f"JustWatch 搜索结果结构调试:")
-                    for i, search_result in enumerate(justwatch_results[:2]):  # 只看前2个结果
-                        logger.info(f"  结果 {i}: 类型={type(search_result)}, 是否有offers={hasattr(search_result, 'offers') if hasattr(search_result, '__dict__') else '不是对象'}")
-                        if hasattr(search_result, '__dict__'):
-                            logger.info(f"  结果 {i} 属性: {list(search_result.__dict__.keys())}")
-                        elif isinstance(search_result, list):
-                            logger.info(f"  结果 {i} 是列表，长度={len(search_result)}")
-                            if len(search_result) > 0:
-                                logger.info(f"    列表第一个元素类型: {type(search_result[0])}")
-                                if hasattr(search_result[0], '__dict__'):
-                                    logger.info(f"    列表第一个元素属性: {list(search_result[0].__dict__.keys())}")
                     
                     # 寻找真正的 MediaEntry 对象
                     best_match = None
                     for search_result in justwatch_results:
                         if hasattr(search_result, 'offers'):
                             best_match = search_result
-                            logger.info(f"找到直接的 MediaEntry 对象")
                             break
                         elif isinstance(search_result, list):
                             for sub_result in search_result:
                                 if hasattr(sub_result, 'offers'):
                                     best_match = sub_result
-                                    logger.info(f"在嵌套列表中找到 MediaEntry 对象")
                                     break
                             if best_match:
                                 break
                     
                     if best_match and hasattr(best_match, 'entry_id'):
-                        logger.info(f"JustWatch 结果对象类型: {type(best_match)}")
                         entry_id = best_match.entry_id
-                        logger.info(f"找到 JustWatch entry_id: {entry_id}")
                         
                         # 支持的国家列表
                         supported_countries = {"US", "GB", "DE", "FR", "JP", "KR", "AU", "CA"}
@@ -815,16 +767,8 @@ class MovieService:
                         justwatch_data = await self._get_justwatch_offers(entry_id, list(supported_countries))
                         
                         if justwatch_data:
-                            logger.info(f"成功获取多国家 JustWatch 数据: {list(justwatch_data.keys())}")
-                            logger.info(f"result 类型检查: {type(result)}")
-                            if isinstance(result, dict):
-                                result["justwatch"] = justwatch_data
-                            else:
-                                logger.error(f"result 不是字典类型: {type(result)}")
-                        else:
-                            logger.warning(f"JustWatch offers 处理后无数据")
+                            result["justwatch"] = justwatch_data
                     else:
-                        logger.warning(f"在所有搜索结果中都未找到 offers 属性")
             
             # 合并数据，优先显示 TMDB 数据，JustWatch 作为补充
             result["combined"] = self._merge_watch_providers(tmdb_data, result.get("justwatch"))
@@ -832,14 +776,6 @@ class MovieService:
         except Exception as e:
             logger.error(f"获取增强观影平台数据失败: {e}")
         
-        # 防御性检查：确保返回正确的数据结构
-        if not isinstance(result, dict):
-            logger.error(f"result 变量被意外修改为 {type(result)}，重新初始化")
-            result = {
-                "tmdb": None,
-                "justwatch": None,
-                "combined": {}
-            }
         
         return result
 
@@ -2389,16 +2325,17 @@ class MovieService:
                             if offer_types:
                                 type_display = {
                                     'FLATRATE': '🎬 订阅观看',
+                                    'SUBSCRIPTION': '🎬 订阅观看',
+                                    'FREE': '🆓 免费观看',
+                                    'ADS': '📺 免费含广告',
                                     'RENT': '🏪 租赁',  
                                     'BUY': '💰 购买',
-                                    'CINEMA': '🎭 影院',
-                                    'FREE': '🆓 免费观看',
-                                    'ADS': '📺 免费含广告'
+                                    'CINEMA': '🎭 影院'
                                 }
                                 
                                 lines.append(f"• **{country_display_name}**:")
-                                # 按类型优先级排序显示
-                                type_order = ['FLATRATE', 'FREE', 'ADS', 'RENT', 'BUY', 'CINEMA']
+                                # 按类型优先级排序显示（优先显示免费和订阅选项）
+                                type_order = ['FREE', 'ADS', 'FLATRATE', 'SUBSCRIPTION', 'RENT', 'BUY', 'CINEMA']
                                 for offer_type in type_order:
                                     if offer_type in offer_types:
                                         platforms = offer_types[offer_type]
