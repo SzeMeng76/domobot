@@ -766,7 +766,6 @@ class MovieService:
                         
                         if justwatch_data:
                             result["justwatch"] = justwatch_data
-                    else:
             
             # 合并数据，优先显示 TMDB 数据，JustWatch 作为补充
             result["combined"] = self._merge_watch_providers(tmdb_data, result.get("justwatch"))
