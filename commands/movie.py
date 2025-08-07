@@ -781,6 +781,64 @@ class MovieService:
             logger.error(f"获取跨平台数据失败: {e}")
             return None
 
+    async def get_popular_for_cross_platform(self, limit: int = 6, country: str = "US") -> Optional[List]:
+        """获取适合跨平台对比的热门内容
+        Args:
+            limit: 返回数量限制
+            country: 国家代码
+        """
+        if not JUSTWATCH_AVAILABLE:
+            logger.warning("JustWatch API不可用，无法获取热门内容")
+            return None
+            
+        cache_key = f"popular_cross_platform_{country}_{limit}"
+        cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
+        if cached_data:
+            return cached_data
+            
+        try:
+            search_results = []
+            
+            # 搜索热门内容，选择有多平台支持的
+            for query in ["popular movies", "popular tv shows", "trending"]:
+                try:
+                    results = justwatch_search(query, country, "en", 30, True)
+                    
+                    for entry in results:
+                        # 只选择有多个平台支持的内容（便于跨平台对比）
+                        platform_count = len(set(offer.package.technical_name for offer in entry.offers))
+                        
+                        if platform_count >= 3:  # 至少3个平台
+                            # 避免重复添加
+                            if not any(existing.tmdb_id == entry.tmdb_id for existing in search_results if hasattr(existing, 'tmdb_id') and hasattr(entry, 'tmdb_id')):
+                                search_results.append(entry)
+                                
+                            if len(search_results) >= limit * 2:  # 获取更多候选
+                                break
+                                
+                except Exception as e:
+                    logger.warning(f"查询 '{query}' 失败: {e}")
+                    continue
+            
+            # 按平台数量和评分排序，选择最适合对比的内容
+            search_results.sort(key=lambda x: (
+                -len(set(offer.package.technical_name for offer in x.offers)),  # 平台数量降序
+                -(x.scoring.imdb_score if x.scoring and x.scoring.imdb_score else 0),  # 评分降序
+                -(x.scoring.tmdb_popularity if x.scoring and x.scoring.tmdb_popularity else 0)  # 热度降序
+            ))
+            
+            final_results = search_results[:limit]
+            
+            if final_results:
+                await cache_manager.save_cache(cache_key, final_results, subdirectory="movie", hours=6)  # 缓存6小时
+                logger.info(f"获取跨平台对比热门内容成功: {len(final_results)} 个结果")
+            
+            return final_results
+            
+        except Exception as e:
+            logger.error(f"获取跨平台对比热门内容失败: {e}")
+            return None
+
     async def get_country_trending(self, country: str, limit: int = 15) -> Optional[List]:
         """获取指定国家的热门内容排行榜
         Args:
@@ -6220,14 +6278,79 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                     )
                 
         elif callback_data == "chart_cross_platform":
-            # 跨平台对比 - 需要用户输入内容标题
-            await query.edit_message_text(
-                "🔍 *跨平台对比*\n\n"
-                "请使用以下格式查看内容的跨平台情况：\n"
-                "`/chart_compare <电影或电视剧名称>`\n\n"
-                "例如：`/chart_compare The Matrix`",
-                parse_mode=ParseMode.MARKDOWN_V2
-            )
+            # 跨平台对比 - 动态获取热门内容
+            await query.edit_message_text("🔍 正在获取热门内容...")
+            
+            try:
+                popular_content = await movie_service.get_popular_for_cross_platform(6)
+                
+                if popular_content and len(popular_content) >= 4:
+                    # 动态创建按钮
+                    buttons = []
+                    for i, entry in enumerate(popular_content[:6]):  # 最多6个
+                        media_emoji = "🎬" if entry.object_type == "MOVIE" else "📺"
+                        title = entry.title
+                        # 限制标题长度，避免按钮过长
+                        display_title = title if len(title) <= 12 else title[:12] + "..."
+                        callback_data = f"chart_compare_dynamic_{entry.tmdb_id}"
+                        
+                        button = InlineKeyboardButton(
+                            f"{media_emoji} {display_title}", 
+                            callback_data=callback_data
+                        )
+                        
+                        # 每行放2个按钮
+                        if i % 2 == 0:
+                            buttons.append([button])
+                        else:
+                            buttons[-1].append(button)
+                    
+                    # 添加自定义搜索和返回按钮
+                    buttons.append([
+                        InlineKeyboardButton("🎨 自定义搜索", callback_data="chart_compare_custom")
+                    ])
+                    buttons.append([
+                        InlineKeyboardButton("🔙 返回主菜单", callback_data="chart_main_menu")
+                    ])
+                    
+                    cross_platform_keyboard = InlineKeyboardMarkup(buttons)
+                    
+                    await query.edit_message_text(
+                        "🔍 *跨平台对比*\n\n"
+                        "选择当前热门内容快速查看跨平台情况：\n\n"
+                        "💡 这些是有多个平台支持的热门内容",
+                        reply_markup=cross_platform_keyboard,
+                        parse_mode=ParseMode.MARKDOWN_V2
+                    )
+                else:
+                    # 如果动态获取失败，使用备用的静态选项
+                    fallback_keyboard = InlineKeyboardMarkup([
+                        [
+                            InlineKeyboardButton("🎬 Avatar", callback_data="chart_compare_Avatar"),
+                            InlineKeyboardButton("🎭 Inception", callback_data="chart_compare_Inception")
+                        ],
+                        [
+                            InlineKeyboardButton("📺 Breaking Bad", callback_data="chart_compare_Breaking Bad"),
+                            InlineKeyboardButton("🦸 Avengers", callback_data="chart_compare_Avengers")
+                        ],
+                        [
+                            InlineKeyboardButton("🎨 自定义搜索", callback_data="chart_compare_custom")
+                        ],
+                        [
+                            InlineKeyboardButton("🔙 返回主菜单", callback_data="chart_main_menu")
+                        ]
+                    ])
+                    
+                    await query.edit_message_text(
+                        "🔍 *跨平台对比*\n\n"
+                        "选择内容快速查看跨平台情况：",
+                        reply_markup=fallback_keyboard,
+                        parse_mode=ParseMode.MARKDOWN_V2
+                    )
+                    
+            except Exception as e:
+                logger.error(f"获取动态热门内容失败: {e}")
+                await query.edit_message_text("❌ 获取热门内容失败，请稍后重试")
             
         elif callback_data == "chart_rank_zone":
             # 排名专区选择
@@ -6581,6 +6704,87 @@ async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 parse_mode=ParseMode.MARKDOWN_V2
             )
             
+        elif callback_data.startswith("chart_compare_"):
+            # 处理跨平台对比请求
+            if callback_data == "chart_compare_custom":
+                # 自定义搜索提示
+                await query.edit_message_text(
+                    "🔍 *自定义跨平台对比*\n\n"
+                    "请使用以下格式查看内容的跨平台情况：\n"
+                    "`/chart_compare <电影或电视剧名称>`\n\n"
+                    "例如：\n"
+                    "• `/chart_compare Avatar`\n"
+                    "• `/chart_compare Breaking Bad`\n"
+                    "• `/chart_compare Avengers`",
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
+            elif callback_data.startswith("chart_compare_dynamic_"):
+                # 处理动态获取的热门内容（通过TMDB ID）
+                tmdb_id = callback_data.replace("chart_compare_dynamic_", "")
+                await query.edit_message_text("🔍 正在获取跨平台对比数据...")
+                
+                try:
+                    # 先通过TMDB ID获取详细信息
+                    movie_details = await movie_service.get_movie_details(int(tmdb_id))
+                    tv_details = await movie_service.get_tv_details(int(tmdb_id))
+                    
+                    # 确定是电影还是电视剧，获取标题
+                    if movie_details and movie_details.get("title"):
+                        title = movie_details["title"]
+                    elif tv_details and tv_details.get("name"):
+                        title = tv_details["name"]
+                    else:
+                        await query.edit_message_text("❌ 获取内容信息失败")
+                        return
+                    
+                    # 使用标题进行跨平台对比搜索
+                    cross_data = await movie_service.get_cross_platform_charts(title)
+                    if cross_data:
+                        result_text = movie_service.format_cross_platform_charts(cross_data)
+                        
+                        # 添加返回按钮
+                        back_keyboard = InlineKeyboardMarkup([
+                            [InlineKeyboardButton("🔙 返回跨平台菜单", callback_data="chart_cross_platform")]
+                        ])
+                        
+                        await query.edit_message_text(
+                            foldable_text_with_markdown_v2(result_text),
+                            reply_markup=back_keyboard,
+                            parse_mode=ParseMode.MARKDOWN_V2
+                        )
+                    else:
+                        await query.edit_message_text(f"❌ 未找到 '{title}' 的跨平台数据")
+                        
+                except Exception as e:
+                    logger.error(f"获取动态跨平台对比数据失败: {e}")
+                    await query.edit_message_text("❌ 获取跨平台对比数据时发生错误")
+                    
+            else:
+                # 处理静态的热门内容（通过标题）
+                title = callback_data.replace("chart_compare_", "").replace("_", " ")
+                await query.edit_message_text(f"🔍 正在获取 *{title}* 的跨平台对比数据...")
+                
+                try:
+                    cross_data = await movie_service.get_cross_platform_charts(title)
+                    if cross_data:
+                        result_text = movie_service.format_cross_platform_charts(cross_data)
+                        
+                        # 添加返回按钮
+                        back_keyboard = InlineKeyboardMarkup([
+                            [InlineKeyboardButton("🔙 返回跨平台菜单", callback_data="chart_cross_platform")]
+                        ])
+                        
+                        await query.edit_message_text(
+                            foldable_text_with_markdown_v2(result_text),
+                            reply_markup=back_keyboard,
+                            parse_mode=ParseMode.MARKDOWN_V2
+                        )
+                    else:
+                        await query.edit_message_text(f"❌ 未找到 '{title}' 的跨平台数据")
+                except Exception as e:
+                    logger.error(f"获取跨平台对比数据失败: {e}")
+                    await query.edit_message_text("❌ 获取跨平台对比数据时发生错误")
+        
         elif callback_data == "chart_debug_platforms":
             # 调试平台信息
             await query.edit_message_text("🔍 正在获取JustWatch平台信息...")
