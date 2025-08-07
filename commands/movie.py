@@ -637,9 +637,10 @@ class MovieService:
                 language_code = "en"
             
             cache_key = f"justwatch_search_{title}_{content_type}_{country_code}"
-            cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
-            if cached_data:
-                return cached_data
+            # 暂时跳过缓存以调试数据结构问题
+            # cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
+            # if cached_data:
+            #     return cached_data
             
             # 搜索内容 - 添加超时保护
             try:
@@ -651,6 +652,15 @@ class MovieService:
                     loop.run_in_executor(None, justwatch_search, title, country_code, language_code, 10, True),
                     timeout=15.0  # 15秒超时
                 )
+                
+                # 调试：验证返回数据类型
+                logger.info(f"JustWatch 原始返回类型: {type(results)}")
+                if results:
+                    logger.info(f"JustWatch 原始返回长度: {len(results)}")
+                    if len(results) > 0:
+                        logger.info(f"JustWatch 第一个元素类型: {type(results[0])}")
+                        if hasattr(results[0], '__dict__'):
+                            logger.info(f"JustWatch 第一个元素属性: {list(results[0].__dict__.keys())}")
             except asyncio.TimeoutError:
                 logger.warning(f"JustWatch 搜索超时: {title}")
                 return None
@@ -763,16 +773,34 @@ class MovieService:
                 
                 logger.info(f"JustWatch 搜索结果: {len(justwatch_results) if justwatch_results else 0} 个结果")
                 if justwatch_results and len(justwatch_results) > 0:
-                    # JustWatch 搜索可能返回嵌套列表，需要处理这种情况
-                    first_result = justwatch_results[0]
+                    # 详细调试：查看搜索结果的结构
+                    logger.info(f"JustWatch 搜索结果结构调试:")
+                    for i, result in enumerate(justwatch_results[:2]):  # 只看前2个结果
+                        logger.info(f"  结果 {i}: 类型={type(result)}, 是否有offers={hasattr(result, 'offers') if hasattr(result, '__dict__') else '不是对象'}")
+                        if hasattr(result, '__dict__'):
+                            logger.info(f"  结果 {i} 属性: {list(result.__dict__.keys())}")
+                        elif isinstance(result, list):
+                            logger.info(f"  结果 {i} 是列表，长度={len(result)}")
+                            if len(result) > 0:
+                                logger.info(f"    列表第一个元素类型: {type(result[0])}")
+                                if hasattr(result[0], '__dict__'):
+                                    logger.info(f"    列表第一个元素属性: {list(result[0].__dict__.keys())}")
                     
-                    # 如果第一个结果是列表，取列表的第一个元素
-                    if isinstance(first_result, list) and len(first_result) > 0:
-                        best_match = first_result[0]
-                        logger.info(f"JustWatch 返回嵌套列表，使用第一个子结果")
-                    else:
-                        best_match = first_result
-                        logger.info(f"JustWatch 返回直接结果")
+                    # 寻找真正的 MediaEntry 对象
+                    best_match = None
+                    for result in justwatch_results:
+                        if hasattr(result, 'offers'):
+                            best_match = result
+                            logger.info(f"找到直接的 MediaEntry 对象")
+                            break
+                        elif isinstance(result, list):
+                            for sub_result in result:
+                                if hasattr(sub_result, 'offers'):
+                                    best_match = sub_result
+                                    logger.info(f"在嵌套列表中找到 MediaEntry 对象")
+                                    break
+                            if best_match:
+                                break
                     
                     if best_match and hasattr(best_match, 'offers'):
                         logger.info(f"JustWatch 结果对象类型: {type(best_match)}")
@@ -788,7 +816,7 @@ class MovieService:
                         else:
                             logger.warning(f"JustWatch offers 处理后无数据")
                     else:
-                        logger.warning(f"JustWatch 搜索结果中未找到 offers 属性")
+                        logger.warning(f"在所有搜索结果中都未找到 offers 属性")
             
             # 合并数据，优先显示 TMDB 数据，JustWatch 作为补充
             result["combined"] = self._merge_watch_providers(tmdb_data, result.get("justwatch"))
