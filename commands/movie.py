@@ -745,14 +745,24 @@ class MovieService:
                     
                     # 寻找真正的 MediaEntry 对象
                     best_match = None
-                    for search_result in justwatch_results:
-                        if hasattr(search_result, 'offers'):
+                    for i, search_result in enumerate(justwatch_results):
+                        has_offers = hasattr(search_result, 'offers')
+                        logger.info(f"JustWatch: 检查结果{i+1} - has_offers={has_offers}")
+                        
+                        if has_offers:
+                            offers = getattr(search_result, 'offers', [])
+                            logger.info(f"JustWatch: 结果{i+1} - offers数量={len(offers) if offers else 0}")
+                            
+                            # 修改条件：只要有 offers 属性就选择，不管 offers 是否为空
                             best_match = search_result
+                            logger.info(f"JustWatch: 选择结果{i+1}作为best_match")
                             break
                         elif isinstance(search_result, list):
+                            logger.info(f"JustWatch: 结果{i+1}是列表，检查子项")
                             for sub_result in search_result:
                                 if hasattr(sub_result, 'offers'):
                                     best_match = sub_result
+                                    logger.info(f"JustWatch: 从列表中选择子项作为best_match")
                                     break
                             if best_match:
                                 break
