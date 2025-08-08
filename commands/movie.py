@@ -357,7 +357,7 @@ class MovieService:
             count: 返回数量，默认20
             
         Returns:
-            List of MediaEntry with streaming charts data, or None if failed
+            List of serialized MediaEntry data, or None if failed
         """
         if not JUSTWATCH_AVAILABLE:
             logger.warning("JustWatch API不可用")
@@ -387,12 +387,15 @@ class MovieService:
                 
                 # 只返回有StreamingCharts数据的内容，或者至少有offers的内容
                 if (entry.streaming_charts and entry.streaming_charts.rank) or entry.offers:
-                    filtered_results.append(entry)
+                    # 序列化MediaEntry为字典，确保缓存兼容性
+                    entry_data = self._serialize_media_entry(entry)
+                    filtered_results.append(entry_data)
             
             # 按照排名排序（如果有排名数据的话）
-            def sort_key(entry):
-                if entry.streaming_charts and entry.streaming_charts.rank:
-                    return entry.streaming_charts.rank
+            def sort_key(entry_dict):
+                streaming_charts = entry_dict.get("streaming_charts")
+                if streaming_charts and streaming_charts.get("rank"):
+                    return streaming_charts["rank"]
                 return 9999  # 没有排名的放在后面
             
             filtered_results.sort(key=sort_key)
@@ -406,6 +409,99 @@ class MovieService:
         except Exception as e:
             logger.error(f"JustWatch热门内容获取失败: {e}")
             return None
+
+    def _serialize_media_entry(self, entry) -> dict:
+        """将MediaEntry对象序列化为字典，便于缓存和JSON序列化"""
+        try:
+            entry_data = {
+                "entry_id": entry.entry_id,
+                "object_id": entry.object_id,
+                "object_type": entry.object_type,
+                "title": entry.title,
+                "url": entry.url,
+                "release_year": entry.release_year,
+                "release_date": entry.release_date,
+                "runtime_minutes": entry.runtime_minutes,
+                "short_description": entry.short_description,
+                "genres": entry.genres,
+                "imdb_id": entry.imdb_id,
+                "tmdb_id": entry.tmdb_id,  # 这是关键字段！
+                "poster": entry.poster,
+                "backdrops": entry.backdrops,
+                "age_certification": entry.age_certification,
+            }
+            
+            # 序列化scoring
+            if entry.scoring:
+                entry_data["scoring"] = {
+                    "imdb_score": entry.scoring.imdb_score,
+                    "imdb_votes": entry.scoring.imdb_votes,
+                    "tmdb_score": entry.scoring.tmdb_score,
+                    "tmdb_votes": entry.scoring.tmdb_votes,
+                    "jwrating_score": entry.scoring.jwrating_score,
+                    "jwrating_votes": entry.scoring.jwrating_votes
+                }
+            else:
+                entry_data["scoring"] = None
+            
+            # 序列化interactions
+            if entry.interactions:
+                entry_data["interactions"] = {
+                    "dislike_list_count": entry.interactions.dislike_list_count,
+                    "like_list_count": entry.interactions.like_list_count,
+                    "seen_list_count": entry.interactions.seen_list_count,
+                    "want_to_see_list_count": entry.interactions.want_to_see_list_count
+                }
+            else:
+                entry_data["interactions"] = None
+            
+            # 序列化streaming_charts
+            if entry.streaming_charts:
+                entry_data["streaming_charts"] = {
+                    "rank": entry.streaming_charts.rank,
+                    "trend": entry.streaming_charts.trend,
+                    "trend_difference": entry.streaming_charts.trend_difference,
+                    "days_in_top_x": entry.streaming_charts.days_in_top_x,
+                    "top_rank": entry.streaming_charts.top_rank,
+                    "updated": entry.streaming_charts.updated
+                }
+            else:
+                entry_data["streaming_charts"] = None
+            
+            # 序列化offers
+            entry_data["offers"] = []
+            if entry.offers:
+                for offer in entry.offers[:3]:  # 只保留前3个offer避免数据过多
+                    offer_data = {
+                        "id": offer.id,
+                        "monetization_type": offer.monetization_type,
+                        "presentation_type": offer.presentation_type,
+                        "price_string": offer.price_string,
+                        "price_value": offer.price_value,
+                        "price_currency": offer.price_currency,
+                        "package": {
+                            "id": offer.package.id,
+                            "package_id": offer.package.package_id,
+                            "name": offer.package.name,
+                            "technical_name": offer.package.technical_name,
+                            "icon": offer.package.icon
+                        }
+                    }
+                    entry_data["offers"].append(offer_data)
+            
+            return entry_data
+            
+        except Exception as e:
+            logger.error(f"MediaEntry序列化失败: {e}")
+            # 返回基本数据作为fallback
+            return {
+                "title": getattr(entry, 'title', 'Unknown Title'),
+                "object_type": getattr(entry, 'object_type', 'UNKNOWN'),
+                "release_year": getattr(entry, 'release_year', 0),
+                "tmdb_id": getattr(entry, 'tmdb_id', None),
+                "streaming_charts": None,
+                "offers": []
+            }
     
     async def get_tv_details(self, tv_id: int) -> Optional[Dict]:
         """获取电视剧详情"""
@@ -2101,16 +2197,19 @@ class MovieService:
         lines = [f"📺 **JustWatch {country_flag} {type_name}流媒体热门排行榜** (更新: {current_time})\n"]
         
         for i, entry in enumerate(content_list[:10], 1):
-            title = entry.title
-            year = entry.release_year
-            content_type_icon = "🎬" if entry.object_type == "MOVIE" else "📺"
+            title = entry.get("title", "未知标题")
+            year = entry.get("release_year", 0)
+            object_type = entry.get("object_type", "UNKNOWN")
+            content_type_icon = "🎬" if object_type == "MOVIE" else "📺"
+            tmdb_id = entry.get("tmdb_id")
             
             # 排名和趋势信息
             rank_info = ""
-            if entry.streaming_charts and entry.streaming_charts.rank:
-                rank = entry.streaming_charts.rank
-                trend = entry.streaming_charts.trend
-                trend_diff = entry.streaming_charts.trend_difference
+            streaming_charts = entry.get("streaming_charts")
+            if streaming_charts and streaming_charts.get("rank"):
+                rank = streaming_charts["rank"]
+                trend = streaming_charts.get("trend", "STABLE")
+                trend_diff = streaming_charts.get("trend_difference", 0)
                 
                 # 趋势符号
                 trend_symbol = {
@@ -2136,8 +2235,10 @@ class MovieService:
             
             # 可用平台信息
             platforms = []
-            for offer in entry.offers[:3]:  # 只显示前3个平台
-                platform_name = offer.package.name
+            offers = entry.get("offers", [])
+            for offer in offers[:3]:  # 只显示前3个平台
+                package = offer.get("package", {})
+                platform_name = package.get("name", "未知平台")
                 if platform_name not in platforms:
                     platforms.append(platform_name)
             
@@ -2145,23 +2246,28 @@ class MovieService:
                 lines.append(f"   🎬 平台: {' | '.join(platforms)}")
             
             # 显示排行榜统计（如果有的话）
-            if entry.streaming_charts:
+            if streaming_charts:
                 chart_stats = []
-                if hasattr(entry.streaming_charts, 'days_in_top_10') and entry.streaming_charts.days_in_top_10:
-                    chart_stats.append(f"前10榜单{entry.streaming_charts.days_in_top_10}天")
-                if hasattr(entry.streaming_charts, 'top_rank') and entry.streaming_charts.top_rank:
-                    chart_stats.append(f"历史最高#{entry.streaming_charts.top_rank}")
+                if streaming_charts.get('days_in_top_x'):
+                    chart_stats.append(f"前{streaming_charts['days_in_top_x']}榜单")
+                if streaming_charts.get('top_rank'):
+                    chart_stats.append(f"历史最高#{streaming_charts['top_rank']}")
                 
                 if chart_stats:
                     lines.append(f"   📊 {' | '.join(chart_stats)}")
             
             # JustWatch评分（如果有的话）
-            if hasattr(entry, 'scoring') and entry.scoring and entry.scoring.jw_rating:
-                lines.append(f"   ⭐ JW评分: {entry.scoring.jw_rating:.1f}/10")
+            scoring = entry.get("scoring")
+            if scoring and scoring.get('jwrating_score'):
+                lines.append(f"   ⭐ JW评分: {scoring['jwrating_score']:.1f}/10")
             
-            # 搜索命令
-            search_cmd = "/movie" if entry.object_type == "MOVIE" else "/tv"
-            lines.append(f"   `{search_cmd} {entry.title}`")
+            # 优先使用TMDB ID生成详情命令，否则使用搜索命令
+            if tmdb_id:
+                detail_cmd = "/movie_detail" if object_type == "MOVIE" else "/tv_detail"
+                lines.append(f"   `{detail_cmd} {tmdb_id}`")
+            else:
+                search_cmd = "/movie" if object_type == "MOVIE" else "/tv"
+                lines.append(f"   `{search_cmd} {title}`")
             
             lines.append("")
         
@@ -2229,28 +2335,39 @@ class MovieService:
             lines.append("📺 **JustWatch流媒体热门** (实时数据)")
             
             for i, entry in enumerate(justwatch_data[:4], 1):
-                title = entry.title
-                year = entry.release_year
-                content_type_icon = "🎬" if entry.object_type == "MOVIE" else "📺"
-                search_cmd = "/movie" if entry.object_type == "MOVIE" else "/tv"
+                title = entry.get("title", "未知标题")
+                year = entry.get("release_year", 0)
+                object_type = entry.get("object_type", "UNKNOWN")
+                content_type_icon = "🎬" if object_type == "MOVIE" else "📺"
+                tmdb_id = entry.get("tmdb_id")
+                
+                # 优先使用TMDB ID生成详情命令，否则使用搜索命令
+                if tmdb_id:
+                    detail_cmd = "/movie_detail" if object_type == "MOVIE" else "/tv_detail"
+                    command_line = f"   `{detail_cmd} {tmdb_id}`"
+                else:
+                    search_cmd = "/movie" if object_type == "MOVIE" else "/tv"
+                    command_line = f"   `{search_cmd} {title}`"
                 
                 # 排名信息
                 rank_info = ""
-                if entry.streaming_charts and entry.streaming_charts.rank:
-                    rank = entry.streaming_charts.rank
-                    trend = entry.streaming_charts.trend
+                streaming_charts = entry.get("streaming_charts")
+                if streaming_charts and streaming_charts.get("rank"):
+                    rank = streaming_charts["rank"]
+                    trend = streaming_charts.get("trend", "STABLE")
                     trend_symbol = {"UP": "📈", "DOWN": "📉", "STABLE": "➡️"}.get(trend, "➡️")
                     rank_info = f" {trend_symbol} #{rank}"
                 
                 lines.append(f"{i}. {content_type_icon} **{title}** ({year}){rank_info}")
                 
                 # 平台信息
-                platforms = [offer.package.name for offer in entry.offers[:3]]
+                offers = entry.get("offers", [])
+                platforms = [offer.get("package", {}).get("name", "未知平台") for offer in offers[:3]]
                 if platforms:
                     lines.append(f"   🎬 {' | '.join(platforms)}")
                 
-                # 搜索命令（JustWatch没有直接ID）
-                lines.append(f"   `{search_cmd} {title}`")
+                # 命令行（优先TMDB ID详情命令）
+                lines.append(command_line)
             
             lines.append("")
         else:
