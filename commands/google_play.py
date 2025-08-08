@@ -114,9 +114,16 @@ async def googleplay_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if len(args_list) >= 3:
         # Check if last argument could be language and second-to-last could be country
         if len(args_list[-2]) == 2 and args_list[-2].isalpha():
-            user_country = args_list[-2].upper()
-            lang_code = args_list[-1].lower()
-            query = " ".join(args_list[:-2])  # Everything except last 2 args
+            potential_country = args_list[-2].upper()
+            # Validate if it's a real country code
+            if potential_country in SUPPORTED_COUNTRIES:
+                user_country = potential_country
+                lang_code = args_list[-1].lower()
+                query = " ".join(args_list[:-2])  # Everything except last 2 args
+            else:
+                # Not a valid country, maybe just language at the end
+                lang_code = args_list[-1].lower()
+                query = " ".join(args_list[:-1])  # Everything except last arg
         else:
             # Maybe just language at the end
             lang_code = args_list[-1].lower()
@@ -124,8 +131,14 @@ async def googleplay_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     elif len(args_list) == 2:
         # Check if second argument is country code or language
         if len(args_list[1]) == 2 and args_list[1].isalpha():
-            user_country = args_list[1].upper()
-            query = args_list[0]
+            potential_country = args_list[1].upper()
+            # Validate if it's a real country code
+            if potential_country in SUPPORTED_COUNTRIES:
+                user_country = potential_country
+                query = args_list[0]
+            else:
+                # Not a valid country, treat as part of app name
+                query = " ".join(args_list)
         else:
             # Assume it's part of app name or language
             if args_list[1].lower() in ['en', 'zh', 'zh-cn', 'ja', 'ko', 'es', 'fr', 'de']:
