@@ -2255,29 +2255,34 @@ class MovieService:
                     title = movie_data.get("title", "未知标题")
                     year = movie_data.get("year", "")
                     tmdb_id = movie_data.get("ids", {}).get("tmdb")
-                    detail_cmd = "/movie_detail"
-                    search_cmd = "/movie"
+                    watchers = item.get("watchers") or 0
+                    plays = item.get("plays") or 0
+                    
+                    year_text = f" ({year})" if year else ""
+                    stats_text = f"👥 {watchers}人观看" + (f" | 🎬 {plays}次播放" if plays else "")
+                    
+                    if tmdb_id:
+                        lines.append(f"{i}. 🎬 **{title}**{year_text}")
+                        lines.append(f"   {stats_text}")
+                        lines.append(f"   `/movie_detail {tmdb_id}`")
+                    else:
+                        lines.append(f"{i}. 🎬 **{title}**{year_text}")
+                        lines.append(f"   {stats_text}")
                 else:
                     show_data = item.get("show", {})
                     title = show_data.get("title", "未知标题")
                     year = show_data.get("year", "")
                     tmdb_id = show_data.get("ids", {}).get("tmdb")
-                    detail_cmd = "/tv_detail"
-                    search_cmd = "/tv"
-                
-                watchers = item.get("watchers", 0)
-                plays = item.get("plays", 0)
-                
-                year_text = f" ({year})" if year else ""
-                stats_text = f"👥 {watchers}人观看" + (f" | 🎬 {plays}次播放" if plays else "")
-                
-                lines.append(f"{i}. 🎬 **{title}**{year_text}")
-                lines.append(f"   {stats_text}")
-                # 优先使用TMDB ID，否则使用搜索命令
-                if tmdb_id:
-                    lines.append(f"   `{detail_cmd} {tmdb_id}`")
-                else:
-                    lines.append(f"   `{search_cmd} {title}`")
+                    watchers = item.get("watchers") or 0
+                    
+                    year_text = f" ({year})" if year else ""
+                    stats_text = f"👥 {watchers}人观看" if watchers > 0 else ""
+                    
+                    if tmdb_id:
+                        lines.append(f"{i}. 🎬 **{title}**{year_text}{stats_text}")
+                        lines.append(f"   `/tv_detail {tmdb_id}`")
+                    else:
+                        lines.append(f"{i}. 🎬 **{title}**{year_text}{stats_text}")
             
             lines.append("")
         else:
