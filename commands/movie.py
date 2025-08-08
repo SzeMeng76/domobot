@@ -2261,14 +2261,6 @@ class MovieService:
             if scoring and scoring.get('jwrating_score'):
                 lines.append(f"   ⭐ JW评分: {scoring['jwrating_score']:.1f}/10")
             
-            # 优先使用TMDB ID生成详情命令，否则使用搜索命令
-            if tmdb_id:
-                detail_cmd = "/movie_detail" if object_type == "MOVIE" else "/tv_detail"
-                lines.append(f"   `{detail_cmd} {tmdb_id}`")
-            else:
-                search_cmd = "/movie" if object_type == "MOVIE" else "/tv"
-                lines.append(f"   `{search_cmd} {title}`")
-            
             lines.append("")
         
         # 添加说明和使用提示
@@ -2335,24 +2327,19 @@ class MovieService:
             lines.append("📺 **JustWatch流媒体热门** (实时数据)")
             
             for i, entry in enumerate(justwatch_data[:4], 1):
+                # 确保entry是字典类型
+                if not isinstance(entry, dict):
+                    continue
+                
                 title = entry.get("title", "未知标题")
                 year = entry.get("release_year", 0)
                 object_type = entry.get("object_type", "UNKNOWN")
                 content_type_icon = "🎬" if object_type == "MOVIE" else "📺"
-                tmdb_id = entry.get("tmdb_id")
-                
-                # 优先使用TMDB ID生成详情命令，否则使用搜索命令
-                if tmdb_id:
-                    detail_cmd = "/movie_detail" if object_type == "MOVIE" else "/tv_detail"
-                    command_line = f"   `{detail_cmd} {tmdb_id}`"
-                else:
-                    search_cmd = "/movie" if object_type == "MOVIE" else "/tv"
-                    command_line = f"   `{search_cmd} {title}`"
                 
                 # 排名信息
                 rank_info = ""
                 streaming_charts = entry.get("streaming_charts")
-                if streaming_charts and streaming_charts.get("rank"):
+                if streaming_charts and isinstance(streaming_charts, dict) and streaming_charts.get("rank"):
                     rank = streaming_charts["rank"]
                     trend = streaming_charts.get("trend", "STABLE")
                     trend_symbol = {"UP": "📈", "DOWN": "📉", "STABLE": "➡️"}.get(trend, "➡️")
@@ -2362,12 +2349,17 @@ class MovieService:
                 
                 # 平台信息
                 offers = entry.get("offers", [])
-                platforms = [offer.get("package", {}).get("name", "未知平台") for offer in offers[:3]]
-                if platforms:
-                    lines.append(f"   🎬 {' | '.join(platforms)}")
-                
-                # 命令行（优先TMDB ID详情命令）
-                lines.append(command_line)
+                if isinstance(offers, list):
+                    platforms = []
+                    for offer in offers[:3]:
+                        if isinstance(offer, dict):
+                            package = offer.get("package", {})
+                            if isinstance(package, dict):
+                                platform_name = package.get("name", "未知平台")
+                                if platform_name not in platforms:
+                                    platforms.append(platform_name)
+                    if platforms:
+                        lines.append(f"   🎬 {' | '.join(platforms)}")
             
             lines.append("")
         else:
