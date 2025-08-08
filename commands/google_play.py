@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 
 from google_play_scraper import app as gp_app
 from google_play_scraper import exceptions as gp_exceptions
@@ -51,6 +52,78 @@ EMOJI_IAP = "🛒"
 EMOJI_LINK = "🔗"
 EMOJI_COUNTRY = "📍"
 EMOJI_FLAG_PLACEHOLDER = "🏳️"  # Fallback if no custom emoji found
+
+
+async def parse_and_convert_iap_price(price_str: str, rate_converter) -> tuple[str, str | None]:
+    """
+    Parse Google Play IAP price string and convert to CNY.
+    Returns (original_price, cny_converted_info)
+    
+    Examples:
+    - "每件NGN 150.00-NGN 99,900.00" -> ("每件NGN 150.00-NGN 99,900.00", "约 ¥10.50-¥700.00")
+    - "$0.99 - $99.99 per item" -> ("$0.99 - $99.99 per item", "约 ¥7.00-¥710.00")
+    """
+    if not price_str or not rate_converter or not rate_converter.rates:
+        return price_str, None
+    
+    # Extended pattern to match more currency formats
+    # Matches: NGN 150.00, $0.99, USD 10.50, ₹100, etc.
+    price_pattern = r'([A-Z]{3}|[¥€£$₹₦₩₽₪₸₴₦₵₡₲₪₫₨₩₭₯₰₱₲₳₴₵₶₷₸₹₺₻₼₽₾₿＄￠￡￢￣￤￥￦])[\s]*([\d,]+\.?\d*)'
+    matches = re.findall(price_pattern, price_str)
+    
+    if not matches:
+        return price_str, None
+    
+    # Common currency symbol mappings
+    symbol_to_code = {
+        '$': 'USD', '€': 'EUR', '£': 'GBP', '¥': 'JPY', '￥': 'CNY',
+        '₹': 'INR', '₦': 'NGN', '₩': 'KRW', '₽': 'RUB', '₪': 'ILS',
+        '₸': 'KZT', '₴': 'UAH', '₵': 'GHS', '₡': 'CRC', '₲': 'PYG',
+        '₫': 'VND', '₨': 'PKR', '₭': 'LAK', '₯': 'GRD', '₱': 'PHP',
+        '₳': 'ARA', '₶': 'LVL', '₷': 'SPL', '₺': 'TRY', '₻': 'TMT',
+        '₼': 'AZN', '₾': 'GEL', '₿': 'BTC', '＄': 'USD', '￠': 'USD',
+        '￡': 'GBP', '￢': 'GBP', '￤': 'ITL', '￦': 'KRW'
+    }
+    
+    try:
+        converted_prices = []
+        
+        for currency_symbol, price_value in matches:
+            # Clean price value
+            clean_price = price_value.replace(',', '')
+            price_float = float(clean_price)
+            
+            # Convert currency symbol to standard code
+            if len(currency_symbol) == 3 and currency_symbol.isalpha():
+                # Already a 3-letter code
+                currency_code = currency_symbol.upper()
+            else:
+                # Map symbol to code
+                currency_code = symbol_to_code.get(currency_symbol, 'USD')
+            
+            # Check if currency is supported by rate converter (like App Store does)
+            if currency_code in rate_converter.rates:
+                cny_price = await rate_converter.convert(price_float, currency_code, "CNY")
+                if cny_price is not None:
+                    converted_prices.append(f"¥{cny_price:.2f}")
+            else:
+                logger.warning(f"Currency {currency_code} not supported by rate converter")
+        
+        if converted_prices:
+            if len(converted_prices) == 1:
+                cny_info = f"约 {converted_prices[0]}"
+            elif len(converted_prices) == 2:
+                cny_info = f"约 {converted_prices[0]}-{converted_prices[1]}"
+            else:
+                # More than 2 prices, show range
+                cny_info = f"约 {converted_prices[0]}-{converted_prices[-1]}"
+            
+            return price_str, cny_info
+            
+    except (ValueError, TypeError) as e:
+        logger.warning(f"Failed to parse/convert IAP price '{price_str}': {e}")
+    
+    return price_str, None
 
 
 async def get_app_details_for_country(app_id: str, country: str, lang_code: str) -> tuple[str, dict | None, str | None]:
@@ -286,17 +359,29 @@ async def googleplay_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
             
             if offers_iap:
                 if iap_range_raw:
-                    iap_str = f"{iap_range_raw}"
+                    original_price, cny_info = await parse_and_convert_iap_price(iap_range_raw, rate_converter)
+                    iap_str = original_price
+                    if cny_info:
+                        iap_str += f" ({cny_info})"
                 elif iap_price_raw:
-                    iap_str = f"{iap_price_raw}"
+                    original_price, cny_info = await parse_and_convert_iap_price(iap_price_raw, rate_converter)
+                    iap_str = original_price
+                    if cny_info:
+                        iap_str += f" ({cny_info})"
                 else:
                     iap_str = "有 (价格范围未知)"
             else:
                 # 即使offersIAP为False，也检查是否有价格信息（可能是检测bug）
                 if iap_price_raw:
-                    iap_str = f"{iap_price_raw} (检测到IAP)"
+                    original_price, cny_info = await parse_and_convert_iap_price(iap_price_raw, rate_converter)
+                    iap_str = f"{original_price} (检测到IAP)"
+                    if cny_info:
+                        iap_str = f"{original_price} ({cny_info}, 检测到IAP)"
                 elif iap_range_raw:
-                    iap_str = f"{iap_range_raw} (检测到IAP)"
+                    original_price, cny_info = await parse_and_convert_iap_price(iap_range_raw, rate_converter)
+                    iap_str = f"{original_price} (检测到IAP)"
+                    if cny_info:
+                        iap_str = f"{original_price} ({cny_info}, 检测到IAP)"
 
             raw_message_parts.append(f"  {EMOJI_RATING} 评分: {rating_stars} ({score_str})")
             raw_message_parts.append(f"  {EMOJI_INSTALLS} 安装量: {installs}")
