@@ -399,7 +399,7 @@ class MovieService:
             
             # 缓存结果
             if filtered_results:
-                await cache_manager.save_cache(cache_key, filtered_results, subdirectory="movie", ttl=1800)  # 30分钟缓存
+                await cache_manager.save_cache(cache_key, filtered_results, subdirectory="movie")
             
             return filtered_results
             
