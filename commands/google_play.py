@@ -244,11 +244,22 @@ async def googleplay_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
             offers_iap = details.get("offersIAP", False)
             iap_range_raw = details.get("IAPRange")
+            iap_price_raw = details.get("inAppProductPrice")
             iap_str = "无"
-            if offers_iap and iap_range_raw:
-                iap_str = f"{iap_range_raw}"
-            elif offers_iap and not iap_range_raw:
-                iap_str = "有 (范围未知)"
+            
+            if offers_iap:
+                if iap_range_raw:
+                    iap_str = f"{iap_range_raw}"
+                elif iap_price_raw:
+                    iap_str = f"{iap_price_raw}"
+                else:
+                    iap_str = "有 (价格范围未知)"
+            else:
+                # 即使offersIAP为False，也检查是否有价格信息（可能是检测bug）
+                if iap_price_raw:
+                    iap_str = f"{iap_price_raw} (检测到IAP)"
+                elif iap_range_raw:
+                    iap_str = f"{iap_range_raw} (检测到IAP)"
 
             raw_message_parts.append(f"  {EMOJI_RATING} 评分: {rating_stars} ({score_str})")
             raw_message_parts.append(f"  {EMOJI_INSTALLS} 安装量: {installs}")
