@@ -2095,6 +2095,7 @@ class MovieService:
             title = entry.title
             year = entry.release_year
             content_type_icon = "🎬" if entry.object_type == "MOVIE" else "📺"
+            tmdb_id = entry.tmdb_id
             
             # 排名和趋势信息
             rank_info = ""
@@ -2149,6 +2150,15 @@ class MovieService:
             # JustWatch评分（如果有的话）
             if hasattr(entry, 'scoring') and entry.scoring and entry.scoring.jw_rating:
                 lines.append(f"   ⭐ JW评分: {entry.scoring.jw_rating:.1f}/10")
+            
+            # 添加复制命令
+            if tmdb_id:
+                detail_cmd = "/movie_detail" if entry.object_type == "MOVIE" else "/tv_detail"
+                lines.append(f"   `{detail_cmd} {tmdb_id}`")
+            else:
+                # 如果没有TMDB ID，使用搜索命令
+                search_cmd = "/movie" if entry.object_type == "MOVIE" else "/tv"
+                lines.append(f"   `{search_cmd} {title}`")
             
             lines.append("")
         
@@ -3768,10 +3778,11 @@ async def movie_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     """处理 /movie_hot 命令 - 获取热门电影（支持多数据源）
     
     用法:
-    /movie_hot - 混合显示TMDB和JustWatch数据（默认）
+    /movie_hot - 混合显示TMDB、JustWatch和Trakt数据（默认）
     /movie_hot tmdb - 只显示TMDB数据
     /movie_hot justwatch - 只显示JustWatch数据
     /movie_hot justwatch US - 显示美国JustWatch数据
+    /movie_hot trakt - 只显示Trakt用户数据
     """
     if not update.message or not update.effective_chat:
         return
@@ -3788,7 +3799,7 @@ async def movie_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     country = context.args[1].upper() if len(context.args) > 1 else "US"
     
     # 验证数据源参数
-    valid_sources = ["mixed", "tmdb", "justwatch"]
+    valid_sources = ["mixed", "tmdb", "justwatch", "trakt"]
     if source not in valid_sources:
         await send_error(
             context,
@@ -3828,6 +3839,18 @@ async def movie_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 result_text = movie_service.format_popular_movies(popular_data)
             else:
                 result_text = "❌ 获取TMDB热门电影失败，请稍后重试"
+                
+        elif source == "trakt":
+            # 只显示Trakt数据
+            try:
+                trakt_data = await movie_service._get_trakt_trending_movies(15)
+                if trakt_data:
+                    result_text = movie_service.format_trakt_trending_movies(trakt_data)
+                else:
+                    result_text = "❌ 获取Trakt热门电影失败，请稍后重试"
+            except Exception as e:
+                logger.warning(f"获取Trakt电影数据失败: {e}")
+                result_text = "❌ Trakt API暂时不可用，请稍后重试"
                 
         else:  # mixed
             # 混合显示TMDB、JustWatch和Trakt数据
@@ -4201,10 +4224,11 @@ async def tv_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     """处理 /tv_hot 命令 - 获取热门电视剧（支持多数据源）
     
     用法:
-    /tv_hot - 混合显示TMDB和JustWatch数据（默认）
+    /tv_hot - 混合显示TMDB、JustWatch和Trakt数据（默认）
     /tv_hot tmdb - 只显示TMDB数据
     /tv_hot justwatch - 只显示JustWatch数据
     /tv_hot justwatch US - 显示美国JustWatch数据
+    /tv_hot trakt - 只显示Trakt用户数据
     """
     if not update.message or not update.effective_chat:
         return
@@ -4221,7 +4245,7 @@ async def tv_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     country = context.args[1].upper() if len(context.args) > 1 else "US"
     
     # 验证数据源参数
-    valid_sources = ["mixed", "tmdb", "justwatch"]
+    valid_sources = ["mixed", "tmdb", "justwatch", "trakt"]
     if source not in valid_sources:
         await send_error(
             context,
@@ -4261,6 +4285,18 @@ async def tv_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 result_text = movie_service.format_popular_tv_shows(popular_data)
             else:
                 result_text = "❌ 获取TMDB热门电视剧失败，请稍后重试"
+                
+        elif source == "trakt":
+            # 只显示Trakt数据
+            try:
+                trakt_data = await movie_service._get_trakt_trending_tv(15)
+                if trakt_data:
+                    result_text = movie_service.format_trakt_trending_tv(trakt_data)
+                else:
+                    result_text = "❌ 获取Trakt热门电视剧失败，请稍后重试"
+            except Exception as e:
+                logger.warning(f"获取Trakt电视剧数据失败: {e}")
+                result_text = "❌ Trakt API暂时不可用，请稍后重试"
                 
         else:  # mixed
             # 混合显示TMDB、JustWatch和Trakt数据
