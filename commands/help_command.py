@@ -56,16 +56,13 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - `/tq <城市> <参数>`: 支持 `24h`, `降水`, `指数` 等高级查询。
 
 🎬 *影视查询*
-搜索: `/movie` 按钮 | `/movies` 文本 | `/tv` 按钮 | `/tvs` 文本
-热门: `/movie_hot` | `/tv_hot` | `/movie_trending` | `/tv_trending`
-详情: `/movie_detail <ID>` | `/tv_detail <ID>`
-视频: `/movie_videos <ID>` | `/tv_videos <ID>`
-评价: `/movie_reviews <ID>` | `/tv_reviews <ID>`
-观看: `/movie_watch <ID>` | `/tv_watch <ID>`
-季集: `/tv_season <ID> <季>` | `/tv_episode <ID> <季> <集>`
-推荐: `/movie_rec <ID>` | `/tv_rec <ID>` | `/movie_related <ID>` | `/tv_related <ID>`
-人物: `/person` 按钮 | `/persons` 文本 | `/person_detail <ID>`
-趋势: `/trending` | `/now_playing` | `/upcoming`
+搜索: `/movie <名称>` | `/tv <名称>` | `/person <姓名>`
+热门: `/movie_hot [tmdb|justwatch|trakt]` | `/tv_hot [tmdb|justwatch|trakt]` | `/trending`
+详情: `/movie_detail <ID>` | `/tv_detail <ID>` | `/tv_season <ID> <季>` | `/tv_episode <ID> <季> <集>`
+视频: `/movie_videos <ID>` | `/tv_videos <ID>` | `/movie_reviews <ID>` | `/tv_reviews <ID>`
+观看: `/movie_watch <ID>` | `/tv_watch <ID>` | `/movie_rec <ID>` | `/tv_rec <ID>`
+人物: `/person <姓名>` | `/person_detail <ID>`
+多源: TMDB+JustWatch+Trakt三平台整合，流媒体排行榜
 
 🎮 *Steam 价格查询*
 - `/steam <游戏名>`: 查询Steam游戏在默认地区的价格。
@@ -109,12 +106,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - `/crypto btc`: 查询比特币价格。
 - `/bin 123456`: 查询信用卡BIN信息。
 - `/tq 北京`: 查询北京天气。
+- `/movie_hot`: 三平台热门电影
+- `/movie_hot justwatch`: JustWatch排行榜
 - `/movie 复仇者联盟`: 搜索电影
 - `/tv 权力的游戏`: 搜索电视剧
-- `/movie_videos 299534`: 查看预告片
 - `/trending`: 查看今日热门
-- `/person 汤姆·汉克斯`: 搜索影视人物（按钮选择）。
-- `/persons 汤姆·汉克斯`: 搜索影视人物（文本列表）。
 - `/steam 赛博朋克`: 查询《赛博朋克2077》价格。
 - `/nf`: 查看Netflix全球价格排名。
 - `/ds`: 查看Disney+全球价格排名。
@@ -219,11 +215,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - `/tq <城市> [天数/参数]`: 天气预报和空气质量
 
 🎬 *影视查询*
-搜索: `/movie` 按钮 | `/movies` 文本 | `/tv` 按钮 | `/tvs` 文本
-电影: `/movie_hot`, `/movie_trending`, `/movie_detail <ID>`, `/movie_rec <ID>`, `/movie_related <ID>`, `/movie_videos <ID>`, `/movie_reviews <ID>`, `/movie_watch <ID>`
-电视: `/tv_hot`, `/tv_trending`, `/tv_detail <ID>`, `/tv_rec <ID>`, `/tv_related <ID>`, `/tv_videos <ID>`, `/tv_reviews <ID>`, `/tv_watch <ID>`, `/tv_season <ID> <季数>`, `/tv_episode <ID> <季> <集>`
-趋势: `/trending`, `/trending_week`, `/now_playing`, `/upcoming`, `/tv_airing`, `/tv_on_air`
-人物: `/person <姓名>` 按钮 | `/persons <姓名>` 文本, `/person_detail <ID>`
+搜索: `/movie <名称>` | `/tv <名称>` | `/person <姓名>`
+热门: `/movie_hot [tmdb|justwatch|trakt]` | `/tv_hot [tmdb|justwatch|trakt]`
+详情: `/movie_detail <ID>` | `/tv_detail <ID>` | `/movie_videos <ID>` | `/tv_videos <ID>`
+季集: `/tv_season <ID> <季>` | `/tv_episode <ID> <季> <集>`
+多源: TMDB+JustWatch+Trakt三平台整合，流媒体排行榜
 
 🎮 *Steam游戏*
 - `/steam <游戏名> [国家]`: 游戏价格查询
@@ -254,7 +250,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 - 支持数学表达式
 
 ⚡ *快速开始*
-`/rate USD 100` `/crypto btc` `/bin 123456` `/tq 北京` `/movie 复仇者联盟` `/steam 赛博朋克` `/nf` `/when 123456789`
+`/rate USD 100` `/crypto btc` `/tq 北京` `/movie_hot` `/movie_hot justwatch` `/steam 赛博朋克` `/nf`
 
 🔄 消息会自动删除保持整洁"""
         
@@ -351,8 +347,9 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 - `/crypto btc`: 查询比特币价格
 - `/bin 123456`: 查询信用卡BIN信息
 - `/tq 北京`: 查询北京天气
+- `/movie_hot`: 三平台热门电影
+- `/movie_hot justwatch`: JustWatch排行榜
 - `/movie 复仇者联盟`: 搜索电影信息
-- `/tv 权力的游戏`: 搜索电视剧信息
 - `/steam 赛博朋克`: 查询游戏价格
 - `/steamb Half-Life`: 查询Steam捆绑包
 - `/steams 动作`: 综合搜索游戏

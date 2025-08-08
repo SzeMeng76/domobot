@@ -35,7 +35,7 @@
 
 -   📺 **公开流媒体价格:** 所有用户可用 - 查询Netflix、Disney+、Spotify、HBO Max等流媒体服务在全球各地区的订阅价格。
 -   👤 **公开用户信息查询:** 所有用户可用 - 查询Telegram用户注册日期、账号年龄，以及获取用户/群组ID。
--   🎬 **电影和电视剧信息:** 查询电影/电视剧详情及海报、评分、演员、预告片、评价、推荐、观看平台和季集信息。支持多源数据整合（TMDB + Trakt），Telegraph长内容集成，热门趋势发现、人物搜索和增强的统计数据（观看数、社区数据）。*(需要白名单)*
+-   🎬 **电影和电视剧信息:** 查询电影/电视剧详情及海报、评分、演员、预告片、评价、推荐、观看平台和季集信息。支持**三平台数据整合**（TMDB + JustWatch + Trakt）及**JustWatch流媒体排行榜**，实时排名趋势、平台可用性、Telegraph长内容集成，热门趋势发现、人物搜索和增强的统计数据（观看数、社区数据）。*(需要白名单)*
 -   🪙 **加密货币价格:** 查询实时加密货币价格，支持自定义数量和货币转换，并显示 24 小时和 7 天的价格变化率。*(需要白名单)*
 -   💳 **BIN查询:** 查询信用卡BIN（银行识别号）信息，包括卡片品牌、类型、发卡银行和国家等详细信息。*(需要白名单)*
 -   🌦️ **天气预报:** 提供详细、多格式的天气预报（实时、多日、每小时、分钟级降水和生活指数）。*(需要白名单)*
@@ -154,24 +154,30 @@ docker-compose down
 # 电影和电视剧
 /movie 复仇者联盟            # 搜索电影（按钮选择）
 /movies 复仇者联盟           # 搜索电影（文本列表）
-/movie_hot                 # 热门电影
-/movie_detail 299536       # 电影详情（包含预告片链接）
+/movie_hot                 # 三平台热门电影（TMDB + JustWatch + Trakt）
+/movie_hot tmdb            # 仅TMDB热门电影
+/movie_hot justwatch       # 仅JustWatch流媒体排行榜
+/movie_hot justwatch US    # JustWatch美国流媒体排行榜
+/movie_detail 299536       # 电影详情（包含JustWatch排名信息）
 /movie_videos 299536       # 电影预告片和相关视频
 /movie_reviews 299536      # 用户评价（长内容自动生成Telegraph页面）
 /movie_rec 299536          # 电影推荐
-/movie_watch 299536        # 观看平台信息
+/movie_watch 299536        # 观看平台信息（包含JustWatch数据）
 /movie_trending            # Trakt热门电影
 /movie_related 299536      # Trakt相关电影推荐
 /tv 权力的游戏              # 搜索电视剧（按钮选择）
 /tvs 权力的游戏             # 搜索电视剧（文本列表）
-/tv_hot                    # 热门电视剧
-/tv_detail 1399            # 电视剧详情（包含预告片链接）
+/tv_hot                    # 三平台热门电视剧（TMDB + JustWatch + Trakt）
+/tv_hot tmdb               # 仅TMDB热门电视剧
+/tv_hot justwatch          # 仅JustWatch流媒体排行榜
+/tv_hot justwatch CN       # JustWatch中国流媒体排行榜
+/tv_detail 1399            # 电视剧详情（包含JustWatch排名信息）
 /tv_season 1399 1          # 季详情
 /tv_episode 1399 1 1       # 单集详情
 /tv_videos 1399            # 电视剧预告片和相关视频
 /tv_reviews 1399           # 用户评价（长内容自动生成Telegraph页面）
 /tv_rec 1399               # 电视剧推荐
-/tv_watch 1399             # 观看平台信息
+/tv_watch 1399             # 观看平台信息（包含JustWatch数据）
 /tv_trending               # Trakt热门电视剧
 /tv_related 1399           # Trakt相关电视剧推荐
 
@@ -465,6 +471,7 @@ docker-compose down
 - **DY.AX BIN API:** 用于信用卡BIN信息查询
 - **TMDB API:** 用于电影和电视剧信息查询，集成Telegraph支持
 - **Trakt API:** 用于增强电影/电视剧统计、热门趋势数据和社区洞察
+- **JustWatch API:** 用于流媒体平台排行榜、图表和平台可用性数据
 - **和风天气API:** 用于天气预报数据
 - **Steam API:** 用于游戏价格信息
 - **各种流媒体服务API:** 用于订阅价格查询

@@ -35,7 +35,7 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 
 -   📺 **Public Streaming Prices:** Available to all users - query subscription prices for Netflix, Disney+, Spotify, and HBO Max across global regions.
 -   👤 **Public User Information:** Available to all users - check Telegram user registration dates, account age, and get user/group IDs.
--   🎬 **Movie & TV Information:** Query movie/TV details with posters, ratings, cast, trailers, reviews, recommendations, viewing platforms, and season/episode info. Features multi-source data aggregation (TMDB + Trakt), Telegraph integration for long content, trending discovery, people search, and enhanced statistics with watch counts and community data. *(Whitelist required)*
+-   🎬 **Movie & TV Information:** Query movie/TV details with posters, ratings, cast, trailers, reviews, recommendations, viewing platforms, and season/episode info. Features **3-platform data integration** (TMDB + JustWatch + Trakt) with **JustWatch streaming charts**, real-time ranking trends, platform availability, Telegraph integration for long content, trending discovery, people search, and enhanced statistics with watch counts and community data. *(Whitelist required)*
 -   🪙 **Crypto Prices:** Look up real-time cryptocurrency prices with support for custom amounts and currency conversion, including 24h and 7d percentage changes. *(Whitelist required)*
 -   💳 **BIN Lookup:** Query credit card BIN (Bank Identification Number) information including card brand, type, issuing bank, and country details. *(Whitelist required)*
 -   🌦️ **Weather Forecasts:** Detailed, multi-format weather forecasts (real-time, daily, hourly, minutely precipitation, and lifestyle indices). *(Whitelist required)*
@@ -154,24 +154,30 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 # Movies and TV shows
 /movie Avengers            # Search movies (button selection)
 /movies Avengers           # Search movies (text list)
-/movie_hot                 # Popular movies  
-/movie_detail 299536       # Movie details with trailers
+/movie_hot                 # Multi-platform popular movies (TMDB + JustWatch + Trakt)
+/movie_hot tmdb            # TMDB popular movies only
+/movie_hot justwatch       # JustWatch streaming charts only
+/movie_hot justwatch US    # JustWatch US streaming charts
+/movie_detail 299536       # Movie details with JustWatch ranking info
 /movie_videos 299536       # Movie trailers and videos
 /movie_reviews 299536      # User reviews (Telegraph for long content)
 /movie_rec 299536          # Movie recommendations
-/movie_watch 299536        # Viewing platforms
+/movie_watch 299536        # Viewing platforms with JustWatch data
 /movie_trending            # Trakt trending movies
 /movie_related 299536      # Trakt related movies
 /tv Game of Thrones        # Search TV shows (button selection)
 /tvs Game of Thrones       # Search TV shows (text list)
-/tv_detail 1399            # TV details with trailers
+/tv_hot                    # Multi-platform popular TV shows (TMDB + JustWatch + Trakt)
+/tv_hot tmdb               # TMDB popular TV shows only  
+/tv_hot justwatch          # JustWatch streaming charts only
+/tv_hot justwatch GB       # JustWatch UK streaming charts
+/tv_detail 1399            # TV details with JustWatch ranking info
 /tv_season 1399 1          # Season details
 /tv_episode 1399 1 1       # Episode details
 /tv_videos 1399            # TV trailers and videos
-/tv_hot                    # Popular TV shows
 /tv_reviews 1399           # User reviews (Telegraph for long content)
 /tv_rec 1399               # TV show recommendations
-/tv_watch 1399             # Viewing platforms
+/tv_watch 1399             # Viewing platforms with JustWatch data
 /tv_trending               # Trakt trending TV shows
 /tv_related 1399           # Trakt related TV shows
 
@@ -424,18 +430,24 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 - **Whitelist Policy Update:** Applications currently closed, future paid service plans under consideration
 
 #### Movie & TV Features
-- **Multi-Source Data Integration:** Combines TMDB and Trakt APIs for comprehensive movie/TV information
+- **3-Platform Data Integration:** Combines TMDB, JustWatch, and Trakt APIs for comprehensive movie/TV information
+- **JustWatch Streaming Charts:** Real-time streaming platform rankings with trend analysis and achievements
+- **Multi-Source Popular Content:** `/movie_hot` and `/tv_hot` commands support 3 data sources (mixed display by default)
+- **Flexible Data Source Selection:** Choose specific platforms with `/movie_hot tmdb|justwatch|trakt [country]`
+- **Enhanced Ranking Display:** Current rank, trend indicators (📈📉➡️), historical achievements, and chart statistics
+- **Platform Availability:** Shows up to 3 streaming platforms where content is available
+- **Trend Analysis:** Rising/falling/stable status with ranking change indicators
 - **Enhanced Search:** Interactive button-based movie/TV show selection
-- **Rich Details:** Posters, ratings, cast, crew, trailers, and viewing platforms
+- **Rich Details:** Posters, ratings, cast, crew, trailers, and viewing platforms with JustWatch ranking info
 - **Community Statistics:** Trakt integration provides watch counts, collector stats, and community engagement data
 - **User Reviews:** Multi-source review system (TMDB + Trakt) with Telegraph integration for long content
 - **Recommendation System:** Intelligent movie and TV show recommendations with Trakt-powered related content
 - **Trending Discovery:** Real-time Trakt trending data with daily refresh for accuracy
-- **Hot/Popular Content:** Dedicated commands for trending and popular movies/TV shows
 - **Season/Episode Info:** Detailed TV show breakdowns with intelligent content truncation
 - **People Search:** Actor, director, and crew information with filmography
-- **Source Transparency:** Clear indicators showing data sources (🎬 TMDB, 📺 Trakt) in all displays
+- **Source Transparency:** Clear indicators showing data sources (📊 TMDB, 📺 JustWatch, 🎯 Trakt) in all displays
 - **Multilingual Support:** Chinese/English content fallback for better coverage
+- **Real-time Updates:** JustWatch data includes timestamps and data freshness indicators
 
 #### User Cache Management System
 - **New user caching infrastructure** with MySQL storage and Redis performance optimization
@@ -469,6 +481,7 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 - **DY.AX BIN API:** For credit card BIN information lookup
 - **TMDB API:** For movie and TV show information with Telegraph integration
 - **Trakt API:** For enhanced movie/TV statistics, trending data, and community insights
+- **JustWatch API:** For streaming platform rankings, charts, and platform availability data
 - **HeFeng Weather API:** For weather forecast data
 - **Steam API:** For game pricing information
 - **Various streaming service APIs:** For subscription pricing

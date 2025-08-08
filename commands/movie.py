@@ -2159,9 +2159,16 @@ class MovieService:
             if hasattr(entry, 'scoring') and entry.scoring and entry.scoring.jw_rating:
                 lines.append(f"   ⭐ JW评分: {entry.scoring.jw_rating:.1f}/10")
             
+            # 搜索命令
+            search_cmd = "/movie" if entry.object_type == "MOVIE" else "/tv"
+            lines.append(f"   `{search_cmd} {entry.title}`")
+            
             lines.append("")
         
         # 添加说明和使用提示
+        type_name_lower = "电影" if content_type == "movie" else "电视剧"
+        hot_cmd = "/movie_hot" if content_type == "movie" else "/tv_hot"
+        
         lines.extend([
             "─────────────────────────",
             "💡 **数据源说明**:",
@@ -2169,7 +2176,10 @@ class MovieService:
             "• 📈📉➡️ 排名趋势: 上升/下降/稳定", 
             "• 🎬 平台数据基于用户观看行为统计",
             "",
-            f"💡 使用 `/movie_detail <标题>` 或 `/tv_detail <标题>` 查看详情"
+            "🔧 **参数选项**:",
+            f"• `{hot_cmd}` - 混合显示所有数据源",
+            f"• `{hot_cmd} justwatch` - 仅JustWatch排行榜",
+            f"• `{hot_cmd} justwatch {country}` - 指定国家数据"
         ])
         
         return "\n".join(lines)
@@ -2192,10 +2202,13 @@ class MovieService:
                 if content_type == "movie":
                     title = item.get("title", "未知标题")
                     date_field = "release_date"
+                    detail_cmd = "/movie_detail"
                 else:
                     title = item.get("name", "未知标题") 
                     date_field = "first_air_date"
+                    detail_cmd = "/tv_detail"
                 
+                item_id = item.get("id")
                 release_date = item.get(date_field, "")
                 year = release_date[:4] if release_date else ""
                 vote_average = item.get("vote_average", 0)
@@ -2206,6 +2219,8 @@ class MovieService:
                 
                 lines.append(f"{i}. 🎬 **{title}**{year_text}{rating_text}")
                 lines.append(f"   📊 TMDB热度: {popularity:.1f}")
+                if item_id:
+                    lines.append(f"   `{detail_cmd} {item_id}`")
             
             lines.append("")
         
@@ -2216,6 +2231,8 @@ class MovieService:
             for i, entry in enumerate(justwatch_data[:4], 1):
                 title = entry.title
                 year = entry.release_year
+                content_type_icon = "🎬" if entry.object_type == "MOVIE" else "📺"
+                search_cmd = "/movie" if entry.object_type == "MOVIE" else "/tv"
                 
                 # 排名信息
                 rank_info = ""
@@ -2225,12 +2242,15 @@ class MovieService:
                     trend_symbol = {"UP": "📈", "DOWN": "📉", "STABLE": "➡️"}.get(trend, "➡️")
                     rank_info = f" {trend_symbol} #{rank}"
                 
-                lines.append(f"{i}. 🎬 **{title}** ({year}){rank_info}")
+                lines.append(f"{i}. {content_type_icon} **{title}** ({year}){rank_info}")
                 
                 # 平台信息
                 platforms = [offer.package.name for offer in entry.offers[:3]]
                 if platforms:
                     lines.append(f"   🎬 {' | '.join(platforms)}")
+                
+                # 搜索命令（JustWatch没有直接ID）
+                lines.append(f"   `{search_cmd} {title}`")
             
             lines.append("")
         else:
@@ -2249,10 +2269,16 @@ class MovieService:
                     movie_data = item.get("movie", {})
                     title = movie_data.get("title", "未知标题")
                     year = movie_data.get("year", "")
+                    tmdb_id = movie_data.get("ids", {}).get("tmdb")
+                    search_cmd = "/movie"
+                    detail_cmd = "/movie_detail"
                 else:
                     show_data = item.get("show", {})
                     title = show_data.get("title", "未知标题")
                     year = show_data.get("year", "")
+                    tmdb_id = show_data.get("ids", {}).get("tmdb")
+                    search_cmd = "/tv"
+                    detail_cmd = "/tv_detail"
                 
                 watchers = item.get("watchers", 0)
                 plays = item.get("plays", 0)
@@ -2262,6 +2288,12 @@ class MovieService:
                 
                 lines.append(f"{i}. 🎬 **{title}**{year_text}")
                 lines.append(f"   {stats_text}")
+                
+                # 使用TMDB ID或搜索命令
+                if tmdb_id:
+                    lines.append(f"   `{detail_cmd} {tmdb_id}`")
+                else:
+                    lines.append(f"   `{search_cmd} {title}`")
             
             lines.append("")
         else:
@@ -2271,13 +2303,23 @@ class MovieService:
                 ""
             ])
         
-        # 数据源说明
+        # 数据源说明和使用提示
+        type_name_lower = "电影" if content_type == "movie" else "电视剧"
+        hot_cmd = "/movie_hot" if content_type == "movie" else "/tv_hot"
+        
         lines.extend([
             "─────────────────────────",
             "💡 **数据源说明**:",
             "• 📊 TMDB - 全球电影数据库热度",
             "• 📺 JustWatch - 流媒体平台排名", 
-            "• 🎯 Trakt - 用户追踪数据"
+            "• 🎯 Trakt - 用户追踪数据",
+            "",
+            "🔧 **参数选项**:",
+            f"• `{hot_cmd}` - 混合显示（默认）",
+            f"• `{hot_cmd} tmdb` - 仅TMDB数据",
+            f"• `{hot_cmd} justwatch` - 仅JustWatch排行榜",
+            f"• `{hot_cmd} justwatch US` - 指定国家JustWatch数据",
+            f"• `{hot_cmd} trakt` - 仅Trakt用户数据"
         ])
         
         return "\n".join(lines)
