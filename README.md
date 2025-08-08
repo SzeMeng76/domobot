@@ -35,7 +35,7 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 
 -   📺 **Public Streaming Prices:** Available to all users - query subscription prices for Netflix, Disney+, Spotify, and HBO Max across global regions.
 -   👤 **Public User Information:** Available to all users - check Telegram user registration dates, account age, and get user/group IDs.
--   🎬 **Movie & TV Information:** Query movie/TV details with posters, ratings, cast, trailers, reviews, recommendations, viewing platforms, and season/episode info. Features multi-source data aggregation (TMDB + Trakt + JustWatch), Telegraph integration for long content, trending discovery, people search, enhanced statistics with watch counts and community data, and comprehensive streaming platform charts with cross-platform comparison. *(Whitelist required)*
+-   🎬 **Movie & TV Information:** Query movie/TV details with posters, ratings, cast, trailers, reviews, recommendations, viewing platforms, and season/episode info. Features multi-source data aggregation (TMDB + Trakt), Telegraph integration for long content, trending discovery, people search, and enhanced statistics with watch counts and community data. *(Whitelist required)*
 -   🪙 **Crypto Prices:** Look up real-time cryptocurrency prices with support for custom amounts and currency conversion, including 24h and 7d percentage changes. *(Whitelist required)*
 -   💳 **BIN Lookup:** Query credit card BIN (Bank Identification Number) information including card brand, type, issuing bank, and country details. *(Whitelist required)*
 -   🌦️ **Weather Forecasts:** Detailed, multi-format weather forecasts (real-time, daily, hourly, minutely precipitation, and lifestyle indices). *(Whitelist required)*
@@ -175,10 +175,6 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /tv_trending               # Trakt trending TV shows
 /tv_related 1399           # Trakt related TV shows
 
-# Streaming platform charts and rankings
-/charts                    # Interactive streaming platform charts center
-/chart_compare Avatar      # Cross-platform availability comparison
-
 # Trending content
 /trending                  # Today's trending movies, TV shows, and people
 /trending_week             # This week's trending content
@@ -230,7 +226,7 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /rate_cleancache          # Clear exchange rate cache
 /crypto_cleancache        # Clear cryptocurrency cache
 /bin_cleancache           # Clear BIN query cache
-/movie_cleancache         # Clear movie/TV and streaming charts cache
+/movie_cleancache         # Clear movie/TV cache
 /steamcc                  # Clear Steam cache
 /nf_cleancache           # Clear Netflix cache
 /ds_cleancache           # Clear Disney+ cache
@@ -412,16 +408,6 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 
 ### 🆕 Recent Updates
 
-#### Streaming Platform Charts & Rankings (Latest Feature)
-- **Interactive Charts Center:** Comprehensive `/charts` command with 40+ streaming platforms including Netflix, Disney+, HBO Max, Amazon Prime, Apple TV+, Hulu, Paramount+, and more
-- **Cross-Platform Comparison:** Dynamic `/chart_compare` functionality comparing content availability across multiple streaming services with real-time JustWatch data
-- **Platform-Specific Rankings:** Dedicated rankings for each streaming platform showing new releases and trending content optimized for platform discovery
-- **Hierarchical Menu System:** Organized platform categories (subscription, free, rental) with smart content filtering and quality-based sorting
-- **Regional Content Discovery:** Country-specific trending content with support for US, UK, Japan, Korea, France, Germany, Canada, Australia, and Brazil
-- **Content Categorization:** Advanced filtering by genre (action, comedy, horror, romance, sci-fi) and performance metrics (Top 10, Top 100, rising, new entries, long-term hits)
-- **Dynamic Content Selection:** AI-powered content curation for cross-platform comparisons, ensuring high-quality mainstream content with multi-platform availability
-- **Comprehensive Cache Integration:** Full integration with existing cache management system via `/movie_cleancache` for optimal performance
-
 #### Data Points Management System (Latest Feature)
 - **JSON Storage Architecture:** Replaced hardcoded data points with flexible JSON file storage system
 - **Real-time Statistics Display:** Shows statistics for total, verified, and estimated data points
@@ -438,7 +424,7 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 - **Whitelist Policy Update:** Applications currently closed, future paid service plans under consideration
 
 #### Movie & TV Features
-- **Multi-Source Data Integration:** Combines TMDB, Trakt, and JustWatch APIs for comprehensive movie/TV information
+- **Multi-Source Data Integration:** Combines TMDB and Trakt APIs for comprehensive movie/TV information
 - **Enhanced Search:** Interactive button-based movie/TV show selection
 - **Rich Details:** Posters, ratings, cast, crew, trailers, and viewing platforms
 - **Community Statistics:** Trakt integration provides watch counts, collector stats, and community engagement data
@@ -448,11 +434,6 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 - **Hot/Popular Content:** Dedicated commands for trending and popular movies/TV shows
 - **Season/Episode Info:** Detailed TV show breakdowns with intelligent content truncation
 - **People Search:** Actor, director, and crew information with filmography
-- **Streaming Platform Charts:** Interactive charts center with 40+ streaming platforms including Netflix, Disney+, HBO Max, Amazon Prime, Apple TV+, Hulu, and more
-- **Cross-Platform Comparison:** Dynamic content availability comparison across multiple streaming services with real-time data
-- **Platform-Specific Rankings:** Dedicated rankings for each streaming platform showing new releases and trending content
-- **Regional Content Discovery:** Country-specific trending content and platform availability by region
-- **Content Categorization:** Rankings by genre (action, comedy, horror, etc.) and performance metrics (Top 10, rising, new entries)
 - **Source Transparency:** Clear indicators showing data sources (🎬 TMDB, 📺 Trakt) in all displays
 - **Multilingual Support:** Chinese/English content fallback for better coverage
 
@@ -488,7 +469,6 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 - **DY.AX BIN API:** For credit card BIN information lookup
 - **TMDB API:** For movie and TV show information with Telegraph integration
 - **Trakt API:** For enhanced movie/TV statistics, trending data, and community insights
-- **JustWatch API:** For streaming platform charts, cross-platform availability, and platform-specific rankings
 - **HeFeng Weather API:** For weather forecast data
 - **Steam API:** For game pricing information
 - **Various streaming service APIs:** For subscription pricing

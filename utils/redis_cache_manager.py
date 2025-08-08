@@ -167,7 +167,7 @@ class RedisCacheManager:
 
             logger.debug(f"缓存已保存 {cache_key}，TTL: {ttl}秒")
 
-        except (RedisError, json.JSONDecodeError, TypeError, ValueError) as e:
+        except (RedisError, json.JSONEncodeError) as e:
             logger.error(f"保存缓存失败 {cache_key}: {e}")
 
     async def clear_cache(self, key: str | None = None, key_prefix: str | None = None, subdirectory: str | None = None):

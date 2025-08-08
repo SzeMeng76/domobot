@@ -1,7 +1,6 @@
 import logging
 import json
 import asyncio
-import base64
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -25,7 +24,7 @@ from utils.command_factory import command_factory
 from utils.config_manager import config_manager
 from utils.country_data import SUPPORTED_COUNTRIES, get_country_flag
 from utils.formatter import foldable_text_v2, foldable_text_with_markdown_v2
-from utils.message_manager import delete_user_command, send_error, send_success, _schedule_deletion
+from utils.message_manager import delete_user_command, send_error, send_success
 from utils.permissions import Permission
 
 logger = logging.getLogger(__name__)
@@ -349,6 +348,65 @@ class MovieService:
             await cache_manager.save_cache(cache_key, data, subdirectory="movie")
         return data
     
+    async def get_justwatch_popular_content(self, country: str = "US", content_type: str = "all", count: int = 20) -> Optional[List]:
+        """使用JustWatch API获取热门内容
+        
+        Args:
+            country: 国家代码，默认US
+            content_type: 内容类型 (movie, show, all)，默认all
+            count: 返回数量，默认20
+            
+        Returns:
+            List of MediaEntry with streaming charts data, or None if failed
+        """
+        if not JUSTWATCH_AVAILABLE:
+            logger.warning("JustWatch API不可用")
+            return None
+        
+        cache_key = f"justwatch_popular_{country}_{content_type}_{count}"
+        cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
+        if cached_data:
+            return cached_data
+            
+        try:
+            # JustWatch API只能通过搜索获取热门内容
+            # 使用空字符串搜索获取最热门的内容
+            popular_results = justwatch_search("", country=country, count=count)
+            
+            if not popular_results:
+                logger.warning("JustWatch搜索返回空结果")
+                return None
+            
+            filtered_results = []
+            for entry in popular_results:
+                # 根据content_type过滤
+                if content_type == "movie" and entry.object_type != "MOVIE":
+                    continue
+                elif content_type == "show" and entry.object_type != "SHOW": 
+                    continue
+                
+                # 只返回有StreamingCharts数据的内容，或者至少有offers的内容
+                if (entry.streaming_charts and entry.streaming_charts.rank) or entry.offers:
+                    filtered_results.append(entry)
+            
+            # 按照排名排序（如果有排名数据的话）
+            def sort_key(entry):
+                if entry.streaming_charts and entry.streaming_charts.rank:
+                    return entry.streaming_charts.rank
+                return 9999  # 没有排名的放在后面
+            
+            filtered_results.sort(key=sort_key)
+            
+            # 缓存结果
+            if filtered_results:
+                await cache_manager.save_cache(cache_key, filtered_results, subdirectory="movie", ttl=1800)  # 30分钟缓存
+            
+            return filtered_results
+            
+        except Exception as e:
+            logger.error(f"JustWatch热门内容获取失败: {e}")
+            return None
+    
     async def get_tv_details(self, tv_id: int) -> Optional[Dict]:
         """获取电视剧详情"""
         cache_key = f"tv_detail_{tv_id}"
@@ -496,670 +554,6 @@ class MovieService:
             await cache_manager.save_cache(cache_key, data, subdirectory="movie")
         return data
     
-    # ========================================
-    # 流媒体平台排行榜相关方法
-    # ========================================
-    
-    async def get_platform_trending(self, platform: str, limit: int = 15, country: str = "US") -> Optional[List]:
-        """获取指定平台的热门内容排行榜 - 改进版
-        Args:
-            platform: 平台技术名称 (netflix, amazon, disney, hulu, max等)
-            limit: 返回数量限制
-            country: 国家代码
-        """
-        if not JUSTWATCH_AVAILABLE:
-            logger.warning("JustWatch API不可用，无法获取平台排行榜")
-            return None
-            
-        cache_key = f"platform_trending_{platform}_{country}_{limit}"
-        cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
-        if cached_data:
-            return cached_data
-            
-        try:
-            search_results = []
-            
-            # 定义平台technical_name的所有变体（基于调试发现）
-            platform_variants = {
-                # Netflix 系列 (143个内容)
-                "netflix": ["netflix", "netflixbasicwithads"],
-                
-                # Amazon 系列 (121个内容)
-                "amazon": ["amazon", "amazonprime", "amazonprimevideowithads", "amazonimdbtv"],
-                
-                # Disney+ (2个内容 - 确实很少)
-                "disneyplus": ["disneyplus"],
-                
-                # HBO Max/Max
-                "max": ["max"],
-                
-                # Apple TV 系列 (70个内容)
-                "itunes": ["itunes"],
-                
-                # Hulu
-                "hulu": ["hulu"],
-                
-                # Paramount+ 系列 (12个内容)
-                "paramountplusshowtime": ["paramountplusshowtime", "amazonparamountplus", "appletvparamountplus", "rokuchannelparamountplus"],
-                
-                # Peacock 系列
-                "peacocktvpremium": ["peacocktvpremium"],
-                
-                # Roku Channel
-                "rokuchannel": ["rokuchannel"],
-                
-                # Pluto TV (3个内容)
-                "plutotv": ["plutotv"],
-                
-                # Tubi TV (11个内容)
-                "tubitv": ["tubitv"],
-                
-                # Vudu/Fandango (47+6=53个内容)
-                "vudu": ["vudu", "vudufree"],
-                
-                # Google Play Movies (31个内容)
-                "play": ["play"],
-                
-                # YouTube 系列 (29+1=30个内容) 
-                "youtube": ["youtube", "youtubefree"],
-                
-                # Plex 系列 (18个内容)
-                "plex": ["plex", "plexplayer", "justwatchplexchannel", "plexfast"],
-                
-                # Starz 系列 (10个内容)
-                "starz": ["starz", "amazonstarz", "appletvstarz", "rokuchannelstarz"],
-                
-                # AMC+ 系列 (6个内容)
-                "amcplus": ["amcplus", "amazonamcplus", "appletvamcplus"],
-                
-                # 免费平台
-                "fawesometv": ["fawesometv"],  # 16个内容
-                "hoopla": ["hoopla"],  # 11个内容
-                "kanopy": ["kanopy"],  # 8个内容
-                "philo": ["philo"],  # 8个内容
-                "fubotv": ["fubotv"],  # 8个内容
-                "spectrumondemand": ["spectrumondemand"],  # 6个内容
-                "ondemandkorea": ["ondemandkorea"],  # 4个内容
-                "justwatchtv": ["justwatchtv"],  # 4个内容
-                "viki": ["viki"],  # 3个内容
-                "sundancenow": ["sundancenow"],  # 2个内容
-                "mubi": ["mubi", "amazonmubi"],  # 2+2=4个内容
-                "kocowa": ["kocowa", "amazonkcpglobal"],  # 2+2=4个内容
-                "thecw": ["thecw"],  # 2个内容
-                "cineverse": ["cineverse"],  # 2个内容
-                "darkroom": ["darkroom"],  # 2个内容
-                "kinofilmcollection": ["kinofilmcollection"],  # 2个内容
-                "distrotv": ["distrotv"],  # 2个内容
-                "mometu": ["mometu"],  # 2个内容
-                "discoveryplusus": ["discoveryplusus", "amazondiscoveryplus"],  # 2+2=4个内容
-                "filmzie": ["filmzie"]  # 2个内容
-            }
-            
-            # 1. 直接搜索平台名称获取热门内容（最真实的数据）
-            try:
-                platform_query_names = {
-                    # 主要平台
-                    "netflix": ["netflix"],
-                    "amazon": ["amazon prime", "prime video"],
-                    "disneyplus": ["disney+", "disney plus"],
-                    "max": ["hbo max", "max"],
-                    "itunes": ["apple tv"],
-                    "hulu": ["hulu"],
-                    "paramountplusshowtime": ["paramount+", "paramount plus"],
-                    "peacocktvpremium": ["peacock"],
-                    "rokuchannel": ["roku channel"],
-                    "plutotv": ["pluto tv"],
-                    "tubitv": ["tubi"],
-                    "vudu": ["vudu", "fandango at home"],
-                    "play": ["google play", "google play movies"],
-                    "youtube": ["youtube"],
-                    "plex": ["plex"],
-                    "starz": ["starz"],
-                    "amcplus": ["amc+", "amc plus"],
-                    "fawesometv": ["fawesome"],
-                    "hoopla": ["hoopla"],
-                    "kanopy": ["kanopy"],
-                    "philo": ["philo"],
-                    "fubotv": ["fubotv", "fubo tv"],
-                    "spectrumondemand": ["spectrum on demand"],
-                    "ondemandkorea": ["ondemandkorea"],
-                    "viki": ["viki", "rakuten viki"],
-                    "sundancenow": ["sundance now"],
-                    "mubi": ["mubi"],
-                    "kocowa": ["kocowa"],
-                    "thecw": ["the cw", "cw"],
-                    "cineverse": ["cineverse"],
-                    "discoveryplusus": ["discovery+", "discovery plus"]
-                }
-                
-                query_names = platform_query_names.get(platform.lower(), [platform])
-                target_platforms = platform_variants.get(platform.lower(), [platform])
-                
-                for query_name in query_names:
-                    try:
-                        results = justwatch_search(query_name, country, "en", 100, True)
-                        
-                        for entry in results:
-                            has_platform = any(
-                                offer.package.technical_name.lower() in [tp.lower() for tp in target_platforms]
-                                for offer in entry.offers
-                            )
-                            
-                            if has_platform:
-                                # 避免重复添加
-                                if not any(existing.tmdb_id == entry.tmdb_id for existing in search_results if hasattr(existing, 'tmdb_id') and hasattr(entry, 'tmdb_id')):
-                                    search_results.append(entry)
-                                    
-                                if len(search_results) >= limit:
-                                    break
-                                    
-                        if len(search_results) >= limit:
-                            break
-                            
-                    except Exception as e:
-                        logger.warning(f"平台查询 '{query_name}' 失败: {e}")
-                        continue
-                        
-            except Exception as e:
-                logger.warning(f"平台搜索失败: {e}")
-            
-            # 2. 如果平台名称搜索不够，使用通用热门内容作为补充
-            if len(search_results) < limit:
-                for media_type in ["movie", "tv"]:
-                    try:
-                        popular_query = f"popular {media_type}s"
-                        results = justwatch_search(popular_query, country, "en", 50, True)
-                        target_platforms = platform_variants.get(platform.lower(), [platform])
-                        
-                        for entry in results:
-                            has_platform = any(
-                                offer.package.technical_name.lower() in [tp.lower() for tp in target_platforms]
-                                for offer in entry.offers
-                            )
-                            
-                            if has_platform:
-                                # 避免重复添加
-                                if not any(existing.tmdb_id == entry.tmdb_id for existing in search_results if hasattr(existing, 'tmdb_id') and hasattr(entry, 'tmdb_id')):
-                                    search_results.append(entry)
-                                    
-                                if len(search_results) >= limit:
-                                    break
-                                    
-                        if len(search_results) >= limit:
-                            break
-                            
-                    except Exception as e:
-                        logger.warning(f"Popular {media_type}s查询失败: {e}")
-                        continue
-            
-            # 按流媒体热度排序
-            search_results.sort(key=lambda x: (
-                x.streaming_charts.rank if x.streaming_charts else 99999,
-                -(x.scoring.tmdb_popularity if x.scoring and x.scoring.tmdb_popularity else 0)
-            ))
-            
-            final_results = search_results[:limit]
-            
-            if final_results:
-                await cache_manager.save_cache(cache_key, final_results, subdirectory="movie")
-                logger.info(f"获取 {platform} 平台内容成功: {len(final_results)} 个结果")
-            else:
-                logger.warning(f"未找到 {platform} 平台的内容")
-            
-            return final_results
-            
-        except Exception as e:
-            logger.error(f"获取平台排行榜失败: {e}")
-            return None
-    
-    async def get_cross_platform_charts(self, title: str, country: str = "US") -> Optional[Dict]:
-        """获取内容在各平台的排名对比
-        Args:
-            title: 内容标题
-            country: 国家代码
-        """
-        if not JUSTWATCH_AVAILABLE:
-            return None
-            
-        cache_key = f"cross_platform_{title}_{country}"
-        cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
-        if cached_data:
-            return cached_data
-            
-        try:
-            results = justwatch_search(title, country, "en", 5, True)
-            
-            if not results:
-                return None
-                
-            # 选择第一个匹配结果
-            entry = results[0]
-            
-            # 按平台分组统计
-            platform_data = {}
-            for offer in entry.offers:
-                platform_name = offer.package.name
-                platform_tech = offer.package.technical_name
-                
-                if platform_tech not in platform_data:
-                    platform_data[platform_tech] = {
-                        'name': platform_name,
-                        'offers': [],
-                        'monetization_types': set()
-                    }
-                
-                platform_data[platform_tech]['offers'].append(offer)
-                platform_data[platform_tech]['monetization_types'].add(offer.monetization_type)
-            
-            result = {
-                'entry': entry,
-                'platforms': platform_data
-            }
-            
-            await cache_manager.save_cache(cache_key, result, subdirectory="movie")
-            return result
-            
-        except Exception as e:
-            logger.error(f"获取跨平台数据失败: {e}")
-            return None
-
-    async def get_popular_for_cross_platform(self, limit: int = 6, country: str = "US") -> Optional[List]:
-        """获取适合跨平台对比的热门内容
-        Args:
-            limit: 返回数量限制
-            country: 国家代码
-        """
-        if not JUSTWATCH_AVAILABLE:
-            logger.warning("JustWatch API不可用，无法获取热门内容")
-            return None
-            
-        # 暂时禁用缓存，因为JustWatch对象序列化后会丢失属性
-        # cache_key = f"popular_cross_platform_{country}_{limit}"
-        # cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
-        # if cached_data:
-        #     return cached_data
-            
-        try:
-            search_results = []
-            
-            # 搜索真正的热门内容，使用通用查询策略
-            search_queries = [
-                "new releases",  # 新上架内容
-                "trending movies",  # 热门电影
-                "trending tv shows",  # 热门剧集
-                "top rated movies",  # 高评分电影
-                "top rated tv",  # 高评分剧集
-                "action movies",  # 流行类型
-                "comedy movies",
-                "drama series",
-                "blockbuster movies",  # 大片
-                "award winning"  # 获奖内容
-            ]
-            
-            for query in search_queries:
-                try:
-                    results = justwatch_search(query, country, "en", 20, True)
-                    
-                    for entry in results:
-                        # 只选择有多个平台支持的内容（便于跨平台对比）
-                        platform_count = len(set(offer.package.technical_name for offer in entry.offers))
-                        
-                        # 提高质量标准：至少4个平台，且有一定评分
-                        if (platform_count >= 4 and 
-                            entry.scoring and 
-                            ((entry.scoring.imdb_score and entry.scoring.imdb_score >= 6.0) or
-                             (entry.scoring.tmdb_score and entry.scoring.tmdb_score >= 6.0))):
-                            
-                            # 避免重复添加
-                            if not any(existing.tmdb_id == entry.tmdb_id for existing in search_results if hasattr(existing, 'tmdb_id') and hasattr(entry, 'tmdb_id')):
-                                search_results.append(entry)
-                                
-                            if len(search_results) >= limit * 2:  # 获取更多候选
-                                break
-                                
-                except Exception as e:
-                    logger.warning(f"查询 '{query}' 失败: {e}")
-                    continue
-            
-            # 按平台数量和评分排序，选择最适合对比的内容
-            search_results.sort(key=lambda x: (
-                -len(set(offer.package.technical_name for offer in x.offers)),  # 平台数量降序
-                -(x.scoring.imdb_score if x.scoring and x.scoring.imdb_score else 0),  # 评分降序
-                -(x.scoring.tmdb_popularity if x.scoring and x.scoring.tmdb_popularity else 0)  # 热度降序
-            ))
-            
-            final_results = search_results[:limit]
-            
-            if final_results:
-                # 不缓存复杂的JustWatch对象，因为序列化会丢失对象属性
-                # await cache_manager.save_cache(cache_key, final_results, subdirectory="movie")
-                logger.info(f"获取跨平台对比热门内容成功: {len(final_results)} 个结果")
-            
-            return final_results
-            
-        except Exception as e:
-            logger.error(f"获取跨平台对比热门内容失败: {e}")
-            return None
-
-    async def get_country_trending(self, country: str, limit: int = 15) -> Optional[List]:
-        """获取指定国家的热门内容排行榜
-        Args:
-            country: 国家代码 (US, GB, JP, KR等)
-            limit: 返回数量限制
-        """
-        if not JUSTWATCH_AVAILABLE:
-            logger.warning("JustWatch API不可用，无法获取国家排行榜")
-            return None
-            
-        cache_key = f"country_trending_{country}_{limit}"
-        cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
-        if cached_data:
-            return cached_data
-            
-        try:
-            # 使用JustWatch搜索该国家的热门内容
-            search_results = []
-            
-            # 搜索热门关键词来获取该国家的热门内容
-            popular_queries = [
-                "popular", "trending", "top rated", "most watched", 
-                "blockbuster", "hit movies", "best series"
-            ]
-            
-            for query in popular_queries:
-                try:
-                    results = justwatch_search(query, country, "en", 20, True)
-                    
-                    for entry in results:
-                        # 避免重复添加
-                        if entry not in search_results:
-                            search_results.append(entry)
-                        
-                        if len(search_results) >= limit * 2:  # 获取更多数据用于筛选
-                            break
-                            
-                    if len(search_results) >= limit * 2:
-                        break
-                        
-                except Exception as e:
-                    logger.warning(f"搜索查询 '{query}' 失败: {e}")
-                    continue
-            
-            # 按流媒体热度和评分排序
-            search_results.sort(key=lambda x: (
-                x.streaming_charts.rank if x.streaming_charts else 99999,
-                -(x.scoring.tmdb_popularity if x.scoring and x.scoring.tmdb_popularity else 0),
-                -(x.scoring.imdb_score if x.scoring and x.scoring.imdb_score else 0)
-            ))
-            
-            # 去重 - 按标题去重
-            seen_titles = set()
-            unique_results = []
-            for entry in search_results:
-                title_key = f"{entry.title}_{entry.release_year}"
-                if title_key not in seen_titles:
-                    seen_titles.add(title_key)
-                    unique_results.append(entry)
-                    
-                    if len(unique_results) >= limit:
-                        break
-            
-            if unique_results:
-                await cache_manager.save_cache(cache_key, unique_results, subdirectory="movie")
-            
-            return unique_results
-            
-        except Exception as e:
-            logger.error(f"获取国家排行榜失败: {e}")
-            return None
-
-
-    async def get_high_rated_content(self, limit: int = 15, country: str = "US") -> Optional[List]:
-        """获取高分内容"""
-        if not JUSTWATCH_AVAILABLE:
-            return None
-            
-        cache_key = f"high_rated_{country}_{limit}"
-        cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
-        if cached_data:
-            return cached_data
-            
-        try:
-            # 搜索高分内容关键词
-            high_rated_queries = ["top rated", "best movies", "highest rated", "critically acclaimed"]
-            search_results = []
-            
-            for query in high_rated_queries:
-                try:
-                    results = justwatch_search(query, country, "en", 30, True)
-                    search_results.extend(results)
-                    if len(search_results) >= limit * 3:
-                        break
-                except Exception:
-                    continue
-            
-            # 按评分排序并筛选高分内容
-            filtered_results = []
-            for entry in search_results:
-                if entry.scoring:
-                    imdb_score = entry.scoring.imdb_score or 0
-                    tmdb_score = entry.scoring.tmdb_score or 0
-                    if imdb_score >= 7.0 or tmdb_score >= 7.0:
-                        filtered_results.append(entry)
-            
-            # 按评分排序
-            filtered_results.sort(key=lambda x: (
-                -(x.scoring.imdb_score or 0),
-                -(x.scoring.tmdb_score or 0)
-            ))
-            
-            # 去重
-            seen = set()
-            unique_results = []
-            for entry in filtered_results:
-                key = f"{entry.title}_{entry.release_year}"
-                if key not in seen:
-                    seen.add(key)
-                    unique_results.append(entry)
-                    if len(unique_results) >= limit:
-                        break
-            
-            if unique_results:
-                await cache_manager.save_cache(cache_key, unique_results, subdirectory="movie")
-            return unique_results
-            
-        except Exception as e:
-            logger.error(f"获取高分内容失败: {e}")
-            return None
-
-    async def get_rank_filtered_content(self, rank_type: str, limit: int = 15, country: str = "US") -> Optional[List]:
-        """根据排名类型获取内容"""
-        if not JUSTWATCH_AVAILABLE:
-            return None
-            
-        cache_key = f"rank_filtered_{rank_type}_{country}_{limit}"
-        cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
-        if cached_data:
-            return cached_data
-            
-        try:
-            search_results = []
-            queries = ["popular", "trending", "top movies", "best shows"]
-            
-            for query in queries:
-                try:
-                    results = justwatch_search(query, country, "en", 50, True)
-                    search_results.extend(results)
-                    if len(search_results) >= limit * 3:
-                        break
-                except Exception:
-                    continue
-            
-            # 根据rank_type筛选
-            filtered_results = []
-            for entry in search_results:
-                if entry.streaming_charts:
-                    charts = entry.streaming_charts
-                    
-                    if rank_type == "top10" and charts.rank <= 10:
-                        filtered_results.append(entry)
-                    elif rank_type == "top100" and charts.rank <= 100:
-                        filtered_results.append(entry)
-                    elif rank_type == "rising" and charts.trend == "UP":
-                        filtered_results.append(entry)
-                    elif rank_type == "new_entries" and charts.days_in_top_100 <= 7:
-                        filtered_results.append(entry)
-                    elif rank_type == "long_term" and charts.days_in_top_100 >= 30:
-                        filtered_results.append(entry)
-                    elif rank_type == "weekly":
-                        filtered_results.append(entry)
-            
-            # 排序
-            if rank_type == "rising":
-                filtered_results.sort(key=lambda x: x.streaming_charts.trend_difference, reverse=True)
-            else:
-                filtered_results.sort(key=lambda x: x.streaming_charts.rank)
-            
-            unique_results = filtered_results[:limit]
-            
-            if unique_results:
-                await cache_manager.save_cache(cache_key, unique_results, subdirectory="movie")
-            return unique_results
-            
-        except Exception as e:
-            logger.error(f"获取排名筛选内容失败: {e}")
-            return None
-
-    async def get_genre_trending(self, genre: str, limit: int = 15, country: str = "US") -> Optional[List]:
-        """根据类型获取热门内容"""
-        if not JUSTWATCH_AVAILABLE:
-            return None
-            
-        cache_key = f"genre_trending_{genre}_{country}_{limit}"
-        cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
-        if cached_data:
-            return cached_data
-            
-        try:
-            # 类型关键词映射
-            genre_queries = {
-                "action": ["action movies", "action films", "thriller"],
-                "comedy": ["comedy movies", "funny movies", "comedies"],
-                "horror": ["horror movies", "scary movies", "horror films"],
-                "romance": ["romantic movies", "love stories", "romance"],
-                "scifi": ["sci-fi movies", "science fiction", "sci fi"],
-                "thriller": ["thriller movies", "suspense", "mystery"],
-                "documentary": ["documentaries", "documentary films"],
-                "family": ["family movies", "kids movies", "family friendly"]
-            }
-            
-            queries = genre_queries.get(genre, [f"{genre} movies"])
-            search_results = []
-            
-            for query in queries:
-                try:
-                    results = justwatch_search(query, country, "en", 30, True)
-                    search_results.extend(results)
-                    if len(search_results) >= limit * 2:
-                        break
-                except Exception:
-                    continue
-            
-            # 按热度排序
-            search_results.sort(key=lambda x: (
-                x.streaming_charts.rank if x.streaming_charts else 99999,
-                -(x.scoring.tmdb_popularity if x.scoring and x.scoring.tmdb_popularity else 0)
-            ))
-            
-            # 去重
-            seen = set()
-            unique_results = []
-            for entry in search_results:
-                key = f"{entry.title}_{entry.release_year}"
-                if key not in seen:
-                    seen.add(key)
-                    unique_results.append(entry)
-                    if len(unique_results) >= limit:
-                        break
-            
-            if unique_results:
-                await cache_manager.save_cache(cache_key, unique_results, subdirectory="movie")
-            return unique_results
-            
-        except Exception as e:
-            logger.error(f"获取类型热门内容失败: {e}")
-            return None
-
-    async def debug_available_platforms(self, country: str = "US", limit: int = 50) -> Optional[Dict]:
-        """调试：获取JustWatch中实际可用的平台technical_name"""
-        if not JUSTWATCH_AVAILABLE:
-            return None
-            
-        try:
-            # 搜索热门内容来获取平台信息
-            search_results = []
-            queries = ["popular", "trending", "netflix", "disney", "hulu"]
-            
-            for query in queries:
-                try:
-                    results = justwatch_search(query, country, "en", 30, False)  # False获取所有选项
-                    search_results.extend(results)
-                    if len(search_results) >= limit:
-                        break
-                except Exception:
-                    continue
-            
-            # 统计所有出现的平台
-            platforms_found = {}
-            for entry in search_results:
-                for offer in entry.offers:
-                    tech_name = offer.package.technical_name
-                    display_name = offer.package.name
-                    
-                    if tech_name not in platforms_found:
-                        platforms_found[tech_name] = {
-                            'display_name': display_name,
-                            'count': 0,
-                            'monetization_types': set()
-                        }
-                    
-                    platforms_found[tech_name]['count'] += 1
-                    platforms_found[tech_name]['monetization_types'].add(offer.monetization_type)
-            
-            # 按出现次数排序
-            sorted_platforms = dict(sorted(
-                platforms_found.items(), 
-                key=lambda x: x[1]['count'], 
-                reverse=True
-            ))
-            
-            return sorted_platforms
-            
-        except Exception as e:
-            logger.error(f"调试平台信息失败: {e}")
-            return None
-
-    def format_debug_platforms(self, platforms_data: Dict) -> str:
-        """格式化调试平台信息"""
-        if not platforms_data:
-            return "❌ 未找到平台信息"
-        
-        lines = ["🔧 *JustWatch可用平台调试信息*\n"]
-        lines.append("格式: `technical_name` - 显示名称 (出现次数) [观看方式]")
-        lines.append("")
-        
-        for tech_name, info in platforms_data.items():
-            display_name = info['display_name']
-            count = info['count']
-            monetization = ', '.join(sorted(info['monetization_types']))
-            
-            lines.append(f"`{tech_name}` - {display_name} ({count}) [{monetization}]")
-        
-        lines.append("")
-        lines.append("💡 使用上述technical_name来修正平台映射")
-        
-        return "\n".join(lines)
-
     # ========================================
     # 趋势内容相关方法
     # ========================================
@@ -2687,6 +2081,207 @@ class MovieService:
         
         return "\n".join(lines)
     
+    def format_justwatch_popular_content(self, content_list: List, content_type: str = "all", country: str = "US") -> str:
+        """格式化JustWatch热门内容"""
+        if not content_list:
+            return "❌ 没有找到JustWatch热门内容"
+        
+        # 获取当前时间用于更新时间显示
+        from datetime import datetime
+        current_time = datetime.now().strftime("%Y-%m-%d")
+        
+        # 根据内容类型设置标题
+        type_name = {
+            "movie": "电影",
+            "show": "电视剧", 
+            "all": "影视内容"
+        }.get(content_type, "内容")
+        
+        country_flag = get_country_flag(country)
+        lines = [f"📺 **JustWatch {country_flag} {type_name}流媒体热门排行榜** (更新: {current_time})\n"]
+        
+        for i, entry in enumerate(content_list[:10], 1):
+            title = entry.title
+            year = entry.release_year
+            content_type_icon = "🎬" if entry.object_type == "MOVIE" else "📺"
+            
+            # 排名和趋势信息
+            rank_info = ""
+            if entry.streaming_charts and entry.streaming_charts.rank:
+                rank = entry.streaming_charts.rank
+                trend = entry.streaming_charts.trend
+                trend_diff = entry.streaming_charts.trend_difference
+                
+                # 趋势符号
+                trend_symbol = {
+                    "UP": "📈", 
+                    "DOWN": "📉", 
+                    "STABLE": "➡️"
+                }.get(trend, "➡️")
+                
+                # 趋势变化文本
+                if trend_diff and trend_diff != 0:
+                    if trend == "UP":
+                        rank_info = f" #{rank} (↑{abs(trend_diff)})"
+                    elif trend == "DOWN":
+                        rank_info = f" #{rank} (↓{abs(trend_diff)})"
+                    else:
+                        rank_info = f" #{rank} (持平)"
+                else:
+                    rank_info = f" #{rank}"
+                
+                lines.append(f"{i}. {content_type_icon} **{title}** ({year}) {trend_symbol}{rank_info}")
+            else:
+                lines.append(f"{i}. {content_type_icon} **{title}** ({year})")
+            
+            # 可用平台信息
+            platforms = []
+            for offer in entry.offers[:3]:  # 只显示前3个平台
+                platform_name = offer.package.name
+                if platform_name not in platforms:
+                    platforms.append(platform_name)
+            
+            if platforms:
+                lines.append(f"   🎬 平台: {' | '.join(platforms)}")
+            
+            # 显示排行榜统计（如果有的话）
+            if entry.streaming_charts:
+                chart_stats = []
+                if hasattr(entry.streaming_charts, 'days_in_top_10') and entry.streaming_charts.days_in_top_10:
+                    chart_stats.append(f"前10榜单{entry.streaming_charts.days_in_top_10}天")
+                if hasattr(entry.streaming_charts, 'top_rank') and entry.streaming_charts.top_rank:
+                    chart_stats.append(f"历史最高#{entry.streaming_charts.top_rank}")
+                
+                if chart_stats:
+                    lines.append(f"   📊 {' | '.join(chart_stats)}")
+            
+            # JustWatch评分（如果有的话）
+            if hasattr(entry, 'scoring') and entry.scoring and entry.scoring.jw_rating:
+                lines.append(f"   ⭐ JW评分: {entry.scoring.jw_rating:.1f}/10")
+            
+            lines.append("")
+        
+        # 添加说明和使用提示
+        lines.extend([
+            "─────────────────────────",
+            "💡 **数据源说明**:",
+            "• 📺 JustWatch - 流媒体平台排名数据",
+            "• 📈📉➡️ 排名趋势: 上升/下降/稳定", 
+            "• 🎬 平台数据基于用户观看行为统计",
+            "",
+            f"💡 使用 `/movie_detail <标题>` 或 `/tv_detail <标题>` 查看详情"
+        ])
+        
+        return "\n".join(lines)
+    
+    def format_mixed_popular_content(self, tmdb_data: Dict, justwatch_data: List, content_type: str = "movie", trakt_data: List = None) -> str:
+        """格式化混合热门内容（TMDB + JustWatch + Trakt）"""
+        from datetime import datetime
+        lines = []
+        current_time = datetime.now().strftime("%Y-%m-%d")
+        
+        type_name = "电影" if content_type == "movie" else "电视剧"
+        lines.append(f"🔥 **热门{type_name}排行榜** 📊 (更新: {current_time})\n")
+        
+        # TMDB数据部分
+        if tmdb_data and tmdb_data.get("results"):
+            lines.append("📊 **TMDB全球热门** (实时数据)")
+            results = tmdb_data["results"][:4]  # 显示前4个
+            
+            for i, item in enumerate(results, 1):
+                if content_type == "movie":
+                    title = item.get("title", "未知标题")
+                    date_field = "release_date"
+                else:
+                    title = item.get("name", "未知标题") 
+                    date_field = "first_air_date"
+                
+                release_date = item.get(date_field, "")
+                year = release_date[:4] if release_date else ""
+                vote_average = item.get("vote_average", 0)
+                popularity = item.get("popularity", 0)
+                
+                year_text = f" ({year})" if year else ""
+                rating_text = f" ⭐ {vote_average:.1f}" if vote_average > 0 else ""
+                
+                lines.append(f"{i}. 🎬 **{title}**{year_text}{rating_text}")
+                lines.append(f"   📊 TMDB热度: {popularity:.1f}")
+            
+            lines.append("")
+        
+        # JustWatch数据部分
+        if justwatch_data:
+            lines.append("📺 **JustWatch流媒体热门** (实时数据)")
+            
+            for i, entry in enumerate(justwatch_data[:4], 1):
+                title = entry.title
+                year = entry.release_year
+                
+                # 排名信息
+                rank_info = ""
+                if entry.streaming_charts and entry.streaming_charts.rank:
+                    rank = entry.streaming_charts.rank
+                    trend = entry.streaming_charts.trend
+                    trend_symbol = {"UP": "📈", "DOWN": "📉", "STABLE": "➡️"}.get(trend, "➡️")
+                    rank_info = f" {trend_symbol} #{rank}"
+                
+                lines.append(f"{i}. 🎬 **{title}** ({year}){rank_info}")
+                
+                # 平台信息
+                platforms = [offer.package.name for offer in entry.offers[:3]]
+                if platforms:
+                    lines.append(f"   🎬 {' | '.join(platforms)}")
+            
+            lines.append("")
+        else:
+            lines.extend([
+                "⚠️ **JustWatch数据**",
+                "❌ JustWatch API暂时不可用",
+                ""
+            ])
+        
+        # Trakt数据部分
+        if trakt_data:
+            lines.append("🎯 **Trakt用户热门** (实时数据)")
+            
+            for i, item in enumerate(trakt_data[:4], 1):
+                if content_type == "movie":
+                    movie_data = item.get("movie", {})
+                    title = movie_data.get("title", "未知标题")
+                    year = movie_data.get("year", "")
+                else:
+                    show_data = item.get("show", {})
+                    title = show_data.get("title", "未知标题")
+                    year = show_data.get("year", "")
+                
+                watchers = item.get("watchers", 0)
+                plays = item.get("plays", 0)
+                
+                year_text = f" ({year})" if year else ""
+                stats_text = f"👥 {watchers}人观看" + (f" | 🎬 {plays}次播放" if plays else "")
+                
+                lines.append(f"{i}. 🎬 **{title}**{year_text}")
+                lines.append(f"   {stats_text}")
+            
+            lines.append("")
+        else:
+            lines.extend([
+                "⚠️ **Trakt数据**",
+                "❌ Trakt API暂时不可用",
+                ""
+            ])
+        
+        # 数据源说明
+        lines.extend([
+            "─────────────────────────",
+            "💡 **数据源说明**:",
+            "• 📊 TMDB - 全球电影数据库热度",
+            "• 📺 JustWatch - 流媒体平台排名", 
+            "• 🎯 Trakt - 用户追踪数据"
+        ])
+        
+        return "\n".join(lines)
+    
     def format_movie_details(self, detail_data: Dict) -> tuple:
         """格式化电影详情，返回(文本内容, 海报URL)"""
         if not detail_data:
@@ -2948,342 +2543,6 @@ class MovieService:
             return "❌ 暂无可用视频内容"
         
         return "\n".join(lines).rstrip()
-
-    # ========================================
-    # 流媒体平台排行榜格式化方法
-    # ========================================
-    
-    def format_platform_trending(self, platform_data: List, platform_name: str) -> str:
-        """格式化平台热门内容"""
-        if not platform_data:
-            return f"❌ 暂无{platform_name}平台热门内容数据"
-        
-        # 平台表情映射
-        platform_emojis = {
-            "netflix": "🔴",
-            "amazon": "📦", 
-            "disney": "🏰",
-            "hulu": "🟢",
-            "max": "🔵",
-            "apple": "🍎",
-            "paramount": "⭐",
-            "peacock": "🦚",
-            "hbo": "🎭"
-        }
-        
-        platform_emoji = platform_emojis.get(platform_name.lower(), "📱")
-        lines = [f"{platform_emoji} *{platform_name} 热门内容*\n"]
-        
-        for i, entry in enumerate(platform_data, 1):
-            title = entry.title
-            year = entry.release_year
-            media_emoji = "🎬" if entry.object_type == "MOVIE" else "📺"
-            
-            # 获取评分信息
-            rating_text = ""
-            if entry.scoring:
-                if entry.scoring.imdb_score:
-                    rating_text = f" - ⭐ {entry.scoring.imdb_score:.1f}/10"
-                elif entry.scoring.tmdb_score:
-                    rating_text = f" - ⭐ {entry.scoring.tmdb_score:.1f}/10"
-            
-            # 获取排名信息
-            rank_text = ""
-            if entry.streaming_charts:
-                rank_info = entry.streaming_charts
-                trend_emoji = {"UP": "📈", "DOWN": "📉", "STABLE": "➡️"}.get(rank_info.trend, "")
-                rank_text = f" #{rank_info.rank} {trend_emoji}"
-            
-            lines.append(f"{i}. {media_emoji} *{title}* ({year}){rating_text}{rank_text}")
-            
-            # 添加详情链接
-            if entry.tmdb_id:
-                if entry.object_type == "MOVIE":
-                    lines.append(f"   `/movie_detail {entry.tmdb_id}`")
-                elif entry.object_type == "SHOW":
-                    lines.append(f"   `/tv_detail {entry.tmdb_id}`")
-            
-            # 添加观看选项
-            monetization_types = set(offer.monetization_type for offer in entry.offers)
-            if "FLATRATE" in monetization_types:
-                lines.append("   🎯 订阅观看")
-            elif "RENT" in monetization_types:
-                rent_offers = [offer for offer in entry.offers if offer.monetization_type == "RENT"]
-                if rent_offers:
-                    price = rent_offers[0].price_string or "价格待查"
-                    lines.append(f"   💰 租赁: {price}")
-            
-            lines.append("")
-        
-        lines.extend([
-            "💡 *使用说明*:",
-            "   🎬 电影详情: `/movie_detail <ID>`",
-            "   📺 电视剧详情: `/tv_detail <ID>`",
-            "",
-            "📊 数据来源: JustWatch"
-        ])
-        return "\n".join(lines)
-    
-    def format_cross_platform_charts(self, cross_data: Dict) -> str:
-        """格式化跨平台排名对比"""
-        if not cross_data:
-            return "❌ 暂无跨平台数据"
-            
-        entry = cross_data['entry']
-        platforms = cross_data['platforms']
-        
-        lines = [f"🔄 *{entry.title}* 跨平台对比\n"]
-        
-        # 基本信息
-        lines.append(f"📅 发行年份: {entry.release_year}")
-        if entry.scoring and entry.scoring.imdb_score:
-            lines.append(f"⭐ IMDb评分: {entry.scoring.imdb_score:.1f}/10")
-        
-        # 流媒体排名
-        if entry.streaming_charts:
-            charts = entry.streaming_charts
-            trend_emoji = {"UP": "📈", "DOWN": "📉", "STABLE": "➡️"}.get(charts.trend, "")
-            lines.append(f"📊 JustWatch排名: #{charts.rank} {trend_emoji}")
-        
-        lines.append("\n🎯 *观看平台*:")
-        
-        # 按货币化类型分组
-        flatrate_platforms = []
-        rent_platforms = []
-        buy_platforms = []
-        
-        for tech_name, platform_info in platforms.items():
-            platform_name = platform_info['name']
-            monetization_types = platform_info['monetization_types']
-            offers = platform_info['offers']
-            
-            if 'FLATRATE' in monetization_types:
-                flatrate_platforms.append(platform_name)
-            if 'RENT' in monetization_types:
-                rent_offer = next((o for o in offers if o.monetization_type == 'RENT'), None)
-                price = rent_offer.price_string if rent_offer else "价格待查"
-                rent_platforms.append(f"{platform_name} ({price})")
-            if 'BUY' in monetization_types:
-                buy_offer = next((o for o in offers if o.monetization_type == 'BUY'), None)
-                price = buy_offer.price_string if buy_offer else "价格待查"
-                buy_platforms.append(f"{platform_name} ({price})")
-        
-        if flatrate_platforms:
-            lines.append(f"📺 订阅观看: {', '.join(flatrate_platforms)}")
-        if rent_platforms:
-            lines.append(f"💰 租赁观看: {', '.join(rent_platforms)}")
-        if buy_platforms:
-            lines.append(f"🛒 购买观看: {', '.join(buy_platforms)}")
-        
-        return "\n".join(lines)
-
-    def format_country_trending(self, country_data: List, country_name: str) -> str:
-        """格式化国家热门内容排行榜"""
-        if not country_data:
-            return f"❌ 暂无{country_name}热门内容数据"
-        
-        lines = [f"🌍 *{country_name} 热门内容*\n"]
-        
-        for i, entry in enumerate(country_data, 1):
-            title = entry.title
-            year = entry.release_year
-            media_emoji = "🎬" if entry.object_type == "MOVIE" else "📺"
-            
-            # 获取评分信息
-            rating_text = ""
-            if entry.scoring:
-                if entry.scoring.imdb_score:
-                    rating_text = f" - ⭐ {entry.scoring.imdb_score:.1f}/10"
-                elif entry.scoring.tmdb_score:
-                    rating_text = f" - ⭐ {entry.scoring.tmdb_score:.1f}/10"
-            
-            # 获取排名信息
-            rank_text = ""
-            if entry.streaming_charts:
-                rank_info = entry.streaming_charts
-                trend_emoji = {"UP": "📈", "DOWN": "📉", "STABLE": "➡️"}.get(rank_info.trend, "")
-                rank_text = f" #{rank_info.rank} {trend_emoji}"
-            
-            lines.append(f"{i}. {media_emoji} *{title}* ({year}){rating_text}{rank_text}")
-            
-            # 添加观看平台信息
-            if entry.offers:
-                platforms = []
-                for offer in entry.offers[:3]:  # 只显示前3个平台
-                    platform_name = offer.package.name
-                    if offer.monetization_type == "FLATRATE":
-                        platforms.append(f"{platform_name}")
-                    elif offer.monetization_type == "RENT" and offer.price_string:
-                        platforms.append(f"{platform_name}({offer.price_string})")
-                
-                if platforms:
-                    lines.append(f"   🎯 可观看: {', '.join(platforms)}")
-            
-            # 添加详情链接
-            if entry.tmdb_id:
-                if entry.object_type == "MOVIE":
-                    lines.append(f"   `/movie_detail {entry.tmdb_id}`")
-                elif entry.object_type == "SHOW":
-                    lines.append(f"   `/tv_detail {entry.tmdb_id}`")
-            
-            lines.append("")
-        
-        lines.extend([
-            "💡 *使用说明*:",
-            "   🎬 电影详情: `/movie_detail <ID>`", 
-            "   📺 电视剧详情: `/tv_detail <ID>`",
-            "",
-            "📊 数据来源: JustWatch"
-        ])
-        return "\n".join(lines)
-
-    def format_high_rated_content(self, high_rated_data: List) -> str:
-        """格式化高分内容"""
-        if not high_rated_data:
-            return "❌ 暂无高分内容数据"
-        
-        lines = ["⭐ *高分精选内容*\n"]
-        
-        for i, entry in enumerate(high_rated_data, 1):
-            title = entry.title
-            year = entry.release_year
-            media_emoji = "🎬" if entry.object_type == "MOVIE" else "📺"
-            
-            # 获取评分信息
-            rating_text = ""
-            if entry.scoring:
-                scores = []
-                if entry.scoring.imdb_score:
-                    scores.append(f"IMDb {entry.scoring.imdb_score:.1f}")
-                if entry.scoring.tmdb_score:
-                    scores.append(f"TMDB {entry.scoring.tmdb_score:.1f}")
-                if scores:
-                    rating_text = f" - ⭐ {' | '.join(scores)}"
-            
-            lines.append(f"{i}. {media_emoji} *{title}* ({year}){rating_text}")
-            
-            # 添加详情链接
-            if entry.tmdb_id:
-                if entry.object_type == "MOVIE":
-                    lines.append(f"   `/movie_detail {entry.tmdb_id}`")
-                elif entry.object_type == "SHOW":
-                    lines.append(f"   `/tv_detail {entry.tmdb_id}`")
-            
-            lines.append("")
-        
-        lines.extend([
-            "💡 *使用说明*:",
-            "   🎬 电影详情: `/movie_detail <ID>`",
-            "   📺 电视剧详情: `/tv_detail <ID>`",
-            "",
-            "📊 数据来源: JustWatch (评分7.0+)"
-        ])
-        return "\n".join(lines)
-
-    def format_rank_filtered_content(self, rank_data: List, rank_title: str) -> str:
-        """格式化排名筛选内容"""
-        if not rank_data:
-            return f"❌ 暂无{rank_title}数据"
-        
-        lines = [f"🏆 *{rank_title}*\n"]
-        
-        for i, entry in enumerate(rank_data, 1):
-            title = entry.title
-            year = entry.release_year
-            media_emoji = "🎬" if entry.object_type == "MOVIE" else "📺"
-            
-            # 获取排名信息
-            rank_info = ""
-            if entry.streaming_charts:
-                charts = entry.streaming_charts
-                rank_info = f" #{charts.rank}"
-                
-                # 添加趋势信息
-                if charts.trend:
-                    trend_emoji = {"UP": "📈", "DOWN": "📉", "STABLE": "➡️"}.get(charts.trend, "")
-                    rank_info += f" {trend_emoji}"
-                    
-                # 添加趋势变化
-                if charts.trend_difference:
-                    if charts.trend == "UP":
-                        rank_info += f"(+{charts.trend_difference})"
-                    elif charts.trend == "DOWN":
-                        rank_info += f"(-{charts.trend_difference})"
-            
-            # 获取评分信息
-            rating_text = ""
-            if entry.scoring and entry.scoring.imdb_score:
-                rating_text = f" - ⭐ {entry.scoring.imdb_score:.1f}/10"
-            
-            lines.append(f"{i}. {media_emoji} *{title}* ({year}){rank_info}{rating_text}")
-            
-            # 添加详情链接
-            if entry.tmdb_id:
-                if entry.object_type == "MOVIE":
-                    lines.append(f"   `/movie_detail {entry.tmdb_id}`")
-                elif entry.object_type == "SHOW":
-                    lines.append(f"   `/tv_detail {entry.tmdb_id}`")
-            
-            # 添加在榜天数信息（对长期霸榜类型）
-            if entry.streaming_charts and "long_term" in rank_title.lower():
-                days = entry.streaming_charts.days_in_top_100
-                lines.append(f"   🕒 在榜: {days}天")
-            
-            lines.append("")
-        
-        lines.extend([
-            "💡 *使用说明*:",
-            "   🎬 电影详情: `/movie_detail <ID>`",
-            "   📺 电视剧详情: `/tv_detail <ID>`",
-            "",
-            "📊 数据来源: JustWatch"
-        ])
-        return "\n".join(lines)
-
-    def format_genre_trending(self, genre_data: List, genre_title: str) -> str:
-        """格式化类型热门内容"""
-        if not genre_data:
-            return f"❌ 暂无{genre_title}数据"
-        
-        lines = [f"🎭 *{genre_title}*\n"]
-        
-        for i, entry in enumerate(genre_data, 1):
-            title = entry.title
-            year = entry.release_year
-            media_emoji = "🎬" if entry.object_type == "MOVIE" else "📺"
-            
-            # 获取评分信息
-            rating_text = ""
-            if entry.scoring:
-                if entry.scoring.imdb_score:
-                    rating_text = f" - ⭐ {entry.scoring.imdb_score:.1f}/10"
-                elif entry.scoring.tmdb_score:
-                    rating_text = f" - ⭐ {entry.scoring.tmdb_score:.1f}/10"
-            
-            # 获取排名信息
-            rank_text = ""
-            if entry.streaming_charts:
-                rank_text = f" #{entry.streaming_charts.rank}"
-            
-            lines.append(f"{i}. {media_emoji} *{title}* ({year}){rating_text}{rank_text}")
-            
-            # 添加详情链接
-            if entry.tmdb_id:
-                if entry.object_type == "MOVIE":
-                    lines.append(f"   `/movie_detail {entry.tmdb_id}`")
-                elif entry.object_type == "SHOW":
-                    lines.append(f"   `/tv_detail {entry.tmdb_id}`")
-            
-            lines.append("")
-        
-        lines.extend([
-            "💡 *使用说明*:",
-            "   🎬 电影详情: `/movie_detail <ID>`",
-            "   📺 电视剧详情: `/tv_detail <ID>`",
-            "",
-            "📊 数据来源: JustWatch"
-        ])
-        return "\n".join(lines)
 
     # ========================================
     # 趋势内容格式化方法
@@ -3936,37 +3195,91 @@ class MovieService:
         return ""
     
     def _format_streaming_charts_info(self, justwatch_entry: any = None) -> str:
-        """格式化流媒体热度排名信息"""
+        """格式化流媒体热度排名信息（增强版）"""
         if not justwatch_entry or not hasattr(justwatch_entry, 'streaming_charts') or not justwatch_entry.streaming_charts:
             return ""
         
         charts = justwatch_entry.streaming_charts
         lines = []
         
+        # 获取更新时间
+        from datetime import datetime, timezone
+        try:
+            if charts.updated:
+                update_time = datetime.fromisoformat(charts.updated.replace('Z', '+00:00'))
+                local_time = update_time.replace(tzinfo=timezone.utc).astimezone()
+                time_str = local_time.strftime("%m-%d %H:%M")
+            else:
+                time_str = "未知"
+        except:
+            time_str = "未知"
+        
         # 当前排名和趋势
         if charts.rank:
-            trend_emoji = {"UP": "📈", "DOWN": "📉", "STABLE": "➡️"}.get(charts.trend, "")
+            trend_emoji = {"UP": "📈", "DOWN": "📉", "STABLE": "➡️"}.get(charts.trend, "➡️")
             trend_text = ""
-            if charts.trend_difference:
+            if charts.trend_difference and charts.trend_difference != 0:
                 if charts.trend == "UP":
-                    trend_text = f" (上升{charts.trend_difference}位)"
+                    trend_text = f" ↑{abs(charts.trend_difference)}"
                 elif charts.trend == "DOWN":
-                    trend_text = f" (下降{charts.trend_difference}位)"
+                    trend_text = f" ↓{abs(charts.trend_difference)}"
+                else:
+                    trend_text = " (持平)"
             
-            lines.append(f"   • 当前排名: #{charts.rank:,} {trend_emoji}{trend_text}")
+            lines.append(f"   • 📊 **当前排名**: #{charts.rank:,} {trend_emoji}{trend_text}")
         
-        # 历史最高排名
+        # 历史最高排名和成就
+        achievements = []
         if charts.top_rank:
-            lines.append(f"   • 历史最高: #{charts.top_rank}")
+            if charts.top_rank <= 3:
+                achievements.append(f"🏆 历史最高#{charts.top_rank}")
+            elif charts.top_rank <= 10:
+                achievements.append(f"🥉 历史最高#{charts.top_rank}")
+            else:
+                achievements.append(f"📈 历史最高#{charts.top_rank}")
         
-        # 榜单停留天数
-        if charts.days_in_top_10 > 0:
-            lines.append(f"   • 前10榜单: {charts.days_in_top_10}天")
-        elif charts.days_in_top_100 > 0:
-            lines.append(f"   • 前100榜单: {charts.days_in_top_100}天")
+        # 榜单成就统计
+        chart_achievements = []
+        if hasattr(charts, 'days_in_top_3') and charts.days_in_top_3 > 0:
+            chart_achievements.append(f"🔥前3名{charts.days_in_top_3}天")
+        if hasattr(charts, 'days_in_top_10') and charts.days_in_top_10 > 0:
+            chart_achievements.append(f"⭐前10名{charts.days_in_top_10}天")
+        elif hasattr(charts, 'days_in_top_100') and charts.days_in_top_100 > 0:
+            chart_achievements.append(f"📋前100名{charts.days_in_top_100}天")
+        elif hasattr(charts, 'days_in_top_1000') and charts.days_in_top_1000 > 0:
+            chart_achievements.append(f"📊前1000名{charts.days_in_top_1000}天")
+        
+        # 合并成就信息
+        if achievements:
+            lines.append(f"   • 🏆 **历史成就**: {' | '.join(achievements)}")
+        
+        if chart_achievements:
+            lines.append(f"   • 📈 **榜单统计**: {' | '.join(chart_achievements)}")
+        
+        # 趋势分析
+        if charts.trend and charts.rank:
+            if charts.rank <= 10:
+                status = "🔥 热门爆款"
+            elif charts.rank <= 50:
+                status = "⭐ 热门内容"
+            elif charts.rank <= 100:
+                status = "📈 上榜内容"
+            else:
+                status = "📊 榜单内容"
+            
+            trend_desc = {
+                "UP": "持续上升中",
+                "DOWN": "热度下降中", 
+                "STABLE": "排名稳定"
+            }.get(charts.trend, "排名稳定")
+            
+            lines.append(f"   • 🎯 **状态**: {status} ({trend_desc})")
+        
+        # 数据源和更新时间
+        lines.append(f"   • 🕐 **数据更新**: {time_str} (JustWatch)")
         
         if lines:
-            return "📈 *流媒体热度*:\n" + "\n".join(lines)
+            return "📺 **JustWatch流媒体排行榜**:\n" + "\n".join(lines)
         return ""
     
     def _format_technical_specs(self, enhanced_providers: Dict) -> str:
@@ -4423,7 +3736,14 @@ async def movie_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
 async def movie_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """处理 /movie_hot 命令 - 获取热门电影"""
+    """处理 /movie_hot 命令 - 获取热门电影（支持多数据源）
+    
+    用法:
+    /movie_hot - 混合显示TMDB和JustWatch数据（默认）
+    /movie_hot tmdb - 只显示TMDB数据
+    /movie_hot justwatch - 只显示JustWatch数据
+    /movie_hot justwatch US - 显示美国JustWatch数据
+    """
     if not update.message or not update.effective_chat:
         return
     
@@ -4434,6 +3754,21 @@ async def movie_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
         return
     
+    # 解析参数
+    source = context.args[0].lower() if context.args else "mixed"
+    country = context.args[1].upper() if len(context.args) > 1 else "US"
+    
+    # 验证数据源参数
+    valid_sources = ["mixed", "tmdb", "justwatch"]
+    if source not in valid_sources:
+        await send_error(
+            context,
+            update.effective_chat.id,
+            foldable_text_v2(f"❌ 无效的数据源: {source}\n支持的数据源: {', '.join(valid_sources)}"),
+            parse_mode="MarkdownV2"
+        )
+        return
+    
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text="🔍 正在获取热门电影\.\.\.",
@@ -4441,15 +3776,59 @@ async def movie_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     )
     
     try:
-        popular_data = await movie_service.get_popular_movies()
-        if popular_data:
-            result_text = movie_service.format_popular_movies(popular_data)
-            await message.edit_text(
-                foldable_text_with_markdown_v2(result_text),
-                parse_mode=ParseMode.MARKDOWN_V2
+        if source == "justwatch":
+            # 只显示JustWatch数据
+            if not JUSTWATCH_AVAILABLE:
+                await message.edit_text("❌ JustWatch API不可用，请使用TMDB数据源")
+                return
+            
+            justwatch_data = await movie_service.get_justwatch_popular_content(
+                country=country, content_type="movie", count=15
             )
-        else:
-            await message.edit_text("❌ 获取热门电影失败，请稍后重试")
+            if justwatch_data:
+                result_text = movie_service.format_justwatch_popular_content(
+                    justwatch_data, content_type="movie", country=country
+                )
+            else:
+                result_text = "❌ JustWatch热门电影数据获取失败，请稍后重试"
+                
+        elif source == "tmdb":
+            # 只显示TMDB数据
+            popular_data = await movie_service.get_popular_movies()
+            if popular_data:
+                result_text = movie_service.format_popular_movies(popular_data)
+            else:
+                result_text = "❌ 获取TMDB热门电影失败，请稍后重试"
+                
+        else:  # mixed
+            # 混合显示TMDB、JustWatch和Trakt数据
+            tmdb_data = await movie_service.get_popular_movies()
+            justwatch_data = None
+            trakt_data = None
+            
+            if JUSTWATCH_AVAILABLE:
+                justwatch_data = await movie_service.get_justwatch_popular_content(
+                    country=country, content_type="movie", count=10
+                )
+            
+            # 获取Trakt热门数据
+            try:
+                trakt_data = await movie_service._get_trakt_trending_movies(8)
+            except Exception as e:
+                logger.warning(f"获取Trakt电影数据失败: {e}")
+            
+            if tmdb_data or justwatch_data or trakt_data:
+                result_text = movie_service.format_mixed_popular_content(
+                    tmdb_data, justwatch_data, content_type="movie", trakt_data=trakt_data
+                )
+            else:
+                result_text = "❌ 获取热门电影数据失败，请稍后重试"
+        
+        await message.edit_text(
+            foldable_text_with_markdown_v2(result_text),
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+        
     except Exception as e:
         logger.error(f"获取热门电影失败: {e}")
         await message.edit_text("❌ 获取热门电影时发生错误")
@@ -4645,15 +4024,12 @@ async def movie_clean_cache_command(update: Update, context: ContextTypes.DEFAUL
             "tv_season_", "tv_episode_", "tv_watch_providers_",
             "trending_",
             "person_search_", "person_detail_",
-            "justwatch_search_", "justwatch_offers_",
-            # 新增charts相关缓存
-            "platform_trending_", "cross_platform_", "country_trending_",
-            "high_rated_", "rank_filtered_", "genre_trending_"
+            "justwatch_search_", "justwatch_offers_"
         ]
         for prefix in prefixes:
             await cache_manager.clear_cache(subdirectory="movie", key_prefix=prefix)
         
-        success_message = "✅ 所有影视内容查询缓存已清理（包括电影、电视剧、人物、观看平台、JustWatch数据、排行榜数据）。"
+        success_message = "✅ 所有影视内容查询缓存已清理（包括电影、电视剧、人物、观看平台、JustWatch数据）。"
         await send_success(context, update.effective_chat.id, foldable_text_v2(success_message), parse_mode="MarkdownV2")
         await delete_user_command(context, update.effective_chat.id, update.message.message_id)
     except Exception as e:
@@ -4793,7 +4169,14 @@ async def tv_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
 async def tv_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """处理 /tv_hot 命令 - 获取热门电视剧"""
+    """处理 /tv_hot 命令 - 获取热门电视剧（支持多数据源）
+    
+    用法:
+    /tv_hot - 混合显示TMDB和JustWatch数据（默认）
+    /tv_hot tmdb - 只显示TMDB数据
+    /tv_hot justwatch - 只显示JustWatch数据
+    /tv_hot justwatch US - 显示美国JustWatch数据
+    """
     if not update.message or not update.effective_chat:
         return
     
@@ -4804,6 +4187,21 @@ async def tv_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
         return
     
+    # 解析参数
+    source = context.args[0].lower() if context.args else "mixed"
+    country = context.args[1].upper() if len(context.args) > 1 else "US"
+    
+    # 验证数据源参数
+    valid_sources = ["mixed", "tmdb", "justwatch"]
+    if source not in valid_sources:
+        await send_error(
+            context,
+            update.effective_chat.id,
+            foldable_text_v2(f"❌ 无效的数据源: {source}\n支持的数据源: {', '.join(valid_sources)}"),
+            parse_mode="MarkdownV2"
+        )
+        return
+    
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text="🔍 正在获取热门电视剧\.\.\.",
@@ -4811,15 +4209,59 @@ async def tv_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     )
     
     try:
-        popular_data = await movie_service.get_popular_tv_shows()
-        if popular_data:
-            result_text = movie_service.format_popular_tv_shows(popular_data)
-            await message.edit_text(
-                foldable_text_with_markdown_v2(result_text),
-                parse_mode=ParseMode.MARKDOWN_V2
+        if source == "justwatch":
+            # 只显示JustWatch数据
+            if not JUSTWATCH_AVAILABLE:
+                await message.edit_text("❌ JustWatch API不可用，请使用TMDB数据源")
+                return
+            
+            justwatch_data = await movie_service.get_justwatch_popular_content(
+                country=country, content_type="show", count=15
             )
-        else:
-            await message.edit_text("❌ 获取热门电视剧失败，请稍后重试")
+            if justwatch_data:
+                result_text = movie_service.format_justwatch_popular_content(
+                    justwatch_data, content_type="show", country=country
+                )
+            else:
+                result_text = "❌ JustWatch热门电视剧数据获取失败，请稍后重试"
+                
+        elif source == "tmdb":
+            # 只显示TMDB数据
+            popular_data = await movie_service.get_popular_tv_shows()
+            if popular_data:
+                result_text = movie_service.format_popular_tv_shows(popular_data)
+            else:
+                result_text = "❌ 获取TMDB热门电视剧失败，请稍后重试"
+                
+        else:  # mixed
+            # 混合显示TMDB、JustWatch和Trakt数据
+            tmdb_data = await movie_service.get_popular_tv_shows()
+            justwatch_data = None
+            trakt_data = None
+            
+            if JUSTWATCH_AVAILABLE:
+                justwatch_data = await movie_service.get_justwatch_popular_content(
+                    country=country, content_type="show", count=10
+                )
+            
+            # 获取Trakt热门数据
+            try:
+                trakt_data = await movie_service._get_trakt_trending_tv(8)
+            except Exception as e:
+                logger.warning(f"获取Trakt电视剧数据失败: {e}")
+            
+            if tmdb_data or justwatch_data or trakt_data:
+                result_text = movie_service.format_mixed_popular_content(
+                    tmdb_data, justwatch_data, content_type="tv", trakt_data=trakt_data
+                )
+            else:
+                result_text = "❌ 获取热门电视剧数据失败，请稍后重试"
+        
+        await message.edit_text(
+            foldable_text_with_markdown_v2(result_text),
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+        
     except Exception as e:
         logger.error(f"获取热门电视剧失败: {e}")
         await message.edit_text("❌ 获取热门电视剧时发生错误")
@@ -5975,822 +5417,6 @@ async def trending_week_command(update: Update, context: ContextTypes.DEFAULT_TY
     except Exception as e:
         logger.error(f"获取本周热门内容失败: {e}")
         await message.edit_text("❌ 获取本周热门内容时发生错误")
-    
-    # 调度删除机器人回复消息
-    from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
-    config = get_config()
-    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
-
-async def charts_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """处理 /charts 命令 - 显示排行榜选择菜单"""
-    if not update.message or not update.effective_chat:
-        return
-    
-    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
-    
-    # 创建inline keyboard
-    keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("🔥 全球热门", callback_data="chart_global_trending"),
-            InlineKeyboardButton("📺 电视剧榜", callback_data="chart_tv_trending"),
-            InlineKeyboardButton("🎬 电影榜", callback_data="chart_movie_trending")
-        ],
-        # 🎯 最热门平台 (按数据量排序)
-        [
-            InlineKeyboardButton("🔴 Netflix", callback_data="chart_platform_netflix"),
-            InlineKeyboardButton("📦 Amazon", callback_data="chart_platform_amazon"),
-            InlineKeyboardButton("🍎 Apple TV", callback_data="chart_platform_itunes")
-        ],
-        [
-            InlineKeyboardButton("🎬 Vudu", callback_data="chart_platform_vudu"),
-            InlineKeyboardButton("▶️ YouTube", callback_data="chart_platform_youtube"),
-            InlineKeyboardButton("🏰 Disney+", callback_data="chart_platform_disney")
-        ],
-        [
-            InlineKeyboardButton("🔵 HBO Max", callback_data="chart_platform_max"),
-            InlineKeyboardButton("⭐ Paramount+", callback_data="chart_platform_paramount"),
-            InlineKeyboardButton("🟢 Hulu", callback_data="chart_platform_hulu")
-        ],
-        [
-            InlineKeyboardButton("🎵 更多订阅平台", callback_data="chart_subscription_platforms"),
-            InlineKeyboardButton("🆓 免费平台", callback_data="chart_free_platforms"),
-            InlineKeyboardButton("🛒 租赁平台", callback_data="chart_rental_platforms")
-        ],
-        [
-            InlineKeyboardButton("🏆 排名专区", callback_data="chart_rank_zone"),
-            InlineKeyboardButton("🎭 类型专区", callback_data="chart_genre_zone")
-        ],
-        [
-            InlineKeyboardButton("🌍 按国家查看", callback_data="chart_by_country"),
-            InlineKeyboardButton("⭐ 高分内容", callback_data="chart_high_rated")
-        ],
-        [
-            InlineKeyboardButton("❌ 关闭", callback_data="chart_close"),
-            InlineKeyboardButton("🔧 调试平台", callback_data="chart_debug_platforms")
-        ]
-    ])
-    
-    message_text = (
-        "🏆 *流媒体排行榜中心*\n\n"
-        "选择你想查看的排行榜类型：\n\n"
-        "📊 **热门榜单**：全球热门内容\n"
-        "🎯 **平台专属**：各流媒体平台热门内容\n"
-        "🌐 **地区排行**：不同国家地区的热门内容\n"
-        "🔍 **跨平台对比**：查看内容在各平台的情况"
-    )
-    
-    await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=foldable_text_with_markdown_v2(message_text),
-        reply_markup=keyboard,
-        parse_mode=ParseMode.MARKDOWN_V2
-    )
-
-async def charts_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """处理排行榜选择回调"""
-    query = update.callback_query
-    if not query or not query.data:
-        return
-        
-    await query.answer()
-    callback_data = query.data
-    
-    if not movie_service:
-        await query.edit_message_text("❌ 电影查询服务未初始化")
-        return
-    
-    async def schedule_chart_deletion():
-        """为charts消息调度删除"""
-        try:
-            from utils.message_manager import _schedule_deletion
-            from utils.config_manager import get_config
-            config = get_config()
-            await _schedule_deletion(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
-        except Exception as e:
-            logger.warning(f"调度删除charts消息失败: {e}")
-    
-    try:
-        if callback_data == "chart_global_trending":
-            # 全球热门内容
-            await query.edit_message_text("🔍 正在获取全球热门内容...")
-            trending_data = await movie_service.get_trending_content("all", "day")
-            if trending_data:
-                result_text = movie_service.format_trending_content(trending_data, "day")
-                await query.edit_message_text(
-                    foldable_text_with_markdown_v2(result_text),
-                    parse_mode=ParseMode.MARKDOWN_V2
-                )
-                await schedule_chart_deletion()
-            else:
-                await query.edit_message_text("❌ 获取全球热门内容失败")
-                await schedule_chart_deletion()
-                
-        elif callback_data == "chart_tv_trending":
-            # 热门电视剧
-            await query.edit_message_text("🔍 正在获取热门电视剧...")
-            trending_data = await movie_service._get_trakt_trending_tv(15)
-            if trending_data:
-                result_text = movie_service.format_trakt_trending_tv(trending_data)
-                await query.edit_message_text(
-                    foldable_text_with_markdown_v2(result_text),
-                    parse_mode=ParseMode.MARKDOWN_V2
-                )
-                await schedule_chart_deletion()
-            else:
-                await query.edit_message_text("❌ 获取热门电视剧失败")
-                await schedule_chart_deletion()
-                
-        elif callback_data == "chart_movie_trending":
-            # 热门电影
-            await query.edit_message_text("🔍 正在获取热门电影...")
-            trending_data = await movie_service._get_trakt_trending_movies(15)
-            if trending_data:
-                result_text = movie_service.format_trakt_trending_movies(trending_data)
-                await query.edit_message_text(
-                    foldable_text_with_markdown_v2(result_text),
-                    parse_mode=ParseMode.MARKDOWN_V2
-                )
-                await schedule_chart_deletion()
-            else:
-                await query.edit_message_text("❌ 获取热门电影失败")
-                await schedule_chart_deletion()
-                
-        elif callback_data.startswith("chart_platform_"):
-            # 平台专属排行榜
-            platform = callback_data.replace("chart_platform_", "")
-            platform_names = {
-                "netflix": "Netflix",
-                "amazon": "Amazon Prime", 
-                "disneyplus": "Disney+",  # 修正：Disney+的正确technical_name
-                "max": "HBO Max",
-                "itunes": "Apple TV",
-                "hulu": "Hulu",
-                "paramountplusshowtime": "Paramount+",  # 修正：Paramount+的主要technical_name
-                "peacocktvpremium": "Peacock",  # 修正：Peacock的正确technical_name
-                "rokuchannel": "Roku Channel",
-                "plutotv": "Pluto TV",
-                "tubitv": "Tubi TV",  # 修正：Tubi的正确technical_name
-                "vudu": "Vudu"
-            }
-            
-            # 修正platform映射
-            platform_mapping = {
-                "apple": "itunes",  # Apple TV按钮映射到itunes
-                "disney": "disneyplus",  # Disney+映射到正确的technical_name
-                "paramount": "paramountplusshowtime",  # Paramount+映射到主要版本
-                "peacock": "peacocktvpremium",  # Peacock映射到正确的technical_name
-                "tubi": "tubitv",  # Tubi映射到正确的technical_name
-            }
-            
-            actual_platform = platform_mapping.get(platform, platform)
-            platform_display = platform_names.get(actual_platform, actual_platform.title())
-            await query.edit_message_text(f"🔍 正在获取{platform_display}排行榜...")
-            
-            platform_data = await movie_service.get_platform_trending(actual_platform, limit=15)
-            if platform_data:
-                result_text = movie_service.format_platform_trending(platform_data, platform_display)
-                await query.edit_message_text(
-                    foldable_text_with_markdown_v2(result_text),
-                    parse_mode=ParseMode.MARKDOWN_V2
-                )
-                await schedule_chart_deletion()
-            else:
-                # 如果失败，尝试其他可能的technical_name
-                alternative_names = {
-                    "disneyplus": ["disney"],  # Disney+的备用名称
-                    "paramountplusshowtime": ["amazonparamountplus", "appletvparamountplus", "rokuchannelparamountplus"],  # Paramount+的其他渠道
-                    "peacocktvpremium": ["peacock"],  # Peacock的可能备用名称
-                    "hulu": ["hulupluspremium", "hulu"]  # Hulu可能的名称（虽然没在结果中看到）
-                }
-                
-                tried_alternatives = False
-                if actual_platform in alternative_names:
-                    for alt_name in alternative_names[actual_platform]:
-                        if alt_name != actual_platform:  # 避免重复尝试
-                            alt_data = await movie_service.get_platform_trending(alt_name, limit=15)
-                            if alt_data:
-                                result_text = movie_service.format_platform_trending(alt_data, platform_display)
-                                await query.edit_message_text(
-                                    foldable_text_with_markdown_v2(result_text),
-                                    parse_mode=ParseMode.MARKDOWN_V2
-                                )
-                                await schedule_chart_deletion()
-                                tried_alternatives = True
-                                break
-                
-                if not tried_alternatives:
-                    await query.edit_message_text(
-                        f"❌ 获取{platform_display}排行榜失败\n\n"
-                        f"可能的原因：\n"
-                        f"• 该平台在当前地区没有足够的热门内容\n"
-                        f"• 平台名称映射需要调整 (当前尝试: `{actual_platform}`)\n"
-                        f"• JustWatch API中该平台的technical_name可能不同\n\n"
-                        f"💡 请尝试其他平台或稍后再试"
-                    )
-                    await schedule_chart_deletion()
-                
-        elif callback_data == "chart_cross_platform":
-            # 跨平台对比 - 动态获取热门内容
-            await query.edit_message_text("🔍 正在获取热门内容...")
-            
-            try:
-                popular_content = await movie_service.get_popular_for_cross_platform(6)
-                
-                if popular_content and len(popular_content) >= 4:
-                    # 动态创建按钮
-                    buttons = []
-                    for i, entry in enumerate(popular_content[:6]):  # 最多6个
-                        media_emoji = "🎬" if entry.object_type == "MOVIE" else "📺"
-                        title = entry.title
-                        # 限制标题长度，避免按钮过长
-                        display_title = title if len(title) <= 12 else title[:12] + "..."
-                        # 将标题编码到callback_data中，避免TMDB ID混淆
-                        # 使用base64编码标题以避免特殊字符问题
-                        encoded_title = base64.b64encode(title.encode('utf-8')).decode('ascii')
-                        callback_data = f"chart_compare_title_{encoded_title}"
-                        
-                        button = InlineKeyboardButton(
-                            f"{media_emoji} {display_title}", 
-                            callback_data=callback_data
-                        )
-                        
-                        # 每行放2个按钮
-                        if i % 2 == 0:
-                            buttons.append([button])
-                        else:
-                            buttons[-1].append(button)
-                    
-                    # 添加自定义搜索和返回按钮
-                    buttons.append([
-                        InlineKeyboardButton("🎨 自定义搜索", callback_data="chart_compare_custom")
-                    ])
-                    buttons.append([
-                        InlineKeyboardButton("🔙 返回主菜单", callback_data="chart_main_menu")
-                    ])
-                    
-                    cross_platform_keyboard = InlineKeyboardMarkup(buttons)
-                    
-                    await query.edit_message_text(
-                        "🔍 *跨平台对比*\n\n"
-                        "选择当前热门内容快速查看跨平台情况：\n\n"
-                        "💡 这些是有多个平台支持的热门内容",
-                        reply_markup=cross_platform_keyboard,
-                        parse_mode=ParseMode.MARKDOWN_V2
-                    )
-                else:
-                    # 如果动态获取失败，使用备用的静态选项
-                    fallback_keyboard = InlineKeyboardMarkup([
-                        [
-                            InlineKeyboardButton("🎬 Avatar", callback_data="chart_compare_Avatar"),
-                            InlineKeyboardButton("🎭 Inception", callback_data="chart_compare_Inception")
-                        ],
-                        [
-                            InlineKeyboardButton("📺 Breaking Bad", callback_data="chart_compare_Breaking Bad"),
-                            InlineKeyboardButton("🦸 Avengers", callback_data="chart_compare_Avengers")
-                        ],
-                        [
-                            InlineKeyboardButton("🎨 自定义搜索", callback_data="chart_compare_custom")
-                        ],
-                        [
-                            InlineKeyboardButton("🔙 返回主菜单", callback_data="chart_main_menu")
-                        ]
-                    ])
-                    
-                    await query.edit_message_text(
-                        "🔍 *跨平台对比*\n\n"
-                        "选择内容快速查看跨平台情况：",
-                        reply_markup=fallback_keyboard,
-                        parse_mode=ParseMode.MARKDOWN_V2
-                    )
-                    
-            except Exception as e:
-                logger.error(f"获取动态热门内容失败: {e}")
-                await query.edit_message_text("❌ 获取热门内容失败，请稍后重试")
-                await schedule_chart_deletion()
-            
-        elif callback_data == "chart_rank_zone":
-            # 排名专区选择
-            rank_keyboard = InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton("🥇 Top 10", callback_data="chart_rank_top10"),
-                    InlineKeyboardButton("🏅 Top 100", callback_data="chart_rank_top100")
-                ],
-                [
-                    InlineKeyboardButton("📈 上升最快", callback_data="chart_rank_rising"),
-                    InlineKeyboardButton("🔥 新入榜", callback_data="chart_rank_new_entries")
-                ],
-                [
-                    InlineKeyboardButton("👑 长期霸榜", callback_data="chart_rank_long_term"),
-                    InlineKeyboardButton("🎯 本周热门", callback_data="chart_rank_weekly")
-                ],
-                [
-                    InlineKeyboardButton("🔙 返回主菜单", callback_data="chart_main_menu")
-                ]
-            ])
-            
-            await query.edit_message_text(
-                "🏆 *排名专区*\n\n选择你想查看的排名类型：",
-                reply_markup=rank_keyboard,
-                parse_mode=ParseMode.MARKDOWN_V2
-            )
-            
-        elif callback_data == "chart_genre_zone":
-            # 类型专区选择
-            genre_keyboard = InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton("🎬 动作片", callback_data="chart_genre_action"),
-                    InlineKeyboardButton("😂 喜剧片", callback_data="chart_genre_comedy"),
-                    InlineKeyboardButton("😱 恐怖片", callback_data="chart_genre_horror")
-                ],
-                [
-                    InlineKeyboardButton("💝 爱情片", callback_data="chart_genre_romance"),
-                    InlineKeyboardButton("🚀 科幻片", callback_data="chart_genre_scifi"),
-                    InlineKeyboardButton("🕵️ 悬疑片", callback_data="chart_genre_thriller")
-                ],
-                [
-                    InlineKeyboardButton("📚 纪录片", callback_data="chart_genre_documentary"),
-                    InlineKeyboardButton("👨‍👩‍👧‍👦 家庭片", callback_data="chart_genre_family")
-                ],
-                [
-                    InlineKeyboardButton("🔙 返回主菜单", callback_data="chart_main_menu")
-                ]
-            ])
-            
-            await query.edit_message_text(
-                "🎭 *类型专区*\n\n选择你想查看的内容类型：",
-                reply_markup=genre_keyboard,
-                parse_mode=ParseMode.MARKDOWN_V2
-            )
-            
-        elif callback_data == "chart_high_rated":
-            # 高分内容
-            await query.edit_message_text("🔍 正在获取高分内容...")
-            
-            high_rated = await movie_service.get_high_rated_content(limit=15)
-            if high_rated:
-                result_text = movie_service.format_high_rated_content(high_rated)
-                await query.edit_message_text(
-                    foldable_text_with_markdown_v2(result_text),
-                    parse_mode=ParseMode.MARKDOWN_V2
-                )
-                await schedule_chart_deletion()
-            else:
-                await query.edit_message_text("❌ 获取高分内容失败")
-                await schedule_chart_deletion()
-                
-        elif callback_data.startswith("chart_rank_"):
-            # 排名专区处理
-            rank_type = callback_data.replace("chart_rank_", "")
-            rank_titles = {
-                "top10": "🥇 JustWatch Top 10",
-                "top100": "🏅 JustWatch Top 100", 
-                "rising": "📈 上升最快内容",
-                "new_entries": "🔥 新入榜内容",
-                "long_term": "👑 长期霸榜内容",
-                "weekly": "🎯 本周热门内容"
-            }
-            
-            rank_title = rank_titles.get(rank_type, "排行榜")
-            await query.edit_message_text(f"🔍 正在获取{rank_title}...")
-            
-            rank_data = await movie_service.get_rank_filtered_content(rank_type, limit=15)
-            if rank_data:
-                result_text = movie_service.format_rank_filtered_content(rank_data, rank_title)
-                await query.edit_message_text(
-                    foldable_text_with_markdown_v2(result_text),
-                    parse_mode=ParseMode.MARKDOWN_V2
-                )
-                await schedule_chart_deletion()
-            else:
-                await query.edit_message_text(f"❌ 获取{rank_title}失败")
-                await schedule_chart_deletion()
-                
-        elif callback_data.startswith("chart_genre_"):
-            # 类型专区处理
-            genre = callback_data.replace("chart_genre_", "")
-            genre_titles = {
-                "action": "🎬 动作片热门",
-                "comedy": "😂 喜剧片热门",
-                "horror": "😱 恐怖片热门",
-                "romance": "💝 爱情片热门", 
-                "scifi": "🚀 科幻片热门",
-                "thriller": "🕵️ 悬疑片热门",
-                "documentary": "📚 纪录片热门",
-                "family": "👨‍👩‍👧‍👦 家庭片热门"
-            }
-            
-            genre_title = genre_titles.get(genre, f"{genre.title()}热门")
-            await query.edit_message_text(f"🔍 正在获取{genre_title}...")
-            
-            genre_data = await movie_service.get_genre_trending(genre, limit=15)
-            if genre_data:
-                result_text = movie_service.format_genre_trending(genre_data, genre_title)
-                await query.edit_message_text(
-                    foldable_text_with_markdown_v2(result_text),
-                    parse_mode=ParseMode.MARKDOWN_V2
-                )
-                await schedule_chart_deletion()
-            else:
-                await query.edit_message_text(f"❌ 获取{genre_title}失败")
-                await schedule_chart_deletion()
-                
-        elif callback_data == "chart_by_country":
-            # 按国家查看 - 显示国家选择
-            country_keyboard = InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton("🇺🇸 美国", callback_data="chart_country_US"),
-                    InlineKeyboardButton("🇬🇧 英国", callback_data="chart_country_GB"),
-                    InlineKeyboardButton("🇯🇵 日本", callback_data="chart_country_JP")
-                ],
-                [
-                    InlineKeyboardButton("🇰🇷 韩国", callback_data="chart_country_KR"),
-                    InlineKeyboardButton("🇫🇷 法国", callback_data="chart_country_FR"),
-                    InlineKeyboardButton("🇩🇪 德国", callback_data="chart_country_DE")
-                ],
-                [
-                    InlineKeyboardButton("🇨🇦 加拿大", callback_data="chart_country_CA"),
-                    InlineKeyboardButton("🇦🇺 澳大利亚", callback_data="chart_country_AU"),
-                    InlineKeyboardButton("🇧🇷 巴西", callback_data="chart_country_BR")
-                ],
-                [
-                    InlineKeyboardButton("🔙 返回主菜单", callback_data="chart_main_menu")
-                ]
-            ])
-            
-            await query.edit_message_text(
-                "🌍 *选择国家/地区*\n\n选择你想查看的国家或地区的热门内容：",
-                reply_markup=country_keyboard,
-                parse_mode=ParseMode.MARKDOWN_V2
-            )
-            
-        elif callback_data.startswith("chart_country_"):
-            # 国家/地区热门内容 - 使用JustWatch按国家查看
-            country = callback_data.replace("chart_country_", "")
-            country_names = {
-                "US": "🇺🇸 美国", "GB": "🇬🇧 英国", "JP": "🇯🇵 日本",
-                "KR": "🇰🇷 韩国", "FR": "🇫🇷 法国", "DE": "🇩🇪 德国",
-                "CA": "🇨🇦 加拿大", "AU": "🇦🇺 澳大利亚", "BR": "🇧🇷 巴西"
-            }
-            
-            country_display = country_names.get(country, country)
-            await query.edit_message_text(f"🔍 正在获取{country_display}热门内容...")
-            
-            # 使用JustWatch获取该国家的热门内容
-            country_trending = await movie_service.get_country_trending(country, limit=15)
-            if country_trending:
-                result_text = movie_service.format_country_trending(country_trending, country_display)
-                await query.edit_message_text(
-                    foldable_text_with_markdown_v2(result_text),
-                    parse_mode=ParseMode.MARKDOWN_V2
-                )
-                await schedule_chart_deletion()
-            else:
-                await query.edit_message_text(f"❌ 获取{country_display}热门内容失败")
-                await schedule_chart_deletion()
-                
-        elif callback_data == "chart_main_menu":
-            # 返回主菜单 - 直接编辑消息显示主菜单
-            # 创建主菜单keyboard
-            main_keyboard = InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton("🔥 全球热门", callback_data="chart_global_trending"),
-                    InlineKeyboardButton("📺 电视剧榜", callback_data="chart_tv_trending"),
-                    InlineKeyboardButton("🎬 电影榜", callback_data="chart_movie_trending")
-                ],
-                # 🎯 最热门平台 (按数据量排序)
-                [
-                    InlineKeyboardButton("🔴 Netflix", callback_data="chart_platform_netflix"),
-                    InlineKeyboardButton("📦 Amazon", callback_data="chart_platform_amazon"),
-                    InlineKeyboardButton("🍎 Apple TV", callback_data="chart_platform_itunes")
-                ],
-                [
-                    InlineKeyboardButton("🎬 Vudu", callback_data="chart_platform_vudu"),
-                    InlineKeyboardButton("▶️ YouTube", callback_data="chart_platform_youtube"),
-                    InlineKeyboardButton("🏰 Disney+", callback_data="chart_platform_disney")
-                ],
-                [
-                    InlineKeyboardButton("🔵 HBO Max", callback_data="chart_platform_max"),
-                    InlineKeyboardButton("⭐ Paramount+", callback_data="chart_platform_paramount"),
-                    InlineKeyboardButton("🟢 Hulu", callback_data="chart_platform_hulu")
-                ],
-                [
-                    InlineKeyboardButton("🎵 更多订阅平台", callback_data="chart_subscription_platforms"),
-                    InlineKeyboardButton("🆓 免费平台", callback_data="chart_free_platforms"),
-                    InlineKeyboardButton("🛒 租赁平台", callback_data="chart_rental_platforms")
-                ],
-                [
-                    InlineKeyboardButton("🏆 排名专区", callback_data="chart_rank_zone"),
-                    InlineKeyboardButton("🎭 类型专区", callback_data="chart_genre_zone")
-                ],
-                [
-                    InlineKeyboardButton("🆕 最新上架", callback_data="chart_new_releases"),
-                    InlineKeyboardButton("⭐ 高分内容", callback_data="chart_high_rated")
-                ],
-                [
-                    InlineKeyboardButton("🌍 按国家查看", callback_data="chart_by_country"),
-                    InlineKeyboardButton("🔄 跨平台对比", callback_data="chart_cross_platform")
-                ],
-                [
-                    InlineKeyboardButton("❌ 关闭", callback_data="chart_close"),
-                    InlineKeyboardButton("🔧 调试平台", callback_data="chart_debug_platforms")
-                ]
-            ])
-            
-            main_message_text = (
-                "🏆 *流媒体排行榜中心*\n\n"
-                "选择你想查看的排行榜类型：\n\n"
-                "📊 **热门榜单**：全球热门内容\n"
-                "🎯 **平台专属**：各流媒体平台独家排行\n"
-                "🌐 **地区排行**：不同国家地区的热门内容\n"
-                "🔍 **跨平台对比**：查看内容在各平台的情况"
-            )
-            
-            await query.edit_message_text(
-                text=foldable_text_with_markdown_v2(main_message_text),
-                reply_markup=main_keyboard,
-                parse_mode=ParseMode.MARKDOWN_V2
-            )
-            return
-            
-        elif callback_data == "chart_close":
-            # 关闭菜单
-            await query.delete_message()
-            return
-            
-        elif callback_data == "chart_subscription_platforms":
-            # 显示订阅平台
-            subscription_keyboard = InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton("🦚 Peacock", callback_data="chart_platform_peacocktvpremium"),
-                    InlineKeyboardButton("🎭 Starz", callback_data="chart_platform_starz"),
-                    InlineKeyboardButton("🎬 AMC+", callback_data="chart_platform_amcplus")
-                ],
-                [
-                    InlineKeyboardButton("🎥 MUBI", callback_data="chart_platform_mubi"),
-                    InlineKeyboardButton("📺 Philo", callback_data="chart_platform_philo"),
-                    InlineKeyboardButton("⚽ fuboTV", callback_data="chart_platform_fubotv")
-                ],
-                [
-                    InlineKeyboardButton("🔍 Discovery+", callback_data="chart_platform_discoveryplusus"),
-                    InlineKeyboardButton("🎞️ Sundance Now", callback_data="chart_platform_sundancenow"),
-                    InlineKeyboardButton("🌐 Spectrum", callback_data="chart_platform_spectrumondemand")
-                ],
-                [
-                    InlineKeyboardButton("🔙 返回主菜单", callback_data="chart_main_menu")
-                ]
-            ])
-            
-            await query.edit_message_text(
-                "🎵 *订阅制流媒体平台*\n\n选择你想查看的平台：",
-                reply_markup=subscription_keyboard,
-                parse_mode=ParseMode.MARKDOWN_V2
-            )
-            
-        elif callback_data == "chart_free_platforms":
-            # 显示免费平台
-            free_keyboard = InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton("🎮 Plex", callback_data="chart_platform_plex"),
-                    InlineKeyboardButton("📺 Roku Channel", callback_data="chart_platform_rokuchannel"),
-                    InlineKeyboardButton("🎪 Pluto TV", callback_data="chart_platform_plutotv")
-                ],
-                [
-                    InlineKeyboardButton("📱 Tubi", callback_data="chart_platform_tubitv"),
-                    InlineKeyboardButton("⭐ Fawesome", callback_data="chart_platform_fawesometv"),
-                    InlineKeyboardButton("📚 Hoopla", callback_data="chart_platform_hoopla")
-                ],
-                [
-                    InlineKeyboardButton("🎓 Kanopy", callback_data="chart_platform_kanopy"),
-                    InlineKeyboardButton("🎬 JustWatch TV", callback_data="chart_platform_justwatchtv"),
-                    InlineKeyboardButton("📺 The CW", callback_data="chart_platform_thecw")
-                ],
-                [
-                    InlineKeyboardButton("🌸 Viki", callback_data="chart_platform_viki"),
-                    InlineKeyboardButton("🇰🇷 OnDemandKorea", callback_data="chart_platform_ondemandkorea"),
-                    InlineKeyboardButton("🎥 Cineverse", callback_data="chart_platform_cineverse")
-                ],
-                [
-                    InlineKeyboardButton("🔙 返回主菜单", callback_data="chart_main_menu")
-                ]
-            ])
-            
-            await query.edit_message_text(
-                "🆓 *免费流媒体平台*\n\n选择你想查看的平台：",
-                reply_markup=free_keyboard,
-                parse_mode=ParseMode.MARKDOWN_V2
-            )
-            
-        elif callback_data == "chart_rental_platforms":
-            # 显示租赁平台
-            rental_keyboard = InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton("🎬 Google Play", callback_data="chart_platform_play"),
-                    InlineKeyboardButton("🎵 YouTube", callback_data="chart_platform_youtube"),
-                    InlineKeyboardButton("🎪 Microsoft Store", callback_data="chart_platform_microsoft")
-                ],
-                [
-                    InlineKeyboardButton("🎭 Darkroom", callback_data="chart_platform_darkroom"),
-                    InlineKeyboardButton("🎬 Kino Film", callback_data="chart_platform_kinofilmcollection"),
-                    InlineKeyboardButton("📺 DistroTV", callback_data="chart_platform_distrotv")
-                ],
-                [
-                    InlineKeyboardButton("🎮 Filmzie", callback_data="chart_platform_filmzie"),
-                    InlineKeyboardButton("🇰🇷 Kocowa", callback_data="chart_platform_kocowa"),
-                    InlineKeyboardButton("📱 Mometu", callback_data="chart_platform_mometu")
-                ],
-                [
-                    InlineKeyboardButton("🔙 返回主菜单", callback_data="chart_main_menu")
-                ]
-            ])
-            
-            await query.edit_message_text(
-                "🛒 *租赁/购买平台*\n\n选择你想查看的平台：",
-                reply_markup=rental_keyboard,
-                parse_mode=ParseMode.MARKDOWN_V2
-            )
-            
-        elif callback_data.startswith("chart_compare_"):
-            # 处理跨平台对比请求
-            if callback_data == "chart_compare_custom":
-                # 自定义搜索提示
-                await query.edit_message_text(
-                    "🔍 *自定义跨平台对比*\n\n"
-                    "请使用以下格式查看内容的跨平台情况：\n"
-                    "`/chart_compare <电影或电视剧名称>`\n\n"
-                    "例如：\n"
-                    "• `/chart_compare Avatar`\n"
-                    "• `/chart_compare Breaking Bad`\n"
-                    "• `/chart_compare Avengers`",
-                    parse_mode=ParseMode.MARKDOWN_V2
-                )
-            elif callback_data.startswith("chart_compare_dynamic_"):
-                # 处理动态获取的热门内容（通过TMDB ID） - 向后兼容
-                tmdb_id = callback_data.replace("chart_compare_dynamic_", "")
-                await query.edit_message_text("🔍 正在获取跨平台对比数据...")
-                
-                try:
-                    # 先通过TMDB ID获取详细信息
-                    movie_details = await movie_service.get_movie_details(int(tmdb_id))
-                    tv_details = await movie_service.get_tv_details(int(tmdb_id))
-                    
-                    # 确定是电影还是电视剧，获取标题
-                    if movie_details and movie_details.get("title"):
-                        title = movie_details["title"]
-                    elif tv_details and tv_details.get("name"):
-                        title = tv_details["name"]
-                    else:
-                        await query.edit_message_text("❌ 获取内容信息失败")
-                        return
-                    
-                    # 使用标题进行跨平台对比搜索
-                    cross_data = await movie_service.get_cross_platform_charts(title)
-                    if cross_data:
-                        result_text = movie_service.format_cross_platform_charts(cross_data)
-                        
-                        # 添加返回按钮
-                        back_keyboard = InlineKeyboardMarkup([
-                            [InlineKeyboardButton("🔙 返回跨平台菜单", callback_data="chart_cross_platform")]
-                        ])
-                        
-                        await query.edit_message_text(
-                            result_text, 
-                            parse_mode="MarkdownV2", 
-                            reply_markup=back_keyboard, 
-                            disable_web_page_preview=True
-                        )
-                        await schedule_chart_deletion()
-                    else:
-                        await query.edit_message_text("❌ 获取跨平台对比数据失败")
-                        await schedule_chart_deletion()
-                        
-                except Exception as e:
-                    logger.error(f"动态跨平台对比失败: {e}")
-                    await query.edit_message_text("❌ 获取跨平台对比数据时发生错误")
-                    await schedule_chart_deletion()
-            
-            elif callback_data.startswith("chart_compare_title_"):
-                # 处理通过标题编码的跨平台对比
-                encoded_title = callback_data.replace("chart_compare_title_", "")
-                await query.edit_message_text("🔍 正在获取跨平台对比数据...")
-                
-                try:
-                    # 解码标题
-                    title = base64.b64decode(encoded_title.encode('ascii')).decode('utf-8')
-                    
-                    # 使用标题进行跨平台对比搜索
-                    cross_data = await movie_service.get_cross_platform_charts(title)
-                    if cross_data:
-                        result_text = movie_service.format_cross_platform_charts(cross_data)
-                        
-                        # 添加返回按钮
-                        back_keyboard = InlineKeyboardMarkup([
-                            [InlineKeyboardButton("🔙 返回跨平台菜单", callback_data="chart_cross_platform")]
-                        ])
-                        
-                        await query.edit_message_text(
-                            foldable_text_with_markdown_v2(result_text),
-                            reply_markup=back_keyboard,
-                            parse_mode=ParseMode.MARKDOWN_V2
-                        )
-                        await schedule_chart_deletion()
-                    else:
-                        await query.edit_message_text(f"❌ 未找到 '{title}' 的跨平台数据")
-                        await schedule_chart_deletion()
-                        
-                except Exception as e:
-                    logger.error(f"获取动态跨平台对比数据失败: {e}")
-                    await query.edit_message_text("❌ 获取跨平台对比数据时发生错误")
-                    await schedule_chart_deletion()
-                    
-            else:
-                # 处理静态的热门内容（通过标题）
-                title = callback_data.replace("chart_compare_", "").replace("_", " ")
-                await query.edit_message_text(f"🔍 正在获取 *{title}* 的跨平台对比数据...")
-                
-                try:
-                    cross_data = await movie_service.get_cross_platform_charts(title)
-                    if cross_data:
-                        result_text = movie_service.format_cross_platform_charts(cross_data)
-                        
-                        # 添加返回按钮
-                        back_keyboard = InlineKeyboardMarkup([
-                            [InlineKeyboardButton("🔙 返回跨平台菜单", callback_data="chart_cross_platform")]
-                        ])
-                        
-                        await query.edit_message_text(
-                            foldable_text_with_markdown_v2(result_text),
-                            reply_markup=back_keyboard,
-                            parse_mode=ParseMode.MARKDOWN_V2
-                        )
-                        await schedule_chart_deletion()
-                    else:
-                        await query.edit_message_text(f"❌ 未找到 '{title}' 的跨平台数据")
-                        await schedule_chart_deletion()
-                except Exception as e:
-                    logger.error(f"获取跨平台对比数据失败: {e}")
-                    await query.edit_message_text("❌ 获取跨平台对比数据时发生错误")
-                    await schedule_chart_deletion()
-        
-        elif callback_data == "chart_debug_platforms":
-            # 调试平台信息
-            await query.edit_message_text("🔍 正在获取JustWatch平台信息...")
-            
-            debug_data = await movie_service.debug_available_platforms()
-            if debug_data:
-                result_text = movie_service.format_debug_platforms(debug_data)
-                await query.edit_message_text(
-                    foldable_text_with_markdown_v2(result_text),
-                    parse_mode=ParseMode.MARKDOWN_V2
-                )
-                await schedule_chart_deletion()
-            else:
-                await query.edit_message_text("❌ 获取平台调试信息失败")
-                await schedule_chart_deletion()
-            
-    except Exception as e:
-        logger.error(f"处理排行榜回调失败: {e}")
-        await query.edit_message_text("❌ 处理请求时发生错误，请稍后重试")
-        await schedule_chart_deletion()
-
-async def chart_compare_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """处理 /chart_compare 命令 - 跨平台对比"""
-    if not update.message or not update.effective_chat:
-        return
-    
-    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
-    
-    if not context.args:
-        error_message = "❌ 请提供要对比的内容标题\n\n使用方法: `/chart_compare <标题>`\n例如: `/chart_compare The Matrix`"
-        await send_error(context, update.effective_chat.id, foldable_text_with_markdown_v2(error_message), parse_mode="MarkdownV2")
-        return
-    
-    if not movie_service:
-        error_message = "❌ 电影查询服务未初始化"
-        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
-        return
-    
-    title = " ".join(context.args)
-    
-    message = await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=f"🔍 正在获取 *{escape_markdown(title, version=2)}* 的跨平台对比数据\.\.\.",
-        parse_mode=ParseMode.MARKDOWN_V2
-    )
-    
-    try:
-        cross_data = await movie_service.get_cross_platform_charts(title)
-        if cross_data:
-            result_text = movie_service.format_cross_platform_charts(cross_data)
-            await message.edit_text(
-                foldable_text_with_markdown_v2(result_text),
-                parse_mode=ParseMode.MARKDOWN_V2
-            )
-        else:
-            await message.edit_text(f"❌ 未找到 '{title}' 的跨平台数据")
-    except Exception as e:
-        logger.error(f"获取跨平台对比数据失败: {e}")
-        await message.edit_text("❌ 获取跨平台对比数据时发生错误")
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
@@ -7996,10 +6622,6 @@ command_factory.register_command("upcoming", upcoming_command, permission=Permis
 command_factory.register_command("tv_airing", tv_airing_command, permission=Permission.USER, description="获取今日播出的电视剧")
 command_factory.register_command("tv_on_air", tv_on_air_command, permission=Permission.USER, description="获取正在播出的电视剧")
 
-# 注册排行榜相关命令
-command_factory.register_command("charts", charts_command, permission=Permission.USER, description="流媒体排行榜中心")
-command_factory.register_command("chart_compare", chart_compare_command, permission=Permission.USER, description="跨平台对比")
-
 # 注册人物搜索命令
 command_factory.register_command("person", person_command, permission=Permission.USER, description="搜索人物信息（按钮选择）")
 command_factory.register_command("persons", persons_command, permission=Permission.USER, description="搜索人物信息（文本列表）")
@@ -8013,4 +6635,3 @@ command_factory.register_command("tv_watch", tv_watch_command, permission=Permis
 command_factory.register_callback(r"^movie_", movie_callback_handler, permission=Permission.USER, description="电影搜索结果选择")
 command_factory.register_callback(r"^tv_", tv_callback_handler, permission=Permission.USER, description="电视剧搜索结果选择")
 command_factory.register_callback(r"^person_", person_callback_handler, permission=Permission.USER, description="人物搜索结果选择")
-command_factory.register_callback(r"^chart_", charts_callback_handler, permission=Permission.USER, description="排行榜选择处理")
