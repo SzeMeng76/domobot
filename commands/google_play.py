@@ -194,13 +194,35 @@ async def googleplay_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 lang_code = args_list[-1].lower()
                 query = " ".join(args_list[:-2])  # Everything except last 2 args
             else:
-                # Not a valid country, maybe just language at the end
+                # Second-to-last is not a valid country, check if last argument is country
+                if len(args_list[-1]) == 2 and args_list[-1].isalpha():
+                    potential_country = args_list[-1].upper()
+                    if potential_country in SUPPORTED_COUNTRIES:
+                        user_country = potential_country
+                        query = " ".join(args_list[:-1])  # Everything except last arg
+                    else:
+                        # Last argument is not a country either, treat as language
+                        lang_code = args_list[-1].lower()
+                        query = " ".join(args_list[:-1])  # Everything except last arg
+                else:
+                    # Last argument is not 2 letters, treat as language
+                    lang_code = args_list[-1].lower()
+                    query = " ".join(args_list[:-1])  # Everything except last arg
+        else:
+            # Second-to-last is not 2 letters, check if last argument is country
+            if len(args_list[-1]) == 2 and args_list[-1].isalpha():
+                potential_country = args_list[-1].upper()
+                if potential_country in SUPPORTED_COUNTRIES:
+                    user_country = potential_country
+                    query = " ".join(args_list[:-1])  # Everything except last arg
+                else:
+                    # Not a country, treat as language
+                    lang_code = args_list[-1].lower()
+                    query = " ".join(args_list[:-1])  # Everything except last arg
+            else:
+                # Last argument is not 2 letters, treat as language
                 lang_code = args_list[-1].lower()
                 query = " ".join(args_list[:-1])  # Everything except last arg
-        else:
-            # Maybe just language at the end
-            lang_code = args_list[-1].lower()
-            query = " ".join(args_list[:-1])  # Everything except last arg
     elif len(args_list) == 2:
         # Check if second argument is country code or language
         if len(args_list[1]) == 2 and args_list[1].isalpha():
