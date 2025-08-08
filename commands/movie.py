@@ -595,25 +595,15 @@ class MovieService:
                 "filmzie": ["filmzie"]  # 2个内容
             }
             
-            # 1. 优先使用 "new releases" 查询（显示最新上架内容）
+            # 1. 优化的"真正新内容"搜索策略
             try:
-                new_releases_results = justwatch_search("new releases", country, "en", 100, True)
-                target_platforms = platform_variants.get(platform.lower(), [platform])
-                
-                for entry in new_releases_results:
-                    has_platform = any(
-                        offer.package.technical_name.lower() in [tp.lower() for tp in target_platforms]
-                        for offer in entry.offers
-                    )
-                    
-                    if has_platform:
-                        search_results.append(entry)
-                        
-                    if len(search_results) >= limit:
-                        break
+                search_results.extend(await self._get_truly_new_platform_content(
+                    platform, target_platforms=platform_variants.get(platform.lower(), [platform]), 
+                    country=country, limit=limit
+                ))
                         
             except Exception as e:
-                logger.warning(f"New releases查询失败: {e}")
+                logger.warning(f"新内容智能搜索失败: {e}")
             
             # 2. 如果新上架内容不够，使用平台名称查询作为补充
             if len(search_results) < limit:
@@ -730,6 +720,130 @@ class MovieService:
         except Exception as e:
             logger.error(f"获取平台排行榜失败: {e}")
             return None
+    
+    async def _get_truly_new_platform_content(self, platform: str, target_platforms: List[str], 
+                                            country: str = "US", limit: int = 15) -> List:
+        """智能获取平台真正的新内容
+        使用多种策略识别真正的新发布内容，而不是简单的文本搜索
+        """
+        new_content = []
+        current_year = 2025
+        previous_year = 2024
+        
+        # 策略1: 使用年份相关搜索获取近期内容
+        year_queries = [
+            f"{current_year}",
+            f"{previous_year}",
+            f"{current_year} movies",
+            f"{current_year} shows", 
+            f"{previous_year} latest",
+            "latest 2024",
+            "latest 2025"
+        ]
+        
+        for query in year_queries:
+            try:
+                results = justwatch_search(query, country, "en", 50, True)
+                
+                for entry in results:
+                    # 检查平台匹配
+                    has_platform = any(
+                        offer.package.technical_name.lower() in [tp.lower() for tp in target_platforms]
+                        for offer in entry.offers
+                    )
+                    
+                    if has_platform:
+                        # 优化的"新内容"判断逻辑
+                        is_new = self._is_truly_new_content(entry, current_year, previous_year)
+                        if is_new:
+                            # 避免重复
+                            if not any(existing.tmdb_id == entry.tmdb_id 
+                                     for existing in new_content 
+                                     if hasattr(existing, 'tmdb_id') and hasattr(entry, 'tmdb_id')):
+                                new_content.append(entry)
+                                
+                    if len(new_content) >= limit:
+                        break
+                        
+                if len(new_content) >= limit:
+                    break
+                    
+            except Exception as e:
+                logger.debug(f"年份搜索 '{query}' 失败: {e}")
+                continue
+        
+        # 策略2: 如果年份搜索不够，使用streaming charts数据筛选
+        if len(new_content) < limit:
+            try:
+                # 使用更广泛的搜索获取内容池
+                broad_results = justwatch_search("popular", country, "en", 200, True)
+                
+                for entry in broad_results:
+                    has_platform = any(
+                        offer.package.technical_name.lower() in [tp.lower() for tp in target_platforms]
+                        for offer in entry.offers
+                    )
+                    
+                    if has_platform and self._is_truly_new_content(entry, current_year, previous_year):
+                        # 使用streaming charts的时间数据
+                        if (entry.streaming_charts and 
+                            entry.streaming_charts.days_in_top_100 <= 90):  # 90天内进入排行榜
+                            
+                            if not any(existing.tmdb_id == entry.tmdb_id 
+                                     for existing in new_content 
+                                     if hasattr(existing, 'tmdb_id') and hasattr(entry, 'tmdb_id')):
+                                new_content.append(entry)
+                                
+                        if len(new_content) >= limit:
+                            break
+                            
+            except Exception as e:
+                logger.debug(f"Streaming charts筛选失败: {e}")
+        
+        # 按新内容优先级排序
+        new_content.sort(key=lambda x: (
+            # 首先按发布年份（越新越前）
+            -(x.release_year if x.release_year else 0),
+            # 然后按在榜天数（越少越新）
+            (x.streaming_charts.days_in_top_100 if x.streaming_charts else 999),
+            # 最后按热度
+            -(x.scoring.tmdb_popularity if x.scoring and x.scoring.tmdb_popularity else 0)
+        ))
+        
+        return new_content[:limit]
+    
+    def _is_truly_new_content(self, entry, current_year: int, previous_year: int) -> bool:
+        """判断内容是否为真正的新内容"""
+        if not entry:
+            return False
+            
+        # 1. 发布年份检查（最重要）
+        if hasattr(entry, 'release_year') and entry.release_year:
+            if entry.release_year >= previous_year:
+                return True
+                
+        # 2. 发布日期检查
+        if hasattr(entry, 'release_date') and entry.release_date:
+            try:
+                from datetime import datetime
+                release_date = datetime.strptime(entry.release_date, "%Y-%m-%d")
+                if release_date.year >= previous_year:
+                    return True
+            except:
+                pass
+        
+        # 3. Streaming charts数据检查
+        if hasattr(entry, 'streaming_charts') and entry.streaming_charts:
+            charts = entry.streaming_charts
+            # 在榜天数很少说明是新内容
+            if charts.days_in_top_100 and charts.days_in_top_100 <= 60:  # 60天内
+                return True
+            # 趋势向上且排名变化大说明是新热门
+            if (charts.trend == "UP" and charts.trend_difference and 
+                charts.trend_difference > 100):
+                return True
+                
+        return False
     
     async def get_cross_platform_charts(self, title: str, country: str = "US") -> Optional[Dict]:
         """获取内容在各平台的排名对比
@@ -933,46 +1047,103 @@ class MovieService:
             return None
 
     async def get_new_releases(self, limit: int = 15, country: str = "US") -> Optional[List]:
-        """获取最新上架内容"""
+        """获取最新上架内容 - 优化版
+        使用智能策略识别真正的新内容，而不是简单的关键词搜索
+        """
         if not JUSTWATCH_AVAILABLE:
             return None
             
-        cache_key = f"new_releases_{country}_{limit}"
+        cache_key = f"new_releases_v2_{country}_{limit}"
         cached_data = await cache_manager.load_cache(cache_key, subdirectory="movie")
         if cached_data:
             return cached_data
             
         try:
-            # 搜索最新内容关键词
-            new_queries = ["new releases", "recently added", "latest movies", "new shows"]
-            search_results = []
+            new_content = []
+            current_year = 2025
+            previous_year = 2024
             
-            for query in new_queries:
+            # 策略1: 使用年份相关搜索获取近期内容
+            year_queries = [
+                f"{current_year} movies",
+                f"{current_year} shows", 
+                f"{current_year}",
+                f"{previous_year} latest",
+                f"latest {current_year}",
+                f"latest {previous_year}",
+                "recently released",
+                "just added",
+                "new this month"
+            ]
+            
+            for query in year_queries:
                 try:
-                    results = justwatch_search(query, country, "en", 20, True)
-                    search_results.extend(results)
-                    if len(search_results) >= limit * 2:
+                    results = justwatch_search(query, country, "en", 30, True)
+                    
+                    for entry in results:
+                        # 优化的"新内容"判断逻辑
+                        is_new = self._is_truly_new_content(entry, current_year, previous_year)
+                        if is_new:
+                            # 避免重复
+                            if not any(existing.tmdb_id == entry.tmdb_id 
+                                     for existing in new_content 
+                                     if hasattr(existing, 'tmdb_id') and hasattr(entry, 'tmdb_id')):
+                                new_content.append(entry)
+                                
+                        if len(new_content) >= limit * 2:  # 获取更多候选
+                            break
+                            
+                    if len(new_content) >= limit * 2:
                         break
-                except Exception:
+                        
+                except Exception as e:
+                    logger.debug(f"年份搜索 '{query}' 失败: {e}")
                     continue
             
-            # 按发行日期排序（越新越前）
-            search_results.sort(key=lambda x: x.release_date, reverse=True)
+            # 策略2: 如果年份搜索不够，使用streaming charts数据筛选
+            if len(new_content) < limit:
+                try:
+                    # 使用更广泛的搜索获取内容池
+                    broad_queries = ["popular movies", "trending", "top rated recent"]
+                    
+                    for broad_query in broad_queries:
+                        broad_results = justwatch_search(broad_query, country, "en", 100, True)
+                        
+                        for entry in broad_results:
+                            if self._is_truly_new_content(entry, current_year, previous_year):
+                                # 使用streaming charts的时间数据
+                                if (entry.streaming_charts and 
+                                    entry.streaming_charts.days_in_top_100 <= 120):  # 120天内进入排行榜
+                                    
+                                    if not any(existing.tmdb_id == entry.tmdb_id 
+                                             for existing in new_content 
+                                             if hasattr(existing, 'tmdb_id') and hasattr(entry, 'tmdb_id')):
+                                        new_content.append(entry)
+                                        
+                                if len(new_content) >= limit * 2:
+                                    break
+                                    
+                        if len(new_content) >= limit * 2:
+                            break
+                            
+                except Exception as e:
+                    logger.debug(f"Streaming charts筛选失败: {e}")
             
-            # 去重
-            seen = set()
-            unique_results = []
-            for entry in search_results:
-                key = f"{entry.title}_{entry.release_year}"
-                if key not in seen:
-                    seen.add(key)
-                    unique_results.append(entry)
-                    if len(unique_results) >= limit:
-                        break
+            # 按新内容优先级排序
+            new_content.sort(key=lambda x: (
+                # 首先按发布年份（越新越前）
+                -(x.release_year if x.release_year else 0),
+                # 然后按在榜天数（越少越新）
+                (x.streaming_charts.days_in_top_100 if x.streaming_charts else 999),
+                # 最后按热度
+                -(x.scoring.tmdb_popularity if x.scoring and x.scoring.tmdb_popularity else 0)
+            ))
             
-            if unique_results:
-                await cache_manager.save_cache(cache_key, unique_results, subdirectory="movie")
-            return unique_results
+            final_results = new_content[:limit]
+            
+            if final_results:
+                await cache_manager.save_cache(cache_key, final_results, subdirectory="movie")
+            return final_results
             
         except Exception as e:
             logger.error(f"获取最新上架内容失败: {e}")
