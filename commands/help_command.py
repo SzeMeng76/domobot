@@ -33,28 +33,28 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     help_text = """🤖 *多功能价格查询机器人*
 
 🔹 *功能概览*
-💱 `/rate USD 100` \\\\- 汇率换算 \\\\| 🪙 `/crypto btc` \\\\- 币价查询
-💳 `/bin 123456` \\\\- BIN信息 \\\\| 🌦️ `/tq 北京` \\\\- 天气预报
-🎬 `/movie 复仇者` \\\\- 影视信息 \\\\| 📺 `/nf` \\\\- 流媒体价格
-🎮 `/steam 赛博朋克` \\\\- 游戏价格 \\\\| 👤 `/when 123` \\\\- 用户信息
+💱 `/rate USD 100` \- 汇率换算 \| 🪙 `/crypto btc` \- 币价查询
+💳 `/bin 123456` \- BIN信息 \| 🌦️ `/tq 北京` \- 天气预报
+🎬 `/movie 复仇者` \- 影视信息 \| 📺 `/nf` \- 流媒体价格
+🎮 `/steam 赛博朋克` \- 游戏价格 \| 👤 `/when 123` \- 用户信息
 
-💱 *汇率* `/rate \\[货币\\] \\[数额\\]` \\\\- 支持表达式计算
-🪙 *加密货币* `/crypto <币种> \\[数量\\] \\[货币\\]` \\\\- 实时价格
-💳 *BIN查询* `/bin <6\\\\-8位>` \\\\- 信用卡信息
-🌦️ *天气* `/tq <城市> \\[天数\\]` \\\\- 天气\\\\&空气质量
+💱 *汇率* `/rate \[货币\] \[数额\]` \- 支持表达式计算
+🪙 *加密货币* `/crypto <币种> \[数量\] \[货币\]` \- 实时价格
+💳 *BIN查询* `/bin <6\-8位>` \- 信用卡信息
+🌦️ *天气* `/tq <城市> \[天数\]` \- 天气\&空气质量
 
 🎬 *影视查询*
 搜索: `/movie <片名>` `/tv <剧名>` `/person <演员>`
 热门: `/movie_hot` `/tv_hot` `/trending`
-平台: TMDB\\\+JustWatch\\\+Trakt 三源整合
+平台: TMDB\+JustWatch\+Trakt 三源整合
 
-🎮 *Steam* `/steam <游戏> \\[国家\\]` \\\\| `/steamb <包名>`
-📺 *流媒体* `/nf` `/ds` `/sp` `/max` \\\\- Netflix/Disney\\\+/Spotify/HBO
-📱 *应用* `/app <名称>` `/gp <名称>` \\\\| `/aps <服务>`
-👤 *用户* `/when <ID/@用户>` `/id` \\\\- 注册时间\\\\&ID信息
+🎮 *Steam* `/steam <游戏> \[国家\]` \| `/steamb <包名>`
+📺 *流媒体* `/nf` `/ds` `/sp` `/max` \- Netflix/Disney\+/Spotify/HBO
+📱 *应用* `/app <名称>` `/gp <名称>` \| `/aps <服务>`
+👤 *用户* `/when <ID/@用户>` `/id` \- 注册时间\&ID信息
 
-🌍 *支持地区* US CN TR IN MY JP GB DE 等40\\\+国家
-💡 *特色* 支持中文地名 \\\\| 自动CNY转换 \\\\| 智能缓存 \\\\| 表达式计算
+🌍 *支持地区* US CN TR IN MY JP GB DE 等40\+国家
+💡 *特色* 支持中文地名 \| 自动CNY转换 \| 智能缓存 \| 表达式计算
 
 ⚡ 快速试用: `/nf` `/crypto btc` `/tq 北京` `/movie_hot`"""
 
@@ -63,7 +63,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 🔧 *管理员*
 权限: `/admin` `/add <ID>` `/addgroup`
 缓存: `/rate_cleancache` `/crypto_cleancache` 等
-用户: `/cache` `/cleanid \\[天数\\]`
+用户: `/cache` `/cleanid \[天数\]`
 数据: `/addpoint` `/removepoint` `/listpoints`"""
 
     super_admin_help_text = """
@@ -77,17 +77,17 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         help_text = """🤖 *多功能价格查询机器人*
 
 🎆 *公开功能*
-📺 *流媒体价格* `/nf` `/ds` `/sp` `/max` \\\\- Netflix/Disney\\\+/Spotify/HBO
-👤 *用户信息* `/when <ID/@用户>` `/id` \\\\- 注册时间\\\\&ID查询
+📺 *流媒体价格* `/nf` `/ds` `/sp` `/max` \- Netflix/Disney\+/Spotify/HBO
+👤 *用户信息* `/when <ID/@用户>` `/id` \- 注册时间\&ID查询
 
-🌍 *支持地区* US CN TR IN MY JP GB DE 等40\\\+国家
-💡 *特色* 支持中文地名 \\\\| 自动CNY转换
+🌍 *支持地区* US CN TR IN MY JP GB DE 等40\+国家
+💡 *特色* 支持中文地名 \| 自动CNY转换
 
 ⚡ *快速试用* `/nf` `/ds` `/sp` `/max` `/when` `/id`
 
 🔒 *白名单专享*
-💱 汇率换算 \\\\| 🪙 加密货币 \\\\| 💳 BIN查询 \\\\| 🌦️ 天气预报
-🎬 影视信息 \\\\| 🎮 Steam游戏 \\\\| 📱 应用查询 \\\\| 🍎 Apple服务
+💱 汇率换算 \| 🪙 加密货币 \| 💳 BIN查询 \| 🌦️ 天气预报
+🎬 影视信息 \| 🎮 Steam游戏 \| 📱 应用查询 \| 🍎 Apple服务
 
 📞 白名单功能暂不开放申请，敬请期待付费服务"""
     else:
@@ -129,23 +129,23 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     # 根据用户权限显示不同的欢迎信息
     if user_permission == Permission.NONE:
         # 非白名单用户 - 只显示可用功能
-        welcome_text = f"""👋 *欢迎 {user.first_name}\\! 多功能价格查询机器人*
+        welcome_text = f"""👋 *欢迎 {user.first_name}\! 多功能价格查询机器人*
 
 🎯 *公开功能*
 📺 流媒体价格 `/nf` `/ds` `/sp` `/max`
 👤 用户信息 `/when` `/id`
 
 🚀 *试试看*
-`/nf` \\\\- Netflix全球价格
-`/ds` \\\\- Disney\\\+全球价格
-`/sp` \\\\- Spotify全球价格
-`/max` \\\\- HBO Max全球价格
-`/help` \\\\- 查看详细功能
+`/nf` \- Netflix全球价格
+`/ds` \- Disney\+全球价格
+`/sp` \- Spotify全球价格
+`/max` \- HBO Max全球价格
+`/help` \- 查看详细功能
 
-🌟 支持40\\\+国家 \\\\| 自动CNY转换 \\\\| 中文地名"""
+🌟 支持40\+国家 \| 自动CNY转换 \| 中文地名"""
     else:
         # 白名单用户 - 显示完整功能
-        welcome_text = f"""👋 *欢迎 {user.first_name}\\! 多功能价格查询机器人*
+        welcome_text = f"""👋 *欢迎 {user.first_name}\! 多功能价格查询机器人*
 
 🎯 *全功能版本*
 💱 汇率 🪙 币价 💳 BIN 🌦️ 天气 🎬 影视 🎮 游戏 📺 流媒体 📱 应用
@@ -154,7 +154,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 `/rate USD 100` `/crypto btc` `/tq 北京` `/movie_hot`
 `/steam 赛博朋克` `/nf` `/help`
 
-🌟 40\\\+国家 \\\\| CNY转换 \\\\| 智能缓存 \\\\| 表达式计算"""
+🌟 40\+国家 \| CNY转换 \| 智能缓存 \| 表达式计算"""
 
     await send_help(context, update.message.chat_id, foldable_text_with_markdown_v2(welcome_text), parse_mode="MarkdownV2")
 
