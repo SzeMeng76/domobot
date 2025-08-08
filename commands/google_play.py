@@ -92,26 +92,50 @@ async def googleplay_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 用法: /gp <应用名或包名> [国家代码] [语言代码]
 
 示例:
-/gp Youtube us en
-/gp Tiktok (查 US, NG, TR)"""
+/gp Youtube
+/gp Google Maps us en
+/gp Tiktok (查 US, NG, TR)
+/gp "Red Dead Redemption" us
+/gp Temple Run zh-cn
+
+注: 多词应用名会自动识别，国家代码(2字母)和语言代码放在最后"""
         from utils.config_manager import get_config
 
         await send_help(context, update.message.chat_id, foldable_text_v2(help_message), parse_mode="MarkdownV2")
         await delete_user_command(context, update.message.chat_id, update.message.message_id)
         return
 
-    # Parse arguments
-    query = args_list[0]
+    # Parse arguments - need to handle multi-word app names
     user_country = None
     lang_code = "zh-cn".lower()
-
-    if len(args_list) > 1:
+    
+    # Look for country code (2 letters) and language code from the end
+    # This allows multi-word app names at the beginning
+    if len(args_list) >= 3:
+        # Check if last argument could be language and second-to-last could be country
+        if len(args_list[-2]) == 2 and args_list[-2].isalpha():
+            user_country = args_list[-2].upper()
+            lang_code = args_list[-1].lower()
+            query = " ".join(args_list[:-2])  # Everything except last 2 args
+        else:
+            # Maybe just language at the end
+            lang_code = args_list[-1].lower()
+            query = " ".join(args_list[:-1])  # Everything except last arg
+    elif len(args_list) == 2:
+        # Check if second argument is country code or language
         if len(args_list[1]) == 2 and args_list[1].isalpha():
             user_country = args_list[1].upper()
-            if len(args_list) > 2:
-                lang_code = args_list[2].lower()
+            query = args_list[0]
         else:
-            lang_code = args_list[1].lower()
+            # Assume it's part of app name or language
+            if args_list[1].lower() in ['en', 'zh', 'zh-cn', 'ja', 'ko', 'es', 'fr', 'de']:
+                lang_code = args_list[1].lower()
+                query = args_list[0]
+            else:
+                # Assume it's part of app name
+                query = " ".join(args_list)
+    else:
+        query = args_list[0]
 
     countries_to_search = []
     if user_country:
