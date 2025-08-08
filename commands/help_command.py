@@ -50,7 +50,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 🎮 *Steam* `/steam <游戏> [国家]` | `/steamb <包名>`
 📺 *流媒体* `/nf` `/ds` `/sp` `/max` - Netflix/Disney+/Spotify/HBO
-📱 *应用* `/app <名称>` `/gp <名称>` | `/aps <服务>`
+📱 *应用商店* `/app <名称>` - 详细内购项目 | `/gp <名称>` - 内购价格范围 | `/aps <服务>`
 👤 *用户* `/when <ID/@用户>` `/id` - 注册时间&ID信息
 
 🌍 *支持地区* US CN TR IN MY JP GB DE 等40+国家
@@ -87,7 +87,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 🔒 *白名单专享*
 💱 汇率换算 | 🪙 加密货币 | 💳 BIN查询 | 🌦️ 天气预报
-🎬 影视信息 | 🎮 Steam游戏 | 📱 应用查询 | 🍎 Apple服务
+🎬 影视信息 | 🎮 Steam游戏 | 📱 应用&内购价格 | 🍎 Apple服务
 
 📞 白名单功能暂不开放申请，敬请期待付费服务"""
     else:

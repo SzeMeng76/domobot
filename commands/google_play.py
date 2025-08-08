@@ -365,12 +365,30 @@ async def googleplay_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
             price = details.get("price", 0)
             currency = details.get("currency", "")
             price_str = "免费"
+            
             if not is_free and price > 0 and currency:
                 price_str = f"{price} {currency}"
+                # Add CNY conversion for app price
+                if rate_converter and rate_converter.rates and currency.upper() in rate_converter.rates:
+                    try:
+                        cny_price = await rate_converter.convert(float(price), currency.upper(), "CNY")
+                        if cny_price is not None:
+                            price_str += f" (约 ¥{cny_price:.2f})"
+                    except (ValueError, TypeError) as e:
+                        logger.warning(f"Failed to convert app price {price} {currency} to CNY: {e}")
             elif not is_free and price == 0 and currency:
                 price_str = f"0 {currency} (可能免费)"
             elif is_free and price > 0:
-                price_str = f"免费 (原价 {price} {currency})"
+                price_str = f"免费 (原价 {price} {currency}"
+                # Add CNY conversion for original price
+                if rate_converter and rate_converter.rates and currency.upper() in rate_converter.rates:
+                    try:
+                        cny_price = await rate_converter.convert(float(price), currency.upper(), "CNY")
+                        if cny_price is not None:
+                            price_str += f", 约 ¥{cny_price:.2f}"
+                    except (ValueError, TypeError) as e:
+                        logger.warning(f"Failed to convert original price {price} {currency} to CNY: {e}")
+                price_str += ")"
             elif not is_free and price == 0 and not currency:
                 price_str = "价格未知"
 

@@ -41,7 +41,7 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 -   🌦️ **Weather Forecasts:** Detailed, multi-format weather forecasts (real-time, daily, hourly, minutely precipitation, and lifestyle indices). *(Whitelist required)*
 -   💱 **Currency Conversion:** Real-time exchange rate lookups with mathematical expression support (e.g., `/rate USD 1+2*3`). *(Whitelist required)*
 -   🎮 **Steam Prices:** Multi-region price comparison for Steam games, bundles, and comprehensive search functionality. *(Whitelist required)*
--   📱 **App Stores:** Application price lookup for the App Store and Google Play. *(Whitelist required)*
+-   📱 **App Stores:** Application and in-app purchase price lookup for the App Store (detailed IAP items with pricing) and Google Play (IAP price ranges). *(Whitelist required)*
 -   🔐 **Admin System:** A comprehensive admin permission system with user/group whitelisting.
 -   📊 **User Caching & Stats:** Caching user data and command usage statistics.
 
@@ -200,9 +200,10 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /steamb "Valve Complete"  # Steam bundle prices
 /steams cyberpunk         # Comprehensive search (games + bundles)
 
-# App stores
-/app WeChat
-/gp WhatsApp
+# App stores (with in-app purchase pricing)
+/app WeChat                # App Store: detailed IAP items and pricing
+/gp WhatsApp              # Google Play: IAP price ranges
+# Note: Apple Store shows individual IAP items with prices; Google Play shows ranges (e.g., "$0.99-$99.99 per item")
 
 # Apple services
 /aps iCloud
