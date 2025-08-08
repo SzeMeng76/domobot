@@ -499,14 +499,39 @@ class SpotifyPriceBot(PriceQueryService):
         if not plans:
             return f"📍 国家/地区: {country_name_cn} ({country_code.upper()}) {country_flag}\n❌ 未找到价格信息"
 
-        # Plan name translation mapping
+        # Plan name translation mapping - 包含预付费套餐
         plan_names = {
+            # 月付套餐
             "Premium Individual": "个人版 (Premium Individual)",
-            "Premium Student": "学生版 (Premium Student)",
+            "Premium Student": "学生版 (Premium Student)", 
             "Premium Duo": "双人版 (Premium Duo)",
             "Premium Family": "家庭版 (Premium Family)",
             "Premium Basic": "基础版 (Premium Basic)",
             "Premium Lite": "轻量版 (Premium Lite)",
+            
+            # 预付费套餐 - Individual (使用标准化后的英文格式)
+            "Premium Individual 1 Year Prepaid": "个人版 [1年预付费]",
+            "Premium Individual 6 Months Prepaid": "个人版 [6个月预付费]", 
+            "Premium Individual 3 Months Prepaid": "个人版 [3个月预付费]",
+            "Premium Individual 1 Month Prepaid": "个人版 [1个月预付费]",
+            
+            # 预付费套餐 - Duo
+            "Premium Duo 1 Year Prepaid": "双人版 [1年预付费]",
+            "Premium Duo 6 Months Prepaid": "双人版 [6个月预付费]",
+            "Premium Duo 3 Months Prepaid": "双人版 [3个月预付费]",
+            "Premium Duo 1 Month Prepaid": "双人版 [1个月预付费]",
+            
+            # 预付费套餐 - Family
+            "Premium Family 1 Year Prepaid": "家庭版 [1年预付费]",
+            "Premium Family 6 Months Prepaid": "家庭版 [6个月预付费]",
+            "Premium Family 3 Months Prepaid": "家庭版 [3个月预付费]",
+            "Premium Family 1 Month Prepaid": "家庭版 [1个月预付费]",
+            
+            # 预付费套餐 - Student (通常没有预付费，但以防万一)
+            "Premium Student 1 Year Prepaid": "学生版 [1年预付费]",
+            "Premium Student 6 Months Prepaid": "学生版 [6个月预付费]",
+            "Premium Student 3 Months Prepaid": "学生版 [3个月预付费]",
+            "Premium Student 1 Month Prepaid": "学生版 [1个月预付费]",
         }
 
         for i, plan in enumerate(plans):
@@ -523,8 +548,19 @@ class SpotifyPriceBot(PriceQueryService):
             is_last_plan = i == len(plans) - 1
             connector = "" if is_last_plan else ""
 
-            # Format price display with currency, price_number, and CNY
-            if currency and price_number and price_cny > 0:
+            # 检查是否为预付费套餐，如果是则显示实际总价格
+            total_price_number = plan.get("total_price_number", "")
+            total_price_cny = plan.get("total_price_cny", 0)
+            
+            # Format price display - 预付费套餐优先显示总价格
+            if total_price_number and total_price_cny > 0:
+                # 预付费套餐显示总价格 + 等效月费
+                if currency and price_number and price_cny > 0:
+                    price_display = f"{currency} {total_price_number} ≈ ¥{total_price_cny:.2f} (等效月费 ¥{price_cny:.2f})"
+                else:
+                    price_display = f"{currency} {total_price_number} ≈ ¥{total_price_cny:.2f}"
+            elif currency and price_number and price_cny > 0:
+                # 月付套餐显示月费
                 price_display = f"{currency} {price_number} ≈ ¥{price_cny:.2f}"
             elif price_cny > 0:
                 price_display = f"{original_price} ≈ ¥{price_cny:.2f}"
@@ -775,6 +811,184 @@ class SpotifyPriceBot(PriceQueryService):
         body_text = "\n".join(message_lines).strip()
         return foldable_text_with_markdown_v2(body_text)
 
+    async def get_top_prepaid_individual(self, top_n: int = 10) -> str:
+        """获取最便宜的个人1年预付费套餐排行榜"""
+        if not self.data:
+            error_msg = f"❌ 错误：未能加载 {self.service_name} 价格数据。"
+            return foldable_text_v2(error_msg)
+
+        # 使用预先计算的个人1年预付费数据
+        top_10_data = self.data.get("_top_10_cheapest_individual_1year_prepaid", {}).get("data", [])
+
+        if not top_10_data:
+            error_msg = f"❌ 未找到 {self.service_name} 个人1年预付费价格信息。"
+            return foldable_text_v2(error_msg)
+
+        # 组装原始文本
+        message_lines = [f"*🎯 {self.service_name} 全球最低价格排名 (个人1年预付费)*"]
+        message_lines.append("")
+
+        for item in top_10_data[:top_n]:
+            rank = item.get("rank", 0)
+            country_code = item.get("country_code", "N/A").upper()
+
+            # 获取中文国家名
+            country_name_cn = (
+                item.get("country_name_cn")
+                or SUPPORTED_COUNTRIES.get(country_code, {}).get("name_cn")
+                or COUNTRY_CODES_CN.get(country_code)
+                or COUNTRY_CODES.get(country_code)
+                or item.get("country_name", country_code)
+            )
+
+            country_flag = get_country_flag(country_code)
+
+            # 提取价格信息
+            currency = item.get("currency", "")
+            price_number = item.get("price_number", "")
+            price_cny = item.get("price_cny", 0)
+            original_price = item.get("original_price", "价格未知")
+            
+            # 检查是否有实际总价格信息
+            total_price_number = item.get("total_price_number", "")
+            total_price_cny = item.get("total_price_cny", 0)
+
+            # 格式化价格显示 - 预付费排行榜优先显示总价格
+            if total_price_number and total_price_cny > 0:
+                # 预付费排行榜显示总价格 + 等效月费
+                if currency and price_number and price_cny > 0:
+                    price_display = f"{currency} {total_price_number} ≈ ¥{total_price_cny:.2f} (等效月费 ¥{price_cny:.2f})"
+                else:
+                    price_display = f"{currency} {total_price_number} ≈ ¥{total_price_cny:.2f}"
+            elif currency and price_number and price_cny > 0:
+                price_display = f"{currency} {price_number} ≈ ¥{price_cny:.2f}"
+            elif price_cny > 0:
+                price_display = f"{original_price} ≈ ¥{price_cny:.2f}"
+            else:
+                price_display = original_price
+
+            # 排名表情符号
+            if rank == 1:
+                rank_emoji = "🥇"
+            elif rank == 2:
+                rank_emoji = "🥈"
+            elif rank == 3:
+                rank_emoji = "🥉"
+            elif rank <= 10:
+                rank_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+                rank_emoji = rank_emojis[rank - 1]
+            else:
+                rank_emoji = f"{rank}."
+
+            message_lines.append(f"{rank_emoji} {country_name_cn} ({country_code}) {country_flag}")
+            message_lines.append(f"🎯 个人1年预付费: {price_display}")
+
+            # 添加空行（除了最后一个）
+            if rank < len(top_10_data[:top_n]):
+                message_lines.append("")
+
+        # 添加更新时间
+        updated_at = self.data.get("_top_10_cheapest_individual_1year_prepaid", {}).get("updated_at", "")
+        if updated_at:
+            message_lines.append("")
+            message_lines.append(f"⏱ 数据更新时间：{updated_at}")
+        elif self.cache_timestamp:
+            update_time_str = datetime.fromtimestamp(self.cache_timestamp).strftime("%Y-%m-%d %H:%M:%S")
+            message_lines.append("")
+            message_lines.append(f"⏱ 数据更新时间 (缓存)：{update_time_str}")
+
+        body_text = "\n".join(message_lines).strip()
+        return foldable_text_with_markdown_v2(body_text)
+
+    async def get_top_prepaid_family(self, top_n: int = 10) -> str:
+        """获取最便宜的家庭1年预付费套餐排行榜"""
+        if not self.data:
+            error_msg = f"❌ 错误：未能加载 {self.service_name} 价格数据。"
+            return foldable_text_v2(error_msg)
+
+        # 使用预先计算的家庭1年预付费数据
+        top_10_data = self.data.get("_top_10_cheapest_family_1year_prepaid", {}).get("data", [])
+
+        if not top_10_data:
+            error_msg = f"❌ 未找到 {self.service_name} 家庭1年预付费价格信息。"
+            return foldable_text_v2(error_msg)
+
+        # 组装原始文本
+        message_lines = [f"*👨‍👩‍👧‍👦 {self.service_name} 全球最低价格排名 (家庭1年预付费)*"]
+        message_lines.append("")
+
+        for item in top_10_data[:top_n]:
+            rank = item.get("rank", 0)
+            country_code = item.get("country_code", "N/A").upper()
+
+            # 获取中文国家名
+            country_name_cn = (
+                item.get("country_name_cn")
+                or SUPPORTED_COUNTRIES.get(country_code, {}).get("name_cn")
+                or COUNTRY_CODES_CN.get(country_code)
+                or COUNTRY_CODES.get(country_code)
+                or item.get("country_name", country_code)
+            )
+
+            country_flag = get_country_flag(country_code)
+
+            # 提取价格信息
+            currency = item.get("currency", "")
+            price_number = item.get("price_number", "")
+            price_cny = item.get("price_cny", 0)
+            original_price = item.get("original_price", "价格未知")
+            
+            # 检查是否有实际总价格信息
+            total_price_number = item.get("total_price_number", "")
+            total_price_cny = item.get("total_price_cny", 0)
+
+            # 格式化价格显示 - 预付费排行榜优先显示总价格
+            if total_price_number and total_price_cny > 0:
+                # 预付费排行榜显示总价格 + 等效月费
+                if currency and price_number and price_cny > 0:
+                    price_display = f"{currency} {total_price_number} ≈ ¥{total_price_cny:.2f} (等效月费 ¥{price_cny:.2f})"
+                else:
+                    price_display = f"{currency} {total_price_number} ≈ ¥{total_price_cny:.2f}"
+            elif currency and price_number and price_cny > 0:
+                price_display = f"{currency} {price_number} ≈ ¥{price_cny:.2f}"
+            elif price_cny > 0:
+                price_display = f"{original_price} ≈ ¥{price_cny:.2f}"
+            else:
+                price_display = original_price
+
+            # 排名表情符号
+            if rank == 1:
+                rank_emoji = "🥇"
+            elif rank == 2:
+                rank_emoji = "🥈"
+            elif rank == 3:
+                rank_emoji = "🥉"
+            elif rank <= 10:
+                rank_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+                rank_emoji = rank_emojis[rank - 1]
+            else:
+                rank_emoji = f"{rank}."
+
+            message_lines.append(f"{rank_emoji} {country_name_cn} ({country_code}) {country_flag}")
+            message_lines.append(f"👨‍👩‍👧‍👦 家庭1年预付费: {price_display}")
+
+            # 添加空行（除了最后一个）
+            if rank < len(top_10_data[:top_n]):
+                message_lines.append("")
+
+        # 添加更新时间
+        updated_at = self.data.get("_top_10_cheapest_family_1year_prepaid", {}).get("updated_at", "")
+        if updated_at:
+            message_lines.append("")
+            message_lines.append(f"⏱ 数据更新时间：{updated_at}")
+        elif self.cache_timestamp:
+            update_time_str = datetime.fromtimestamp(self.cache_timestamp).strftime("%Y-%m-%d %H:%M:%S")
+            message_lines.append("")
+            message_lines.append(f"⏱ 数据更新时间 (缓存)：{update_time_str}")
+
+        body_text = "\n".join(message_lines).strip()
+        return foldable_text_with_markdown_v2(body_text)
+
 
 # --- Command Handler Setup ---
 spotify_price_bot: SpotifyPriceBot | None = None
@@ -846,11 +1060,91 @@ async def spotify_clean_cache_command(update: Update, context: ContextTypes.DEFA
     return await spotify_price_bot.clean_cache_command(update, context)
 
 
+async def spotify_prepaid_individual_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handles the /spi command for individual 1-year prepaid plans."""
+    if not spotify_price_bot:
+        if update.message:
+            error_message = "❌ 错误：Spotify 查询服务未初始化。"
+            await send_error(context, update.message.chat_id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        return
+
+    if not update.message:
+        return
+
+    loading_message = "🔍 正在查询 Spotify Premium 个人1年预付费全球最低价格排名... ⏳"
+    message = await context.bot.send_message(
+        chat_id=update.message.chat_id, text=foldable_text_v2(loading_message), parse_mode="MarkdownV2"
+    )
+
+    try:
+        await spotify_price_bot.load_or_fetch_data(context)
+        result = await spotify_price_bot.get_top_prepaid_individual()
+        await message.edit_text(result, parse_mode="MarkdownV2", disable_web_page_preview=True)
+
+        # 使用消息管理API调度删除任务
+        chat_id = update.message.chat_id
+        user_command_id = update.message.message_id
+
+        from utils.message_manager import _schedule_deletion
+        from utils.config_manager import get_config
+        config = get_config()
+        await _schedule_deletion(context, chat_id, message.message_id, config.auto_delete_delay)
+        await delete_user_command(context, chat_id, user_command_id)
+
+        logger.info(f"🔧 Scheduled deletion for Spotify prepaid individual messages - Bot: {message.message_id}, User: {user_command_id}")
+
+    except Exception as e:
+        logger.error(f"Error getting top prepaid individual Spotify prices: {e}", exc_info=True)
+        error_message = f"❌ 查询时发生错误: {e}"
+        await message.edit_text(foldable_text_v2(error_message), parse_mode="MarkdownV2")
+
+
+async def spotify_prepaid_family_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handles the /spf command for family 1-year prepaid plans.""" 
+    if not spotify_price_bot:
+        if update.message:
+            error_message = "❌ 错误：Spotify 查询服务未初始化。"
+            await send_error(context, update.message.chat_id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        return
+
+    if not update.message:
+        return
+
+    loading_message = "🔍 正在查询 Spotify Premium 家庭1年预付费全球最低价格排名... ⏳"
+    message = await context.bot.send_message(
+        chat_id=update.message.chat_id, text=foldable_text_v2(loading_message), parse_mode="MarkdownV2"
+    )
+
+    try:
+        await spotify_price_bot.load_or_fetch_data(context)
+        result = await spotify_price_bot.get_top_prepaid_family()
+        await message.edit_text(result, parse_mode="MarkdownV2", disable_web_page_preview=True)
+
+        # 使用消息管理API调度删除任务
+        chat_id = update.message.chat_id
+        user_command_id = update.message.message_id
+
+        from utils.message_manager import _schedule_deletion
+        from utils.config_manager import get_config
+        config = get_config()
+        await _schedule_deletion(context, chat_id, message.message_id, config.auto_delete_delay)
+        await delete_user_command(context, chat_id, user_command_id)
+
+        logger.info(f"🔧 Scheduled deletion for Spotify prepaid family messages - Bot: {message.message_id}, User: {user_command_id}")
+
+    except Exception as e:
+        logger.error(f"Error getting top prepaid family Spotify prices: {e}", exc_info=True)
+        error_message = f"❌ 查询时发生错误: {e}"
+        await message.edit_text(foldable_text_v2(error_message), parse_mode="MarkdownV2")
+
+
 # Alias for the command
 sp_command = spotify_command
 
 # Register commands
 command_factory.register_command("sp", sp_command, permission=Permission.NONE, description="Spotify订阅价格查询")
+command_factory.register_command("spi", spotify_prepaid_individual_command, permission=Permission.NONE, description="Spotify个人1年预付费排行榜")
+command_factory.register_command("spf", spotify_prepaid_family_command, permission=Permission.NONE, description="Spotify家庭1年预付费排行榜")
 command_factory.register_command(
     "sp_cleancache", spotify_clean_cache_command, permission=Permission.ADMIN, description="清理Spotify缓存"
 )
