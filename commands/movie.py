@@ -2214,21 +2214,45 @@ class MovieService:
             lines.append("📺 **JustWatch流媒体热门** (实时数据)")
             
             for i, entry in enumerate(justwatch_data[:4], 1):
-                title = entry.title
-                year = entry.release_year
+                # 兼容两种数据格式：对象属性和字典
+                if hasattr(entry, 'title'):
+                    # MediaEntry对象格式
+                    title = entry.title
+                    year = entry.release_year
+                    streaming_charts = entry.streaming_charts
+                    offers = entry.offers
+                else:
+                    # 字典格式
+                    title = entry.get("title", "未知标题")
+                    year = entry.get("release_year", 0)
+                    streaming_charts = entry.get("streaming_charts")
+                    offers = entry.get("offers", [])
                 
                 # 排名信息
                 rank_info = ""
-                if entry.streaming_charts and entry.streaming_charts.rank:
-                    rank = entry.streaming_charts.rank
-                    trend = entry.streaming_charts.trend
-                    trend_symbol = {"UP": "📈", "DOWN": "📉", "STABLE": "➡️"}.get(trend, "➡️")
-                    rank_info = f" {trend_symbol} #{rank}"
+                if streaming_charts:
+                    if hasattr(streaming_charts, 'rank'):
+                        rank = streaming_charts.rank
+                        trend = streaming_charts.trend
+                    else:
+                        rank = streaming_charts.get("rank")
+                        trend = streaming_charts.get("trend", "STABLE")
+                    
+                    if rank:
+                        trend_symbol = {"UP": "📈", "DOWN": "📉", "STABLE": "➡️"}.get(trend, "➡️")
+                        rank_info = f" {trend_symbol} #{rank}"
                 
                 lines.append(f"{i}. 🎬 **{title}** ({year}){rank_info}")
                 
                 # 平台信息
-                platforms = [offer.package.name for offer in entry.offers[:3]]
+                platforms = []
+                if hasattr(offers, '__iter__'):
+                    for offer in offers[:3]:
+                        if hasattr(offer, 'package'):
+                            platforms.append(offer.package.name)
+                        elif isinstance(offer, dict) and offer.get("package"):
+                            platforms.append(offer["package"].get("name", "未知平台"))
+                
                 if platforms:
                     lines.append(f"   🎬 {' | '.join(platforms)}")
             
