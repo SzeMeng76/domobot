@@ -2192,25 +2192,20 @@ class MovieService:
                 if content_type == "movie":
                     title = item.get("title", "未知标题")
                     date_field = "release_date"
-                    detail_cmd = "/movie_detail"
                 else:
                     title = item.get("name", "未知标题") 
                     date_field = "first_air_date"
-                    detail_cmd = "/tv_detail"
                 
                 release_date = item.get(date_field, "")
                 year = release_date[:4] if release_date else ""
                 vote_average = item.get("vote_average", 0)
                 popularity = item.get("popularity", 0)
-                item_id = item.get("id")
                 
                 year_text = f" ({year})" if year else ""
                 rating_text = f" ⭐ {vote_average:.1f}" if vote_average > 0 else ""
                 
                 lines.append(f"{i}. 🎬 **{title}**{year_text}{rating_text}")
                 lines.append(f"   📊 TMDB热度: {popularity:.1f}")
-                if item_id:
-                    lines.append(f"   `{detail_cmd} {item_id}`")
             
             lines.append("")
         
@@ -2254,35 +2249,19 @@ class MovieService:
                     movie_data = item.get("movie", {})
                     title = movie_data.get("title", "未知标题")
                     year = movie_data.get("year", "")
-                    tmdb_id = movie_data.get("ids", {}).get("tmdb")
-                    watchers = item.get("watchers") or 0
-                    plays = item.get("plays") or 0
-                    
-                    year_text = f" ({year})" if year else ""
-                    stats_text = f"👥 {watchers}人观看" + (f" | 🎬 {plays}次播放" if plays else "")
-                    
-                    if tmdb_id:
-                        lines.append(f"{i}. 🎬 **{title}**{year_text}")
-                        lines.append(f"   {stats_text}")
-                        lines.append(f"   `/movie_detail {tmdb_id}`")
-                    else:
-                        lines.append(f"{i}. 🎬 **{title}**{year_text}")
-                        lines.append(f"   {stats_text}")
                 else:
                     show_data = item.get("show", {})
                     title = show_data.get("title", "未知标题")
                     year = show_data.get("year", "")
-                    tmdb_id = show_data.get("ids", {}).get("tmdb")
-                    watchers = item.get("watchers") or 0
-                    
-                    year_text = f" ({year})" if year else ""
-                    stats_text = f"👥 {watchers}人观看" if watchers > 0 else ""
-                    
-                    if tmdb_id:
-                        lines.append(f"{i}. 🎬 **{title}**{year_text}{stats_text}")
-                        lines.append(f"   `/tv_detail {tmdb_id}`")
-                    else:
-                        lines.append(f"{i}. 🎬 **{title}**{year_text}{stats_text}")
+                
+                watchers = item.get("watchers", 0)
+                plays = item.get("plays", 0)
+                
+                year_text = f" ({year})" if year else ""
+                stats_text = f"👥 {watchers}人观看" + (f" | 🎬 {plays}次播放" if plays else "")
+                
+                lines.append(f"{i}. 🎬 **{title}**{year_text}")
+                lines.append(f"   {stats_text}")
             
             lines.append("")
         else:
@@ -2298,14 +2277,7 @@ class MovieService:
             "💡 **数据源说明**:",
             "• 📊 TMDB - 全球电影数据库热度",
             "• 📺 JustWatch - 流媒体平台排名", 
-            "• 🎯 Trakt - 用户追踪数据",
-            "",
-            "🔧 **参数选项**:",
-            f"• `/{'movie_hot' if content_type == 'movie' else 'tv_hot'}` - 混合显示所有数据源",
-            f"• `/{'movie_hot' if content_type == 'movie' else 'tv_hot'} tmdb` - 仅TMDB热门数据",
-            f"• `/{'movie_hot' if content_type == 'movie' else 'tv_hot'} justwatch` - 仅JustWatch排行榜",
-            f"• `/{'movie_hot' if content_type == 'movie' else 'tv_hot'} justwatch US` - 指定国家JustWatch数据",
-            f"• `/{'movie_hot' if content_type == 'movie' else 'tv_hot'} trakt` - 仅Trakt用户数据"
+            "• 🎯 Trakt - 用户追踪数据"
         ])
         
         return "\n".join(lines)
