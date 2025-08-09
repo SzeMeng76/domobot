@@ -5081,6 +5081,11 @@ async def streaming_movie_ranking_command(update: Update, context: ContextTypes.
     
     await delete_user_command(context, update.effective_chat.id, update.message.message_id)
     
+    if not movie_service:
+        error_message = "❌ 电影查询服务未初始化"
+        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        return
+    
     # 解析参数
     country = context.args[0].upper() if context.args else "US"
     
@@ -5131,6 +5136,11 @@ async def streaming_tv_ranking_command(update: Update, context: ContextTypes.DEF
         return
     
     await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    
+    if not movie_service:
+        error_message = "❌ 电影查询服务未初始化"
+        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        return
     
     # 解析参数
     country = context.args[0].upper() if context.args else "US"

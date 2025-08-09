@@ -164,6 +164,8 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /movie_rec 299536          # Movie recommendations
 /movie_watch 299536        # Viewing platforms with JustWatch data
 /movie_trending            # Trakt trending movies
+/streaming_movie_ranking   # Comprehensive streaming movie ranking
+/streaming_movie_ranking US # US streaming movie ranking
 /movie_related 299536      # Trakt related movies
 /tv Game of Thrones        # Search TV shows (button selection)
 /tvs Game of Thrones       # Search TV shows (text list)
@@ -178,7 +180,9 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /tv_reviews 1399           # User reviews (Telegraph for long content)
 /tv_rec 1399               # TV show recommendations
 /tv_watch 1399             # Viewing platforms with JustWatch data
-/tv_trending               # Trakt trending TV shows
+/tv_trending               # Trakt trending TV shows  
+/streaming_tv_ranking      # Comprehensive streaming TV ranking
+/streaming_tv_ranking GB   # UK streaming TV ranking
 /tv_related 1399           # Trakt related TV shows
 
 # Trending content

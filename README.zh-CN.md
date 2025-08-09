@@ -164,6 +164,8 @@ docker-compose down
 /movie_rec 299536          # 电影推荐
 /movie_watch 299536        # 观看平台信息（包含JustWatch数据）
 /movie_trending            # Trakt热门电影
+/streaming_movie_ranking   # 综合流媒体电影热度排行榜
+/streaming_movie_ranking US # 美国流媒体电影排行榜
 /movie_related 299536      # Trakt相关电影推荐
 /tv 权力的游戏              # 搜索电视剧（按钮选择）
 /tvs 权力的游戏             # 搜索电视剧（文本列表）
@@ -179,6 +181,8 @@ docker-compose down
 /tv_rec 1399               # 电视剧推荐
 /tv_watch 1399             # 观看平台信息（包含JustWatch数据）
 /tv_trending               # Trakt热门电视剧
+/streaming_tv_ranking      # 综合流媒体电视剧热度排行榜
+/streaming_tv_ranking CN   # 中国流媒体电视剧排行榜
 /tv_related 1399           # Trakt相关电视剧推荐
 
 # 热门趋势内容

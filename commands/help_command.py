@@ -46,6 +46,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 🎬 *影视查询*
 搜索: `/movie <片名>` `/tv <剧名>` `/person <演员>`
 热门: `/movie_hot` `/tv_hot` `/trending`
+排行: `/streaming_movie_ranking` `/streaming_tv_ranking`
 平台: TMDB+JustWatch+Trakt 三源整合
 
 🎮 *Steam* `/steam <游戏> [国家]` | `/steamb <包名>`
