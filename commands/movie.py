@@ -5119,6 +5119,9 @@ async def streaming_movie_ranking_command(update: Update, context: ContextTypes.
         logger.error(f"流媒体电影排行榜命令执行失败: {e}")
         await message.edit_text("❌ 获取排行榜数据时发生错误，请稍后重试")
     
+    # 调度删除机器人回复消息
+    from utils.message_manager import _schedule_deletion
+    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -5167,6 +5170,9 @@ async def streaming_tv_ranking_command(update: Update, context: ContextTypes.DEF
         logger.error(f"流媒体电视剧排行榜命令执行失败: {e}")
         await message.edit_text("❌ 获取排行榜数据时发生错误，请稍后重试")
     
+    # 调度删除机器人回复消息
+    from utils.message_manager import _schedule_deletion
+    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
