@@ -397,6 +397,96 @@ class MovieService:
         except Exception as e:
             logger.error(f"JustWatch热门内容获取失败: {e}")
             return None
+
+    async def _get_justwatch_trending_movies(self, country: str = "US", limit: int = 15) -> Optional[List]:
+        """获取JustWatch热门电影排行榜"""
+        return await self.get_justwatch_popular_content(country=country, content_type="movie", count=limit)
+
+    async def _get_justwatch_trending_tv(self, country: str = "US", limit: int = 15) -> Optional[List]:
+        """获取JustWatch热门电视剧排行榜"""  
+        return await self.get_justwatch_popular_content(country=country, content_type="show", count=limit)
+
+    def _calculate_streaming_score(self, entry) -> float:
+        """计算综合流媒体热度分数"""
+        score = 0.0
+        
+        # 1. JustWatch streaming charts权重 (40%)
+        if hasattr(entry, 'streaming_charts') and entry.streaming_charts:
+            charts = entry.streaming_charts
+            
+            # 排名分数 (越小越好，转换为分数)
+            if charts.rank:
+                rank_score = max(0, 1000 - charts.rank) / 1000 * 100
+                score += rank_score * 0.25
+            
+            # 趋势分数
+            trend_bonus = {'UP': 20, 'STABLE': 10, 'DOWN': 0}.get(charts.trend, 0)
+            score += trend_bonus * 0.05
+            
+            # 榜单停留时间分数
+            if charts.days_in_top_100:
+                days_score = min(charts.days_in_top_100, 100) / 100 * 50
+                score += days_score * 0.10
+        
+        # 2. JustWatch评分权重 (20%)
+        if hasattr(entry, 'scoring') and entry.scoring and entry.scoring.jw_rating:
+            jw_score = entry.scoring.jw_rating * 100  # 转换为百分制
+            score += jw_score * 0.20
+        
+        # 3. TMDB热度权重 (25%)
+        if hasattr(entry, 'scoring') and entry.scoring and entry.scoring.tmdb_popularity:
+            # TMDB热度通常0-200，标准化到100
+            tmdb_score = min(entry.scoring.tmdb_popularity, 200) / 200 * 100
+            score += tmdb_score * 0.25
+        
+        # 4. 用户互动权重 (15%)
+        if hasattr(entry, 'interactions') and entry.interactions:
+            interactions = entry.interactions
+            if interactions.likes and interactions.dislikes:
+                total = interactions.likes + interactions.dislikes
+                if total > 0:
+                    like_ratio = interactions.likes / total
+                    # 考虑互动总量和喜欢比例
+                    interaction_score = (like_ratio * 50) + (min(total, 10000) / 10000 * 50)
+                    score += interaction_score * 0.15
+        
+        return score
+
+    async def get_comprehensive_streaming_ranking(self, content_type: str = "movie", country: str = "US", limit: int = 20) -> Optional[List]:
+        """获取综合流媒体热度排行榜
+        
+        Args:
+            content_type: "movie" 或 "show"
+            country: 国家代码
+            limit: 返回数量
+        """
+        try:
+            # 获取多个数据源
+            justwatch_data = await self.get_justwatch_popular_content(
+                country=country, content_type=content_type, count=50  # 获取更多数据用于排序
+            )
+            
+            if not justwatch_data:
+                return None
+            
+            # 为每个条目计算综合热度分数
+            scored_items = []
+            for entry in justwatch_data:
+                score = self._calculate_streaming_score(entry)
+                scored_items.append({
+                    'entry': entry,
+                    'score': score
+                })
+            
+            # 按分数排序
+            scored_items.sort(key=lambda x: x['score'], reverse=True)
+            
+            # 返回排序后的entry列表
+            return [item['entry'] for item in scored_items[:limit]]
+            
+        except Exception as e:
+            logger.error(f"获取综合流媒体排行榜失败: {e}")
+            return None
     
     async def get_tv_details(self, tv_id: int) -> Optional[Dict]:
         """获取电视剧详情"""
@@ -2174,6 +2264,104 @@ class MovieService:
         ])
         
         return "\n".join(lines)
+
+    def format_comprehensive_streaming_ranking(self, content_list: List, content_type: str = "movie", country: str = "US") -> str:
+        """格式化综合流媒体热度排行榜"""
+        if not content_list:
+            return "❌ 没有找到流媒体热度排行榜数据"
+        
+        from datetime import datetime
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M")
+        
+        type_name = "电影" if content_type == "movie" else "电视剧"
+        country_flag = get_country_flag(country)
+        
+        lines = [f"🏆 **{country_flag} 综合流媒体{type_name}热度排行榜** (更新: {current_time})\n"]
+        
+        for i, entry in enumerate(content_list[:15], 1):
+            title = entry.title
+            year = entry.release_year
+            content_icon = "🎬" if entry.object_type == "MOVIE" else "📺"
+            
+            # 计算并显示热度分数
+            score = self._calculate_streaming_score(entry)
+            
+            # 基本信息行
+            lines.append(f"**#{i}** {content_icon} **{title}** ({year}) `热度: {score:.1f}`")
+            
+            # 详细指标
+            details = []
+            
+            # JustWatch流媒体排名
+            if hasattr(entry, 'streaming_charts') and entry.streaming_charts:
+                charts = entry.streaming_charts
+                if charts.rank:
+                    trend_symbol = {'UP': '📈', 'DOWN': '📉', 'STABLE': '➡️'}.get(charts.trend, '➡️')
+                    details.append(f"JW排名: {trend_symbol}#{charts.rank}")
+                
+                if charts.days_in_top_100:
+                    details.append(f"TOP100停留: {charts.days_in_top_100}天")
+                
+                if charts.top_rank:
+                    details.append(f"历史最高: #{charts.top_rank}")
+            
+            # 评分信息
+            ratings = []
+            if hasattr(entry, 'scoring') and entry.scoring:
+                if entry.scoring.tmdb_popularity:
+                    ratings.append(f"TMDB热度: {entry.scoring.tmdb_popularity:.1f}")
+                if entry.scoring.jw_rating:
+                    jw_score = entry.scoring.jw_rating * 10
+                    ratings.append(f"JW评分: {jw_score:.1f}")
+                if entry.scoring.imdb_score:
+                    ratings.append(f"IMDb: {entry.scoring.imdb_score}")
+            
+            # 用户互动
+            if hasattr(entry, 'interactions') and entry.interactions:
+                likes = entry.interactions.likes
+                dislikes = entry.interactions.dislikes
+                if likes and dislikes:
+                    total = likes + dislikes
+                    like_percent = likes / total * 100
+                    details.append(f"用户喜爱: {like_percent:.1f}% ({total:,}互动)")
+            
+            # 流媒体平台
+            platforms = []
+            if hasattr(entry, 'offers') and entry.offers:
+                platform_names = set()
+                for offer in entry.offers[:3]:  # 只显示前3个平台
+                    if offer.package and offer.package.name:
+                        platform_names.add(offer.package.name)
+                platforms = list(platform_names)[:3]
+            
+            # 组装详细信息
+            if details:
+                lines.append(f"   📊 {' | '.join(details)}")
+            if ratings:
+                lines.append(f"   ⭐ {' | '.join(ratings)}")
+            if platforms:
+                lines.append(f"   🎬 平台: {' | '.join(platforms)}")
+            
+            # 搜索命令
+            if entry.tmdb_id:
+                search_cmd = "/movie_detail" if entry.object_type == "MOVIE" else "/tv_detail"
+                lines.append(f"   `{search_cmd} {entry.tmdb_id}`")
+            
+            lines.append("")
+        
+        # 添加算法说明
+        lines.extend([
+            "─────────────────────────",
+            "📋 **热度算法说明**:",
+            "• 🏆 JustWatch排名 + 趋势 (40%)",
+            "• ⭐ 评分质量 (20%)",
+            "• 🔥 TMDB全球热度 (25%)",
+            "• 👥 用户互动反馈 (15%)",
+            "",
+            "💡 数据整合多个流媒体平台的观看行为统计"
+        ])
+        
+        return "\n".join(lines)
     
     def format_mixed_popular_content(self, tmdb_data: Dict, justwatch_data: List, content_type: str = "movie", trakt_data: List = None) -> str:
         """格式化混合热门内容（TMDB + JustWatch + Trakt）"""
@@ -2217,7 +2405,7 @@ class MovieService:
         
         # JustWatch数据部分
         if justwatch_data:
-            lines.append("📺 **JustWatch流媒体热门** (实时数据)")
+            lines.append("🏆 **JustWatch综合流媒体热度** (智能排序)")
             
             for i, entry in enumerate(justwatch_data[:4], 1):
                 title = entry.title
@@ -2225,28 +2413,48 @@ class MovieService:
                 tmdb_id = entry.tmdb_id
                 object_type = entry.object_type
                 
-                # 排名信息
-                rank_info = ""
-                if entry.streaming_charts and entry.streaming_charts.rank:
+                # 计算热度分数
+                score = self._calculate_streaming_score(entry)
+                
+                # 排名和趋势信息
+                rank_info = f" `热度: {score:.1f}`"
+                if hasattr(entry, 'streaming_charts') and entry.streaming_charts and entry.streaming_charts.rank:
                     rank = entry.streaming_charts.rank
                     trend = entry.streaming_charts.trend
                     trend_symbol = {"UP": "📈", "DOWN": "📉", "STABLE": "➡️"}.get(trend, "➡️")
-                    rank_info = f" {trend_symbol} #{rank}"
+                    rank_info += f" {trend_symbol}#{rank}"
                 
                 lines.append(f"{i}. 🎬 **{title}** ({year}){rank_info}")
                 
-                # 平台信息
-                platforms = [offer.package.name for offer in entry.offers[:3]]
-                if platforms:
-                    lines.append(f"   🎬 {' | '.join(platforms)}")
+                # 简化的详细信息
+                details = []
+                if hasattr(entry, 'scoring') and entry.scoring:
+                    if entry.scoring.jw_rating:
+                        details.append(f"JW: {entry.scoring.jw_rating * 10:.1f}")
+                    if entry.scoring.imdb_score:
+                        details.append(f"IMDb: {entry.scoring.imdb_score}")
                 
-                # 优先使用TMDB ID生成详情命令，否则使用搜索命令
+                # 平台信息（只显示前2个主要平台）
+                platforms = []
+                if hasattr(entry, 'offers') and entry.offers:
+                    platform_names = set()
+                    for offer in entry.offers[:2]:
+                        if offer.package and offer.package.name:
+                            platform_names.add(offer.package.name)
+                    platforms = list(platform_names)[:2]
+                
+                if details or platforms:
+                    info_parts = []
+                    if details:
+                        info_parts.append(" | ".join(details))
+                    if platforms:
+                        info_parts.append(f"平台: {' | '.join(platforms)}")
+                    lines.append(f"   ⭐ {' | '.join(info_parts)}")
+                
+                # 优先使用TMDB ID生成详情命令
                 if tmdb_id:
                     detail_cmd = "/movie_detail" if object_type == "MOVIE" else "/tv_detail"
                     lines.append(f"   `{detail_cmd} {tmdb_id}`")
-                else:
-                    search_cmd = "/movie" if object_type == "MOVIE" else "/tv"
-                    lines.append(f"   `{search_cmd} {title}`")
             
             lines.append("")
         else:
@@ -3670,6 +3878,7 @@ async def movie_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "`/movie_videos <电影ID>` - 获取预告片和视频\n"
             "`/movie_reviews <电影ID>` - 获取电影用户评价\n"
             "`/movie_trending` - 获取Trakt热门电影\n"
+            "`/streaming_movie_ranking [国家码]` - 获取综合流媒体电影热度排行榜\n"
             "`/movie_related <电影ID>` - 获取Trakt相关电影推荐\n"
             "`/movie_watch <电影ID>` - 获取观看平台\n\n"
             "**热门趋势:**\n"
@@ -3817,16 +4026,16 @@ async def movie_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     try:
         if source == "justwatch":
-            # 只显示JustWatch数据
+            # 只显示JustWatch数据 - 使用新的综合ranking算法
             if not JUSTWATCH_AVAILABLE:
                 await message.edit_text("❌ JustWatch API不可用，请使用TMDB数据源")
                 return
             
-            justwatch_data = await movie_service.get_justwatch_popular_content(
-                country=country, content_type="movie", count=15
+            justwatch_data = await movie_service.get_comprehensive_streaming_ranking(
+                content_type="movie", country=country, limit=10
             )
             if justwatch_data:
-                result_text = movie_service.format_justwatch_popular_content(
+                result_text = movie_service.format_comprehensive_streaming_ranking(
                     justwatch_data, content_type="movie", country=country
                 )
             else:
@@ -3859,8 +4068,8 @@ async def movie_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             trakt_data = None
             
             if JUSTWATCH_AVAILABLE:
-                justwatch_data = await movie_service.get_justwatch_popular_content(
-                    country=country, content_type="movie", count=10
+                justwatch_data = await movie_service.get_comprehensive_streaming_ranking(
+                    content_type="movie", country=country, limit=4  # 混合模式只显示4个
                 )
             
             # 获取Trakt热门数据
@@ -4116,6 +4325,7 @@ async def tv_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             "`/tv_videos <电视剧ID>` - 获取预告片和视频\n"
             "`/tv_reviews <电视剧ID>` - 获取电视剧用户评价\n"
             "`/tv_trending` - 获取Trakt热门电视剧\n"
+            "`/streaming_tv_ranking [国家码]` - 获取综合流媒体电视剧热度排行榜\n"
             "`/tv_related <电视剧ID>` - 获取Trakt相关电视剧推荐\n"
             "`/tv_watch <电视剧ID>` - 获取观看平台\n"
             "`/tv_season <电视剧ID> <季数>` - 获取季详情\n"
@@ -4263,16 +4473,16 @@ async def tv_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     try:
         if source == "justwatch":
-            # 只显示JustWatch数据
+            # 只显示JustWatch数据 - 使用新的综合ranking算法
             if not JUSTWATCH_AVAILABLE:
                 await message.edit_text("❌ JustWatch API不可用，请使用TMDB数据源")
                 return
             
-            justwatch_data = await movie_service.get_justwatch_popular_content(
-                country=country, content_type="show", count=15
+            justwatch_data = await movie_service.get_comprehensive_streaming_ranking(
+                content_type="show", country=country, limit=10
             )
             if justwatch_data:
-                result_text = movie_service.format_justwatch_popular_content(
+                result_text = movie_service.format_comprehensive_streaming_ranking(
                     justwatch_data, content_type="show", country=country
                 )
             else:
@@ -4305,8 +4515,8 @@ async def tv_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             trakt_data = None
             
             if JUSTWATCH_AVAILABLE:
-                justwatch_data = await movie_service.get_justwatch_popular_content(
-                    country=country, content_type="show", count=10
+                justwatch_data = await movie_service.get_comprehensive_streaming_ranking(
+                    content_type="show", country=country, limit=4  # 混合模式只显示4个
                 )
             
             # 获取Trakt热门数据
@@ -4861,6 +5071,102 @@ async def tv_trending_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
     from utils.config_manager import get_config
+    config = get_config()
+    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
+
+async def streaming_movie_ranking_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理 /streaming_movie_ranking 命令 - 获取综合流媒体电影热度排行榜"""
+    if not update.message or not update.effective_chat:
+        return
+    
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    
+    # 解析参数
+    country = context.args[0].upper() if context.args else "US"
+    
+    # 验证国家代码
+    valid_countries = {"US", "GB", "DE", "FR", "JP", "KR", "AU", "CA", "CN"}
+    if country not in valid_countries:
+        country = "US"
+    
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="🔍 正在获取综合流媒体电影热度排行榜...",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    
+    try:
+        if not JUSTWATCH_AVAILABLE:
+            result_text = "❌ JustWatch API不可用，无法获取流媒体排行榜数据"
+        else:
+            ranking_data = await movie_service.get_comprehensive_streaming_ranking(
+                content_type="movie", country=country, limit=15
+            )
+            
+            if ranking_data:
+                result_text = movie_service.format_comprehensive_streaming_ranking(
+                    ranking_data, content_type="movie", country=country
+                )
+            else:
+                result_text = "❌ 获取流媒体电影排行榜失败，请稍后重试"
+        
+        await message.edit_text(
+            foldable_text_with_markdown_v2(result_text),
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+        
+    except Exception as e:
+        logger.error(f"流媒体电影排行榜命令执行失败: {e}")
+        await message.edit_text("❌ 获取排行榜数据时发生错误，请稍后重试")
+    
+    config = get_config()
+    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
+
+async def streaming_tv_ranking_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理 /streaming_tv_ranking 命令 - 获取综合流媒体电视剧热度排行榜"""
+    if not update.message or not update.effective_chat:
+        return
+    
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    
+    # 解析参数
+    country = context.args[0].upper() if context.args else "US"
+    
+    # 验证国家代码
+    valid_countries = {"US", "GB", "DE", "FR", "JP", "KR", "AU", "CA", "CN"}
+    if country not in valid_countries:
+        country = "US"
+    
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="🔍 正在获取综合流媒体电视剧热度排行榜...",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    
+    try:
+        if not JUSTWATCH_AVAILABLE:
+            result_text = "❌ JustWatch API不可用，无法获取流媒体排行榜数据"
+        else:
+            ranking_data = await movie_service.get_comprehensive_streaming_ranking(
+                content_type="show", country=country, limit=15
+            )
+            
+            if ranking_data:
+                result_text = movie_service.format_comprehensive_streaming_ranking(
+                    ranking_data, content_type="show", country=country
+                )
+            else:
+                result_text = "❌ 获取流媒体电视剧排行榜失败，请稍后重试"
+        
+        await message.edit_text(
+            foldable_text_with_markdown_v2(result_text),
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+        
+    except Exception as e:
+        logger.error(f"流媒体电视剧排行榜命令执行失败: {e}")
+        await message.edit_text("❌ 获取排行榜数据时发生错误，请稍后重试")
+    
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -6663,6 +6969,7 @@ command_factory.register_command("movie_rec", movie_rec_command, permission=Perm
 command_factory.register_command("movie_videos", movie_videos_command, permission=Permission.USER, description="获取电影预告片")
 command_factory.register_command("movie_reviews", movie_reviews_command, permission=Permission.USER, description="获取电影用户评价")
 command_factory.register_command("movie_trending", movie_trending_command, permission=Permission.USER, description="获取Trakt热门电影")
+command_factory.register_command("streaming_movie_ranking", streaming_movie_ranking_command, permission=Permission.USER, description="获取综合流媒体电影热度排行榜")
 command_factory.register_command("movie_related", movie_related_command, permission=Permission.USER, description="获取Trakt相关电影推荐")
 command_factory.register_command("movie_cleancache", movie_clean_cache_command, permission=Permission.ADMIN, description="清理电影和电视剧查询缓存")
 
@@ -6675,6 +6982,7 @@ command_factory.register_command("tv_rec", tv_rec_command, permission=Permission
 command_factory.register_command("tv_videos", tv_videos_command, permission=Permission.USER, description="获取电视剧预告片")
 command_factory.register_command("tv_reviews", tv_reviews_command, permission=Permission.USER, description="获取电视剧用户评价")
 command_factory.register_command("tv_trending", tv_trending_command, permission=Permission.USER, description="获取Trakt热门电视剧")
+command_factory.register_command("streaming_tv_ranking", streaming_tv_ranking_command, permission=Permission.USER, description="获取综合流媒体电视剧热度排行榜")
 command_factory.register_command("tv_related", tv_related_command, permission=Permission.USER, description="获取Trakt相关电视剧推荐")
 command_factory.register_command("tv_season", tv_season_command, permission=Permission.USER, description="获取电视剧季详情")
 command_factory.register_command("tv_episode", tv_episode_command, permission=Permission.USER, description="获取电视剧集详情")
