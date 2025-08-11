@@ -554,21 +554,32 @@ class SpotifyPriceBot(PriceQueryService):
             equivalent_monthly_number = plan.get("equivalent_monthly_number", 0)
             equivalent_monthly_cny = plan.get("equivalent_monthly_cny", 0)
             
+            # 检查是否为试用期套餐（price_cny为null但有monthly_equivalent_cny）
+            is_trial_plan = (price_cny is None and equivalent_monthly_cny is not None and equivalent_monthly_cny > 0)
+            
             # Format price display - 根据是否为预付费套餐调整显示
             if is_prepaid and equivalent_monthly:
                 # 预付费套餐：显示总价格 + 等效月费参考
-                if currency and price_number and price_cny > 0:
-                    if equivalent_monthly_cny > 0:
+                if currency and price_number and price_cny is not None and price_cny > 0:
+                    if equivalent_monthly_cny is not None and equivalent_monthly_cny > 0:
                         price_display = f"{currency} {price_number} ≈ ¥{price_cny:.2f} (等效月费 ¥{equivalent_monthly_cny:.2f})"
                     else:
                         price_display = f"{currency} {price_number} ≈ ¥{price_cny:.2f}"
-                else:
+                elif price_cny is not None and price_cny > 0:
                     price_display = f"{original_price} ≈ ¥{price_cny:.2f}"
-            elif currency and price_number and price_cny > 0:
+                else:
+                    price_display = original_price
+            elif is_trial_plan:
+                # 试用期套餐：使用monthly_equivalent显示真实价格
+                price_display = f"{equivalent_monthly} ≈ ¥{equivalent_monthly_cny:.2f}"
+            elif currency and price_number and price_cny is not None and price_cny > 0:
                 # 月付套餐显示月费
                 price_display = f"{currency} {price_number} ≈ ¥{price_cny:.2f}"
-            elif price_cny > 0:
+            elif price_cny is not None and price_cny > 0:
                 price_display = f"{original_price} ≈ ¥{price_cny:.2f}"
+            elif equivalent_monthly_cny is not None and equivalent_monthly_cny > 0:
+                # 备用：如果主价格无CNY但有等效价格，使用等效价格
+                price_display = f"{equivalent_monthly} ≈ ¥{equivalent_monthly_cny:.2f}"
             else:
                 price_display = original_price
 
@@ -689,9 +700,9 @@ class SpotifyPriceBot(PriceQueryService):
                 original_price = item.get("original_price", "价格未知")
 
                 # Format price display with currency, price_number, and CNY
-                if currency and price_number and price_cny > 0:
+                if currency and price_number and price_cny is not None and price_cny > 0:
                     price_display = f"{currency} {price_number} ≈ ¥{price_cny:.2f}"
-                elif price_cny > 0:
+                elif price_cny is not None and price_cny > 0:
                     price_display = f"{original_price} ≈ ¥{price_cny:.2f}"
                 else:
                     price_display = original_price
@@ -780,9 +791,9 @@ class SpotifyPriceBot(PriceQueryService):
                         break
 
                 # Format price display with currency, price_number, and CNY
-                if currency and price_number and price_cny > 0:
+                if currency and price_number and price_cny is not None and price_cny > 0:
                     price_display = f"{currency} {price_number} ≈ ¥{price_cny:.2f}"
-                elif price_cny > 0:
+                elif price_cny is not None and price_cny > 0:
                     price_display = f"{original_price} ≈ ¥{price_cny:.2f}"
                 else:
                     price_display = original_price
@@ -859,13 +870,13 @@ class SpotifyPriceBot(PriceQueryService):
 
             # 格式化价格显示 - 个人预付费排行榜显示总价格
             # 注意：修复后price_number和price_cny已经是总价格
-            if currency and price_number and price_cny > 0:
+            if currency and price_number and price_cny is not None and price_cny > 0:
                 # 预付费排行榜显示总价格 + 等效月费参考
-                if monthly_equivalent_cny > 0:
+                if monthly_equivalent_cny is not None and monthly_equivalent_cny > 0:
                     price_display = f"{currency} {price_number} ≈ ¥{price_cny:.2f} (等效月费 ¥{monthly_equivalent_cny:.2f})"
                 else:
                     price_display = f"{currency} {price_number} ≈ ¥{price_cny:.2f}"
-            elif price_cny > 0:
+            elif price_cny is not None and price_cny > 0:
                 price_display = f"{original_price} ≈ ¥{price_cny:.2f}"
             else:
                 price_display = original_price
@@ -946,13 +957,13 @@ class SpotifyPriceBot(PriceQueryService):
 
             # 格式化价格显示 - 家庭预付费排行榜显示总价格
             # 注意：修复后price_number和price_cny已经是总价格
-            if currency and price_number and price_cny > 0:
+            if currency and price_number and price_cny is not None and price_cny > 0:
                 # 预付费排行榜显示总价格 + 等效月费参考
-                if monthly_equivalent_cny > 0:
+                if monthly_equivalent_cny is not None and monthly_equivalent_cny > 0:
                     price_display = f"{currency} {price_number} ≈ ¥{price_cny:.2f} (等效月费 ¥{monthly_equivalent_cny:.2f})"
                 else:
                     price_display = f"{currency} {price_number} ≈ ¥{price_cny:.2f}"
-            elif price_cny > 0:
+            elif price_cny is not None and price_cny > 0:
                 price_display = f"{original_price} ≈ ¥{price_cny:.2f}"
             else:
                 price_display = original_price
