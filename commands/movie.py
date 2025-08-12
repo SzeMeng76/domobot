@@ -892,18 +892,10 @@ class MovieService:
             if JUSTWATCH_AVAILABLE and title:
                 logger.info(f"JustWatch: 开始搜索 {title}")
                 
-                # 获取完整的TMDB详情数据，包含多语言标题
+                # 获取完整的TMDB详情数据，用于更好的JustWatch搜索
                 if content_type == "movie":
                     full_tmdb_data = await self.get_movie_details(content_id)
-                    # 获取英文标题数据
-                    try:
-                        english_data = await self._make_tmdb_request(f"movie/{content_id}", language="en-US")
-                        if english_data and full_tmdb_data:
-                            full_tmdb_data["english_title"] = english_data.get("title")
-                            full_tmdb_data["english_original_title"] = english_data.get("original_title")
-                    except Exception:
-                        pass
-                    # 获取alternative_titles
+                    # 尝试获取alternative_titles
                     try:
                         alt_titles = await self._make_tmdb_request(f"movie/{content_id}/alternative_titles")
                         if alt_titles and full_tmdb_data:
@@ -912,15 +904,7 @@ class MovieService:
                         pass
                 else:
                     full_tmdb_data = await self.get_tv_details(content_id)
-                    # 获取英文标题数据
-                    try:
-                        english_data = await self._make_tmdb_request(f"tv/{content_id}", language="en-US")
-                        if english_data and full_tmdb_data:
-                            full_tmdb_data["english_name"] = english_data.get("name")
-                            full_tmdb_data["english_original_name"] = english_data.get("original_name")
-                    except Exception:
-                        pass
-                    # 获取alternative_titles
+                    # 尝试获取alternative_titles
                     try:
                         alt_titles = await self._make_tmdb_request(f"tv/{content_id}/alternative_titles")
                         if alt_titles and full_tmdb_data:
@@ -1042,33 +1026,22 @@ class MovieService:
         if content_type == "movie":
             original_title = tmdb_data.get("original_title", "")
             local_title = tmdb_data.get("title", "")
-            english_title = tmdb_data.get("english_title", "")
-            english_original_title = tmdb_data.get("english_original_title", "")
         else:
             original_title = tmdb_data.get("original_name", "")
             local_title = tmdb_data.get("name", "")
-            english_title = tmdb_data.get("english_name", "")
-            english_original_title = tmdb_data.get("english_original_name", "")
         
         # 优先尝试英文标题，因为JustWatch主要使用英文
-        # 优先级：1. TMDB英文标题 2. 英文原标题 3. 其他英文标题 4. 非英文标题
+        # 优先级：1. 英文标题 2. 原标题 3. 本地标题 4. 传入的主标题
         
-        # 最优先：TMDB的英文标题
-        if english_title and english_title not in titles_to_try:
-            titles_to_try.append(english_title)
-        
-        if english_original_title and english_original_title != english_title and english_original_title not in titles_to_try:
-            titles_to_try.append(english_original_title)
-        
-        # 如果原标题是英文，添加
-        if original_title and self._is_likely_english(original_title) and original_title not in titles_to_try:
+        # 如果原标题是英文，优先使用
+        if original_title and self._is_likely_english(original_title):
             titles_to_try.append(original_title)
         
-        # 如果本地标题是英文，添加
-        if local_title and self._is_likely_english(local_title) and local_title not in titles_to_try:
+        # 如果本地标题是英文且与原标题不同，添加本地标题
+        if local_title and self._is_likely_english(local_title) and local_title != original_title:
             titles_to_try.append(local_title)
         
-        # 如果主标题是英文，添加
+        # 如果主标题是英文且与前面的不同，添加主标题
         if primary_title and self._is_likely_english(primary_title) and primary_title not in titles_to_try:
             titles_to_try.append(primary_title)
         
@@ -1097,7 +1070,6 @@ class MovieService:
         titles_to_try = [title.strip() for title in titles_to_try if title and title.strip()]
         
         logger.info(f"JustWatch: 将尝试搜索标题: {titles_to_try}")
-        logger.info(f"JustWatch: 目标TMDB ID: {tmdb_id}")
         
         # 依次尝试每个标题
         for i, title_to_search in enumerate(titles_to_try):
@@ -1105,11 +1077,6 @@ class MovieService:
             
             try:
                 results = await self._search_justwatch_content(title_to_search, content_type)
-                
-                logger.info(f"JustWatch: 搜索 '{title_to_search}' 返回 {len(results) if results else 0} 个结果")
-                if results:
-                    for idx, result in enumerate(results):
-                        logger.info(f"JustWatch: 结果{idx+1}: {getattr(result, 'title', 'N/A')} (TMDB ID: {getattr(result, 'tmdb_id', 'N/A')})")
                 
                 if results and isinstance(results, list) and len(results) > 0:
                     # 检查是否有有效匹配
