@@ -870,6 +870,45 @@ class MovieService:
         
         return None
 
+    async def _get_english_title_from_tmdb(self, tmdb_id: int, content_type: str) -> Optional[str]:
+        """从TMDB获取英文标题"""
+        if not tmdb_id:
+            return None
+            
+        try:
+            # 获取translations数据
+            trans_data = await self._make_tmdb_request(f"{content_type}/{tmdb_id}/translations")
+            
+            if trans_data and "translations" in trans_data:
+                for trans in trans_data["translations"]:
+                    if trans.get("iso_639_1") == "en":
+                        trans_data_content = trans.get("data", {})
+                        if content_type == "movie":
+                            english_title = trans_data_content.get("title")
+                        else:
+                            english_title = trans_data_content.get("name")
+                        
+                        if english_title and english_title.strip():
+                            logger.info(f"TMDB: 找到英文标题 '{english_title}' for ID {tmdb_id}")
+                            return english_title.strip()
+            
+            # 如果translations中没有英文标题，尝试alternative_titles
+            if content_type == "movie":
+                alt_data = await self._make_tmdb_request(f"movie/{tmdb_id}/alternative_titles")
+                if alt_data and "titles" in alt_data:
+                    for title_info in alt_data["titles"]:
+                        if title_info.get("iso_3166_1") in ["US", "GB", "AU", "CA"]:  # 英语国家
+                            alt_title = title_info.get("title")
+                            if alt_title and alt_title.strip() and self._is_likely_english(alt_title):
+                                logger.info(f"TMDB: 从alternative_titles找到英文标题 '{alt_title}' for ID {tmdb_id}")
+                                return alt_title.strip()
+            
+            logger.info(f"TMDB: 未找到英文标题 for ID {tmdb_id}")
+            return None
+            
+        except Exception as e:
+            logger.warning(f"获取TMDB英文标题失败 {tmdb_id}: {e}")
+            return None
 
     async def get_enhanced_watch_providers(self, content_id: int, content_type: str = "movie", title: str = "") -> Dict:
         """获取增强的观影平台信息，整合 TMDB 和 JustWatch 数据"""
@@ -1009,6 +1048,13 @@ class MovieService:
         """增强的JustWatch搜索策略 - 尝试多个标题"""
         titles_to_try = []
         
+        # 首先尝试从TMDB获取英文标题
+        tmdb_id = tmdb_data.get("id")
+        if tmdb_id:
+            english_title = await self._get_english_title_from_tmdb(tmdb_id, content_type)
+            if english_title:
+                titles_to_try.append(english_title)
+        
         # 从TMDB数据中提取所有可能的标题
         if content_type == "movie":
             original_title = tmdb_data.get("original_title", "")
@@ -1018,19 +1064,20 @@ class MovieService:
             local_title = tmdb_data.get("name", "")
         
         # 构建搜索标题列表，按优先级排序
-        # 优先级：1. 英文原标题 2. 主要标题 3. 本地化标题
-        if original_title and self._is_likely_english(original_title):
+        # 优先级：1. TMDB英文标题 2. 英文原标题 3. 主要标题 4. 本地化标题
+        if original_title and self._is_likely_english(original_title) and original_title not in titles_to_try:
             titles_to_try.append(original_title)
-            if local_title and local_title != original_title:
-                titles_to_try.append(local_title)
-        else:
-            # 如果原标题不是英文（如中文），先尝试本地标题，再尝试原标题
-            if primary_title and primary_title not in titles_to_try:
-                titles_to_try.append(primary_title)
-            if local_title and local_title != primary_title and local_title not in titles_to_try:
-                titles_to_try.append(local_title)
-            if original_title and original_title not in titles_to_try:
-                titles_to_try.append(original_title)
+            
+        if local_title and local_title not in titles_to_try:
+            titles_to_try.append(local_title)
+            
+        # 如果原标题不是英文，也加入尝试列表（作为最后选择）
+        if original_title and not self._is_likely_english(original_title) and original_title not in titles_to_try:
+            titles_to_try.append(original_title)
+            
+        # 如果primary_title与上述都不同，也加入
+        if primary_title and primary_title not in titles_to_try:
+            titles_to_try.append(primary_title)
         
         # 去重并过滤空标题
         titles_to_try = [title.strip() for title in titles_to_try if title and title.strip()]
