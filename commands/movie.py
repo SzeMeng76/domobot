@@ -912,6 +912,8 @@ class MovieService:
 
     async def get_enhanced_watch_providers(self, content_id: int, content_type: str = "movie", title: str = "") -> Dict:
         """获取增强的观影平台信息，整合 TMDB 和 JustWatch 数据"""
+        logger.info(f"=== get_enhanced_watch_providers 开始执行 ===")
+        logger.info(f"参数: content_id={content_id}, content_type={content_type}, title='{title}'")
         result = {
             "tmdb": None,
             "justwatch": None,
@@ -942,6 +944,7 @@ class MovieService:
                 
                 justwatch_results = await self._enhanced_justwatch_search(search_data, title, content_type)
                 
+                logger.info(f"JustWatch搜索结果: {len(justwatch_results) if justwatch_results else 0} 个结果")
                 if justwatch_results and len(justwatch_results) > 0:
                     logger.info(f"JustWatch: 找到 {len(justwatch_results)} 个有效搜索结果")
                     
@@ -973,6 +976,10 @@ class MovieService:
                             logger.info(f"JustWatch: 未获取到观看数据")
                     else:
                         logger.warning(f"JustWatch: 没有找到有效的 best_match 或缺少 entry_id")
+                else:
+                    logger.warning(f"JustWatch: 搜索 '{title}' 没有找到任何结果")
+            else:
+                logger.warning(f"JustWatch: 跳过搜索 - JUSTWATCH_AVAILABLE={JUSTWATCH_AVAILABLE}, title='{title}'")
             
             # 合并数据，优先显示 TMDB 数据，JustWatch 作为补充
             result["combined"] = self._merge_watch_providers(tmdb_data, result.get("justwatch"))
@@ -1051,10 +1058,13 @@ class MovieService:
         
         # 首先尝试从TMDB获取英文标题
         tmdb_id = tmdb_data.get("id")
+        logger.info(f"JustWatch搜索: tmdb_id={tmdb_id}, content_type={content_type}")
         if tmdb_id:
             english_title = await self._get_english_title_from_tmdb(tmdb_id, content_type)
+            logger.info(f"JustWatch: 获取到的英文标题: '{english_title}'")
             if english_title:
                 titles_to_try.append(english_title)
+                logger.info(f"JustWatch: 英文标题已加入搜索列表")
         
         # 从TMDB数据中提取所有可能的标题
         if content_type == "movie":
