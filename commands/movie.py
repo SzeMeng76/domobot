@@ -901,11 +901,8 @@ class MovieService:
                         if english_data and full_tmdb_data:
                             full_tmdb_data["english_title"] = english_data.get("title")
                             full_tmdb_data["english_original_title"] = english_data.get("original_title")
-                            logger.info(f"JustWatch: 获取到英文数据 - title: {english_data.get('title')}, original_title: {english_data.get('original_title')}")
-                        else:
-                            logger.warning(f"JustWatch: 未获取到英文数据")
-                    except Exception as e:
-                        logger.error(f"JustWatch: 获取英文数据失败: {e}")
+                    except Exception:
+                        pass
                     # 获取alternative_titles
                     try:
                         alt_titles = await self._make_tmdb_request(f"movie/{content_id}/alternative_titles")
@@ -921,11 +918,8 @@ class MovieService:
                         if english_data and full_tmdb_data:
                             full_tmdb_data["english_name"] = english_data.get("name")
                             full_tmdb_data["english_original_name"] = english_data.get("original_name")
-                            logger.info(f"JustWatch: 获取到英文数据 - name: {english_data.get('name')}, original_name: {english_data.get('original_name')}")
-                        else:
-                            logger.warning(f"JustWatch: 未获取到英文数据")
-                    except Exception as e:
-                        logger.error(f"JustWatch: 获取英文数据失败: {e}")
+                    except Exception:
+                        pass
                     # 获取alternative_titles
                     try:
                         alt_titles = await self._make_tmdb_request(f"tv/{content_id}/alternative_titles")
