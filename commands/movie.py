@@ -891,15 +891,16 @@ class MovieService:
             # 获取 JustWatch 数据作为补充
             if JUSTWATCH_AVAILABLE and title:
                 logger.info(f"JustWatch: 开始搜索 {title}")
-                
-                # 获取完整的TMDB详情数据，用于更好的JustWatch搜索
+                # 由于我们只有基本信息，创建简化的数据结构用于搜索
+                search_data = {}
                 if content_type == "movie":
-                    full_tmdb_data = await self.get_movie_details(content_id)
+                    search_data["original_title"] = title
+                    search_data["title"] = title
                 else:
-                    full_tmdb_data = await self.get_tv_details(content_id)
+                    search_data["original_name"] = title
+                    search_data["name"] = title
                 
-                # 使用完整的TMDB数据进行搜索，包含TMDB ID
-                justwatch_results = await self._enhanced_justwatch_search(full_tmdb_data or {}, title, content_type, content_id)
+                justwatch_results = await self._enhanced_justwatch_search(search_data, title, content_type)
                 
                 if justwatch_results and len(justwatch_results) > 0:
                     logger.info(f"JustWatch: 找到 {len(justwatch_results)} 个有效搜索结果")
@@ -1004,8 +1005,8 @@ class MovieService:
         
         return True
     
-    async def _enhanced_justwatch_search(self, tmdb_data: Dict, primary_title: str, content_type: str, tmdb_id: int = None) -> Optional[List]:
-        """增强的JustWatch搜索策略 - 尝试多个标题，优先TMDB ID匹配"""
+    async def _enhanced_justwatch_search(self, tmdb_data: Dict, primary_title: str, content_type: str) -> Optional[List]:
+        """增强的JustWatch搜索策略 - 尝试多个标题"""
         titles_to_try = []
         
         # 从TMDB数据中提取所有可能的标题
@@ -1046,27 +1047,12 @@ class MovieService:
                 if results and isinstance(results, list) and len(results) > 0:
                     # 检查是否有有效匹配
                     valid_results = []
-                    tmdb_matched_results = []
-                    
                     for result in results:
                         if hasattr(result, 'entry_id') and self._should_use_justwatch_result(title_to_search, result):
                             valid_results.append(result)
-                            
-                            # 如果有TMDB ID，检查是否匹配
-                            if tmdb_id and hasattr(result, 'tmdb_id') and result.tmdb_id:
-                                try:
-                                    if int(result.tmdb_id) == tmdb_id:
-                                        tmdb_matched_results.append(result)
-                                        logger.info(f"JustWatch: 找到TMDB ID匹配的结果: {result.title} (TMDB ID: {result.tmdb_id})")
-                                except (ValueError, TypeError):
-                                    pass
                     
-                    # 优先返回TMDB ID匹配的结果
-                    if tmdb_matched_results:
-                        logger.info(f"JustWatch: 标题 '{title_to_search}' 找到 {len(tmdb_matched_results)} 个TMDB ID匹配结果")
-                        return tmdb_matched_results
-                    elif valid_results:
-                        logger.info(f"JustWatch: 标题 '{title_to_search}' 找到 {len(valid_results)} 个有效结果（无TMDB ID匹配）")
+                    if valid_results:
+                        logger.info(f"JustWatch: 标题 '{title_to_search}' 找到 {len(valid_results)} 个有效结果")
                         return valid_results
                     else:
                         logger.info(f"JustWatch: 标题 '{title_to_search}' 无有效匹配结果")
