@@ -497,7 +497,7 @@ class MovieService:
             limit: 返回数量
         """
         if countries is None:
-            countries = ["US", "GB", "DE", "FR", "JP", "KR", "AU", "CA", "CN", "TH", "SG", "MY", "ID", "PH", "VN", "TW", "HK", "IN"]
+            countries = ["US", "JP", "KR", "TH", "SG", "MY", "TW", "HK"]
         
         try:
             logger.info(f"开始获取多国综合排行榜: {countries}")
@@ -2583,7 +2583,7 @@ class MovieService:
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M")
         
         type_name = "电影" if content_type == "movie" else "电视剧"
-        countries_str = " | ".join([get_country_flag(c) for c in (countries or ["US", "GB", "DE", "FR", "JP", "KR", "AU", "CA", "CN", "TH", "SG", "MY", "ID", "PH", "VN", "TW", "HK", "IN"])])
+        countries_str = " | ".join([get_country_flag(c) for c in (countries or ["US", "JP", "KR", "TH", "SG", "MY", "TW", "HK"])])
         
         lines = [f"🌍 **多国综合流媒体{type_name}热度排行榜** (更新: {current_time})", 
                 f"📊 数据来源: {countries_str}\n"]
@@ -4425,7 +4425,7 @@ async def movie_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     # JustWatch源的国家解析逻辑（支持多国模式）
     if source == "justwatch" and len(context.args) > 1:
         # 检查是否为单国模式（单个有效国家代码）
-        valid_countries = {"US", "GB", "DE", "FR", "JP", "KR", "AU", "CA", "CN", "TH", "SG", "MY", "ID", "PH", "VN", "TW", "HK", "IN"}
+        valid_countries = {"US", "JP", "KR", "TH", "SG", "MY", "TW", "HK"}
         if (len(context.args) == 2 and 
             context.args[1].upper() in valid_countries and 
             context.args[1].lower() != "multi"):
@@ -4923,7 +4923,7 @@ async def tv_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # JustWatch源的国家解析逻辑（支持多国模式）
     if source == "justwatch" and len(context.args) > 1:
         # 检查是否为单国模式（单个有效国家代码）
-        valid_countries = {"US", "GB", "DE", "FR", "JP", "KR", "AU", "CA", "CN", "TH", "SG", "MY", "ID", "PH", "VN", "TW", "HK", "IN"}
+        valid_countries = {"US", "JP", "KR", "TH", "SG", "MY", "TW", "HK"}
         if (len(context.args) == 2 and 
             context.args[1].upper() in valid_countries and 
             context.args[1].lower() != "multi"):
@@ -5624,7 +5624,7 @@ async def streaming_movie_ranking_command(update: Update, context: ContextTypes.
             if not countries:
                 countries = None
         
-        countries_display = countries or ["US", "GB", "DE", "FR", "JP", "KR", "AU", "CA", "CN", "TH", "SG", "MY", "ID", "PH", "VN", "TW", "HK", "IN"]
+        countries_display = countries or ["US", "JP", "KR", "TH", "SG", "MY", "TW", "HK"]
         message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text=f"🌍 正在获取多国综合流媒体电影热度排行榜...\n📊 数据来源: {' | '.join(countries_display)}",
@@ -5647,7 +5647,7 @@ async def streaming_movie_ranking_command(update: Update, context: ContextTypes.
         # 单国模式: /streaming_movie_ranking [US]
         country = context.args[0].upper() if context.args else "US"
         
-        valid_countries = {"US", "GB", "DE", "FR", "JP", "KR", "AU", "CA", "CN", "TH", "SG", "MY", "ID", "PH", "VN", "TW", "HK", "IN"}
+        valid_countries = {"US", "JP", "KR", "TH", "SG", "MY", "TW", "HK"}
         if country not in valid_countries:
             country = "US"
         
@@ -5714,7 +5714,7 @@ async def streaming_tv_ranking_command(update: Update, context: ContextTypes.DEF
             if not countries:
                 countries = None
         
-        countries_display = countries or ["US", "GB", "DE", "FR", "JP", "KR", "AU", "CA", "CN", "TH", "SG", "MY", "ID", "PH", "VN", "TW", "HK", "IN"]
+        countries_display = countries or ["US", "JP", "KR", "TH", "SG", "MY", "TW", "HK"]
         message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text=f"🌍 正在获取多国综合流媒体电视剧热度排行榜...\n📊 数据来源: {' | '.join(countries_display)}",
@@ -5737,7 +5737,7 @@ async def streaming_tv_ranking_command(update: Update, context: ContextTypes.DEF
         # 单国模式: /streaming_tv_ranking [US]
         country = context.args[0].upper() if context.args else "US"
         
-        valid_countries = {"US", "GB", "DE", "FR", "JP", "KR", "AU", "CA", "CN", "TH", "SG", "MY", "ID", "PH", "VN", "TW", "HK", "IN"}
+        valid_countries = {"US", "JP", "KR", "TH", "SG", "MY", "TW", "HK"}
         if country not in valid_countries:
             country = "US"
         
