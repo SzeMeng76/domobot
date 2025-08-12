@@ -891,8 +891,10 @@ class MovieService:
             # 获取 JustWatch 数据作为补充
             if JUSTWATCH_AVAILABLE and title:
                 logger.info(f"JustWatch: 开始搜索 {title}")
-                # 由于我们只有基本信息，创建简化的数据结构用于搜索
-                search_data = {}
+                # 创建包含TMDB ID的搜索数据结构
+                search_data = {
+                    "id": content_id  # 关键：直接传递TMDB ID
+                }
                 if content_type == "movie":
                     search_data["original_title"] = title
                     search_data["title"] = title
