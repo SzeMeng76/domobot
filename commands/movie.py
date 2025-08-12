@@ -2816,7 +2816,13 @@ class MovieService:
         if justwatch_data:
             lines.append("🏆 **JustWatch综合流媒体热度** (智能排序)")
             
-            for i, entry in enumerate(justwatch_data[:4], 1):
+            for i, item in enumerate(justwatch_data[:4], 1):
+                # 处理包装对象和直接MediaEntry对象
+                if isinstance(item, dict) and 'entry' in item:
+                    entry = item['entry']
+                else:
+                    entry = item
+                
                 title = entry.title
                 year = entry.release_year
                 tmdb_id = entry.tmdb_id
