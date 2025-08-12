@@ -895,8 +895,22 @@ class MovieService:
                 # 获取完整的TMDB详情数据，用于更好的JustWatch搜索
                 if content_type == "movie":
                     full_tmdb_data = await self.get_movie_details(content_id)
+                    # 尝试获取alternative_titles
+                    try:
+                        alt_titles = await self._make_tmdb_request(f"movie/{content_id}/alternative_titles")
+                        if alt_titles and full_tmdb_data:
+                            full_tmdb_data["alternative_titles"] = alt_titles
+                    except Exception:
+                        pass
                 else:
                     full_tmdb_data = await self.get_tv_details(content_id)
+                    # 尝试获取alternative_titles
+                    try:
+                        alt_titles = await self._make_tmdb_request(f"tv/{content_id}/alternative_titles")
+                        if alt_titles and full_tmdb_data:
+                            full_tmdb_data["alternative_titles"] = alt_titles
+                    except Exception:
+                        pass
                 
                 # 使用完整的TMDB数据进行搜索，包含TMDB ID
                 justwatch_results = await self._enhanced_justwatch_search(full_tmdb_data or {}, title, content_type, content_id)
@@ -1016,20 +1030,41 @@ class MovieService:
             original_title = tmdb_data.get("original_name", "")
             local_title = tmdb_data.get("name", "")
         
-        # 构建搜索标题列表，按优先级排序
-        # 优先级：1. 英文原标题 2. 主要标题 3. 本地化标题
+        # 优先尝试英文标题，因为JustWatch主要使用英文
+        # 优先级：1. 英文标题 2. 原标题 3. 本地标题 4. 传入的主标题
+        
+        # 如果原标题是英文，优先使用
         if original_title and self._is_likely_english(original_title):
             titles_to_try.append(original_title)
-            if local_title and local_title != original_title:
-                titles_to_try.append(local_title)
-        else:
-            # 如果原标题不是英文（如中文），先尝试本地标题，再尝试原标题
-            if primary_title and primary_title not in titles_to_try:
-                titles_to_try.append(primary_title)
-            if local_title and local_title != primary_title and local_title not in titles_to_try:
-                titles_to_try.append(local_title)
-            if original_title and original_title not in titles_to_try:
-                titles_to_try.append(original_title)
+        
+        # 如果本地标题是英文且与原标题不同，添加本地标题
+        if local_title and self._is_likely_english(local_title) and local_title != original_title:
+            titles_to_try.append(local_title)
+        
+        # 如果主标题是英文且与前面的不同，添加主标题
+        if primary_title and self._is_likely_english(primary_title) and primary_title not in titles_to_try:
+            titles_to_try.append(primary_title)
+        
+        # 然后尝试非英文标题
+        if original_title and not self._is_likely_english(original_title) and original_title not in titles_to_try:
+            titles_to_try.append(original_title)
+        
+        if local_title and not self._is_likely_english(local_title) and local_title not in titles_to_try:
+            titles_to_try.append(local_title)
+        
+        if primary_title and not self._is_likely_english(primary_title) and primary_title not in titles_to_try:
+            titles_to_try.append(primary_title)
+        
+        # 如果从TMDB数据中可以获取alternative_titles，也添加进去
+        if tmdb_data.get("alternative_titles") and tmdb_data["alternative_titles"].get("titles"):
+            for alt_title_data in tmdb_data["alternative_titles"]["titles"]:
+                alt_title = alt_title_data.get("title")
+                if alt_title and alt_title not in titles_to_try:
+                    # 优先添加英文替代标题
+                    if self._is_likely_english(alt_title):
+                        titles_to_try.insert(-1 if titles_to_try else 0, alt_title)
+                    else:
+                        titles_to_try.append(alt_title)
         
         # 去重并过滤空标题
         titles_to_try = [title.strip() for title in titles_to_try if title and title.strip()]
