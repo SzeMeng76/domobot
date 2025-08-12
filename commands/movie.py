@@ -890,7 +890,7 @@ class MovieService:
             
             # 获取 JustWatch 数据作为补充
             if JUSTWATCH_AVAILABLE and title:
-                logger.error(f"🔍 JustWatch: 开始搜索 {title} (TMDB ID: {content_id})")
+                logger.info(f"JustWatch: 开始搜索 {title}")
                 
                 # 获取完整的TMDB详情数据，包含多语言标题
                 if content_type == "movie":
@@ -901,9 +901,9 @@ class MovieService:
                         if english_data and full_tmdb_data:
                             full_tmdb_data["english_title"] = english_data.get("title")
                             full_tmdb_data["english_original_title"] = english_data.get("original_title")
-                            logger.error(f"JustWatch: 获取到英文数据 - title: {english_data.get('title')}, original_title: {english_data.get('original_title')}")
+                            logger.info(f"JustWatch: 获取到英文数据 - title: {english_data.get('title')}, original_title: {english_data.get('original_title')}")
                         else:
-                            logger.error(f"JustWatch: 未获取到英文数据")
+                            logger.warning(f"JustWatch: 未获取到英文数据")
                     except Exception as e:
                         logger.error(f"JustWatch: 获取英文数据失败: {e}")
                     # 获取alternative_titles
@@ -921,9 +921,9 @@ class MovieService:
                         if english_data and full_tmdb_data:
                             full_tmdb_data["english_name"] = english_data.get("name")
                             full_tmdb_data["english_original_name"] = english_data.get("original_name")
-                            logger.error(f"JustWatch: 获取到英文数据 - name: {english_data.get('name')}, original_name: {english_data.get('original_name')}")
+                            logger.info(f"JustWatch: 获取到英文数据 - name: {english_data.get('name')}, original_name: {english_data.get('original_name')}")
                         else:
-                            logger.error(f"JustWatch: 未获取到英文数据")
+                            logger.warning(f"JustWatch: 未获取到英文数据")
                     except Exception as e:
                         logger.error(f"JustWatch: 获取英文数据失败: {e}")
                     # 获取alternative_titles
