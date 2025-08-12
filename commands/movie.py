@@ -991,17 +991,15 @@ class MovieService:
         
         similarity = self._calculate_title_similarity(search_title, result_title)
         
-        # 相似度阈值：
-        # - 0.5+ : 很可能是正确匹配
-        # - 0.3-0.5 : 可能匹配，但需要谨慎
-        # - <0.3 : 很可能是错误匹配
-        if similarity < 0.3:
-            logger.info(f"JustWatch匹配度过低，跳过: '{search_title}' vs '{result_title}' (相似度: {similarity:.2f})")
+        # 相似度阈值：只接受高度匹配的结果，避免匹配到错误的内容
+        # - 1.0: 完全匹配（理想）
+        # - 0.95+: 极高匹配度（可接受）
+        # - <0.95: 可能是错误匹配，不使用
+        if similarity < 0.95:
+            logger.info(f"JustWatch匹配度不足，跳过: '{search_title}' vs '{result_title}' (相似度: {similarity:.2f}，需要≥0.95)")
             return False
-        elif similarity < 0.5:
-            logger.info(f"JustWatch匹配度较低，但仍使用: '{search_title}' vs '{result_title}' (相似度: {similarity:.2f})")
         else:
-            logger.info(f"JustWatch匹配度良好: '{search_title}' vs '{result_title}' (相似度: {similarity:.2f})")
+            logger.info(f"JustWatch匹配度极高，使用: '{search_title}' vs '{result_title}' (相似度: {similarity:.2f})")
         
         return True
     
