@@ -569,13 +569,16 @@ class MovieService:
             results = []
             for item in scored_items[:limit]:
                 entry = item['entry']
-                # 添加多国排名信息到entry对象
-                entry.multi_country_data = {
-                    'score': item['score'],
-                    'countries': item['countries'],
-                    'country_ranks': item['country_ranks']
+                # 创建包含多国数据的包装对象
+                wrapper = {
+                    'entry': entry,
+                    'multi_country_data': {
+                        'score': item['score'],
+                        'countries': item['countries'],
+                        'country_ranks': item['country_ranks']
+                    }
                 }
-                results.append(entry)
+                results.append(wrapper)
             
             logger.info(f"多国综合排行榜完成，共 {len(results)} 个结果")
             return results
@@ -2585,13 +2588,21 @@ class MovieService:
         lines = [f"🌍 **多国综合流媒体{type_name}热度排行榜** (更新: {current_time})", 
                 f"📊 数据来源: {countries_str}\n"]
         
-        for i, entry in enumerate(content_list[:15], 1):
+        for i, item in enumerate(content_list[:15], 1):
+            # 处理新的数据结构
+            if isinstance(item, dict) and 'entry' in item:
+                entry = item['entry']
+                multi_data = item.get('multi_country_data', {})
+            else:
+                # 向后兼容旧格式
+                entry = item
+                multi_data = getattr(entry, 'multi_country_data', {})
+            
             title = entry.title
             year = getattr(entry, 'original_release_year', '') or getattr(entry, 'release_date', '')[:4] if hasattr(entry, 'release_date') and entry.release_date else ''
             content_icon = "🎬" if entry.object_type == "MOVIE" else "📺"
             
             # 获取多国数据
-            multi_data = getattr(entry, 'multi_country_data', {})
             score = multi_data.get('score', 0)
             countries_with_rank = multi_data.get('countries', [])
             country_ranks = multi_data.get('country_ranks', {})
