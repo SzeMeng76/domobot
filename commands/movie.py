@@ -1040,8 +1040,17 @@ class MovieService:
                     title = english_data.get(title_field)
                     original_title = english_data.get('original_title' if content_type == 'movie' else 'original_name')
                     
-                    logger.info(f"  英文API标题: {title}")
-                    logger.info(f"  原始标题: {original_title}")
+                    # 详细记录所有可能包含标题的字段
+                    logger.info(f"  英文API完整响应的标题相关字段:")
+                    logger.info(f"    name: {english_data.get('name')}")
+                    logger.info(f"    title: {english_data.get('title')}")
+                    logger.info(f"    original_name: {english_data.get('original_name')}")
+                    logger.info(f"    original_title: {english_data.get('original_title')}")
+                    logger.info(f"    tagline: {english_data.get('tagline')}")
+                    
+                    logger.info(f"  使用的title_field: {title_field}")
+                    logger.info(f"  提取的标题: {title}")
+                    logger.info(f"  提取的原始标题: {original_title}")
                     
                     # 直接添加英文API的标题，不再检查是否为英文
                     if title:
