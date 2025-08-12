@@ -5704,19 +5704,18 @@ async def streaming_tv_ranking_command(update: Update, context: ContextTypes.DEF
             parse_mode=ParseMode.MARKDOWN
         )
         
-        try:
-            if not JUSTWATCH_AVAILABLE:
-                result_text = "❌ JustWatch API不可用，无法获取流媒体排行榜数据"
-            else:
-                ranking_data = await movie_service.get_multi_country_streaming_ranking(
-                    content_type="show", countries=countries, limit=15
+        if not JUSTWATCH_AVAILABLE:
+            result_text = "❌ JustWatch API不可用，无法获取流媒体排行榜数据"
+        else:
+            ranking_data = await movie_service.get_multi_country_streaming_ranking(
+                content_type="show", countries=countries, limit=15
+            )
+            if ranking_data:
+                result_text = movie_service.format_multi_country_streaming_ranking(
+                    ranking_data, content_type="show", countries=countries_display
                 )
-                if ranking_data:
-                    result_text = movie_service.format_multi_country_streaming_ranking(
-                        ranking_data, content_type="show", countries=countries_display
-                    )
-                else:
-                    result_text = "❌ 获取多国综合流媒体电视剧热度排行榜失败，请稍后重试"
+            else:
+                result_text = "❌ 获取多国综合流媒体电视剧热度排行榜失败，请稍后重试"
     else:
         # 单国模式: /streaming_tv_ranking [US]
         country = context.args[0].upper() if context.args else "US"
@@ -5731,28 +5730,23 @@ async def streaming_tv_ranking_command(update: Update, context: ContextTypes.DEF
             parse_mode=ParseMode.MARKDOWN
         )
         
-        try:
-            if not JUSTWATCH_AVAILABLE:
-                result_text = "❌ JustWatch API不可用，无法获取流媒体排行榜数据"
-            else:
-                ranking_data = await movie_service.get_comprehensive_streaming_ranking(
-                    content_type="show", country=country, limit=15
+        if not JUSTWATCH_AVAILABLE:
+            result_text = "❌ JustWatch API不可用，无法获取流媒体排行榜数据"
+        else:
+            ranking_data = await movie_service.get_comprehensive_streaming_ranking(
+                content_type="show", country=country, limit=15
+            )
+            if ranking_data:
+                result_text = movie_service.format_comprehensive_streaming_ranking(
+                    ranking_data, content_type="show", country=country
                 )
-                if ranking_data:
-                    result_text = movie_service.format_comprehensive_streaming_ranking(
-                        ranking_data, content_type="show", country=country
-                    )
-                else:
-                    result_text = "❌ 获取流媒体电视剧排行榜失败，请稍后重试"
+            else:
+                result_text = "❌ 获取流媒体电视剧排行榜失败，请稍后重试"
         
-        await message.edit_text(
-            foldable_text_with_markdown_v2(result_text),
-            parse_mode=ParseMode.MARKDOWN_V2
-        )
-        
-    except Exception as e:
-        logger.error(f"流媒体电视剧排行榜命令执行失败: {e}")
-        await message.edit_text("❌ 获取排行榜数据时发生错误，请稍后重试")
+    await message.edit_text(
+        foldable_text_with_markdown_v2(result_text),
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
