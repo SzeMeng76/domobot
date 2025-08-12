@@ -1017,6 +1017,9 @@ class MovieService:
             logger.info(f"优先获取alternative_titles: {alt_titles_endpoint}")
             alt_titles_data = await self._make_tmdb_request(alt_titles_endpoint)
             
+            # 详细记录alternative_titles的响应
+            logger.info(f"alternative_titles API完整响应: {alt_titles_data}")
+            
             if alt_titles_data and 'titles' in alt_titles_data:
                 logger.info(f"获取到{len(alt_titles_data['titles'])}个alternative titles")
                 for title_info in alt_titles_data['titles']:
@@ -1028,10 +1031,13 @@ class MovieService:
                     if country in ['US', 'GB', 'CA', 'AU'] and title and title not in english_titles:
                         english_titles.append(title)
                         logger.info(f"  ✓ 添加英语国家标题: {title}")
+                    
+                    # 如果是任何标题包含常见的英文词汇，也添加进去
+                    if title and any(word.lower() in title.lower() for word in ['flower', 'sea', 'the', 'and', 'of', 'in', 'to']) and title not in english_titles:
+                        english_titles.append(title)
+                        logger.info(f"  ✓ 添加可能的英文标题: {title} (包含英文词汇)")
             else:
-                logger.info("没有获取到alternative_titles数据")
-                # 详细记录alternative_titles的响应
-                logger.info(f"alternative_titles API响应: {alt_titles_data}")
+                logger.info("没有获取到alternative_titles数据或titles字段为空")
             
             # 补充：如果没有找到alternative titles，获取英文API的标题
             if not english_titles:
