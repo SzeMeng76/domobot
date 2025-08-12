@@ -6783,6 +6783,26 @@ async def movie_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                 # 获取电影详情
                 detail_data = await movie_service.get_movie_details(movie_id)
                 if detail_data:
+                    # 获取增强观看平台数据（包含JustWatch）
+                    movie_title = detail_data.get("title", "") or detail_data.get("original_title", "")
+                    logger.info(f"Movie title for JustWatch search: {movie_title}")
+                    enhanced_providers = await movie_service.get_enhanced_watch_providers(
+                        movie_id, "movie", movie_title
+                    )
+                    
+                    # 将增强的观影平台数据合并到详情数据中
+                    if enhanced_providers:
+                        combined_providers = enhanced_providers.get("combined") or enhanced_providers.get("tmdb")
+                        if combined_providers:
+                            detail_data["watch/providers"] = combined_providers
+                        
+                        # 传递完整的增强数据
+                        detail_data["enhanced_providers"] = enhanced_providers
+                        
+                        # 传递JustWatch MediaEntry数据
+                        if enhanced_providers.get("justwatch_media_entry"):
+                            detail_data["justwatch_media_entry"] = enhanced_providers["justwatch_media_entry"]
+                    
                     result_text, poster_url = movie_service.format_movie_details(detail_data)
                     
                     # 如果有海报URL，发送图片消息
@@ -6909,6 +6929,26 @@ async def tv_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                 # 获取电视剧详情
                 detail_data = await movie_service.get_tv_details(tv_id)
                 if detail_data:
+                    # 获取增强观看平台数据（包含JustWatch）
+                    tv_title = detail_data.get("name", "") or detail_data.get("original_name", "")
+                    logger.info(f"TV title for JustWatch search: {tv_title}")
+                    enhanced_providers = await movie_service.get_enhanced_watch_providers(
+                        tv_id, "tv", tv_title
+                    )
+                    
+                    # 将增强的观影平台数据合并到详情数据中
+                    if enhanced_providers:
+                        combined_providers = enhanced_providers.get("combined") or enhanced_providers.get("tmdb")
+                        if combined_providers:
+                            detail_data["watch/providers"] = combined_providers
+                        
+                        # 传递完整的增强数据
+                        detail_data["enhanced_providers"] = enhanced_providers
+                        
+                        # 传递JustWatch MediaEntry数据
+                        if enhanced_providers.get("justwatch_media_entry"):
+                            detail_data["justwatch_media_entry"] = enhanced_providers["justwatch_media_entry"]
+                    
                     result_text, poster_url = movie_service.format_tv_details(detail_data)
                     
                     # 如果有海报URL，发送图片消息
