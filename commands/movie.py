@@ -928,11 +928,10 @@ class MovieService:
             result["tmdb"] = tmdb_data
             
             # 获取 JustWatch 数据作为补充
-            logger.info(f"JustWatch检查: JUSTWATCH_AVAILABLE={JUSTWATCH_AVAILABLE}, title='{title}', content_id={content_id}")
             if JUSTWATCH_AVAILABLE and title:
                 logger.info(f"JustWatch: 开始搜索 {title}")
                 # 由于我们只有基本信息，创建简化的数据结构用于搜索
-                search_data = {"id": content_id}  # 添加ID用于获取英文标题
+                search_data = {}
                 if content_type == "movie":
                     search_data["original_title"] = title
                     search_data["title"] = title
