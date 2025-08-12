@@ -1020,12 +1020,19 @@ class MovieService:
             # 详细记录alternative_titles的响应
             logger.info(f"alternative_titles API完整响应: {alt_titles_data}")
             
-            if alt_titles_data and 'titles' in alt_titles_data:
-                logger.info(f"获取到{len(alt_titles_data['titles'])}个alternative titles")
-                for title_info in alt_titles_data['titles']:
+            # 验证返回的ID是否匹配
+            if alt_titles_data and alt_titles_data.get('id') != tmdb_id:
+                logger.warning(f"⚠️ API返回的ID {alt_titles_data.get('id')} 与请求的ID {tmdb_id} 不匹配！")
+                logger.warning(f"这可能是TMDB数据错误，跳过alternative_titles")
+                alt_titles_data = None  # 忽略错误的数据
+            
+            if alt_titles_data and 'results' in alt_titles_data:
+                logger.info(f"获取到{len(alt_titles_data['results'])}个alternative titles")
+                for title_info in alt_titles_data['results']:
                     country = title_info.get('iso_3166_1')
                     title = title_info.get('title')
-                    logger.info(f"  alternative title: {title} (国家: {country})")
+                    title_type = title_info.get('type', '')
+                    logger.info(f"  alternative title: {title} (国家: {country}, 类型: {title_type})")
                     
                     # 优先获取英语国家的标题，不再依赖_is_likely_english判断
                     if country in ['US', 'GB', 'CA', 'AU'] and title and title not in english_titles:
@@ -1033,11 +1040,11 @@ class MovieService:
                         logger.info(f"  ✓ 添加英语国家标题: {title}")
                     
                     # 如果是任何标题包含常见的英文词汇，也添加进去
-                    if title and any(word.lower() in title.lower() for word in ['flower', 'sea', 'the', 'and', 'of', 'in', 'to']) and title not in english_titles:
+                    elif title and any(word.lower() in title.lower() for word in ['flower', 'sea', 'the', 'and', 'of', 'in', 'to']) and title not in english_titles:
                         english_titles.append(title)
                         logger.info(f"  ✓ 添加可能的英文标题: {title} (包含英文词汇)")
             else:
-                logger.info("没有获取到alternative_titles数据或titles字段为空")
+                logger.info("没有获取到alternative_titles数据或results字段为空")
             
             # 补充：无论是否找到alternative titles，都获取英文API的标题作为对比
             logger.info(f"处理完alternative_titles后的english_titles: {english_titles}")
@@ -1100,6 +1107,47 @@ class MovieService:
         except Exception as e:
             logger.warning(f"TMDB搜索失败: {e}")
             return []
+    
+    def _find_best_match_from_search(self, search_results: List[Dict], query: str) -> Optional[Dict]:
+        """从搜索结果中找到最匹配查询词的结果"""
+        if not search_results or not query:
+            return None
+        
+        query_lower = query.lower().strip()
+        best_match = None
+        best_score = 0
+        
+        for result in search_results:
+            # 获取节目名称
+            name = result.get('name') or result.get('title', '')
+            original_name = result.get('original_name') or result.get('original_title', '')
+            
+            # 计算匹配度
+            name_score = self._calculate_title_similarity(query_lower, name.lower())
+            original_score = self._calculate_title_similarity(query_lower, original_name.lower())
+            
+            # 取最高分
+            max_score = max(name_score, original_score)
+            
+            logger.info(f"  搜索结果匹配度: '{name}' / '{original_name}' -> {max_score:.2f}")
+            
+            # 如果完全匹配，直接返回
+            if max_score >= 0.95:
+                logger.info(f"  ✓ 找到完全匹配: {name}")
+                return result
+            
+            # 记录最佳匹配
+            if max_score > best_score:
+                best_score = max_score
+                best_match = result
+        
+        if best_match and best_score >= 0.6:  # 至少60%相似度
+            name = best_match.get('name') or best_match.get('title', '')
+            logger.info(f"  ✓ 最佳匹配 (相似度: {best_score:.2f}): {name}")
+            return best_match
+        
+        logger.info(f"  未找到足够匹配的结果 (最高相似度: {best_score:.2f})")
+        return search_results[0] if search_results else None  # 如果没有好的匹配，返回第一个
 
     async def _enhanced_justwatch_search(self, tmdb_data: Dict, primary_title: str, content_type: str) -> Optional[List]:
         """增强的JustWatch搜索策略 - 尝试多个标题"""
@@ -1131,21 +1179,23 @@ class MovieService:
                 search_results = await self._search_tmdb_for_id(original_title or primary_title, content_type)
                 if search_results:
                     logger.info(f"JustWatch: TMDB搜索到可能匹配: {search_results}")
-                    # 使用第一个搜索结果的英文标题
-                    for result in search_results[:2]:  # 只检查前2个结果
-                        result_tmdb_id = result.get('id')
+                    
+                    # 寻找最匹配的搜索结果，而不是简单使用第一个
+                    best_match = self._find_best_match_from_search(search_results, original_title or primary_title)
+                    if best_match:
+                        result_tmdb_id = best_match.get('id')
                         if result_tmdb_id:
-                            logger.info(f"JustWatch: 尝试从TMDB ID {result_tmdb_id}获取英文标题...")
+                            logger.info(f"JustWatch: 使用最佳匹配结果 (ID: {result_tmdb_id})获取英文标题...")
                             result_english_titles = await self._get_english_titles(result_tmdb_id, content_type)
                             english_titles.extend(result_english_titles)
                             
                             # 同时添加搜索结果中的英文标题
                             if content_type == "movie":
-                                result_title = result.get('title')
-                                result_original = result.get('original_title')
+                                result_title = best_match.get('title')
+                                result_original = best_match.get('original_title')
                             else:
-                                result_title = result.get('name')
-                                result_original = result.get('original_name')
+                                result_title = best_match.get('name')
+                                result_original = best_match.get('original_name')
                             
                             if result_title and self._is_likely_english(result_title) and result_title not in english_titles:
                                 english_titles.append(result_title)
