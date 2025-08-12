@@ -900,7 +900,8 @@ class MovieService:
                     search_data["original_name"] = title
                     search_data["name"] = title
                 
-                justwatch_results = await self._enhanced_justwatch_search(search_data, title, content_type)
+                # 当用户已经选择了具体内容时，不使用智能匹配
+                justwatch_results = await self._enhanced_justwatch_search(search_data, title, content_type, use_smart_matching=False)
                 
                 if justwatch_results and len(justwatch_results) > 0:
                     logger.info(f"JustWatch: 找到 {len(justwatch_results)} 个有效搜索结果")
@@ -1147,7 +1148,7 @@ class MovieService:
         logger.info(f"  未找到足够匹配的结果 (最高相似度: {best_score:.2f})")
         return search_results[0] if search_results else None  # 如果没有好的匹配，返回第一个
 
-    async def _enhanced_justwatch_search(self, tmdb_data: Dict, primary_title: str, content_type: str) -> Optional[List]:
+    async def _enhanced_justwatch_search(self, tmdb_data: Dict, primary_title: str, content_type: str, use_smart_matching: bool = True) -> Optional[List]:
         """增强的JustWatch搜索策略 - 尝试多个标题"""
         titles_to_try = []
         
@@ -1178,12 +1179,20 @@ class MovieService:
                 if search_results:
                     logger.info(f"JustWatch: TMDB搜索到可能匹配: {search_results}")
                     
-                    # 寻找最匹配的搜索结果，而不是简单使用第一个
-                    best_match = self._find_best_match_from_search(search_results, original_title or primary_title)
+                    # 根据use_smart_matching决定是否使用智能匹配
+                    if use_smart_matching:
+                        # 寻找最匹配的搜索结果，而不是简单使用第一个
+                        best_match = self._find_best_match_from_search(search_results, original_title or primary_title)
+                        logger.info(f"JustWatch: 智能匹配模式 - 使用最佳匹配结果")
+                    else:
+                        # 直接使用第一个搜索结果（用户已经通过其他方式指定了具体内容）
+                        best_match = search_results[0]
+                        logger.info(f"JustWatch: 直接模式 - 使用第一个搜索结果")
+                    
                     if best_match:
                         result_tmdb_id = best_match.get('id')
                         if result_tmdb_id:
-                            logger.info(f"JustWatch: 使用最佳匹配结果 (ID: {result_tmdb_id})获取英文标题...")
+                            logger.info(f"JustWatch: 使用匹配结果 (ID: {result_tmdb_id})获取英文标题...")
                             result_english_titles = await self._get_english_titles(result_tmdb_id, content_type)
                             english_titles.extend(result_english_titles)
                             
