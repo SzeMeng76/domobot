@@ -1030,6 +1030,8 @@ class MovieService:
                         logger.info(f"  ✓ 添加英语国家标题: {title}")
             else:
                 logger.info("没有获取到alternative_titles数据")
+                # 详细记录alternative_titles的响应
+                logger.info(f"alternative_titles API响应: {alt_titles_data}")
             
             # 补充：如果没有找到alternative titles，获取英文API的标题
             if not english_titles:
