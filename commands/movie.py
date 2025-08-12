@@ -1095,10 +1095,10 @@ class MovieService:
         
         # 相似度阈值：只接受高度匹配的结果，避免匹配到错误的内容
         # - 1.0: 完全匹配（理想）
-        # - 0.95+: 极高匹配度（可接受）
-        # - <0.95: 可能是错误匹配，不使用
-        if similarity < 0.95:
-            logger.info(f"JustWatch匹配度不足，跳过: '{search_title}' vs '{result_title}' (相似度: {similarity:.2f}，需要≥0.95)")
+        # - 0.85+: 高匹配度（可接受）
+        # - <0.85: 可能是错误匹配，不使用
+        if similarity < 0.85:
+            logger.info(f"JustWatch匹配度不足，跳过: '{search_title}' vs '{result_title}' (相似度: {similarity:.2f}，需要≥0.85)")
             return False
         else:
             logger.info(f"JustWatch匹配度极高，使用: '{search_title}' vs '{result_title}' (相似度: {similarity:.2f})")
@@ -1232,7 +1232,7 @@ class MovieService:
             logger.info(f"  搜索结果匹配度: '{name}' / '{original_name}' -> {max_score:.2f}")
             
             # 如果完全匹配，直接返回
-            if max_score >= 0.95:
+            if max_score >= 0.85:
                 logger.info(f"  ✓ 找到完全匹配: {name}")
                 return result
             
