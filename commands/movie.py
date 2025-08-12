@@ -1005,6 +1005,50 @@ class MovieService:
         
         return True
     
+    async def _get_english_titles(self, tmdb_id: int, content_type: str) -> List[str]:
+        """从TMDB API获取英文标题（包括alternative_titles和translations）"""
+        english_titles = []
+        
+        try:
+            # 获取alternative_titles
+            alt_titles_endpoint = f"{'movie' if content_type == 'movie' else 'tv'}/{tmdb_id}/alternative_titles"
+            alt_titles_data = await self._make_tmdb_request(alt_titles_endpoint)
+            
+            if alt_titles_data and 'titles' in alt_titles_data:
+                for title_info in alt_titles_data['titles']:
+                    # 优先获取美国、英国、加拿大、澳大利亚的英文标题
+                    if title_info.get('iso_3166_1') in ['US', 'GB', 'CA', 'AU']:
+                        title = title_info.get('title')
+                        if title and self._is_likely_english(title) and title not in english_titles:
+                            english_titles.append(title)
+            
+            # 获取translations中的英文标题
+            translations_endpoint = f"{'movie' if content_type == 'movie' else 'tv'}/{tmdb_id}/translations"
+            translations_data = await self._make_tmdb_request(translations_endpoint)
+            
+            if translations_data and 'translations' in translations_data:
+                for translation in translations_data['translations']:
+                    if translation.get('iso_639_1') == 'en':  # 英文翻译
+                        data = translation.get('data', {})
+                        title_field = 'title' if content_type == 'movie' else 'name'
+                        title = data.get(title_field)
+                        if title and title not in english_titles:
+                            english_titles.append(title)
+            
+            # 如果以上都没有找到，尝试直接获取英文版本的详细信息
+            if not english_titles:
+                english_data = await self._make_tmdb_request(f"{'movie' if content_type == 'movie' else 'tv'}/{tmdb_id}", language="en-US")
+                if english_data:
+                    title_field = 'title' if content_type == 'movie' else 'name'
+                    title = english_data.get(title_field)
+                    if title and self._is_likely_english(title):
+                        english_titles.append(title)
+                        
+        except Exception as e:
+            logger.warning(f"获取英文标题时出错: {e}")
+        
+        return english_titles
+
     async def _enhanced_justwatch_search(self, tmdb_data: Dict, primary_title: str, content_type: str) -> Optional[List]:
         """增强的JustWatch搜索策略 - 尝试多个标题"""
         titles_to_try = []
@@ -1013,13 +1057,30 @@ class MovieService:
         if content_type == "movie":
             original_title = tmdb_data.get("original_title", "")
             local_title = tmdb_data.get("title", "")
+            tmdb_id = tmdb_data.get("id")
         else:
             original_title = tmdb_data.get("original_name", "")
             local_title = tmdb_data.get("name", "")
+            tmdb_id = tmdb_data.get("id")
+        
+        # 如果原标题不是英文，尝试获取英文标题
+        english_titles = []
+        if not self._is_likely_english(original_title) and tmdb_id:
+            english_titles = await self._get_english_titles(tmdb_id, content_type)
+            logger.info(f"JustWatch: 获取到的英文标题: {english_titles}")
         
         # 构建搜索标题列表，按优先级排序
-        # 优先级：1. 英文原标题 2. 主要标题 3. 本地化标题
-        if original_title and self._is_likely_english(original_title):
+        # 优先级：1. TMDB英文标题 2. 英文原标题 3. 主要标题 4. 本地化标题
+        if english_titles:
+            # 有英文标题时，优先使用英文标题
+            titles_to_try.extend(english_titles)
+            if original_title and original_title not in titles_to_try:
+                titles_to_try.append(original_title)
+            if local_title and local_title not in titles_to_try:
+                titles_to_try.append(local_title)
+            if primary_title and primary_title not in titles_to_try:
+                titles_to_try.append(primary_title)
+        elif original_title and self._is_likely_english(original_title):
             titles_to_try.append(original_title)
             if local_title and local_title != original_title:
                 titles_to_try.append(local_title)
