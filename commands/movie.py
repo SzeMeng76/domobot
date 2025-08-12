@@ -1070,6 +1070,30 @@ class MovieService:
         logger.info(f"最终获取到的英文标题: {english_titles}")
         return english_titles
 
+    async def _search_tmdb_for_id(self, title: str, content_type: str) -> List[Dict]:
+        """通过标题搜索TMDB获取ID和基本信息"""
+        try:
+            endpoint = f"search/{'movie' if content_type == 'movie' else 'tv'}"
+            params = {
+                "query": title,
+                "language": "zh-CN",
+                "include_adult": False
+            }
+            
+            logger.info(f"搜索TMDB: {endpoint} with query '{title}'")
+            data = await self._make_tmdb_request(endpoint, params)
+            
+            if data and data.get('results'):
+                logger.info(f"TMDB搜索到 {len(data['results'])} 个结果")
+                return data['results']
+            else:
+                logger.info(f"TMDB搜索无结果")
+                return []
+                
+        except Exception as e:
+            logger.warning(f"TMDB搜索失败: {e}")
+            return []
+
     async def _enhanced_justwatch_search(self, tmdb_data: Dict, primary_title: str, content_type: str) -> Optional[List]:
         """增强的JustWatch搜索策略 - 尝试多个标题"""
         titles_to_try = []
@@ -1089,15 +1113,44 @@ class MovieService:
         logger.info(f"JustWatch: 检查原标题是否为英文: '{original_title}' -> {self._is_likely_english(original_title)}")
         logger.info(f"JustWatch: TMDB ID: {tmdb_id}")
         
-        if not self._is_likely_english(original_title) and tmdb_id:
-            logger.info(f"JustWatch: 开始获取英文标题...")
-            english_titles = await self._get_english_titles(tmdb_id, content_type)
-            logger.info(f"JustWatch: 获取到的英文标题: {english_titles}")
+        if not self._is_likely_english(original_title):
+            if tmdb_id:
+                logger.info(f"JustWatch: 使用已有TMDB ID获取英文标题...")
+                english_titles = await self._get_english_titles(tmdb_id, content_type)
+                logger.info(f"JustWatch: 获取到的英文标题: {english_titles}")
+            else:
+                # 如果没有TMDB ID，尝试通过搜索获取
+                logger.info(f"JustWatch: 没有TMDB ID，尝试通过标题搜索获取...")
+                search_results = await self._search_tmdb_for_id(original_title or primary_title, content_type)
+                if search_results:
+                    logger.info(f"JustWatch: TMDB搜索到可能匹配: {search_results}")
+                    # 使用第一个搜索结果的英文标题
+                    for result in search_results[:2]:  # 只检查前2个结果
+                        result_tmdb_id = result.get('id')
+                        if result_tmdb_id:
+                            logger.info(f"JustWatch: 尝试从TMDB ID {result_tmdb_id}获取英文标题...")
+                            result_english_titles = await self._get_english_titles(result_tmdb_id, content_type)
+                            english_titles.extend(result_english_titles)
+                            
+                            # 同时添加搜索结果中的英文标题
+                            if content_type == "movie":
+                                result_title = result.get('title')
+                                result_original = result.get('original_title')
+                            else:
+                                result_title = result.get('name')
+                                result_original = result.get('original_name')
+                            
+                            if result_title and self._is_likely_english(result_title) and result_title not in english_titles:
+                                english_titles.append(result_title)
+                            if result_original and self._is_likely_english(result_original) and result_original not in english_titles:
+                                english_titles.append(result_original)
+                    
+                    logger.info(f"JustWatch: 通过TMDB搜索获取到的英文标题: {english_titles}")
         else:
             if self._is_likely_english(original_title):
                 logger.info(f"JustWatch: 原标题已是英文，跳过英文标题获取")
             if not tmdb_id:
-                logger.info(f"JustWatch: 缺少TMDB ID，无法获取英文标题")
+                logger.info(f"JustWatch: 缺少TMDB ID，但原标题是英文")
         
         # 构建搜索标题列表，按优先级排序
         # 优先级：1. TMDB英文标题 2. 英文原标题 3. 主要标题 4. 本地化标题
