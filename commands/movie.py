@@ -1039,7 +1039,8 @@ class MovieService:
             else:
                 logger.info("没有获取到alternative_titles数据或titles字段为空")
             
-            # 补充：如果没有找到alternative titles，获取英文API的标题
+            # 补充：无论是否找到alternative titles，都获取英文API的标题作为对比
+            logger.info(f"处理完alternative_titles后的english_titles: {english_titles}")
             if not english_titles:
                 logger.info("没有找到alternative titles，获取英文API标题作为补充...")
                 english_data = await self._make_tmdb_request(f"{'movie' if content_type == 'movie' else 'tv'}/{tmdb_id}", language="en-US")
