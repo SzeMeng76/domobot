@@ -2649,8 +2649,8 @@ class MovieService:
             if hasattr(entry, 'offers') and entry.offers:
                 platforms = []
                 for offer in entry.offers[:3]:  # 只显示前3个平台
-                    if hasattr(offer, 'package') and offer.package and offer.package.clear_name:
-                        platforms.append(offer.package.clear_name)
+                    if hasattr(offer, 'package') and offer.package and offer.package.name:
+                        platforms.append(offer.package.name)
                 
                 if platforms:
                     lines.append(f"   🎬 主要平台: {' | '.join(platforms)}")
