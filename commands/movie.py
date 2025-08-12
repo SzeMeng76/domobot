@@ -1006,51 +1006,52 @@ class MovieService:
         return True
     
     async def _get_english_titles(self, tmdb_id: int, content_type: str) -> List[str]:
-        """从TMDB API获取英文标题，优先使用原生英文API"""
+        """从TMDB API获取英文标题，优先从alternative_titles获取真正的英文标题"""
         english_titles = []
         
         try:
             logger.info(f"开始获取TMDB ID {tmdb_id} ({content_type})的英文标题")
             
-            # 优先：直接获取英文版本的详细信息（最准确的原生英文标题）
-            logger.info("首先获取英文API的原生标题...")
-            english_data = await self._make_tmdb_request(f"{'movie' if content_type == 'movie' else 'tv'}/{tmdb_id}", language="en-US")
-            if english_data:
-                title_field = 'title' if content_type == 'movie' else 'name'
-                title = english_data.get(title_field)
-                original_title = english_data.get('original_title' if content_type == 'movie' else 'original_name')
-                
-                logger.info(f"  英文API标题: {title}")
-                logger.info(f"  原始标题: {original_title}")
-                
-                # 添加英文API的标题
-                if title and self._is_likely_english(title):
-                    english_titles.append(title)
-                    logger.info(f"  ✓ 添加英文API标题: {title}")
-                
-                # 添加原始标题（如果是英文且不重复）
-                if original_title and self._is_likely_english(original_title) and original_title not in english_titles:
-                    english_titles.append(original_title)
-                    logger.info(f"  ✓ 添加原始标题: {original_title}")
-            
-            # 补充：获取alternative_titles中的英文标题
+            # 优先：获取alternative_titles中的英文标题（最准确）
             alt_titles_endpoint = f"{'movie' if content_type == 'movie' else 'tv'}/{tmdb_id}/alternative_titles"
-            logger.info(f"补充获取alternative_titles: {alt_titles_endpoint}")
+            logger.info(f"优先获取alternative_titles: {alt_titles_endpoint}")
             alt_titles_data = await self._make_tmdb_request(alt_titles_endpoint)
             
             if alt_titles_data and 'titles' in alt_titles_data:
                 logger.info(f"获取到{len(alt_titles_data['titles'])}个alternative titles")
                 for title_info in alt_titles_data['titles']:
-                    # 优先获取美国、英国、加拿大、澳大利亚的英文标题
                     country = title_info.get('iso_3166_1')
                     title = title_info.get('title')
                     logger.info(f"  alternative title: {title} (国家: {country})")
                     
-                    if country in ['US', 'GB', 'CA', 'AU'] and title and self._is_likely_english(title) and title not in english_titles:
+                    # 优先获取英语国家的标题，不再依赖_is_likely_english判断
+                    if country in ['US', 'GB', 'CA', 'AU'] and title and title not in english_titles:
                         english_titles.append(title)
-                        logger.info(f"  ✓ 添加英文标题: {title}")
+                        logger.info(f"  ✓ 添加英语国家标题: {title}")
             else:
                 logger.info("没有获取到alternative_titles数据")
+            
+            # 补充：如果没有找到alternative titles，获取英文API的标题
+            if not english_titles:
+                logger.info("没有找到alternative titles，获取英文API标题作为补充...")
+                english_data = await self._make_tmdb_request(f"{'movie' if content_type == 'movie' else 'tv'}/{tmdb_id}", language="en-US")
+                if english_data:
+                    title_field = 'title' if content_type == 'movie' else 'name'
+                    title = english_data.get(title_field)
+                    original_title = english_data.get('original_title' if content_type == 'movie' else 'original_name')
+                    
+                    logger.info(f"  英文API标题: {title}")
+                    logger.info(f"  原始标题: {original_title}")
+                    
+                    # 直接添加英文API的标题，不再检查是否为英文
+                    if title:
+                        english_titles.append(title)
+                        logger.info(f"  ✓ 添加英文API标题: {title}")
+                    
+                    # 添加原始标题（如果不重复）
+                    if original_title and original_title not in english_titles:
+                        english_titles.append(original_title)
+                        logger.info(f"  ✓ 添加原始标题: {original_title}")
                         
         except Exception as e:
             logger.warning(f"获取英文标题时出错: {e}")
