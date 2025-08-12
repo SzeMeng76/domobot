@@ -488,6 +488,102 @@ class MovieService:
             logger.error(f"获取综合流媒体排行榜失败: {e}")
             return None
     
+    async def get_multi_country_streaming_ranking(self, content_type: str = "movie", countries: List[str] = None, limit: int = 20) -> Optional[List]:
+        """获取多国综合流媒体热度排行榜
+        
+        Args:
+            content_type: "movie" 或 "show"
+            countries: 国家代码列表，默认为主要国家
+            limit: 返回数量
+        """
+        if countries is None:
+            countries = ["US", "GB", "DE", "FR", "JP", "KR", "AU", "CA"]
+        
+        try:
+            logger.info(f"开始获取多国综合排行榜: {countries}")
+            all_entries = {}  # 使用字典去重，key为title+year
+            country_scores = {}  # 记录每个内容在各国的排名
+            
+            # 从每个国家获取数据
+            for country in countries:
+                try:
+                    logger.info(f"获取 {country} 的数据...")
+                    country_data = await self.get_justwatch_popular_content(
+                        country=country, content_type=content_type, count=30
+                    )
+                    
+                    if country_data:
+                        for rank, entry in enumerate(country_data, 1):
+                            # 创建唯一标识符
+                            title = entry.title
+                            year = getattr(entry, 'release_date', '')[:4] if hasattr(entry, 'release_date') and entry.release_date else ''
+                            if not year and hasattr(entry, 'original_release_year'):
+                                year = str(entry.original_release_year)
+                            
+                            unique_id = f"{title}_{year}".lower().replace(" ", "_")
+                            
+                            # 如果是新内容，添加到字典
+                            if unique_id not in all_entries:
+                                all_entries[unique_id] = entry
+                                country_scores[unique_id] = {}
+                            
+                            # 记录在该国家的排名（排名越高分数越高）
+                            rank_score = max(0, 100 - rank * 2)  # 第1名=98分，第2名=96分，依此类推
+                            country_scores[unique_id][country] = rank_score
+                            
+                            logger.debug(f"  {country}: #{rank} {title} -> {rank_score}分")
+                            
+                except Exception as e:
+                    logger.warning(f"获取 {country} 数据失败: {e}")
+                    continue
+            
+            # 计算综合分数并排序
+            scored_items = []
+            for unique_id, entry in all_entries.items():
+                country_data = country_scores[unique_id]
+                
+                # 基础分数：各国排名分数的平均值
+                base_score = sum(country_data.values()) / len(country_data) if country_data else 0
+                
+                # 覆盖度加权：在更多国家有排名的内容获得额外分数
+                coverage_bonus = len(country_data) * 5  # 每个国家额外5分
+                
+                # 流媒体热度分数（如果有的话）
+                streaming_score = self._calculate_streaming_score(entry) * 0.3
+                
+                final_score = base_score + coverage_bonus + streaming_score
+                
+                scored_items.append({
+                    'entry': entry,
+                    'score': final_score,
+                    'countries': list(country_data.keys()),
+                    'country_ranks': country_data
+                })
+                
+                logger.debug(f"综合评分: {entry.title} -> {final_score:.1f} (基础:{base_score:.1f} 覆盖:{coverage_bonus} 流媒体:{streaming_score:.1f})")
+            
+            # 按分数排序
+            scored_items.sort(key=lambda x: x['score'], reverse=True)
+            
+            # 返回结果，包含额外的多国排名信息
+            results = []
+            for item in scored_items[:limit]:
+                entry = item['entry']
+                # 添加多国排名信息到entry对象
+                entry.multi_country_data = {
+                    'score': item['score'],
+                    'countries': item['countries'],
+                    'country_ranks': item['country_ranks']
+                }
+                results.append(entry)
+            
+            logger.info(f"多国综合排行榜完成，共 {len(results)} 个结果")
+            return results
+            
+        except Exception as e:
+            logger.error(f"获取多国综合排行榜失败: {e}")
+            return None
+    
     async def get_tv_details(self, tv_id: int) -> Optional[Dict]:
         """获取电视剧详情"""
         cache_key = f"tv_detail_{tv_id}"
@@ -2474,6 +2570,98 @@ class MovieService:
         ])
         
         return "\n".join(lines)
+    
+    def format_multi_country_streaming_ranking(self, content_list: List, content_type: str = "movie", countries: List[str] = None) -> str:
+        """格式化多国综合流媒体热度排行榜"""
+        if not content_list:
+            return "❌ 没有找到多国流媒体热度排行榜数据"
+        
+        from datetime import datetime
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M")
+        
+        type_name = "电影" if content_type == "movie" else "电视剧"
+        countries_str = " | ".join([get_country_flag(c) for c in (countries or ["US", "GB", "DE", "FR", "JP", "KR", "AU", "CA"])])
+        
+        lines = [f"🌍 **多国综合流媒体{type_name}热度排行榜** (更新: {current_time})", 
+                f"📊 数据来源: {countries_str}\n"]
+        
+        for i, entry in enumerate(content_list[:15], 1):
+            title = entry.title
+            year = getattr(entry, 'original_release_year', '') or getattr(entry, 'release_date', '')[:4] if hasattr(entry, 'release_date') and entry.release_date else ''
+            content_icon = "🎬" if entry.object_type == "MOVIE" else "📺"
+            
+            # 获取多国数据
+            multi_data = getattr(entry, 'multi_country_data', {})
+            score = multi_data.get('score', 0)
+            countries_with_rank = multi_data.get('countries', [])
+            country_ranks = multi_data.get('country_ranks', {})
+            
+            # 基本信息行
+            coverage_info = f"({len(countries_with_rank)}国上榜)" if countries_with_rank else ""
+            lines.append(f"**#{i}** {content_icon} **{title}** ({year}) `综合热度: {score:.1f}` {coverage_info}")
+            
+            # 各国排名详情
+            rank_details = []
+            for country in sorted(countries_with_rank):
+                flag = get_country_flag(country)
+                rank_score = country_ranks.get(country, 0)
+                # 根据分数反推大致排名
+                approx_rank = max(1, int((100 - rank_score) / 2 + 1))
+                rank_details.append(f"{flag}#{approx_rank}")
+            
+            if rank_details:
+                # 每行最多显示6个国家，避免过长
+                for chunk_start in range(0, len(rank_details), 6):
+                    chunk = rank_details[chunk_start:chunk_start + 6]
+                    lines.append(f"   📊 {' | '.join(chunk)}")
+            
+            # 流媒体热度信息（如果有的话）
+            if hasattr(entry, 'streaming_charts') and entry.streaming_charts:
+                charts = entry.streaming_charts
+                if charts.rank:
+                    trend_symbol = {'UP': '📈', 'DOWN': '📉', 'STABLE': '➡️'}.get(charts.trend, '➡️')
+                    lines.append(f"   🎯 主要市场排名: {trend_symbol}#{charts.rank}")
+            
+            # 评分信息
+            ratings = []
+            if hasattr(entry, 'scoring') and entry.scoring:
+                if entry.scoring.tmdb_popularity:
+                    ratings.append(f"TMDB热度: {entry.scoring.tmdb_popularity:.1f}")
+                if entry.scoring.jw_rating:
+                    jw_score = entry.scoring.jw_rating * 10
+                    ratings.append(f"JW评分: {jw_score:.1f}")
+            
+            if ratings:
+                lines.append(f"   ⭐ {' | '.join(ratings)}")
+            
+            # 显示可用平台（取第一个国家的数据作为示例）
+            if hasattr(entry, 'offers') and entry.offers:
+                platforms = []
+                for offer in entry.offers[:3]:  # 只显示前3个平台
+                    if hasattr(offer, 'package') and offer.package and offer.package.clear_name:
+                        platforms.append(offer.package.clear_name)
+                
+                if platforms:
+                    lines.append(f"   🎬 主要平台: {' | '.join(platforms)}")
+            
+            # 添加详情命令
+            tmdb_id = entry.tmdb_id
+            if tmdb_id:
+                detail_cmd = "/movie_detail" if entry.object_type == "MOVIE" else "/tv_detail"
+                lines.append(f"   `{detail_cmd} {tmdb_id}`")
+            
+            lines.append("")  # 空行分隔
+        
+        # 添加说明
+        lines.extend([
+            "💡 **排行榜说明**:",
+            "• 综合热度 = 各国排名平均分 + 覆盖度加成 + 流媒体热度",
+            "• 在更多国家上榜的内容会获得额外加分",
+            "• 数据来源于各国JustWatch流媒体平台排行榜",
+            f"• 🌍 覆盖国家: {countries_str}"
+        ])
+        
+        return "\n".join(lines)
 
     def format_comprehensive_streaming_ranking(self, content_list: List, content_type: str = "movie", country: str = "US") -> str:
         """格式化综合流媒体热度排行榜"""
@@ -4088,7 +4276,7 @@ async def movie_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "`/movie_videos <电影ID>` - 获取预告片和视频\n"
             "`/movie_reviews <电影ID>` - 获取电影用户评价\n"
             "`/movie_trending` - 获取Trakt热门电影\n"
-            "`/streaming_movie_ranking [国家码]` - 获取综合流媒体电影热度排行榜\n"
+            "`/streaming_movie_ranking [国家码|multi]` - 获取综合流媒体电影热度排行榜\n"
             "`/movie_related <电影ID>` - 获取Trakt相关电影推荐\n"
             "`/movie_watch <电影ID>` - 获取观看平台\n\n"
             "**热门趋势:**\n"
@@ -4199,8 +4387,9 @@ async def movie_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     用法:
     /movie_hot - 混合显示TMDB、JustWatch和Trakt数据（默认）
     /movie_hot tmdb - 只显示TMDB数据
-    /movie_hot justwatch - 只显示JustWatch数据
+    /movie_hot justwatch - 多国综合JustWatch数据（默认）
     /movie_hot justwatch US - 显示美国JustWatch数据
+    /movie_hot justwatch multi US GB DE - 指定国家多国综合
     /movie_hot trakt - 只显示Trakt用户数据
     """
     if not update.message or not update.effective_chat:
@@ -4215,7 +4404,37 @@ async def movie_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     # 解析参数
     source = context.args[0].lower() if context.args else "mixed"
-    country = context.args[1].upper() if len(context.args) > 1 else "US"
+    
+    # JustWatch源的国家解析逻辑（支持多国模式）
+    if source == "justwatch" and len(context.args) > 1:
+        # 检查是否为单国模式（单个有效国家代码）
+        valid_countries = {"US", "GB", "DE", "FR", "JP", "KR", "AU", "CA", "CN"}
+        if (len(context.args) == 2 and 
+            context.args[1].upper() in valid_countries and 
+            context.args[1].lower() != "multi"):
+            # 单国模式: /movie_hot justwatch US
+            country = context.args[1].upper()
+            use_multi_country = False
+        else:
+            # 多国模式: /movie_hot justwatch 或 /movie_hot justwatch multi [countries...]
+            use_multi_country = True
+            start_idx = 2 if context.args[1].lower() == "multi" else 1
+            countries = None
+            if len(context.args) > start_idx:
+                countries = [arg.upper() for arg in context.args[start_idx:] 
+                           if len(arg) == 2 and arg.upper() in valid_countries]
+                if not countries:
+                    countries = None
+            country = countries  # 存储国家列表
+    else:
+        # 其他源或无参数时的默认逻辑
+        if source == "mixed":
+            # 混合模式默认使用多国综合JustWatch数据
+            use_multi_country = True
+            country = None
+        else:
+            country = context.args[1].upper() if len(context.args) > 1 else "US"
+            use_multi_country = False
     
     # 验证数据源参数
     valid_sources = ["mixed", "tmdb", "justwatch", "trakt"]
@@ -4236,20 +4455,33 @@ async def movie_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     try:
         if source == "justwatch":
-            # 只显示JustWatch数据 - 使用新的综合ranking算法
+            # 显示JustWatch数据 - 支持单国和多国模式
             if not JUSTWATCH_AVAILABLE:
                 await message.edit_text("❌ JustWatch API不可用，请使用TMDB数据源")
                 return
             
-            justwatch_data = await movie_service.get_comprehensive_streaming_ranking(
-                content_type="movie", country=country, limit=10
-            )
-            if justwatch_data:
-                result_text = movie_service.format_comprehensive_streaming_ranking(
-                    justwatch_data, content_type="movie", country=country
+            if use_multi_country:
+                # 多国综合模式
+                justwatch_data = await movie_service.get_multi_country_streaming_ranking(
+                    content_type="movie", countries=country, limit=10
                 )
+                if justwatch_data:
+                    result_text = movie_service.format_multi_country_streaming_ranking(
+                        justwatch_data, content_type="movie", countries=country
+                    )
+                else:
+                    result_text = "❌ JustWatch多国热门电影数据获取失败，请稍后重试"
             else:
-                result_text = "❌ JustWatch热门电影数据获取失败，请稍后重试"
+                # 单国模式
+                justwatch_data = await movie_service.get_comprehensive_streaming_ranking(
+                    content_type="movie", country=country, limit=10
+                )
+                if justwatch_data:
+                    result_text = movie_service.format_comprehensive_streaming_ranking(
+                        justwatch_data, content_type="movie", country=country
+                    )
+                else:
+                    result_text = "❌ JustWatch热门电影数据获取失败，请稍后重试"
                 
         elif source == "tmdb":
             # 只显示TMDB数据
@@ -4278,9 +4510,16 @@ async def movie_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             trakt_data = None
             
             if JUSTWATCH_AVAILABLE:
-                justwatch_data = await movie_service.get_comprehensive_streaming_ranking(
-                    content_type="movie", country=country, limit=4  # 混合模式只显示4个
-                )
+                if use_multi_country:
+                    # 混合模式使用多国综合JustWatch数据
+                    justwatch_data = await movie_service.get_multi_country_streaming_ranking(
+                        content_type="movie", countries=country, limit=4
+                    )
+                else:
+                    # 单国模式
+                    justwatch_data = await movie_service.get_comprehensive_streaming_ranking(
+                        content_type="movie", country=country, limit=4
+                    )
             
             # 获取Trakt热门数据
             try:
@@ -4646,8 +4885,9 @@ async def tv_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     用法:
     /tv_hot - 混合显示TMDB、JustWatch和Trakt数据（默认）
     /tv_hot tmdb - 只显示TMDB数据
-    /tv_hot justwatch - 只显示JustWatch数据
+    /tv_hot justwatch - 多国综合JustWatch数据（默认）
     /tv_hot justwatch US - 显示美国JustWatch数据
+    /tv_hot justwatch multi US GB DE - 指定国家多国综合
     /tv_hot trakt - 只显示Trakt用户数据
     """
     if not update.message or not update.effective_chat:
@@ -4662,7 +4902,37 @@ async def tv_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     # 解析参数
     source = context.args[0].lower() if context.args else "mixed"
-    country = context.args[1].upper() if len(context.args) > 1 else "US"
+    
+    # JustWatch源的国家解析逻辑（支持多国模式）
+    if source == "justwatch" and len(context.args) > 1:
+        # 检查是否为单国模式（单个有效国家代码）
+        valid_countries = {"US", "GB", "DE", "FR", "JP", "KR", "AU", "CA", "CN"}
+        if (len(context.args) == 2 and 
+            context.args[1].upper() in valid_countries and 
+            context.args[1].lower() != "multi"):
+            # 单国模式: /tv_hot justwatch US
+            country = context.args[1].upper()
+            use_multi_country = False
+        else:
+            # 多国模式: /tv_hot justwatch 或 /tv_hot justwatch multi [countries...]
+            use_multi_country = True
+            start_idx = 2 if context.args[1].lower() == "multi" else 1
+            countries = None
+            if len(context.args) > start_idx:
+                countries = [arg.upper() for arg in context.args[start_idx:] 
+                           if len(arg) == 2 and arg.upper() in valid_countries]
+                if not countries:
+                    countries = None
+            country = countries  # 存储国家列表
+    else:
+        # 其他源或无参数时的默认逻辑
+        if source == "mixed":
+            # 混合模式默认使用多国综合JustWatch数据
+            use_multi_country = True
+            country = None
+        else:
+            country = context.args[1].upper() if len(context.args) > 1 else "US"
+            use_multi_country = False
     
     # 验证数据源参数
     valid_sources = ["mixed", "tmdb", "justwatch", "trakt"]
@@ -4683,20 +4953,33 @@ async def tv_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     try:
         if source == "justwatch":
-            # 只显示JustWatch数据 - 使用新的综合ranking算法
+            # 显示JustWatch数据 - 支持单国和多国模式
             if not JUSTWATCH_AVAILABLE:
                 await message.edit_text("❌ JustWatch API不可用，请使用TMDB数据源")
                 return
             
-            justwatch_data = await movie_service.get_comprehensive_streaming_ranking(
-                content_type="show", country=country, limit=10
-            )
-            if justwatch_data:
-                result_text = movie_service.format_comprehensive_streaming_ranking(
-                    justwatch_data, content_type="show", country=country
+            if use_multi_country:
+                # 多国综合模式
+                justwatch_data = await movie_service.get_multi_country_streaming_ranking(
+                    content_type="show", countries=country, limit=10
                 )
+                if justwatch_data:
+                    result_text = movie_service.format_multi_country_streaming_ranking(
+                        justwatch_data, content_type="show", countries=country
+                    )
+                else:
+                    result_text = "❌ JustWatch多国热门电视剧数据获取失败，请稍后重试"
             else:
-                result_text = "❌ JustWatch热门电视剧数据获取失败，请稍后重试"
+                # 单国模式
+                justwatch_data = await movie_service.get_comprehensive_streaming_ranking(
+                    content_type="show", country=country, limit=10
+                )
+                if justwatch_data:
+                    result_text = movie_service.format_comprehensive_streaming_ranking(
+                        justwatch_data, content_type="show", country=country
+                    )
+                else:
+                    result_text = "❌ JustWatch热门电视剧数据获取失败，请稍后重试"
                 
         elif source == "tmdb":
             # 只显示TMDB数据
@@ -4725,9 +5008,16 @@ async def tv_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             trakt_data = None
             
             if JUSTWATCH_AVAILABLE:
-                justwatch_data = await movie_service.get_comprehensive_streaming_ranking(
-                    content_type="show", country=country, limit=4  # 混合模式只显示4个
-                )
+                if use_multi_country:
+                    # 混合模式使用多国综合JustWatch数据
+                    justwatch_data = await movie_service.get_multi_country_streaming_ranking(
+                        content_type="show", countries=country, limit=4
+                    )
+                else:
+                    # 单国模式
+                    justwatch_data = await movie_service.get_comprehensive_streaming_ranking(
+                        content_type="show", country=country, limit=4
+                    )
             
             # 获取Trakt热门数据
             try:
@@ -5296,34 +5586,74 @@ async def streaming_movie_ranking_command(update: Update, context: ContextTypes.
         await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
         return
     
-    # 解析参数
-    country = context.args[0].upper() if context.args else "US"
-    
-    # 验证国家代码
+    # 解析参数 - 默认多国模式，单个国家代码切换到单国模式
     valid_countries = {"US", "GB", "DE", "FR", "JP", "KR", "AU", "CA", "CN"}
-    if country not in valid_countries:
-        country = "US"
     
-    message = await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text="🔍 正在获取综合流媒体电影热度排行榜...",
-        parse_mode=ParseMode.MARKDOWN
+    # 检查是否为单国模式（单个有效国家代码）
+    single_country_mode = (
+        context.args and 
+        len(context.args) == 1 and 
+        context.args[0].upper() in valid_countries and
+        context.args[0].lower() != "multi"
     )
     
-    try:
-        if not JUSTWATCH_AVAILABLE:
-            result_text = "❌ JustWatch API不可用，无法获取流媒体排行榜数据"
-        else:
-            ranking_data = await movie_service.get_comprehensive_streaming_ranking(
-                content_type="movie", country=country, limit=15
-            )
-            
-            if ranking_data:
-                result_text = movie_service.format_comprehensive_streaming_ranking(
-                    ranking_data, content_type="movie", country=country
-                )
+    if not single_country_mode:
+        # 多国模式 (默认或明确指定multi)
+        countries = None
+        start_idx = 1 if context.args and context.args[0].lower() == "multi" else 0
+        
+        if context.args and len(context.args) > start_idx:
+            countries = [arg.upper() for arg in context.args[start_idx:] if len(arg) == 2 and arg.upper() in valid_countries]
+            if not countries:
+                countries = None
+        
+        countries_display = countries or ["US", "GB", "DE", "FR", "JP", "KR", "AU", "CA"]
+        message = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"🌍 正在获取多国综合流媒体电影热度排行榜...\n📊 数据来源: {' | '.join(countries_display)}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+        try:
+            if not JUSTWATCH_AVAILABLE:
+                result_text = "❌ JustWatch API不可用，无法获取流媒体排行榜数据"
             else:
-                result_text = "❌ 获取流媒体电影排行榜失败，请稍后重试"
+                ranking_data = await movie_service.get_multi_country_streaming_ranking(
+                    content_type="movie", countries=countries, limit=15
+                )
+                if ranking_data:
+                    result_text = movie_service.format_multi_country_streaming_ranking(
+                        ranking_data, content_type="movie", countries=countries_display
+                    )
+                else:
+                    result_text = "❌ 获取多国综合流媒体电影热度排行榜失败，请稍后重试"
+    else:
+        # 单国模式: /streaming_movie_ranking [US]
+        country = context.args[0].upper() if context.args else "US"
+        
+        valid_countries = {"US", "GB", "DE", "FR", "JP", "KR", "AU", "CA", "CN"}
+        if country not in valid_countries:
+            country = "US"
+        
+        message = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="🔍 正在获取综合流媒体电影热度排行榜...",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+        try:
+            if not JUSTWATCH_AVAILABLE:
+                result_text = "❌ JustWatch API不可用，无法获取流媒体排行榜数据"
+            else:
+                ranking_data = await movie_service.get_comprehensive_streaming_ranking(
+                    content_type="movie", country=country, limit=15
+                )
+                if ranking_data:
+                    result_text = movie_service.format_comprehensive_streaming_ranking(
+                        ranking_data, content_type="movie", country=country
+                    )
+                else:
+                    result_text = "❌ 获取流媒体电影排行榜失败，请稍后重试"
         
         await message.edit_text(
             foldable_text_with_markdown_v2(result_text),
@@ -5352,34 +5682,74 @@ async def streaming_tv_ranking_command(update: Update, context: ContextTypes.DEF
         await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
         return
     
-    # 解析参数
-    country = context.args[0].upper() if context.args else "US"
-    
-    # 验证国家代码
+    # 解析参数 - 默认多国模式，单个国家代码切换到单国模式
     valid_countries = {"US", "GB", "DE", "FR", "JP", "KR", "AU", "CA", "CN"}
-    if country not in valid_countries:
-        country = "US"
     
-    message = await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text="🔍 正在获取综合流媒体电视剧热度排行榜...",
-        parse_mode=ParseMode.MARKDOWN
+    # 检查是否为单国模式（单个有效国家代码）
+    single_country_mode = (
+        context.args and 
+        len(context.args) == 1 and 
+        context.args[0].upper() in valid_countries and
+        context.args[0].lower() != "multi"
     )
     
-    try:
-        if not JUSTWATCH_AVAILABLE:
-            result_text = "❌ JustWatch API不可用，无法获取流媒体排行榜数据"
-        else:
-            ranking_data = await movie_service.get_comprehensive_streaming_ranking(
-                content_type="show", country=country, limit=15
-            )
-            
-            if ranking_data:
-                result_text = movie_service.format_comprehensive_streaming_ranking(
-                    ranking_data, content_type="show", country=country
-                )
+    if not single_country_mode:
+        # 多国模式 (默认或明确指定multi)
+        countries = None
+        start_idx = 1 if context.args and context.args[0].lower() == "multi" else 0
+        
+        if context.args and len(context.args) > start_idx:
+            countries = [arg.upper() for arg in context.args[start_idx:] if len(arg) == 2 and arg.upper() in valid_countries]
+            if not countries:
+                countries = None
+        
+        countries_display = countries or ["US", "GB", "DE", "FR", "JP", "KR", "AU", "CA"]
+        message = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"🌍 正在获取多国综合流媒体电视剧热度排行榜...\n📊 数据来源: {' | '.join(countries_display)}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+        try:
+            if not JUSTWATCH_AVAILABLE:
+                result_text = "❌ JustWatch API不可用，无法获取流媒体排行榜数据"
             else:
-                result_text = "❌ 获取流媒体电视剧排行榜失败，请稍后重试"
+                ranking_data = await movie_service.get_multi_country_streaming_ranking(
+                    content_type="show", countries=countries, limit=15
+                )
+                if ranking_data:
+                    result_text = movie_service.format_multi_country_streaming_ranking(
+                        ranking_data, content_type="show", countries=countries_display
+                    )
+                else:
+                    result_text = "❌ 获取多国综合流媒体电视剧热度排行榜失败，请稍后重试"
+    else:
+        # 单国模式: /streaming_tv_ranking [US]
+        country = context.args[0].upper() if context.args else "US"
+        
+        valid_countries = {"US", "GB", "DE", "FR", "JP", "KR", "AU", "CA", "CN"}
+        if country not in valid_countries:
+            country = "US"
+        
+        message = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="🔍 正在获取综合流媒体电视剧热度排行榜...",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+        try:
+            if not JUSTWATCH_AVAILABLE:
+                result_text = "❌ JustWatch API不可用，无法获取流媒体排行榜数据"
+            else:
+                ranking_data = await movie_service.get_comprehensive_streaming_ranking(
+                    content_type="show", country=country, limit=15
+                )
+                if ranking_data:
+                    result_text = movie_service.format_comprehensive_streaming_ranking(
+                        ranking_data, content_type="show", country=country
+                    )
+                else:
+                    result_text = "❌ 获取流媒体电视剧排行榜失败，请稍后重试"
         
         await message.edit_text(
             foldable_text_with_markdown_v2(result_text),
