@@ -162,98 +162,52 @@ async def googleplay_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if not args_list:
         help_message = """❓ 请输入应用名称或包名。
 
-用法: /gp <应用名或包名> [国家代码] [语言代码]
+用法: /gp <应用名或包名> [国家代码1] [国家代码2] ...
 
 示例:
 /gp Youtube
-/gp Google Maps us en
-/gp Tiktok (查 US, NG, TR)
-/gp "Red Dead Redemption" us
-/gp Temple Run zh-cn
+/gp Google Maps us
+/gp ChatGPT in ng (查询印度和尼日利亚)
+/gp "Red Dead Redemption" us cn jp
+/gp TikTok (查 US, NG, TR 默认区域)
 
-注: 多词应用名会自动识别，国家代码(2字母)和语言代码放在最后"""
+注: 多词应用名会自动识别，国家代码为2字母代码，支持查询多个国家"""
         from utils.config_manager import get_config
 
         await send_help(context, update.message.chat_id, foldable_text_v2(help_message), parse_mode="MarkdownV2")
         await delete_user_command(context, update.message.chat_id, update.message.message_id)
         return
 
-    # Parse arguments - need to handle multi-word app names
-    user_country = None
-    lang_code = "zh-cn".lower()
+    # Parse arguments - support multiple country codes
+    user_countries = []
+    lang_code = "zh-cn"  # Fixed default language
     
-    # Look for country code (2 letters) and language code from the end
-    # This allows multi-word app names at the beginning
-    if len(args_list) >= 3:
-        # Check if last argument could be language and second-to-last could be country
-        if len(args_list[-2]) == 2 and args_list[-2].isalpha():
-            potential_country = args_list[-2].upper()
-            # Validate if it's a real country code
-            if potential_country in SUPPORTED_COUNTRIES:
-                user_country = potential_country
-                lang_code = args_list[-1].lower()
-                query = " ".join(args_list[:-2])  # Everything except last 2 args
-            else:
-                # Second-to-last is not a valid country, check if last argument is country
-                if len(args_list[-1]) == 2 and args_list[-1].isalpha():
-                    potential_country = args_list[-1].upper()
-                    if potential_country in SUPPORTED_COUNTRIES:
-                        user_country = potential_country
-                        query = " ".join(args_list[:-1])  # Everything except last arg
-                    else:
-                        # Last argument is not a country either, treat as language
-                        lang_code = args_list[-1].lower()
-                        query = " ".join(args_list[:-1])  # Everything except last arg
-                else:
-                    # Last argument is not 2 letters, treat as language
-                    lang_code = args_list[-1].lower()
-                    query = " ".join(args_list[:-1])  # Everything except last arg
+    # Find all 2-letter country codes from the end of arguments
+    query_args = args_list[:]
+    
+    # Start from the end and find valid country codes
+    while len(query_args) > 1:  # Keep at least one arg for app name
+        last_arg = query_args[-1]
+        if (len(last_arg) == 2 and 
+            last_arg.isalpha() and 
+            last_arg.upper() in SUPPORTED_COUNTRIES):
+            user_countries.insert(0, last_arg.upper())  # Insert at beginning to maintain order
+            query_args.pop()  # Remove from query args
         else:
-            # Second-to-last is not 2 letters, check if last argument is country
-            if len(args_list[-1]) == 2 and args_list[-1].isalpha():
-                potential_country = args_list[-1].upper()
-                if potential_country in SUPPORTED_COUNTRIES:
-                    user_country = potential_country
-                    query = " ".join(args_list[:-1])  # Everything except last arg
-                else:
-                    # Not a country, treat as language
-                    lang_code = args_list[-1].lower()
-                    query = " ".join(args_list[:-1])  # Everything except last arg
-            else:
-                # Last argument is not 2 letters, treat as language
-                lang_code = args_list[-1].lower()
-                query = " ".join(args_list[:-1])  # Everything except last arg
-    elif len(args_list) == 2:
-        # Check if second argument is country code or language
-        if len(args_list[1]) == 2 and args_list[1].isalpha():
-            potential_country = args_list[1].upper()
-            # Validate if it's a real country code
-            if potential_country in SUPPORTED_COUNTRIES:
-                user_country = potential_country
-                query = args_list[0]
-            else:
-                # Not a valid country, treat as part of app name
-                query = " ".join(args_list)
-        else:
-            # Assume it's part of app name or language
-            if args_list[1].lower() in ['en', 'zh', 'zh-cn', 'ja', 'ko', 'es', 'fr', 'de']:
-                lang_code = args_list[1].lower()
-                query = args_list[0]
-            else:
-                # Assume it's part of app name
-                query = " ".join(args_list)
-    else:
-        query = args_list[0]
+            break  # Stop if we find a non-country code
+    
+    # The remaining args form the app name query
+    query = " ".join(query_args)
 
     countries_to_search = []
-    if user_country:
-        countries_to_search.append(user_country)
-        initial_search_country = user_country
-        search_info = f"区域: {user_country}, 语: {lang_code}"
+    if user_countries:
+        countries_to_search = user_countries
+        initial_search_country = user_countries[0]
+        search_info = f"区域: {', '.join(user_countries)}"
     else:
         countries_to_search = DEFAULT_SEARCH_COUNTRIES
         initial_search_country = DEFAULT_SEARCH_COUNTRIES[0]
-        search_info = f"区域: {', '.join(countries_to_search)}, 语言: {lang_code}"
+        search_info = f"区域: {', '.join(countries_to_search)}"
 
     # Initial search message - use plain text, will be replaced
     search_message = f"🔍 正在搜索 Google Play 应用: {query} ({search_info})..."
@@ -309,7 +263,7 @@ async def googleplay_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     # Update with progress message
     progress_message = f"""✅ 找到应用: {app_title_short} ({app_id})
-⏳ 正在获取以下区域的详细信息: {", ".join(countries_to_search)} (语言: {lang_code})..."""
+⏳ 正在获取以下区域的详细信息: {", ".join(countries_to_search)}..."""
     await message.edit_text(foldable_text_v2(progress_message), parse_mode="MarkdownV2")
 
     # Concurrently fetch details for all countries
