@@ -53,29 +53,6 @@ rate_converter = None
 cache_manager = None
 
 
-async def cleanup_session_safely(session_id: str | None, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """
-    安全清理会话的所有删除任务
-    
-    Args:
-        session_id: 会话ID
-        context: Bot上下文
-        
-    Returns:
-        是否成功清理
-    """
-    if not session_id:
-        return False
-        
-    try:
-        cancelled_count = await cancel_session_deletions(session_id, context)
-        logger.info(f"已清理会话 {session_id} 的 {cancelled_count} 个删除任务")
-        return True
-    except Exception as e:
-        logger.error(f"清理会话 {session_id} 失败: {e}")
-        return False
-
-
 def set_rate_converter(converter):
     global rate_converter
     rate_converter = converter
@@ -400,13 +377,12 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         session_id = f"app_search_{user_id}_{int(time.time())}"
 
         # 如果用户已经有活跃的搜索会话，取消旧的删除任务
-        old_session_id = None
         if user_id in user_search_sessions:
             old_session = user_search_sessions[user_id]
             old_session_id = old_session.get("session_id")
             if old_session_id:
-                await cleanup_session_safely(old_session_id, context)
-                logger.info(f"🔄 用户 {user_id} 有现有搜索会话，已清理旧会话")
+                cancelled_count = await cancel_session_deletions(old_session_id, context)
+                logger.info(f"🔄 用户 {user_id} 有现有搜索会话，已取消 {cancelled_count} 个旧的删除任务")
             logger.info(
                 f"🔄 User {user_id} has existing search session (message: {old_session.get('message_id')}, query: '{old_session.get('query')}'), will be replaced with new search"
             )
@@ -518,31 +494,9 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     except Exception as e:
         logger.error(f"Search process error: {e}")
         error_message = f"❌ 搜索失败: {e!s}\n\n请稍后重试或联系管理员."
-        
-        # 清理加载消息
-        try:
-            await message.delete()
-        except Exception:
-            pass
-            
-        # 如果有旧会话，确保清理
-        if user_id in user_search_sessions:
-            old_session = user_search_sessions[user_id]
-            old_session_id = old_session.get("session_id")
-            if old_session_id:
-                await cleanup_session_safely(old_session_id, context)
-            # 清除会话
-            del user_search_sessions[user_id]
-            
-        # 发送错误消息（带自动删除）
+        await message.delete()
+        config = get_config()
         await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
-        
-        # 删除用户命令消息
-        if update.message:
-            try:
-                await delete_user_command(context, update.effective_chat.id, update.message.message_id)
-            except Exception:
-                pass
 
 
 async def handle_app_search_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -557,12 +511,7 @@ async def handle_app_search_callback(update: Update, context: ContextTypes.DEFAU
     if user_id not in user_search_sessions:
         logger.warning(f"❌ User {user_id} has no active search session for callback: {data}")
         error_message = "❌ 搜索会话已过期，请重新搜索。"
-        
-        try:
-            await query.message.delete()
-        except Exception:
-            pass
-            
+        await query.message.delete()
         await send_error(context, query.message.chat_id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
         return
 
@@ -724,25 +673,7 @@ async def handle_app_search_callback(update: Update, context: ContextTypes.DEFAU
         elif data == "app_new_search":
             # 开始新搜索
             new_search_message = "🔍 *开始新的搜索*\n\n请使用 `/app 应用名称` 命令开始新的搜索。\n\n例如: `/app 微信`"
-            
-            # 取消当前会话的所有删除任务
-            session_id = session.get("session_id")
-            if session_id:
-                await cleanup_session_safely(session_id, context)
-                    
             await query.edit_message_text(foldable_text_with_markdown_v2(new_search_message), parse_mode="MarkdownV2")
-            
-            # 重新调度新消息的删除
-            if session_id:
-                try:
-                    from utils.config_manager import get_config
-                    config = get_config()
-                    scheduler = context.bot_data.get("message_delete_scheduler")
-                    if scheduler:
-                        await scheduler.schedule_deletion(query.message.chat_id, query.message.message_id, config.auto_delete_delay, None)  # 新搜索提示不绑定会话
-                except Exception as e:
-                    logger.error(f"调度新搜索消息删除失败: {e}")
-                    
             # 清除会话
             if user_id in user_search_sessions:
                 del user_search_sessions[user_id]
@@ -750,18 +681,7 @@ async def handle_app_search_callback(update: Update, context: ContextTypes.DEFAU
         elif data == "app_close":
             # 关闭搜索
             close_message = "🔍 搜索已关闭。\n\n使用 `/app 应用名称` 开始新的搜索。"
-            
-            # 取消当前会话的所有删除任务
-            session_id = session.get("session_id")
-            if session_id:
-                await cleanup_session_safely(session_id, context)
-            
-            # 删除当前消息并发送关闭消息（带自动删除）
-            try:
-                await query.message.delete()
-            except Exception:
-                pass
-                
+            await query.message.delete()
             await send_info(context, query.message.chat_id, foldable_text_v2(close_message), parse_mode="MarkdownV2")
 
             # 清除会话
@@ -771,21 +691,7 @@ async def handle_app_search_callback(update: Update, context: ContextTypes.DEFAU
     except Exception as e:
         logger.error(f"处理回调查询时发生错误: {e}")
         error_message = f"❌ 操作失败: {e!s}\n\n请重新搜索或联系管理员."
-        
-        # 清理当前会话
-        session_id = session.get("session_id")
-        if session_id:
-            await cleanup_session_safely(session_id, context)
-        
-        # 清除用户会话
-        if user_id in user_search_sessions:
-            del user_search_sessions[user_id]
-            
-        try:
-            await query.message.delete()
-        except Exception:
-            pass
-            
+        await query.message.delete()
         await send_error(context, query.message.chat_id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
 
 
@@ -855,58 +761,12 @@ async def show_app_details(
         # --- 使用新的智能 formatter 模块进行格式化和折叠 ---
         formatted_message = foldable_text_with_markdown_v2(full_raw_message)
 
-        # 编辑消息后，重新调度删除任务
-        session_id = session.get("session_id")
-        chat_id = query.message.chat_id
-        message_id = query.message.message_id
-        
-        # 先取消原有的删除任务
-        if session_id:
-            try:
-                scheduler = context.bot_data.get("message_delete_scheduler")
-                if scheduler and hasattr(scheduler, "cancel_deletion"):
-                    await scheduler.cancel_deletion(chat_id, message_id)
-                    logger.debug(f"已取消消息 {message_id} 的原有删除任务")
-            except Exception as e:
-                logger.error(f"取消原有删除任务失败: {e}")
-        
         await query.edit_message_text(formatted_message, parse_mode="MarkdownV2", disable_web_page_preview=True)
-        
-        # 编辑后重新调度删除
-        if session_id:
-            try:
-                from utils.config_manager import get_config
-                config = get_config()
-                scheduler = context.bot_data.get("message_delete_scheduler")
-                if scheduler and hasattr(scheduler, "schedule_deletion"):
-                    await scheduler.schedule_deletion(chat_id, message_id, config.auto_delete_delay, session_id)
-                    logger.debug(f"已重新调度消息 {message_id} 的删除任务")
-            except Exception as e:
-                logger.error(f"重新调度删除任务失败: {e}")
 
     except Exception as e:
         logger.error(f"显示应用详情时发生错误: {e}", exc_info=True)
         error_message = f"❌ 获取应用详情失败: {e!s}"
-        
-        try:
-            await query.edit_message_text(foldable_text_v2(error_message), parse_mode="MarkdownV2")
-            
-            # 错误消息也需要重新调度删除
-            session_id = session.get("session_id")
-            if session_id:
-                chat_id = query.message.chat_id
-                message_id = query.message.message_id
-                scheduler = context.bot_data.get("message_delete_scheduler")
-                if scheduler:
-                    try:
-                        await scheduler.cancel_deletion(chat_id, message_id)
-                        await scheduler.schedule_deletion(chat_id, message_id, 5, session_id)  # 错误消息5秒删除
-                        logger.debug(f"已重新调度错误消息 {message_id} 的删除任务")
-                    except Exception as schedule_e:
-                        logger.error(f"重新调度错误消息删除失败: {schedule_e}")
-                        
-        except Exception as edit_e:
-            logger.error(f"编辑错误消息失败: {edit_e}")
+        await query.edit_message_text(foldable_text_v2(error_message), parse_mode="MarkdownV2")
 
 
 async def handle_app_id_query(update: Update, context: ContextTypes.DEFAULT_TYPE, args_str_full: str) -> None:
@@ -1106,22 +966,7 @@ async def handle_app_id_query(update: Update, context: ContextTypes.DEFAULT_TYPE
     except Exception as e:
         logger.error(f"App ID 查询过程出错: {e}")
         error_message = f"❌ 查询失败: {e!s}\n\n请稍后重试或联系管理员。"
-        
-        # 清理加载消息
-        try:
-            await message.delete()
-        except Exception:
-            pass
-            
-        # 发送错误消息（带自动删除）
-        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
-        
-        # 删除用户命令消息
-        if update.message:
-            try:
-                await delete_user_command(context, update.effective_chat.id, update.message.message_id)
-            except Exception:
-                pass
+        await message.edit_text(foldable_text_v2(error_message), parse_mode="MarkdownV2")
 
 
 async def get_app_prices(
