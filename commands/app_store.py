@@ -878,6 +878,9 @@ async def handle_app_id_query(update: Update, context: ContextTypes.DEFAULT_TYPE
             logger.info(f"使用缓存的应用详情: App ID {app_id}")
             formatted_message = cached_detail.get("formatted_message", "❌ 缓存数据格式错误")
             await message.edit_text(formatted_message, parse_mode="MarkdownV2", disable_web_page_preview=True)
+            # 删除用户命令消息
+            if update.message:
+                await delete_user_command(context, update.effective_chat.id, update.message.message_id)
             return
 
         # 直接使用 App ID 作为应用名称，先开始获取价格信息
@@ -899,9 +902,13 @@ async def handle_app_id_query(update: Update, context: ContextTypes.DEFAULT_TYPE
         if not successful_results:
             countries_str = ", ".join(countries_to_check)
             error_message = (
-                f"❌ 在以下区域均未找到 App ID {app_id}：{countries_str}\\n\\n请检查 ID 是否正确或尝试其他区域"
+                f"❌ 在以下区域均未找到 App ID {app_id}：{countries_str}\n\n请检查 ID 是否正确或尝试其他区域"
             )
-            await message.edit_text(foldable_text_v2(error_message), parse_mode="MarkdownV2")
+            await message.delete()
+            await send_error(context, update.effective_chat.id, error_message)
+            # 删除用户命令消息
+            if update.message:
+                await delete_user_command(context, update.effective_chat.id, update.message.message_id)
             return
 
         # 从第一个成功的结果中获取真实的应用名称
