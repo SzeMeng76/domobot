@@ -53,7 +53,7 @@ rate_converter = None
 cache_manager = None
 
 
-async def cleanup_session_safely(session_id: str | None, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def cleanup_session_safely(session_id: str | None, context: ContextTypes.DEFAULT_TYPE) -> bool:
     """
     安全清理会话的所有删除任务
     
@@ -62,18 +62,18 @@ async def cleanup_session_safely(session_id: str | None, context: ContextTypes.D
         context: Bot上下文
         
     Returns:
-        清理的任务数量，失败时返回0
+        是否成功清理
     """
     if not session_id:
-        return 0
+        return False
         
     try:
         cancelled_count = await cancel_session_deletions(session_id, context)
         logger.info(f"已清理会话 {session_id} 的 {cancelled_count} 个删除任务")
-        return cancelled_count
+        return True
     except Exception as e:
         logger.error(f"清理会话 {session_id} 失败: {e}")
-        return 0
+        return False
 
 
 def set_rate_converter(converter):
@@ -405,8 +405,8 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             old_session = user_search_sessions[user_id]
             old_session_id = old_session.get("session_id")
             if old_session_id:
-                cancelled_count = await cleanup_session_safely(old_session_id, context)
-                logger.info(f"🔄 用户 {user_id} 有现有搜索会话，已清理 {cancelled_count} 个旧任务")
+                await cleanup_session_safely(old_session_id, context)
+                logger.info(f"🔄 用户 {user_id} 有现有搜索会话，已清理旧会话")
             logger.info(
                 f"🔄 User {user_id} has existing search session (message: {old_session.get('message_id')}, query: '{old_session.get('query')}'), will be replaced with new search"
             )
