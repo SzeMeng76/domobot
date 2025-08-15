@@ -497,6 +497,10 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await message.delete()
         config = get_config()
         await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        
+        # 异常情况下也删除用户命令消息
+        if update.message:
+            await delete_user_command(context, update.effective_chat.id, update.message.message_id)
 
 
 async def handle_app_search_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -693,6 +697,10 @@ async def handle_app_search_callback(update: Update, context: ContextTypes.DEFAU
         error_message = f"❌ 操作失败: {e!s}\n\n请重新搜索或联系管理员."
         await query.message.delete()
         await send_error(context, query.message.chat_id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        
+        # 清理用户会话
+        if user_id in user_search_sessions:
+            del user_search_sessions[user_id]
 
 
 async def show_app_details(
@@ -762,6 +770,19 @@ async def show_app_details(
         formatted_message = foldable_text_with_markdown_v2(full_raw_message)
 
         await query.edit_message_text(formatted_message, parse_mode="MarkdownV2", disable_web_page_preview=True)
+        
+        # 编辑消息后重新调度删除任务  
+        session_id = session.get("session_id")
+        if session_id and context.bot_data.get("message_delete_scheduler"):
+            from utils.config_manager import get_config
+            config = get_config()
+            scheduler = context.bot_data.get("message_delete_scheduler")
+            await scheduler.schedule_deletion(
+                query.message.chat_id, 
+                query.message.message_id, 
+                config.auto_delete_delay, 
+                session_id
+            )
 
     except Exception as e:
         logger.error(f"显示应用详情时发生错误: {e}", exc_info=True)
@@ -967,6 +988,10 @@ async def handle_app_id_query(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.error(f"App ID 查询过程出错: {e}")
         error_message = f"❌ 查询失败: {e!s}\n\n请稍后重试或联系管理员。"
         await message.edit_text(foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        
+        # 异常情况下也删除用户命令消息
+        if update.message:
+            await delete_user_command(context, update.effective_chat.id, update.message.message_id)
 
 
 async def get_app_prices(
