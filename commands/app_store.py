@@ -474,16 +474,12 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         user_search_sessions[user_id] = {
             "query": final_query,
             "search_data": search_data_for_session,
-            "message_id": message.message_id,
+            "message_id": None,  # 临时设为None，稍后更新
             "user_specified_countries": final_countries_to_search or None,
-            "chat_id": update.effective_chat.id,  # 获取 chat_id
-            "session_id": session_id,  # 添加会话ID
-            "created_at": datetime.now(),  # 添加创建时间
+            "chat_id": update.effective_chat.id,
+            "session_id": session_id,
+            "created_at": datetime.now(),
         }
-
-        logger.info(
-            f"✅ Created new search session for user {user_id}: message {message.message_id}, query '{final_query}', chat {update.effective_chat.id}, session {session_id}"
-        )
 
         # Format and display results
         result_text = format_search_results(search_data_for_session)
@@ -504,9 +500,12 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             disable_web_page_preview=True
         )
         
-        # 更新会话中的消息ID
+        # 更新会话中的消息ID为正确的搜索结果消息ID
         if new_message:
             user_search_sessions[user_id]["message_id"] = new_message.message_id
+            logger.info(
+                f"✅ Created new search session for user {user_id}: message {new_message.message_id}, query '{final_query}', chat {update.effective_chat.id}, session {session_id}"
+            )
 
         # 删除用户命令消息
         if update.message:
