@@ -388,25 +388,16 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         # 生成唯一的会话ID
         session_id = f"app_search_{user_id}_{int(time.time())}"
 
-        # 如果用户已经有活跃的搜索会话，立即删除旧的搜索结果消息
+        # 如果用户已经有活跃的搜索会话，取消旧的删除任务
         if user_id in user_search_sessions:
             old_session = user_search_sessions[user_id]
-            old_message_id = old_session.get("message_id")
-            old_chat_id = old_session.get("chat_id")
-            
-            # 立即删除旧的搜索结果消息
-            if old_message_id and old_chat_id:
-                try:
-                    await context.bot.delete_message(chat_id=old_chat_id, message_id=old_message_id)
-                    logger.info(f"🔄 已删除用户 {user_id} 的旧搜索结果消息: {old_message_id}")
-                except Exception as e:
-                    logger.warning(f"删除旧搜索结果失败: {e}")
-            
-            # 取消旧会话的所有删除任务
             old_session_id = old_session.get("session_id")
             if old_session_id:
                 cancelled_count = await cancel_session_deletions(old_session_id, context)
                 logger.info(f"🔄 用户 {user_id} 有现有搜索会话，已取消 {cancelled_count} 个旧的删除任务")
+            logger.info(
+                f"🔄 User {user_id} has existing search session (message: {old_session.get('message_id')}, query: '{old_session.get('query')}'), will be replaced with new search"
+            )
 
         user_search_sessions[user_id] = {"user_specified_countries": final_countries_to_search or None}
 
@@ -510,7 +501,7 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
         # 删除用户命令消息
         if update.message:
-            await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+            await delete_user_command(context, update.effective_chat.id, update.message.message_id, session_id=session_id)
 
     except Exception as e:
         logger.error(f"Search process error: {e}")
@@ -1006,7 +997,7 @@ async def handle_app_id_query(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         # 删除用户命令消息
         if update.message:
-            await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+            await delete_user_command(context, update.effective_chat.id, update.message.message_id, session_id=session_id)
 
     except Exception as e:
         logger.error(f"App ID 查询过程出错: {e}")
