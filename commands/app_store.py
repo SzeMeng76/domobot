@@ -326,6 +326,9 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             await message.delete()
             config = get_config()
             await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+            # 删除用户命令消息
+            if update.message:
+                await delete_user_command(context, update.effective_chat.id, update.message.message_id)
             return
 
         try:
@@ -338,6 +341,9 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             await message.delete()
             config = get_config()
             await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+            # 删除用户命令消息
+            if update.message:
+                await delete_user_command(context, update.effective_chat.id, update.message.message_id)
             return
 
         if not all_params_list:
@@ -345,6 +351,9 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             await message.delete()
             config = get_config()
             await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+            # 删除用户命令消息
+            if update.message:
+                await delete_user_command(context, update.effective_chat.id, update.message.message_id)
             return
 
         app_name_parts_collected = []
@@ -360,6 +369,9 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             await message.delete()
             config = get_config()
             await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+            # 删除用户命令消息
+            if update.message:
+                await delete_user_command(context, update.effective_chat.id, update.message.message_id)
             return
         app_name_to_search = " ".join(app_name_parts_collected)
 
@@ -815,11 +827,17 @@ async def handle_app_id_query(update: Update, context: ContextTypes.DEFAULT_TYPE
         except ValueError as e:
             error_message = f"❌ 参数解析错误: {e!s}"
             await message.edit_text(foldable_text_v2(error_message), parse_mode="MarkdownV2")
+            # 删除用户命令消息
+            if update.message:
+                await delete_user_command(context, update.effective_chat.id, update.message.message_id)
             return
 
         if not all_params_list:
             error_message = "❌ 参数解析后为空，请提供 App ID。"
             await message.edit_text(foldable_text_v2(error_message), parse_mode="MarkdownV2")
+            # 删除用户命令消息
+            if update.message:
+                await delete_user_command(context, update.effective_chat.id, update.message.message_id)
             return
 
         # 提取 App ID
@@ -827,6 +845,9 @@ async def handle_app_id_query(update: Update, context: ContextTypes.DEFAULT_TYPE
         if not (app_id_param.lower().startswith("id") and app_id_param[2:].isdigit()):
             error_message = "❌ 无效的 App ID 格式，请使用 id + 数字，如 id363590051"
             await message.edit_text(foldable_text_v2(error_message), parse_mode="MarkdownV2")
+            # 删除用户命令消息
+            if update.message:
+                await delete_user_command(context, update.effective_chat.id, update.message.message_id)
             return
 
         app_id = app_id_param[2:]  # 移除 'id' 前缀
