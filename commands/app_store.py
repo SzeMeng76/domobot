@@ -394,13 +394,17 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             old_message_id = old_session.get("message_id")
             old_chat_id = old_session.get("chat_id")
             
+            logger.info(f"🔄 用户 {user_id} 有现有搜索会话: message_id={old_message_id}, query='{old_session.get('query')}', chat_id={old_chat_id}")
+            
             # 立即删除旧的搜索结果消息
             if old_message_id and old_chat_id:
                 try:
                     await context.bot.delete_message(chat_id=old_chat_id, message_id=old_message_id)
                     logger.info(f"🔄 已删除用户 {user_id} 的旧搜索结果消息: {old_message_id}")
                 except Exception as e:
-                    logger.warning(f"删除旧搜索结果失败: {e}")
+                    logger.warning(f"删除旧搜索结果失败: message_id={old_message_id}, error={e}")
+            else:
+                logger.warning(f"🔄 无法删除旧搜索结果: message_id={old_message_id}, chat_id={old_chat_id}")
             
             # 取消旧会话的删除任务
             old_session_id = old_session.get("session_id")
@@ -471,10 +475,11 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             "results": page_results,
         }
 
+        # 先创建会话，message_id稍后更新
         user_search_sessions[user_id] = {
             "query": final_query,
             "search_data": search_data_for_session,
-            "message_id": message.message_id,
+            "message_id": None,  # 稍后更新为搜索结果消息ID
             "user_specified_countries": final_countries_to_search or None,
             "chat_id": update.effective_chat.id,  # 获取 chat_id
             "session_id": session_id,  # 添加会话ID
@@ -482,7 +487,7 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         }
 
         logger.info(
-            f"✅ Created new search session for user {user_id}: message {message.message_id}, query '{final_query}', chat {update.effective_chat.id}, session {session_id}"
+            f"✅ Created new search session for user {user_id}: loading message {message.message_id}, query '{final_query}', chat {update.effective_chat.id}, session {session_id}"
         )
 
         # Format and display results
@@ -504,9 +509,15 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             disable_web_page_preview=True
         )
         
-        # 更新会话中的消息ID
+        # 更新会话中的消息ID为搜索结果消息ID
         if new_message:
             user_search_sessions[user_id]["message_id"] = new_message.message_id
+            logger.info(f"✅ Updated session message_id to search result: {new_message.message_id} for user {user_id}")
+        else:
+            logger.error(f"❌ Failed to send search result message for user {user_id}")
+            # 如果发送失败，从会话中移除该用户
+            if user_id in user_search_sessions:
+                del user_search_sessions[user_id]
 
         # 删除用户命令消息（不绑定会话，避免被取消）
         if update.message:
