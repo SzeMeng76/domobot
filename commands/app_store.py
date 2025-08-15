@@ -771,14 +771,12 @@ async def show_app_details(
 
         await query.edit_message_text(formatted_message, parse_mode="MarkdownV2", disable_web_page_preview=True)
         
-        # 编辑消息后重新调度删除任务
+        # 编辑消息后重新调度删除任务  
         session_id = session.get("session_id")
         if session_id and context.bot_data.get("message_delete_scheduler"):
             from utils.config_manager import get_config
             config = get_config()
             scheduler = context.bot_data.get("message_delete_scheduler")
-            # 先取消原有任务，再调度新任务
-            await scheduler.cancel_deletion(query.message.chat_id, query.message.message_id)
             await scheduler.schedule_deletion(
                 query.message.chat_id, 
                 query.message.message_id, 
