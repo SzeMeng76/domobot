@@ -384,10 +384,6 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                 if resolved_code in SUPPORTED_COUNTRIES and resolved_code not in final_countries_to_search:
                     final_countries_to_search.append(resolved_code)
 
-        # Store user-specified countries in session for later use in show_app_details
-        # 生成唯一的会话ID
-        session_id = f"app_search_{user_id}_{int(time.time())}"
-
         # 如果用户已经有活跃的搜索会话，立即删除旧的搜索结果消息
         if user_id in user_search_sessions:
             old_session = user_search_sessions[user_id]
@@ -408,7 +404,9 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                 cancelled_count = await cancel_session_deletions(old_session_id, context)
                 logger.info(f"🔄 用户 {user_id} 有现有搜索会话，已取消 {cancelled_count} 个旧的删除任务")
 
-        user_search_sessions[user_id] = {"user_specified_countries": final_countries_to_search or None}
+        # Store user-specified countries in session for later use in show_app_details
+        # 生成唯一的会话ID
+        session_id = f"app_search_{user_id}_{int(time.time())}"
 
         # For search, we only use the first specified country.
         country_code = (final_countries_to_search[0] if final_countries_to_search else "US").lower()
@@ -471,6 +469,7 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             "results": page_results,
         }
 
+        # 先创建会话（临时设置message_id为None）
         user_search_sessions[user_id] = {
             "query": final_query,
             "search_data": search_data_for_session,
@@ -506,6 +505,8 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             logger.info(
                 f"✅ Created new search session for user {user_id}: message {new_message.message_id}, query '{final_query}', chat {update.effective_chat.id}, session {session_id}"
             )
+        else:
+            logger.error(f"❌ Failed to send search result message for user {user_id}")
 
         # 删除用户命令消息
         if update.message:
