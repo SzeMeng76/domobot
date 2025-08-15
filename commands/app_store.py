@@ -497,6 +497,10 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await message.delete()
         config = get_config()
         await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        
+        # 异常情况下也删除用户命令消息
+        if update.message:
+            await delete_user_command(context, update.effective_chat.id, update.message.message_id)
 
 
 async def handle_app_search_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -693,6 +697,10 @@ async def handle_app_search_callback(update: Update, context: ContextTypes.DEFAU
         error_message = f"❌ 操作失败: {e!s}\n\n请重新搜索或联系管理员."
         await query.message.delete()
         await send_error(context, query.message.chat_id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        
+        # 清理用户会话
+        if user_id in user_search_sessions:
+            del user_search_sessions[user_id]
 
 
 async def show_app_details(
@@ -967,6 +975,10 @@ async def handle_app_id_query(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.error(f"App ID 查询过程出错: {e}")
         error_message = f"❌ 查询失败: {e!s}\n\n请稍后重试或联系管理员。"
         await message.edit_text(foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        
+        # 异常情况下也删除用户命令消息
+        if update.message:
+            await delete_user_command(context, update.effective_chat.id, update.message.message_id)
 
 
 async def get_app_prices(
