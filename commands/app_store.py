@@ -511,9 +511,13 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         if new_message:
             user_search_sessions[user_id]["message_id"] = new_message.message_id
 
-        # 删除用户命令消息
+        # 删除用户命令消息 - 确保总是执行
         if update.message:
-            await delete_user_command(context, update.effective_chat.id, update.message.message_id, session_id=session_id)
+            try:
+                await delete_user_command(context, update.effective_chat.id, update.message.message_id, session_id=session_id)
+                logger.debug(f"已调度删除用户命令消息: {update.message.message_id}")
+            except Exception as cmd_del_e:
+                logger.error(f"删除用户命令消息失败: {cmd_del_e}")
 
     except Exception as e:
         logger.error(f"Search process error: {e}")
@@ -1099,9 +1103,13 @@ async def handle_app_id_query(update: Update, context: ContextTypes.DEFAULT_TYPE
             disable_web_page_preview=True
         )
 
-        # 删除用户命令消息
+        # 删除用户命令消息 - 确保总是执行
         if update.message:
-            await delete_user_command(context, update.effective_chat.id, update.message.message_id, session_id=session_id)
+            try:
+                await delete_user_command(context, update.effective_chat.id, update.message.message_id, session_id=session_id)
+                logger.debug(f"已调度删除用户命令消息: {update.message.message_id}")
+            except Exception as cmd_del_e:
+                logger.error(f"删除用户命令消息失败: {cmd_del_e}")
 
     except Exception as e:
         logger.error(f"App ID 查询过程出错: {e}")
