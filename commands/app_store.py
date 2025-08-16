@@ -281,6 +281,7 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         )
         if update.effective_chat:
             await send_help(context, update.effective_chat.id, foldable_text_with_markdown_v2(help_message), parse_mode="MarkdownV2")
+            # 删除用户命令消息 - 不绑定会话，立即执行
             await delete_user_command(context, update.effective_chat.id, update.message.message_id)
         return
 
@@ -326,7 +327,7 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             await message.delete()
             config = get_config()
             await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
-            # 删除用户命令消息
+            # 删除用户命令消息 - 不绑定会话，立即执行
             if update.message:
                 await delete_user_command(context, update.effective_chat.id, update.message.message_id)
             return
@@ -341,7 +342,7 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             await message.delete()
             config = get_config()
             await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
-            # 删除用户命令消息
+            # 删除用户命令消息 - 不绑定会话，立即执行
             if update.message:
                 await delete_user_command(context, update.effective_chat.id, update.message.message_id)
             return
@@ -351,7 +352,7 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             await message.delete()
             config = get_config()
             await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
-            # 删除用户命令消息
+            # 删除用户命令消息 - 不绑定会话，立即执行
             if update.message:
                 await delete_user_command(context, update.effective_chat.id, update.message.message_id)
             return
@@ -369,7 +370,7 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             await message.delete()
             config = get_config()
             await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
-            # 删除用户命令消息
+            # 删除用户命令消息 - 不绑定会话，立即执行
             if update.message:
                 await delete_user_command(context, update.effective_chat.id, update.message.message_id)
             return
@@ -388,13 +389,29 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         # 生成唯一的会话ID
         session_id = f"app_search_{user_id}_{int(time.time())}"
 
-        # 如果用户已经有活跃的搜索会话，取消旧的删除任务
+        # 如果用户已经有活跃的搜索会话，立即删除旧的搜索结果
         if user_id in user_search_sessions:
             old_session = user_search_sessions[user_id]
+            old_message_id = old_session.get("message_id")
+            old_chat_id = old_session.get("chat_id")
             old_session_id = old_session.get("session_id")
+            
+            # 立即删除旧的搜索结果消息
+            if old_message_id and old_chat_id:
+                try:
+                    logger.info(f"🗑️ 准备立即删除用户 {user_id} 的旧搜索结果消息: chat_id={old_chat_id}, message_id={old_message_id}")
+                    await context.bot.delete_message(chat_id=old_chat_id, message_id=old_message_id)
+                    logger.info(f"✅ 已成功删除用户 {user_id} 的旧搜索结果消息: {old_message_id}")
+                except Exception as e:
+                    logger.error(f"❌ 删除旧搜索结果消息失败: chat_id={old_chat_id}, message_id={old_message_id}, error: {e}")
+            else:
+                logger.warning(f"⚠️ 无法删除旧搜索结果消息: old_message_id={old_message_id}, old_chat_id={old_chat_id}")
+            
+            # 取消旧会话的剩余删除任务
             if old_session_id:
                 cancelled_count = await cancel_session_deletions(old_session_id, context)
                 logger.info(f"🔄 用户 {user_id} 有现有搜索会话，已取消 {cancelled_count} 个旧的删除任务")
+            
             logger.info(
                 f"🔄 User {user_id} has existing search session (message: {old_session.get('message_id')}, query: '{old_session.get('query')}'), will be replaced with new search"
             )
@@ -510,7 +527,7 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         config = get_config()
         await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
         
-        # 异常情况下也删除用户命令消息
+        # 异常情况下也删除用户命令消息 - 不绑定会话，立即执行
         if update.message:
             await delete_user_command(context, update.effective_chat.id, update.message.message_id)
 
@@ -827,7 +844,7 @@ async def handle_app_id_query(update: Update, context: ContextTypes.DEFAULT_TYPE
         except ValueError as e:
             error_message = f"❌ 参数解析错误: {e!s}"
             await message.edit_text(foldable_text_v2(error_message), parse_mode="MarkdownV2")
-            # 删除用户命令消息
+            # 删除用户命令消息 - 不绑定会话，立即执行
             if update.message:
                 await delete_user_command(context, update.effective_chat.id, update.message.message_id)
             return
@@ -835,7 +852,7 @@ async def handle_app_id_query(update: Update, context: ContextTypes.DEFAULT_TYPE
         if not all_params_list:
             error_message = "❌ 参数解析后为空，请提供 App ID。"
             await message.edit_text(foldable_text_v2(error_message), parse_mode="MarkdownV2")
-            # 删除用户命令消息
+            # 删除用户命令消息 - 不绑定会话，立即执行
             if update.message:
                 await delete_user_command(context, update.effective_chat.id, update.message.message_id)
             return
@@ -845,7 +862,7 @@ async def handle_app_id_query(update: Update, context: ContextTypes.DEFAULT_TYPE
         if not (app_id_param.lower().startswith("id") and app_id_param[2:].isdigit()):
             error_message = "❌ 无效的 App ID 格式，请使用 id + 数字，如 id363590051"
             await message.edit_text(foldable_text_v2(error_message), parse_mode="MarkdownV2")
-            # 删除用户命令消息
+            # 删除用户命令消息 - 不绑定会话，立即执行
             if update.message:
                 await delete_user_command(context, update.effective_chat.id, update.message.message_id)
             return
@@ -878,7 +895,7 @@ async def handle_app_id_query(update: Update, context: ContextTypes.DEFAULT_TYPE
             logger.info(f"使用缓存的应用详情: App ID {app_id}")
             formatted_message = cached_detail.get("formatted_message", "❌ 缓存数据格式错误")
             await message.edit_text(formatted_message, parse_mode="MarkdownV2", disable_web_page_preview=True)
-            # 删除用户命令消息
+            # 删除用户命令消息 - 不绑定会话，立即执行
             if update.message:
                 await delete_user_command(context, update.effective_chat.id, update.message.message_id)
             return
@@ -906,7 +923,7 @@ async def handle_app_id_query(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
             await message.delete()
             await send_error(context, update.effective_chat.id, error_message)
-            # 删除用户命令消息
+            # 删除用户命令消息 - 不绑定会话，立即执行
             if update.message:
                 await delete_user_command(context, update.effective_chat.id, update.message.message_id)
             return
@@ -1004,7 +1021,7 @@ async def handle_app_id_query(update: Update, context: ContextTypes.DEFAULT_TYPE
         error_message = f"❌ 查询失败: {e!s}\n\n请稍后重试或联系管理员。"
         await message.edit_text(foldable_text_v2(error_message), parse_mode="MarkdownV2")
         
-        # 异常情况下也删除用户命令消息
+        # 异常情况下也删除用户命令消息 - 不绑定会话，立即执行
         if update.message:
             await delete_user_command(context, update.effective_chat.id, update.message.message_id)
 
@@ -1273,7 +1290,7 @@ async def app_store_clean_cache_command(update: Update, context: ContextTypes.DE
     user_id = update.effective_user.id
     config = get_config()
 
-    # 删除用户命令消息
+    # 删除用户命令消息 - 不绑定会话，立即执行
     await delete_user_command(context, update.message.chat_id, update.message.message_id)
 
     # 使用 MySQL 用户管理器进行权限检查
