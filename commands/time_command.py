@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from telegram import Update
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
+from telegram.helpers import escape_markdown
 
 from utils.command_factory import command_factory
 from utils.permissions import Permission
@@ -133,21 +134,29 @@ def resolve_timezone(user_input: str) -> tuple[str, dict]:
 
 def format_time_result(result: Dict[str, Any], country_info: dict = None) -> str:
     """格式化时间结果"""
-    dst_indicator = " (夏令时)" if result.get("is_dst") else ""
+    dst_indicator = " \\(夏令时\\)" if result.get("is_dst") else ""
     
     # 构建标题
     if country_info and country_info.get("flag") and country_info.get("name"):
-        title = f"{country_info['flag']} **{country_info['name']}**"
+        safe_name = escape_markdown(country_info['name'], version=2)
+        title = f"{country_info['flag']} **{safe_name}**"
         if country_info.get("currency"):
-            title += f" ({country_info['currency']})"
+            safe_currency = escape_markdown(country_info['currency'], version=2)
+            title += f" \\({safe_currency}\\)"
     else:
-        title = f"🕐 **{result['timezone']}**"
+        safe_timezone = escape_markdown(result['timezone'], version=2)
+        title = f"🕐 **{safe_timezone}**"
+    
+    # 转义其他字段
+    safe_formatted = escape_markdown(result['formatted'], version=2)
+    safe_timezone_field = escape_markdown(result['timezone'], version=2)
+    safe_offset = escape_markdown(result['utc_offset'], version=2)
     
     return (
         f"{title}{dst_indicator}\n"
-        f"📅 {result['formatted']}\n"
-        f"🌍 时区: {result['timezone']}\n"
-        f"⏰ UTC偏移: {result['utc_offset']}"
+        f"📅 {safe_formatted}\n"
+        f"🌍 时区: {safe_timezone_field}\n"
+        f"⏰ UTC偏移: {safe_offset}"
     )
 
 def format_conversion_result(result: Dict[str, Any], source_country: dict = None, target_country: dict = None) -> str:
@@ -155,30 +164,41 @@ def format_conversion_result(result: Dict[str, Any], source_country: dict = None
     source = result['source']
     target = result['target']
     
-    source_dst = " (夏令时)" if source.get("is_dst") else ""
-    target_dst = " (夏令时)" if target.get("is_dst") else ""
+    source_dst = " \\(夏令时\\)" if source.get("is_dst") else ""
+    target_dst = " \\(夏令时\\)" if target.get("is_dst") else ""
     
     # 格式化源时区标题
     if source_country and source_country.get("flag") and source_country.get("name"):
-        source_title = f"{source_country['flag']} **{source_country['name']}**"
+        safe_source_name = escape_markdown(source_country['name'], version=2)
+        source_title = f"{source_country['flag']} **{safe_source_name}**"
     else:
-        source_title = f"📍 **{source['timezone']}**"
+        safe_source_tz = escape_markdown(source['timezone'], version=2)
+        source_title = f"📍 **{safe_source_tz}**"
     
     # 格式化目标时区标题
     if target_country and target_country.get("flag") and target_country.get("name"):
-        target_title = f"{target_country['flag']} **{target_country['name']}**"
+        safe_target_name = escape_markdown(target_country['name'], version=2)
+        target_title = f"{target_country['flag']} **{safe_target_name}**"
     else:
-        target_title = f"📍 **{target['timezone']}**"
+        safe_target_tz = escape_markdown(target['timezone'], version=2)
+        target_title = f"📍 **{safe_target_tz}**"
+    
+    # 转义时间相关字段
+    safe_source_formatted = escape_markdown(source['formatted'], version=2)
+    safe_source_tz = escape_markdown(source['timezone'], version=2)
+    safe_target_formatted = escape_markdown(target['formatted'], version=2)
+    safe_target_tz = escape_markdown(target['timezone'], version=2)
+    safe_time_diff = escape_markdown(result['time_difference'], version=2)
     
     return (
         f"🔄 **时区转换结果**\n\n"
         f"{source_title}{source_dst}\n"
-        f"⏰ {source['formatted']}\n"
-        f"🌍 {source['timezone']}\n\n"
+        f"⏰ {safe_source_formatted}\n"
+        f"🌍 {safe_source_tz}\n\n"
         f"{target_title}{target_dst}\n"
-        f"⏰ {target['formatted']}\n"
-        f"🌍 {target['timezone']}\n\n"
-        f"⏱️ **时差: {result['time_difference']}**"
+        f"⏰ {safe_target_formatted}\n"
+        f"🌍 {safe_target_tz}\n\n"
+        f"⏱️ **时差: {safe_time_diff}**"
     )
 
 async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -201,7 +221,8 @@ async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         # 如果使用了国家/城市名映射，添加提示
         if timezone_input and country_info:
             if country_info.get("name"):
-                response += f"\n\n💡 已识别为 {country_info['name']}"
+                safe_country_name = escape_markdown(country_info['name'], version=2)
+                response += f"\n\n💡 已识别为 {safe_country_name}"
         
         await send_message_with_auto_delete(
             context=context,
@@ -342,27 +363,29 @@ async def timezone_list_command(update: Update, context: ContextTypes.DEFAULT_TY
         cities = get_supported_cities()
         city_list = []
         for i, city in enumerate(cities[:15]):  # 只显示前15个城市，避免消息过长
-            city_list.append(f"• {city}")
+            safe_city = escape_markdown(city, version=2)
+            city_list.append(f"• {safe_city}")
         
         # 获取支持的国家列表（前10个）
         countries = get_supported_countries_for_timezone()[:10]
         country_list = []
         for country in countries:
-            country_list.append(f"{country['flag']} {country['name']}")
+            safe_name = escape_markdown(country['name'], version=2)
+            country_list.append(f"{country['flag']} {safe_name}")
         
         response = (
             "🌍 **支持的时区查询**\n\n"
             "🏙️ **常用城市:**\n" + "\n".join(city_list) +
-            f"\n...等 {len(cities)} 个城市\n\n"
+            f"\n\\.\\.\\.等 {len(cities)} 个城市\n\n"
             "🇺🇳 **支持的国家:**\n" + "\n".join(country_list) +
-            f"\n...等 {len(countries)} 个国家\n\n"
+            f"\n\\.\\.\\.等 {len(get_supported_countries_for_timezone())} 个国家\n\n"
             "💡 **使用方法:**\n"
             "• 城市名: `/time 北京`\n"
             "• 国家名: `/time 日本`\n"
             "• 国家代码: `/time JP`\n"
             "• IANA时区: `/time Asia/Tokyo`\n"
             "• 时区转换: `/convert_time 中国 14:30 美国`\n\n"
-            "🔗 完整IANA时区列表: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones"
+            "🔗 完整IANA时区列表: https://en\\.wikipedia\\.org/wiki/List\\_of\\_tz\\_database\\_time\\_zones"
         )
         
         await send_message_with_auto_delete(
