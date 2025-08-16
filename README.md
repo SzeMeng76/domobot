@@ -16,7 +16,8 @@ Read this in other languages: [简体中文](./README.zh-CN.md)
 **Public features available to all users and groups:**
 - 📺 **Streaming Prices:** Netflix, Disney+, Spotify, HBO Max pricing across global regions
 - 👤 **User Information:** Telegram registration dates, account age, and ID lookup
-- 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`
+- ⏰ **Time & Timezone:** Current time queries, timezone conversion, and timezone lists
+- 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`
 - 👥 **Group Friendly:** Works in any Telegram group without requiring whitelist approval
 
 *Advanced features (crypto, weather, Steam prices, movie/TV info, etc.) require whitelist access.*
@@ -35,6 +36,7 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 
 -   📺 **Public Streaming Prices:** Available to all users - query subscription prices for Netflix, Disney+, Spotify, and HBO Max across global regions.
 -   👤 **Public User Information:** Available to all users - check Telegram user registration dates, account age, and get user/group IDs.
+-   ⏰ **Public Time & Timezone:** Available to all users - query current time in any timezone, convert time between zones, and view supported timezone lists with IANA integration.
 -   🎬 **Movie & TV Information:** Query movie/TV details with posters, ratings, cast, trailers, reviews, recommendations, viewing platforms, and season/episode info. Features **3-platform data integration** (TMDB + JustWatch + Trakt) with **JustWatch streaming charts**, real-time ranking trends, platform availability, Telegraph integration for long content, trending discovery, people search, and enhanced statistics with watch counts and community data. *(Whitelist required)*
 -   🪙 **Crypto Prices:** Look up real-time cryptocurrency prices with support for custom amounts and currency conversion, including 24h and 7d percentage changes. *(Whitelist required)*
 -   💳 **BIN Lookup:** Query credit card BIN (Bank Identification Number) information including card brand, type, issuing bank, and country details. *(Whitelist required)*
@@ -128,6 +130,14 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /when                     # Reply to a user's message
 /id                       # Get user/group IDs
 /id                       # Reply to a message
+
+# Time & timezone queries
+/time                     # Show help for time commands
+/time Beijing             # Current time in Beijing
+/time Japan               # Current time in Japan
+/time US                  # Current time in US
+/convert_time China 14:30 US    # Convert 2:30 PM from China to US time
+/timezone                 # View supported timezone list
 ```
 
 #### Whitelist-Only Commands
@@ -418,6 +428,16 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 - MySQL and Redis connection details must be configured in the `.env` file.
 
 ### 🆕 Recent Updates
+
+#### Time & Timezone Features (Latest Feature)
+- **Public Time Queries:** Available to all users - query current time in any timezone using country names, codes, cities, or IANA timezone identifiers
+- **Timezone Conversion:** Convert time between different timezones with intelligent parsing of various timezone formats
+- **Comprehensive Timezone Support:** Supports 200+ cities, 190+ countries with full IANA timezone database integration
+- **Country Data Integration:** Leverages existing country_data.py for consistent flag display and localized country names
+- **Smart Input Recognition:** Accepts Chinese/English country names, ISO country codes, major city names, and standard IANA timezone identifiers
+- **Interactive Help System:** Context-aware help with complete IANA timezone documentation links
+- **Caching System:** Redis-powered caching for timezone differences and location lookups for optimal performance
+- **Markdown V2 Formatting:** Full compliance with Telegram's formatting requirements with proper character escaping
 
 #### Data Points Management System (Latest Feature)
 - **JSON Storage Architecture:** Replaced hardcoded data points with flexible JSON file storage system
