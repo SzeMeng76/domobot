@@ -388,26 +388,14 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         # 生成唯一的会话ID
         session_id = f"app_search_{user_id}_{int(time.time())}"
 
-        # 如果用户已经有活跃的搜索会话，取消旧的删除任务并立即清理旧消息
+        # 如果用户已经有活跃的搜索会话，取消旧的删除任务
         old_session_cleanup_task = None
         if user_id in user_search_sessions:
             old_session = user_search_sessions[user_id]
             old_session_id = old_session.get("session_id")
-            old_message_id = old_session.get("message_id")
-            old_chat_id = old_session.get("chat_id")
-            
             if old_session_id:
                 # 异步取消旧的删除任务，不等待完成
                 old_session_cleanup_task = asyncio.create_task(cancel_session_deletions(old_session_id, context))
-            
-            # 立即删除旧的搜索结果消息
-            if old_message_id and old_chat_id:
-                try:
-                    await context.bot.delete_message(chat_id=old_chat_id, message_id=old_message_id)
-                    logger.info(f"🗑️ 已删除旧搜索结果消息: {old_message_id}")
-                except Exception as e:
-                    logger.debug(f"删除旧搜索结果消息失败（可能已被删除）: {e}")
-            
             logger.info(
                 f"🔄 User {user_id} has existing search session (message: {old_session.get('message_id')}, query: '{old_session.get('query')}'), will be replaced with new search"
             )
