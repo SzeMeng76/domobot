@@ -506,7 +506,6 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         # 现在执行旧会话清理（在新消息创建完成后）
         if old_session_cleanup_info:
             old_session_id = old_session_cleanup_info.get("session_id")
-            old_message_id = old_session_cleanup_info.get("message_id")
             old_chat_id = old_session_cleanup_info.get("chat_id")
             
             # 异步取消旧的删除任务
@@ -514,15 +513,31 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             if old_session_id:
                 cleanup_tasks.append(cancel_session_deletions(old_session_id, context))
             
-            # 删除旧的搜索结果消息（只有当message_id有效时才删除）
-            if old_message_id and old_chat_id and old_message_id is not None:
+            # 删除与旧会话相关的消息：获取Redis中该会话的所有消息并删除
+            if old_session_id and old_chat_id:
                 try:
-                    await context.bot.delete_message(chat_id=old_chat_id, message_id=old_message_id)
-                    logger.info(f"🗑️ 已删除旧搜索结果消息: {old_message_id}")
+                    # 获取旧会话调度的所有消息ID
+                    scheduler = context.bot_data.get("message_delete_scheduler")
+                    if scheduler and hasattr(scheduler, 'get_session_message_ids'):
+                        # 如果调度器支持获取会话消息ID，使用这个方法
+                        message_ids = await scheduler.get_session_message_ids(old_session_id)
+                        for msg_id in message_ids:
+                            try:
+                                await context.bot.delete_message(chat_id=old_chat_id, message_id=msg_id)
+                                logger.info(f"🗑️ 已删除旧会话消息: {msg_id}")
+                            except Exception as e:
+                                logger.debug(f"删除旧会话消息失败（可能已被删除）: {e}")
+                    else:
+                        # 回退方案：尝试删除可能的消息ID（当前消息ID-1）
+                        possible_old_msg_id = new_message.message_id - 1 if new_message else None
+                        if possible_old_msg_id:
+                            try:
+                                await context.bot.delete_message(chat_id=old_chat_id, message_id=possible_old_msg_id)
+                                logger.info(f"🗑️ 已删除可能的旧搜索结果消息: {possible_old_msg_id}")
+                            except Exception as e:
+                                logger.debug(f"删除可能的旧搜索结果消息失败: {e}")
                 except Exception as e:
-                    logger.debug(f"删除旧搜索结果消息失败（可能已被删除）: {e}")
-            elif old_message_id is None:
-                logger.debug("旧会话消息ID为None，跳过删除（可能是loading消息阶段）")
+                    logger.warning(f"清理旧会话消息时出错: {e}")
             
             # 等待删除任务取消完成
             if cleanup_tasks:
