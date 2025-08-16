@@ -388,13 +388,10 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         # 生成唯一的会话ID
         session_id = f"app_search_{user_id}_{int(time.time())}"
 
-        # 如果用户已经有活跃的搜索会话，取消旧的删除任务
+        # 如果用户已经有活跃的搜索会话，记录但不取消旧的删除任务
+        # 让旧消息按原计划自动删除，避免遗留消息
         if user_id in user_search_sessions:
             old_session = user_search_sessions[user_id]
-            old_session_id = old_session.get("session_id")
-            if old_session_id:
-                cancelled_count = await cancel_session_deletions(old_session_id, context)
-                logger.info(f"🔄 用户 {user_id} 有现有搜索会话，已取消 {cancelled_count} 个旧的删除任务")
             logger.info(
                 f"🔄 User {user_id} has existing search session (message: {old_session.get('message_id')}, query: '{old_session.get('query')}'), will be replaced with new search"
             )
