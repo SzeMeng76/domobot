@@ -396,25 +396,21 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             old_chat_id = old_session.get("chat_id")
             old_session_id = old_session.get("session_id")
             
-            # 先取消旧会话的所有删除任务，避免竞态条件
-            if old_session_id:
-                cancelled_count = await cancel_session_deletions(old_session_id, context)
-                logger.info(f"🔄 用户 {user_id} 有现有搜索会话，已取消 {cancelled_count} 个旧的删除任务")
-            
-            # 然后立即删除旧的搜索结果消息
+            # 立即删除旧的搜索结果消息
             if old_message_id and old_chat_id:
                 try:
                     logger.info(f"🗑️ 准备立即删除用户 {user_id} 的旧搜索结果消息: chat_id={old_chat_id}, message_id={old_message_id}")
                     await context.bot.delete_message(chat_id=old_chat_id, message_id=old_message_id)
                     logger.info(f"✅ 已成功删除用户 {user_id} 的旧搜索结果消息: {old_message_id}")
                 except Exception as e:
-                    # 如果消息已经不存在，这是正常的（可能已经被调度器删除）
-                    if "message to delete not found" in str(e).lower():
-                        logger.info(f"ℹ️ 旧搜索结果消息已经不存在（可能已被自动删除）: {old_message_id}")
-                    else:
-                        logger.error(f"❌ 删除旧搜索结果消息失败: chat_id={old_chat_id}, message_id={old_message_id}, error: {e}")
+                    logger.error(f"❌ 删除旧搜索结果消息失败: chat_id={old_chat_id}, message_id={old_message_id}, error: {e}")
             else:
                 logger.warning(f"⚠️ 无法删除旧搜索结果消息: old_message_id={old_message_id}, old_chat_id={old_chat_id}")
+            
+            # 取消旧会话的剩余删除任务
+            if old_session_id:
+                cancelled_count = await cancel_session_deletions(old_session_id, context)
+                logger.info(f"🔄 用户 {user_id} 有现有搜索会话，已取消 {cancelled_count} 个旧的删除任务")
             
             logger.info(
                 f"🔄 User {user_id} has existing search session (message: {old_session.get('message_id')}, query: '{old_session.get('query')}'), will be replaced with new search"
