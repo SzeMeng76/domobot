@@ -388,28 +388,19 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         # 生成唯一的会话ID
         session_id = f"app_search_{user_id}_{int(time.time())}"
 
-        # 如果用户已经有活跃的搜索会话，取消旧的删除任务并立即清理旧消息
-        old_session_cleanup_task = None
+        # 保存旧会话信息，但延迟清理直到新消息创建完成
+        old_session_cleanup_info = None
         if user_id in user_search_sessions:
             old_session = user_search_sessions[user_id]
-            old_session_id = old_session.get("session_id")
-            old_message_id = old_session.get("message_id")
-            old_chat_id = old_session.get("chat_id")
-            
-            if old_session_id:
-                # 异步取消旧的删除任务，不等待完成
-                old_session_cleanup_task = asyncio.create_task(cancel_session_deletions(old_session_id, context))
-            
-            # 立即删除旧的搜索结果消息
-            if old_message_id and old_chat_id:
-                try:
-                    await context.bot.delete_message(chat_id=old_chat_id, message_id=old_message_id)
-                    logger.info(f"🗑️ 已删除旧搜索结果消息: {old_message_id}")
-                except Exception as e:
-                    logger.debug(f"删除旧搜索结果消息失败（可能已被删除）: {e}")
+            old_session_cleanup_info = {
+                "session_id": old_session.get("session_id"),
+                "message_id": old_session.get("message_id"),
+                "chat_id": old_session.get("chat_id"),
+                "query": old_session.get("query")
+            }
             
             logger.info(
-                f"🔄 User {user_id} has existing search session (message: {old_session.get('message_id')}, query: '{old_session.get('query')}'), will be replaced with new search"
+                f"🔄 User {user_id} has existing search session (message: {old_session_cleanup_info['message_id']}, query: '{old_session_cleanup_info['query']}'), will be replaced with new search"
             )
             # 立即清除旧会话，避免竞态条件
             del user_search_sessions[user_id]
@@ -485,14 +476,6 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             "created_at": datetime.now(),  # 添加创建时间
         }
 
-        # 等待旧会话清理完成，避免删除任务冲突
-        if old_session_cleanup_task:
-            try:
-                cancelled_count = await old_session_cleanup_task
-                logger.info(f"🔄 用户 {user_id} 已完成旧会话清理，取消了 {cancelled_count} 个删除任务")
-            except Exception as e:
-                logger.warning(f"等待旧会话清理时出错: {e}")
-
         logger.info(
             f"✅ Created new search session for user {user_id}: message {message.message_id}, query '{final_query}', chat {update.effective_chat.id}, session {session_id}"
         )
@@ -519,6 +502,34 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         # 更新会话中的消息ID
         if new_message:
             user_search_sessions[user_id]["message_id"] = new_message.message_id
+
+        # 现在执行旧会话清理（在新消息创建完成后）
+        if old_session_cleanup_info:
+            old_session_id = old_session_cleanup_info.get("session_id")
+            old_message_id = old_session_cleanup_info.get("message_id")
+            old_chat_id = old_session_cleanup_info.get("chat_id")
+            
+            # 异步取消旧的删除任务
+            cleanup_tasks = []
+            if old_session_id:
+                cleanup_tasks.append(cancel_session_deletions(old_session_id, context))
+            
+            # 删除旧的搜索结果消息
+            if old_message_id and old_chat_id:
+                try:
+                    await context.bot.delete_message(chat_id=old_chat_id, message_id=old_message_id)
+                    logger.info(f"🗑️ 已删除旧搜索结果消息: {old_message_id}")
+                except Exception as e:
+                    logger.debug(f"删除旧搜索结果消息失败（可能已被删除）: {e}")
+            
+            # 等待删除任务取消完成
+            if cleanup_tasks:
+                try:
+                    results = await asyncio.gather(*cleanup_tasks, return_exceptions=True)
+                    cancelled_count = results[0] if results and not isinstance(results[0], Exception) else 0
+                    logger.info(f"🔄 用户 {user_id} 已完成旧会话清理，取消了 {cancelled_count} 个删除任务")
+                except Exception as e:
+                    logger.warning(f"等待旧会话清理时出错: {e}")
 
         # 删除用户命令消息
         if update.message:
