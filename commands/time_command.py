@@ -20,6 +20,26 @@ from utils.timezone_mapper import (
     get_supported_cities
 )
 
+# 帮助文本
+TIME_HELP_TEXT = (
+    "*时间查询帮助*\n\n"
+    "**命令列表:**\n"
+    "• `/time [时区]` \\- 查询指定时区当前时间\n"
+    "• `/convert_time <源时区> <时间> <目标时区>` \\- 时区转换\n"
+    "• `/timezone` \\- 查看支持的时区列表\n\n"
+    "**时区格式支持:**\n"
+    "• 国家名: `中国`, `日本`, `美国`\n"
+    "• 国家代码: `CN`, `JP`, `US`\n"
+    "• 城市名: `北京`, `东京`, `纽约`\n"
+    "• IANA时区: `Asia/Shanghai`, `America/New_York`\n\n"
+    "**使用示例:**\n"
+    "• `/time 北京` \\- 查询北京时间\n"
+    "• `/time Japan` \\- 查询日本时间\n"
+    "• `/convert_time 中国 14:30 美国` \\- 时区转换\n"
+    "• `/timezone` \\- 查看所有支持的时区\n\n"
+    "🔗 完整IANA时区列表: https://en\\.wikipedia\\.org/wiki/List\\_of\\_tz\\_database\\_time\\_zones"
+)
+
 logger = logging.getLogger(__name__)
 
 # 全局变量
@@ -204,9 +224,24 @@ def format_conversion_result(result: Dict[str, Any], source_country: dict = None
 async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """获取当前时间"""
     try:
+        # 如果没有参数，显示帮助信息
+        if not context.args:
+            await send_message_with_auto_delete(
+                context=context,
+                chat_id=update.effective_chat.id,
+                text=TIME_HELP_TEXT,
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+            await delete_user_command(
+                context=context,
+                chat_id=update.effective_chat.id,
+                message_id=update.effective_message.message_id
+            )
+            return
+        
         # 解析参数
         args = context.args
-        timezone_input = " ".join(args) if args else None
+        timezone_input = " ".join(args)
         timezone, country_info = resolve_timezone(timezone_input)
         
         # 获取时间服务
