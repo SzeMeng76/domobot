@@ -450,8 +450,7 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                 cancelled_count = await cancel_session_deletions(old_session_id, context)
                 logger.info(f"🧹 智能清理：已立即调度旧消息删除，并取消了 {cancelled_count} 个剩余的删除任务")
 
-        # 暂时存储用户指定的国家，稍后创建完整会话数据
-        temp_user_countries = final_countries_to_search or None
+        user_search_sessions[user_id] = {"user_specified_countries": final_countries_to_search or None}
 
         # For search, we only use the first specified country.
         country_code = (final_countries_to_search[0] if final_countries_to_search else "US").lower()
@@ -519,7 +518,7 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             "search_data": search_data_for_session,
             "message_id": None,  # 暂时设为None，稍后更新为搜索结果消息ID
             "user_command_message_id": update.message.message_id if update.message else None,  # 记录用户命令消息ID
-            "user_specified_countries": temp_user_countries,
+            "user_specified_countries": final_countries_to_search or None,
             "chat_id": update.effective_chat.id,  # 获取 chat_id
             "session_id": session_id,  # 添加会话ID
             "created_at": datetime.now(),  # 添加创建时间
