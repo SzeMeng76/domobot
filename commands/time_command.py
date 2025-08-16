@@ -181,12 +181,6 @@ def format_conversion_result(result: Dict[str, Any], source_country: dict = None
         f"⏱️ **时差: {result['time_difference']}**"
     )
 
-@command_factory.register_command(
-    command="time",
-    description="查询当前时间（可指定时区）",
-    permission=Permission.NONE,
-    usage="/time [时区]\n例如: /time 东京 或 /time Asia/Tokyo"
-)
 async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """获取当前时间"""
     try:
@@ -247,12 +241,6 @@ async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             message_id=update.effective_message.message_id
         )
 
-@command_factory.register_command(
-    command="convert_time",
-    description="时区转换",
-    permission=Permission.NONE,
-    usage="/convert_time <源时区> <时间> <目标时区>\n例如: /convert_time 北京 14:30 纽约"
-)
 async def convert_time_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """时区转换"""
     try:
@@ -347,12 +335,6 @@ async def convert_time_command(update: Update, context: ContextTypes.DEFAULT_TYP
             message_id=update.effective_message.message_id
         )
 
-@command_factory.register_command(
-    command="timezone",
-    description="查看支持的时区列表",
-    permission=Permission.NONE,
-    usage="/timezone"
-)
 async def timezone_list_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """显示支持的时区列表"""
     try:
@@ -409,3 +391,8 @@ async def timezone_list_command(update: Update, context: ContextTypes.DEFAULT_TY
             chat_id=update.effective_chat.id,
             message_id=update.effective_message.message_id
         )
+
+# Register commands
+command_factory.register_command("time", time_command, permission=Permission.NONE, description="查询当前时间（可指定时区）")
+command_factory.register_command("convert_time", convert_time_command, permission=Permission.NONE, description="时区转换")
+command_factory.register_command("timezone", timezone_list_command, permission=Permission.NONE, description="查看支持的时区列表")
