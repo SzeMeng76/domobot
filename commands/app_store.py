@@ -257,48 +257,6 @@ def create_search_keyboard(search_data: dict) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(keyboard)
 
 
-async def schedule_immediate_cleanup_for_old_session(old_session: dict, context: ContextTypes.DEFAULT_TYPE, delay: int = 1) -> None:
-    """
-    为旧会话的关键消息设置立即删除
-    
-    Args:
-        old_session: 旧的会话数据
-        context: Bot 上下文
-        delay: 删除延迟（秒），默认1秒
-    """
-    try:
-        chat_id = old_session.get("chat_id")
-        if not chat_id:
-            logger.warning("旧会话缺少 chat_id，无法执行立即清理")
-            return
-        
-        cleanup_tasks = []
-        
-        # 立即删除旧的搜索结果消息
-        old_message_id = old_session.get("message_id")
-        if old_message_id:
-            logger.info(f"🧹 调度立即删除旧搜索结果消息: chat_id={chat_id}, message_id={old_message_id}, delay={delay}s")
-            cleanup_tasks.append(
-                _schedule_deletion(context, chat_id, old_message_id, delay)
-            )
-        
-        # 立即删除旧的用户命令消息
-        old_user_command_id = old_session.get("user_command_message_id")
-        if old_user_command_id:
-            logger.info(f"🧹 调度立即删除旧用户命令消息: chat_id={chat_id}, message_id={old_user_command_id}, delay={delay}s")
-            cleanup_tasks.append(
-                _schedule_deletion(context, chat_id, old_user_command_id, delay)
-            )
-        
-        # 并发执行所有清理任务
-        if cleanup_tasks:
-            await asyncio.gather(*cleanup_tasks, return_exceptions=True)
-            logger.info(f"✅ 已调度 {len(cleanup_tasks)} 个旧会话消息的立即删除")
-        
-    except Exception as e:
-        logger.error(f"为旧会话调度立即清理时出错: {e}")
-
-
 async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理 /app 命令，使用iTunes API进行分页搜索"""
     if not update.message:
@@ -430,22 +388,16 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         # 生成唯一的会话ID
         session_id = f"app_search_{user_id}_{int(time.time())}"
 
-        # 如果用户已经有活跃的搜索会话，使用智能清理策略
+        # 如果用户已经有活跃的搜索会话，取消旧的删除任务
         if user_id in user_search_sessions:
             old_session = user_search_sessions[user_id]
             old_session_id = old_session.get("session_id")
-            
+            if old_session_id:
+                cancelled_count = await cancel_session_deletions(old_session_id, context)
+                logger.info(f"🔄 用户 {user_id} 有现有搜索会话，已取消 {cancelled_count} 个旧的删除任务")
             logger.info(
                 f"🔄 User {user_id} has existing search session (message: {old_session.get('message_id')}, query: '{old_session.get('query')}'), will be replaced with new search"
             )
-            
-            # 智能清理：立即删除旧的搜索结果消息
-            await schedule_immediate_cleanup_for_old_session(old_session, context, delay=1)
-            
-            # 取消旧会话的其余删除任务（如用户命令等）
-            if old_session_id:
-                cancelled_count = await cancel_session_deletions(old_session_id, context)
-                logger.info(f"🧹 智能清理：已立即调度旧消息删除，并取消了 {cancelled_count} 个剩余的删除任务")
 
         user_search_sessions[user_id] = {"user_specified_countries": final_countries_to_search or None}
 
@@ -514,7 +466,6 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             "query": final_query,
             "search_data": search_data_for_session,
             "message_id": message.message_id,
-            "user_command_message_id": update.message.message_id if update.message else None,  # 记录用户命令消息ID
             "user_specified_countries": final_countries_to_search or None,
             "chat_id": update.effective_chat.id,  # 获取 chat_id
             "session_id": session_id,  # 添加会话ID
@@ -846,23 +797,6 @@ async def handle_app_id_query(update: Update, context: ContextTypes.DEFAULT_TYPE
     user_id = update.effective_user.id if update.effective_user else None
     if not user_id:
         return
-
-    # 智能清理：如果用户有现有搜索会话，立即清理
-    if user_id in user_search_sessions:
-        old_session = user_search_sessions[user_id]
-        logger.info(f"🔄 App ID查询：用户 {user_id} 有现有搜索会话，将执行智能清理")
-        
-        # 立即清理旧的搜索结果
-        await schedule_immediate_cleanup_for_old_session(old_session, context, delay=1)
-        
-        # 取消旧会话的其他删除任务
-        old_session_id = old_session.get("session_id")
-        if old_session_id:
-            cancelled_count = await cancel_session_deletions(old_session_id, context)
-            logger.info(f"🧹 App ID查询智能清理：已立即调度旧消息删除，并取消了 {cancelled_count} 个剩余任务")
-        
-        # 清除会话记录
-        del user_search_sessions[user_id]
 
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
