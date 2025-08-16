@@ -469,7 +469,7 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         user_search_sessions[user_id] = {
             "query": final_query,
             "search_data": search_data_for_session,
-            "message_id": message.message_id,
+            "message_id": None,  # 暂时为None，稍后更新为搜索结果消息ID
             "user_specified_countries": final_countries_to_search or None,
             "chat_id": update.effective_chat.id,  # 获取 chat_id
             "session_id": session_id,  # 添加会话ID
@@ -514,13 +514,15 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             if old_session_id:
                 cleanup_tasks.append(cancel_session_deletions(old_session_id, context))
             
-            # 删除旧的搜索结果消息
-            if old_message_id and old_chat_id:
+            # 删除旧的搜索结果消息（只有当message_id有效时才删除）
+            if old_message_id and old_chat_id and old_message_id is not None:
                 try:
                     await context.bot.delete_message(chat_id=old_chat_id, message_id=old_message_id)
                     logger.info(f"🗑️ 已删除旧搜索结果消息: {old_message_id}")
                 except Exception as e:
                     logger.debug(f"删除旧搜索结果消息失败（可能已被删除）: {e}")
+            elif old_message_id is None:
+                logger.debug("旧会话消息ID为None，跳过删除（可能是loading消息阶段）")
             
             # 等待删除任务取消完成
             if cleanup_tasks:
