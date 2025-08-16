@@ -277,13 +277,11 @@ async def schedule_immediate_cleanup_for_old_session(old_session: dict, context:
         
         # 立即删除旧的搜索结果消息
         old_message_id = old_session.get("message_id")
-        if old_message_id is not None:
+        if old_message_id:
             logger.info(f"🧹 调度立即删除旧搜索结果消息: chat_id={chat_id}, message_id={old_message_id}, delay={delay}s")
             cleanup_tasks.append(
                 _schedule_deletion(context, chat_id, old_message_id, delay)
             )
-        else:
-            logger.debug("旧会话的搜索结果消息ID为None，跳过删除")
         
         # 立即删除旧的用户命令消息
         old_user_command_id = old_session.get("user_command_message_id")
@@ -516,7 +514,7 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         user_search_sessions[user_id] = {
             "query": final_query,
             "search_data": search_data_for_session,
-            "message_id": None,  # 暂时设为None，稍后更新为搜索结果消息ID
+            "message_id": message.message_id,
             "user_command_message_id": update.message.message_id if update.message else None,  # 记录用户命令消息ID
             "user_specified_countries": final_countries_to_search or None,
             "chat_id": update.effective_chat.id,  # 获取 chat_id
