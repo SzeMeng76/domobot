@@ -28,3 +28,8 @@ Babel>=2.14.0
 
 # JustWatch API for streaming providers
 simple-justwatch-python-api==0.16
+
+# Timezone Support
+tzlocal==5.3.1
+tzdata==2025.2
+backports.zoneinfo==0.2.1; python_version<"3.9"

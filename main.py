@@ -95,6 +95,7 @@ from commands import (
     spotify,
     steam,
     system_commands,
+    time_command,
     weather,
 )
 from commands.rate_command import set_rate_converter
@@ -249,6 +250,7 @@ async def setup_application(application: Application, config) -> None:
     bin.set_dependencies(cache_manager, httpx_client)
     movie.set_dependencies(cache_manager, httpx_client)
     movie.init_movie_service()
+    time_command.set_dependencies(cache_manager)
 
     # 新增：为需要用户缓存的模块注入依赖
     # 这里可以根据实际需要为特定命令模块注入用户缓存管理器
