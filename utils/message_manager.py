@@ -167,7 +167,7 @@ async def delete_user_command(
     return False
 
 
-async def cancel_session_deletions(session_id: str, context: ContextTypes.DEFAULT_TYPE) -> bool:
+async def cancel_session_deletions(session_id: str, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     取消会话相关的所有删除任务
 
@@ -176,7 +176,7 @@ async def cancel_session_deletions(session_id: str, context: ContextTypes.DEFAUL
         context: Bot 上下文
 
     Returns:
-        是否成功取消
+        取消的任务数量
     """
     try:
         if context and hasattr(context, "bot_data"):
@@ -184,14 +184,14 @@ async def cancel_session_deletions(session_id: str, context: ContextTypes.DEFAUL
             if scheduler:
                 count = await scheduler.cancel_session_deletions(session_id)
                 logger.info(f"已取消会话 {session_id} 的 {count} 个删除任务")
-                return count > 0
+                return count
 
         logger.warning("无法获取消息删除调度器")
-        return False
+        return 0
 
     except Exception as e:
         logger.error(f"取消会话删除任务失败: {e}")
-        return False
+        return 0
 
 
 # 注意：schedule_message_deletion 函数已被删除

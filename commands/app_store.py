@@ -23,7 +23,8 @@ from utils.message_manager import (
     send_info,  # <--- 把它加进来！
     send_help,
     delete_user_command,
-    MessageType
+    MessageType,
+    _schedule_deletion
 )
 from utils.permissions import Permission
 from utils.price_parser import extract_currency_and_price
