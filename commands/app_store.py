@@ -389,18 +389,17 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         session_id = f"app_search_{user_id}_{int(time.time())}"
 
         # 如果用户已经有活跃的搜索会话，取消旧的删除任务
-        old_session_cleanup_task = None
         if user_id in user_search_sessions:
             old_session = user_search_sessions[user_id]
             old_session_id = old_session.get("session_id")
             if old_session_id:
-                # 异步取消旧的删除任务，不等待完成
-                old_session_cleanup_task = asyncio.create_task(cancel_session_deletions(old_session_id, context))
+                cancelled_count = await cancel_session_deletions(old_session_id, context)
+                logger.info(f"🔄 用户 {user_id} 有现有搜索会话，已取消 {cancelled_count} 个旧的删除任务")
             logger.info(
                 f"🔄 User {user_id} has existing search session (message: {old_session.get('message_id')}, query: '{old_session.get('query')}'), will be replaced with new search"
             )
-            # 立即清除旧会话，避免竞态条件
-            del user_search_sessions[user_id]
+
+        user_search_sessions[user_id] = {"user_specified_countries": final_countries_to_search or None}
 
         # For search, we only use the first specified country.
         country_code = (final_countries_to_search[0] if final_countries_to_search else "US").lower()
@@ -472,14 +471,6 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             "session_id": session_id,  # 添加会话ID
             "created_at": datetime.now(),  # 添加创建时间
         }
-
-        # 等待旧会话清理完成，避免删除任务冲突
-        if old_session_cleanup_task:
-            try:
-                cancelled_count = await old_session_cleanup_task
-                logger.info(f"🔄 用户 {user_id} 已完成旧会话清理，取消了 {cancelled_count} 个删除任务")
-            except Exception as e:
-                logger.warning(f"等待旧会话清理时出错: {e}")
 
         logger.info(
             f"✅ Created new search session for user {user_id}: message {message.message_id}, query '{final_query}', chat {update.effective_chat.id}, session {session_id}"
