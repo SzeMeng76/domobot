@@ -536,28 +536,21 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         # 删除搜索进度消息，然后发送新的搜索结果消息
         await message.delete()
         
-        # 直接发送搜索结果消息，不使用自动删除API（稍后手动管理删除）
-        try:
-            result_message = await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=foldable_text_v2(result_text),
-                reply_markup=keyboard,
-                parse_mode="MarkdownV2",
-                disable_web_page_preview=True
-            )
-            
-            # 立即更新会话中的消息ID
-            user_search_sessions[user_id]["message_id"] = result_message.message_id
-            logger.info(f"✅ 搜索结果已发送并更新会话: user={user_id}, message_id={result_message.message_id}")
-            
-            # 手动调度这个消息的删除
-            from utils.config_manager import get_config
-            config = get_config()
-            await _schedule_deletion(context, result_message.chat_id, result_message.message_id, config.auto_delete_delay, session_id)
-            
-        except Exception as e:
-            logger.error(f"发送搜索结果消息失败: {e}")
-            # 如果发送失败，保持message_id为None
+        # 使用统一的消息发送API发送搜索结果
+        new_message = await send_message_with_auto_delete(
+            context, 
+            update.effective_chat.id, 
+            foldable_text_v2(result_text), 
+            MessageType.SEARCH_RESULT,
+            session_id=session_id,
+            reply_markup=keyboard, 
+            parse_mode="MarkdownV2", 
+            disable_web_page_preview=True
+        )
+        
+        # 更新会话中的消息ID
+        if new_message:
+            user_search_sessions[user_id]["message_id"] = new_message.message_id
 
         # 删除用户命令消息
         if update.message:
