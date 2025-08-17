@@ -52,13 +52,25 @@ class TLDManager:
     async def ensure_data_available(self):
         """确保TLD数据可用"""
         if not self.tld_file.exists():
-            logger.info("TLD数据文件不存在，尝试下载...")
+            logger.info(f"TLD数据文件不存在: {self.tld_file}，尝试下载...")
             updater = self.get_updater()
             if updater:
-                await updater.update_data(force=True)
+                try:
+                    success = await updater.update_data(force=True)
+                    if success:
+                        logger.info("TLD数据下载成功")
+                    else:
+                        logger.error("TLD数据下载失败")
+                except Exception as e:
+                    logger.error(f"下载TLD数据时出错: {e}")
+            else:
+                logger.error("无法获取TLD更新器")
+        else:
+            logger.debug(f"TLD数据文件已存在: {self.tld_file}")
         
     def load_tld_data(self):
         """加载TLD数据"""
+        logger.debug(f"尝试加载TLD数据文件: {self.tld_file}")
         if not self.tld_file.exists():
             logger.warning(f"TLD数据文件不存在: {self.tld_file}")
             return None
@@ -66,7 +78,9 @@ class TLDManager:
         try:
             with open(self.tld_file, 'r', encoding='utf-8') as f:
                 self._tld_data = json.load(f)
-            logger.debug(f"已加载 {len(self._tld_data) if self._tld_data else 0} 个TLD记录")
+            logger.info(f"已加载 {len(self._tld_data) if self._tld_data else 0} 个TLD记录")
+            if self._tld_data:
+                logger.debug(f"数据示例keys: {list(self._tld_data.keys())[:5]}")
         except Exception as e:
             logger.error(f"加载TLD数据失败: {e}")
             self._tld_data = None
@@ -82,6 +96,7 @@ class TLDManager:
             self.load_tld_data()
             
         if not self._tld_data:
+            logger.debug("TLD数据为空")
             return None
             
         # 清理TLD输入
@@ -89,9 +104,12 @@ class TLDManager:
         if not tld_clean.startswith('.'):
             tld_clean = '.' + tld_clean
             
+        logger.debug(f"查找TLD: '{tld_clean}', 数据中的keys示例: {list(self._tld_data.keys())[:5]}")
+        
         # IANA数据是字典格式，key是完整的TLD（带点）
         if tld_clean in self._tld_data:
             item = self._tld_data[tld_clean]
+            logger.debug(f"找到TLD数据: {item}")
             return {
                 '类型': self._map_tld_type(item.get('tldType')),
                 '管理机构': self._extract_nic_name(item.get('nic')),
@@ -100,7 +118,9 @@ class TLDManager:
                 'WHOIS服务器': self._clean_whois_server(item.get('whois')),
                 '国际化域名': '是' if item.get('isIDN') == 'True' else '否'
             }
-        return None
+        else:
+            logger.debug(f"未找到TLD '{tld_clean}' 在数据中")
+            return None
     
     def _clean_whois_server(self, whois: str) -> str:
         """清理WHOIS服务器信息"""
