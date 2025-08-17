@@ -7,6 +7,9 @@ WHOIS查询命令模块
 import logging
 import re
 import ipaddress
+import json
+import os
+from pathlib import Path
 from typing import Optional, Dict, Any, Tuple
 import asyncio
 from datetime import datetime, timedelta
@@ -25,6 +28,113 @@ logger = logging.getLogger(__name__)
 
 # 全局变量
 cache_manager = None
+
+class TLDManager:
+    """TLD数据管理器 - 使用IANA数据库"""
+    
+    def __init__(self, data_dir="data/tld"):
+        self.data_dir = Path(data_dir)
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.tld_file = self.data_dir / "tld.json"
+        self._tld_data = None
+        self._updater = None
+        
+    def get_updater(self):
+        """获取更新器实例"""
+        if not self._updater:
+            try:
+                from utils.tld_updater import TLDUpdater
+                self._updater = TLDUpdater(str(self.data_dir))
+            except ImportError:
+                logger.warning("TLD更新器不可用")
+        return self._updater
+        
+    async def ensure_data_available(self):
+        """确保TLD数据可用"""
+        if not self.tld_file.exists():
+            logger.info("TLD数据文件不存在，尝试下载...")
+            updater = self.get_updater()
+            if updater:
+                await updater.update_data(force=True)
+        
+    def load_tld_data(self):
+        """加载TLD数据"""
+        if not self.tld_file.exists():
+            logger.warning(f"TLD数据文件不存在: {self.tld_file}")
+            return None
+            
+        try:
+            with open(self.tld_file, 'r', encoding='utf-8') as f:
+                self._tld_data = json.load(f)
+            logger.debug(f"已加载 {len(self._tld_data) if self._tld_data else 0} 个TLD记录")
+        except Exception as e:
+            logger.error(f"加载TLD数据失败: {e}")
+            self._tld_data = None
+            
+        return self._tld_data
+    
+    async def get_tld_info(self, tld: str) -> Optional[Dict[str, Any]]:
+        """获取TLD信息"""
+        # 确保数据可用
+        await self.ensure_data_available()
+        
+        if not self._tld_data:
+            self.load_tld_data()
+            
+        if not self._tld_data:
+            return None
+            
+        # 清理TLD输入
+        tld_clean = tld.lower().lstrip('.')
+        
+        # 查找TLD
+        for item in self._tld_data:
+            if item.get('tld', '').lower() == tld_clean:
+                return {
+                    '类型': self._map_tld_type(item.get('tldType')),
+                    '管理机构': self._extract_nic_name(item.get('nic')),
+                    '创建时间': item.get('registration'),
+                    '最后更新': item.get('lastUpdate'),
+                    'WHOIS服务器': item.get('whois'),
+                    '国际化域名': '是' if item.get('isIDN') else '否'
+                }
+        return None
+    
+    def _map_tld_type(self, tld_type: str) -> str:
+        """映射TLD类型为中文"""
+        type_map = {
+            'gTLD': '通用顶级域名',
+            'ccTLD': '国家代码顶级域名', 
+            'iTLD': '基础设施顶级域名'
+        }
+        return type_map.get(tld_type, tld_type or '未知')
+    
+    def _extract_nic_name(self, nic_url: str) -> str:
+        """从NIC URL提取机构名称"""
+        if not nic_url:
+            return '未知'
+        
+        # 简单的URL到名称映射
+        name_map = {
+            'verisigninc.com': 'Verisign',
+            'pir.org': 'PIR',
+            'cnnic.cn': 'CNNIC',
+            'neustar.biz': 'Neustar',
+            'nominet.uk': 'Nominet',
+            'jprs.jp': 'JPRS'
+        }
+        
+        for domain, name in name_map.items():
+            if domain in nic_url.lower():
+                return name
+                
+        # 如果没有匹配，返回域名部分
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(nic_url)
+            return parsed.netloc or nic_url
+        except:
+            return nic_url or '未知'
 
 def set_dependencies(c_manager):
     """设置依赖"""
@@ -262,7 +372,7 @@ class WhoisService:
             'success': False,
             'data': {},
             'error': None,
-            'source': 'manual'
+            'source': 'iana'
         }
         
         # 清理TLD输入
@@ -270,8 +380,8 @@ class WhoisService:
         if not tld.startswith('.'):
             tld = '.' + tld
         
-        # 由于TLD查询比较复杂，先提供基础信息
-        tld_info = self._get_tld_info(tld)
+        # 使用IANA数据库查询TLD信息
+        tld_info = await self._get_tld_info(tld)
         if tld_info:
             result['success'] = True
             result['data'] = tld_info
@@ -636,20 +746,34 @@ class WhoisService:
         
         return formatted
     
-    def _get_tld_info(self, tld: str) -> Optional[Dict[str, Any]]:
-        """获取TLD基础信息"""
-        # 常见TLD信息字典
+    async def _get_tld_info(self, tld: str) -> Optional[Dict[str, Any]]:
+        """获取TLD基础信息 - 使用IANA数据库"""
+        try:
+            # 使用TLD管理器获取信息
+            tld_manager = getattr(self, '_tld_manager', None)
+            if not tld_manager:
+                self._tld_manager = TLDManager()
+                tld_manager = self._tld_manager
+            
+            return await tld_manager.get_tld_info(tld)
+        except Exception as e:
+            logger.debug(f"获取TLD信息失败: {e}")
+            # 如果IANA数据不可用，回退到基础硬编码数据
+            return self._get_fallback_tld_info(tld)
+    
+    def _get_fallback_tld_info(self, tld: str) -> Optional[Dict[str, Any]]:
+        """回退的TLD信息（硬编码）"""
         tld_database = {
-            '.com': {'类型': 'gTLD', '管理机构': 'Verisign', '创建': '1985', '用途': '商业'},
-            '.net': {'类型': 'gTLD', '管理机构': 'Verisign', '创建': '1985', '用途': '网络'},
-            '.org': {'类型': 'gTLD', '管理机构': 'PIR', '创建': '1985', '用途': '组织'},
+            '.com': {'类型': 'gTLD', '管理机构': 'Verisign', '创建时间': '1985-01-01', '用途': '商业'},
+            '.net': {'类型': 'gTLD', '管理机构': 'Verisign', '创建时间': '1985-01-01', '用途': '网络'},
+            '.org': {'类型': 'gTLD', '管理机构': 'PIR', '创建时间': '1985-01-01', '用途': '组织'},
             '.cn': {'类型': 'ccTLD', '管理机构': 'CNNIC', '国家': '中国', '用途': '中国国家域名'},
             '.us': {'类型': 'ccTLD', '管理机构': 'Neustar', '国家': '美国', '用途': '美国国家域名'},
             '.uk': {'类型': 'ccTLD', '管理机构': 'Nominet', '国家': '英国', '用途': '英国国家域名'},
             '.jp': {'类型': 'ccTLD', '管理机构': 'JPRS', '国家': '日本', '用途': '日本国家域名'},
             '.io': {'类型': 'ccTLD', '管理机构': 'ICB', '国家': '英属印度洋领地', '用途': '技术公司'},
             '.ai': {'类型': 'ccTLD', '管理机构': 'Government of Anguilla', '国家': '安圭拉', '用途': 'AI公司'},
-            '.dev': {'类型': 'gTLD', '管理机构': 'Google', '创建': '2019', '用途': '开发者'},
+            '.dev': {'类型': 'gTLD', '管理机构': 'Google', '创建时间': '2019-01-01', '用途': '开发者'},
         }
         
         return tld_database.get(tld.lower())

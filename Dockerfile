@@ -34,6 +34,9 @@ RUN pip install --no-cache-dir --no-index --find-links=/app/wheels -r requiremen
 # 复制应用代码
 COPY . .
 
+# 创建数据目录并设置权限
+RUN mkdir -p /app/data/tld && chmod 755 /app/data/tld
+
 # 暴露端口
 EXPOSE 8443
 
