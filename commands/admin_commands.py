@@ -808,3 +808,163 @@ command_factory.register_command(
 # admin命令由ConversationHandler处理，不需要在这里注册
 # command_factory.register_command("admin", admin_command_placeholder, permission=Permission.ADMIN, description="打开管理员面板")
 
+async def refresh_commands_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """管理员刷新所有用户的命令列表（解决新功能不显示问题）"""
+    try:
+        user_id = update.effective_user.id
+        user_manager = get_user_manager(context)
+        
+        # 检查是否为管理员
+        if not await is_admin(user_id, context):
+            await send_error(
+                context,
+                update.effective_chat.id,
+                "❌ 只有管理员可以执行此操作"
+            )
+            if update.message:
+                await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+            return
+        
+        if not user_manager:
+            await send_error(
+                context,
+                update.effective_chat.id,
+                "❌ 用户管理器未初始化"
+            )
+            if update.message:
+                await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+            return
+        
+        # 发送开始处理消息
+        processing_msg = await send_info(
+            context,
+            update.effective_chat.id,
+            "🔄 正在刷新全局和所有用户群组的命令列表..."
+        )
+        
+        success_count = 0
+        error_count = 0
+        
+        # 1. 首先更新全局默认命令（给所有普通用户）
+        try:
+            from telegram import BotCommand
+            none_commands = command_factory.get_command_list(Permission.NONE)
+            basic_bot_commands = [BotCommand(command, description) for command, description in none_commands.items()]
+            await context.bot.set_my_commands(basic_bot_commands)
+            success_count += 1
+            logger.info("已更新全局默认命令列表")
+        except Exception as e:
+            logger.error(f"更新全局默认命令失败: {e}")
+            error_count += 1
+        
+        # 刷新所有白名单用户
+        whitelist_users = await user_manager.get_all_whitelisted_users()
+        for whitelist_user_id in whitelist_users:
+            try:
+                is_admin_user = await is_admin(whitelist_user_id, context)
+                await update_user_command_menu(whitelist_user_id, context, True, is_admin_user)
+                success_count += 1
+            except Exception as e:
+                logger.error(f"刷新用户 {whitelist_user_id} 命令失败: {e}")
+                error_count += 1
+        
+        # 刷新所有管理员（确保管理员都有完整命令）
+        admin_users = await user_manager.get_all_admins()
+        for admin_user_id in admin_users:
+            try:
+                await update_user_command_menu(admin_user_id, context, True, True)
+                if admin_user_id not in whitelist_users:  # 避免重复计数
+                    success_count += 1
+            except Exception as e:
+                logger.error(f"刷新管理员 {admin_user_id} 命令失败: {e}")
+                error_count += 1
+        
+        # 刷新所有白名单群组
+        whitelist_groups = await user_manager.get_all_whitelisted_groups()
+        for group_id in whitelist_groups:
+            try:
+                await update_group_command_menu(group_id, context, True)
+                success_count += 1
+            except Exception as e:
+                logger.error(f"刷新群组 {group_id} 命令失败: {e}")
+                error_count += 1
+        
+        # 删除处理消息
+        try:
+            await processing_msg.delete()
+        except:
+            pass
+        
+        # 发送结果消息
+        result_text = f"✅ 命令列表刷新完成！\n\n📊 统计信息：\n• 成功刷新：{success_count} 个\n• 失败：{error_count} 个\n\n📋 刷新范围：\n• 全局默认命令（所有用户）\n• 白名单用户个人命令\n• 管理员个人命令\n• 白名单群组命令"
+        if error_count > 0:
+            result_text += "\n\n⚠️ 部分项目刷新失败，请查看日志"
+        
+        await send_success(
+            context,
+            update.effective_chat.id,
+            result_text
+        )
+        
+        # 删除用户命令
+        if update.message:
+            await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+        
+        logger.info(f"管理员 {user_id} 已刷新所有用户命令列表，成功：{success_count}，失败：{error_count}")
+        
+    except Exception as e:
+        logger.error(f"批量刷新命令列表失败: {e}")
+        await send_error(
+            context,
+            update.effective_chat.id,
+            "❌ 批量刷新命令列表失败，请稍后重试"
+        )
+        
+        if update.message:
+            await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+
+async def refresh_my_commands_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """用户刷新自己的命令列表"""
+    try:
+        user_id = update.effective_user.id
+        user_manager = get_user_manager(context)
+        
+        # 检查用户权限
+        is_admin_user = await is_admin(user_id, context)
+        is_whitelist_user = False
+        
+        if user_manager:
+            is_whitelist_user = await user_manager.is_whitelisted(user_id)
+        
+        # 更新用户命令菜单
+        await update_user_command_menu(user_id, context, is_whitelist_user, is_admin_user)
+        
+        # 发送成功消息
+        status = "管理员" if is_admin_user else ("白名单用户" if is_whitelist_user else "普通用户")
+        await send_success(
+            context,
+            update.effective_chat.id,
+            f"✅ 你的命令列表已刷新！\n\n👤 权限等级：{status}\n💡 现在可以看到所有可用命令了"
+        )
+        
+        # 删除用户命令
+        if update.message:
+            await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+        
+        logger.info(f"用户 {user_id} 已刷新自己的命令列表，权限：{status}")
+        
+    except Exception as e:
+        logger.error(f"刷新个人命令列表失败: {e}")
+        await send_error(
+            context,
+            update.effective_chat.id,
+            "❌ 刷新命令列表失败，请稍后重试"
+        )
+        
+        if update.message:
+            await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+
+# 注册刷新命令
+command_factory.register_command("refresh_all", refresh_commands_command, permission=Permission.ADMIN, description="管理员刷新所有用户命令列表")
+command_factory.register_command("refresh", refresh_my_commands_command, permission=Permission.NONE, description="刷新我的命令列表")
+
