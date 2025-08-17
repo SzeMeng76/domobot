@@ -266,6 +266,14 @@ class WhoisService:
                 if isinstance(data, dict):
                     try:
                         formatted_data = self._format_ip_data(data)
+                        
+                        # 尝试获取地理位置信息
+                        geolocation_data = await self._query_ip_geolocation(ip)
+                        if geolocation_data:
+                            # 将地理位置信息添加到结果中
+                            geo_info = self._format_geolocation_data(geolocation_data)
+                            formatted_data.update(geo_info)
+                        
                         if formatted_data:  # 确保格式化后有数据
                             result['success'] = True
                             result['data'] = formatted_data
@@ -368,6 +376,102 @@ class WhoisService:
             result['error'] = f"查询失败: {str(e)}"
         
         return result
+    
+    async def _query_ip_geolocation(self, ip: str) -> Optional[Dict[str, Any]]:
+        """查询IP地理位置信息 (使用IP-API.com)"""
+        try:
+            from utils.http_client import create_custom_client
+            
+            # IP-API.com 免费API
+            url = f"http://ip-api.com/json/{ip}?fields=status,message,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,query"
+            
+            headers = {
+                "User-Agent": "Mozilla/5.0 (compatible; DomoBot/1.0)"
+            }
+            
+            async with create_custom_client(headers=headers) as client:
+                response = await client.get(url, timeout=10.0)
+                response.raise_for_status()
+                data = response.json()
+                
+                if data.get('status') == 'success':
+                    return data
+                else:
+                    logger.warning(f"IP地理位置查询失败: {data.get('message', '未知错误')}")
+                    return None
+                    
+        except Exception as e:
+            logger.error(f"IP地理位置查询异常: {e}")
+            return None
+    
+    def _format_geolocation_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """格式化地理位置数据"""
+        formatted = {}
+        
+        try:
+            from utils.country_data import SUPPORTED_COUNTRIES, get_country_flag
+            
+            # 国家信息
+            if 'country' in data and 'countryCode' in data:
+                country_name = data['country']
+                country_code = data['countryCode']
+                try:
+                    # 尝试获取旗帜
+                    flag = get_country_flag(country_code)
+                    formatted['🌍 实际国家'] = f"{flag} {country_name} ({country_code})"
+                except:
+                    formatted['🌍 实际国家'] = f"{country_name} ({country_code})"
+            elif 'country' in data:
+                formatted['🌍 实际国家'] = data['country']
+            
+            # 地区信息
+            if 'regionName' in data:
+                formatted['🏞️ 实际地区'] = data['regionName']
+            
+            # 城市信息
+            if 'city' in data:
+                formatted['🏙️ 实际城市'] = data['city']
+            
+            # 邮编
+            if 'zip' in data and data['zip']:
+                formatted['📮 邮政编码'] = data['zip']
+            
+            # 坐标信息
+            if 'lat' in data and 'lon' in data:
+                lat = data['lat']
+                lon = data['lon']
+                formatted['📍 坐标'] = f"{lat:.4f}, {lon:.4f}"
+            
+            # 时区
+            if 'timezone' in data:
+                formatted['🕐 时区'] = data['timezone']
+            
+            # ISP信息
+            if 'isp' in data:
+                formatted['🌐 ISP'] = data['isp']
+            
+            # 组织信息 (如果与ISP不同)
+            if 'org' in data and data['org'] != data.get('isp'):
+                formatted['🏢 实际组织'] = data['org']
+            
+            # AS信息
+            if 'as' in data:
+                formatted['🔢 实际AS'] = data['as']
+                
+        except ImportError:
+            # 如果country_data不可用，使用简单格式
+            if 'country' in data:
+                if 'countryCode' in data:
+                    formatted['🌍 实际国家'] = f"{data['country']} ({data['countryCode']})"
+                else:
+                    formatted['🌍 实际国家'] = data['country']
+            
+            if 'regionName' in data:
+                formatted['🏞️ 实际地区'] = data['regionName']
+            if 'city' in data:
+                formatted['🏙️ 实际城市'] = data['city']
+        
+        return formatted
     
     async def query_tld(self, tld: str) -> Dict[str, Any]:
         """查询TLD信息"""
@@ -969,7 +1073,7 @@ class WhoisService:
         
         # 添加说明信息，解释WHOIS与地理位置的区别
         if 'asn_description' in data and any(keyword in data['asn_description'].upper() for keyword in ['MICROSOFT', 'AMAZON', 'GOOGLE', 'AZURE', 'AWS']):
-            formatted['💡 说明'] = 'WHOIS显示IP注册信息，服务器实际位置可能不同'
+            formatted['💡 说明'] = 'WHOIS显示IP注册信息，实际位置见下方地理位置数据'
         
         return formatted
     
@@ -1104,7 +1208,9 @@ def format_whois_result(result: Dict[str, Any]) -> str:
             '📅 时间信息': ['创建时间', '过期时间', '更新时间', '最后更新', '续费时间'],
             '📊 状态信息': ['状态', '域名状态', '选项'],
             '🌐 网络信息': ['DNS服务器', 'ASN', 'ASN描述', 'ASN国家', 'ASN注册机构', '网络名称', 'IP段', '起始地址', '结束地址', '网络国家', '网络类型', 'WHOIS服务器', '国际化域名', 'DNSSEC'],
-            '📍 地理位置': ['国家', '地区', '城市', '邮编', '地理坐标'],
+            '📍 注册位置': ['国家', '地区', '城市', '邮编', '地理坐标'],
+            '🌍 实际位置': ['🌍 实际国家', '🏞️ 实际地区', '🏙️ 实际城市', '📮 邮政编码', '📍 坐标', '🕐 时区'],
+            '🏢 实际网络': ['🌐 ISP', '🏢 实际组织', '🔢 实际AS'],
             '📞 联系信息': ['邮箱', '电话', '传真', '联系人', '地址'],
             '🛡️ 安全信息': ['注册商举报邮箱', '注册商举报电话'],
             '🔗 参考信息': ['WHOIS数据库响应', '选项'],
