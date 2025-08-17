@@ -243,13 +243,19 @@ class WhoisService:
         """提取whois21查询结果"""
         formatted = {}
         
-        # whois21对象的属性提取
-        if hasattr(whois_obj, 'domain_name') and whois_obj.domain_name:
-            formatted['域名'] = whois_obj.domain_name
-        
-        if hasattr(whois_obj, 'registrar') and whois_obj.registrar:
-            formatted['注册商'] = whois_obj.registrar
+        # 根据GitHub文档，主要从whois_data字典中提取数据
+        if hasattr(whois_obj, 'whois_data') and whois_obj.whois_data:
+            whois_data = whois_obj.whois_data
             
+            # 域名信息
+            if 'domain_name' in whois_data:
+                formatted['域名'] = whois_data['domain_name']
+            
+            # 注册商信息  
+            if 'registrar' in whois_data:
+                formatted['注册商'] = whois_data['registrar']
+        
+        # 也检查直接属性
         if hasattr(whois_obj, 'creation_date') and whois_obj.creation_date:
             # 处理日期时间格式
             if hasattr(whois_obj.creation_date, 'strftime'):
@@ -257,12 +263,13 @@ class WhoisService:
             else:
                 formatted['创建时间'] = str(whois_obj.creation_date)
             
-        if hasattr(whois_obj, 'expiration_date') and whois_obj.expiration_date:
+        # 注意：根据文档是 expires_date 不是 expiration_date
+        if hasattr(whois_obj, 'expires_date') and whois_obj.expires_date:
             # 处理日期时间格式
-            if hasattr(whois_obj.expiration_date, 'strftime'):
-                formatted['过期时间'] = whois_obj.expiration_date.strftime('%Y-%m-%d %H:%M:%S UTC')
+            if hasattr(whois_obj.expires_date, 'strftime'):
+                formatted['过期时间'] = whois_obj.expires_date.strftime('%Y-%m-%d %H:%M:%S UTC')
             else:
-                formatted['过期时间'] = str(whois_obj.expiration_date)
+                formatted['过期时间'] = str(whois_obj.expires_date)
             
         if hasattr(whois_obj, 'updated_date') and whois_obj.updated_date:
             # 处理日期时间格式
@@ -270,16 +277,35 @@ class WhoisService:
                 formatted['更新时间'] = whois_obj.updated_date.strftime('%Y-%m-%d %H:%M:%S UTC')
             else:
                 formatted['更新时间'] = str(whois_obj.updated_date)
+        
+        # 从whois_data中提取其他信息
+        if hasattr(whois_obj, 'whois_data') and whois_obj.whois_data:
+            whois_data = whois_obj.whois_data
             
-        if hasattr(whois_obj, 'status') and whois_obj.status:
-            # 处理状态信息，可能是列表或字符串
+            if 'status' in whois_data:
+                # 处理状态信息，可能是列表或字符串
+                status = whois_data['status']
+                if isinstance(status, list):
+                    formatted['状态'] = ', '.join(str(s) for s in status)
+                else:
+                    formatted['状态'] = str(status)
+                    
+            if 'name_servers' in whois_data:
+                # 处理DNS服务器列表
+                name_servers = whois_data['name_servers']
+                if isinstance(name_servers, list):
+                    formatted['DNS服务器'] = ', '.join(str(ns) for ns in name_servers)
+                else:
+                    formatted['DNS服务器'] = str(name_servers)
+        
+        # 如果从whois_data没有获取到数据，尝试直接从对象属性获取
+        if not formatted.get('状态') and hasattr(whois_obj, 'status') and whois_obj.status:
             if isinstance(whois_obj.status, list):
                 formatted['状态'] = ', '.join(str(s) for s in whois_obj.status)
             else:
                 formatted['状态'] = str(whois_obj.status)
-            
-        if hasattr(whois_obj, 'name_servers') and whois_obj.name_servers:
-            # 处理DNS服务器列表
+                
+        if not formatted.get('DNS服务器') and hasattr(whois_obj, 'name_servers') and whois_obj.name_servers:
             if isinstance(whois_obj.name_servers, list):
                 formatted['DNS服务器'] = ', '.join(str(ns) for ns in whois_obj.name_servers)
             else:
