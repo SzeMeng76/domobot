@@ -15,7 +15,13 @@ from utils.command_factory import command_factory
 from utils.config_manager import get_config
 from utils.error_handling import with_error_handling
 from utils.http_client import get_http_client
-from utils.message_manager import send_and_auto_delete, delete_user_command
+from utils.message_manager import (
+    send_message_with_auto_delete,
+    delete_user_command,
+    send_info,
+    send_error,
+    send_success
+)
 from utils.permissions import Permission
 
 logger = logging.getLogger(__name__)
@@ -243,14 +249,12 @@ async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🔄 支持缓存，响应迅速"
         )
         
-        await send_and_auto_delete(
-            context=context,
+        # 发送带按钮的消息
+        await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text=message,
-            delay=config.auto_delete_delay,
             parse_mode='Markdown',
-            reply_markup=keyboard,
-            command_message_id=update.effective_message.message_id if update.effective_message else None
+            reply_markup=keyboard
         )
         
         # 删除用户命令
@@ -268,13 +272,11 @@ async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if source not in NEWS_SOURCES:
         available_sources = ", ".join(list(NEWS_SOURCES.keys())[:10])
-        await send_and_auto_delete(
-            context=context,
-            chat_id=update.effective_chat.id,
-            text=f"❌ 不支持的新闻源: `{source}`\n\n部分可用源: {available_sources}\n\n使用 `/news` 查看完整列表",
-            delay=config.auto_delete_delay,
-            parse_mode='Markdown',
-            command_message_id=update.effective_message.message_id if update.effective_message else None
+        await send_error(
+            context, 
+            update.effective_chat.id, 
+            f"❌ 不支持的新闻源: `{source}`\n\n部分可用源: {available_sources}\n\n使用 `/news` 查看完整列表",
+            parse_mode='Markdown'
         )
         
         # 删除用户命令
@@ -299,13 +301,11 @@ async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 格式化并发送消息
         message = format_news_message(source, news_items)
         
-        await send_and_auto_delete(
-            context=context,
-            chat_id=update.effective_chat.id,
-            text=message,
-            delay=config.auto_delete_delay,
-            parse_mode='Markdown',
-            command_message_id=update.effective_message.message_id if update.effective_message else None
+        await send_success(
+            context,
+            update.effective_chat.id,
+            message,
+            parse_mode='Markdown'
         )
         
         # 删除用户命令
@@ -322,12 +322,10 @@ async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         
         logger.error(f"新闻命令执行失败: {e}")
-        await send_and_auto_delete(
-            context=context,
-            chat_id=update.effective_chat.id,
-            text=f"❌ 获取 {NEWS_SOURCES[source]} 新闻失败\n\n请稍后重试或联系管理员",
-            delay=config.auto_delete_delay,
-            command_message_id=update.effective_message.message_id if update.effective_message else None
+        await send_error(
+            context,
+            update.effective_chat.id,
+            f"❌ 获取 {NEWS_SOURCES[source]} 新闻失败\n\n请稍后重试或联系管理员"
         )
         
         # 删除用户命令
@@ -381,13 +379,11 @@ async def hot_news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             message = "❌ 暂时无法获取热门新闻，请稍后重试"
         
-        await send_and_auto_delete(
-            context=context,
-            chat_id=update.effective_chat.id,
-            text=message,
-            delay=config.auto_delete_delay,
-            parse_mode='Markdown',
-            command_message_id=update.effective_message.message_id if update.effective_message else None
+        await send_success(
+            context,
+            update.effective_chat.id,
+            message,
+            parse_mode='Markdown'
         )
         
         # 删除用户命令
@@ -401,12 +397,10 @@ async def hot_news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         
         logger.error(f"热门新闻命令执行失败: {e}")
-        await send_and_auto_delete(
-            context=context,
-            chat_id=update.effective_chat.id,
-            text="❌ 获取热门新闻失败，请稍后重试",
-            delay=config.auto_delete_delay,
-            command_message_id=update.effective_message.message_id if update.effective_message else None
+        await send_error(
+            context,
+            update.effective_chat.id,
+            "❌ 获取热门新闻失败，请稍后重试"
         )
         
         # 删除用户命令
@@ -596,12 +590,10 @@ async def news_clean_cache_command(update: Update, context: ContextTypes.DEFAULT
         else:
             message = "❌ 缓存管理器不可用"
             
-        await send_and_auto_delete(
-            context=context,
-            chat_id=update.effective_chat.id,
-            text=message,
-            delay=config.auto_delete_delay,
-            command_message_id=update.effective_message.message_id if update.effective_message else None
+        await send_success(
+            context,
+            update.effective_chat.id,
+            message
         )
         
         # 删除用户命令
@@ -610,12 +602,10 @@ async def news_clean_cache_command(update: Update, context: ContextTypes.DEFAULT
             
     except Exception as e:
         logger.error(f"清理新闻缓存时发生错误: {e}")
-        await send_and_auto_delete(
-            context=context,
-            chat_id=update.effective_chat.id,
-            text=f"❌ 清理新闻缓存时发生错误: {e}",
-            delay=config.auto_delete_delay,
-            command_message_id=update.effective_message.message_id if update.effective_message else None
+        await send_error(
+            context,
+            update.effective_chat.id,
+            f"❌ 清理新闻缓存时发生错误: {e}"
         )
         
         # 删除用户命令
