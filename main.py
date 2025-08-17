@@ -231,27 +231,6 @@ async def setup_application(application: Application, config) -> None:
     logger.info("✅ 核心组件初始化完成")
 
     # ========================================
-    # 第一步半：初始化TLD数据库
-    # ========================================
-    logger.info("🌐 初始化TLD数据库...")
-    try:
-        from utils.tld_updater import TLDUpdater
-        tld_updater = TLDUpdater()
-        
-        # 检查是否需要下载TLD数据
-        if await tld_updater.should_update():
-            logger.info("📥 正在下载最新TLD数据...")
-            success = await tld_updater.update_data()
-            if success:
-                logger.info("✅ TLD数据库初始化完成")
-            else:
-                logger.warning("⚠️ TLD数据下载失败，将使用内置数据")
-        else:
-            logger.info("✅ TLD数据库已是最新")
-    except Exception as e:
-        logger.warning(f"⚠️ TLD数据库初始化失败: {e}，将使用内置数据")
-
-    # ========================================
     # 第二步：为命令模块注入依赖
     # ========================================
     logger.info(" 注入命令模块依赖...")
