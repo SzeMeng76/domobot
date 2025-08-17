@@ -768,7 +768,18 @@ class WhoisService:
             formatted['ASN描述'] = data['asn_description']
             
         if 'asn_country_code' in data:
-            formatted['ASN国家'] = data['asn_country_code']
+            # 使用country_data优化国家显示
+            country_code = data['asn_country_code']
+            try:
+                from utils.country_data import SUPPORTED_COUNTRIES, get_country_flag
+                if country_code in SUPPORTED_COUNTRIES:
+                    country_name = SUPPORTED_COUNTRIES[country_code]['name']
+                    flag = get_country_flag(country_code)
+                    formatted['ASN国家'] = f"{flag} {country_name} ({country_code})"
+                else:
+                    formatted['ASN国家'] = country_code
+            except ImportError:
+                formatted['ASN国家'] = country_code
             
         if 'asn_registry' in data:
             formatted['ASN注册机构'] = data['asn_registry']
@@ -785,7 +796,18 @@ class WhoisService:
             if 'end_address' in network:
                 formatted['结束地址'] = network['end_address']
             if 'country' in network:
-                formatted['网络国家'] = network['country']
+                # 优化网络国家显示
+                country_code = network['country']
+                try:
+                    from utils.country_data import SUPPORTED_COUNTRIES, get_country_flag
+                    if country_code in SUPPORTED_COUNTRIES:
+                        country_name = SUPPORTED_COUNTRIES[country_code]['name']
+                        flag = get_country_flag(country_code)
+                        formatted['网络国家'] = f"{flag} {country_name} ({country_code})"
+                    else:
+                        formatted['网络国家'] = country_code
+                except ImportError:
+                    formatted['网络国家'] = country_code
             if 'type' in network:
                 formatted['网络类型'] = network['type']
         
@@ -822,7 +844,21 @@ class WhoisService:
                                                 if field_value[4]:  # region (state/province)
                                                     location_info['地区'] = field_value[4]
                                                 if field_value[6]:  # country-name
-                                                    location_info['国家'] = field_value[6]
+                                                    # 尝试优化国家显示
+                                                    country = field_value[6]
+                                                    if len(country) == 2:  # 可能是国家代码
+                                                        try:
+                                                            from utils.country_data import SUPPORTED_COUNTRIES, get_country_flag
+                                                            if country.upper() in SUPPORTED_COUNTRIES:
+                                                                country_name = SUPPORTED_COUNTRIES[country.upper()]['name']
+                                                                flag = get_country_flag(country.upper())
+                                                                location_info['国家'] = f"{flag} {country_name} ({country.upper()})"
+                                                            else:
+                                                                location_info['国家'] = country
+                                                        except ImportError:
+                                                            location_info['国家'] = country
+                                                    else:
+                                                        location_info['国家'] = country
                                                 if field_value[5]:  # postal-code
                                                     location_info['邮编'] = field_value[5]
                                         
@@ -840,7 +876,17 @@ class WhoisService:
         
         # 查找网络块中的国家信息作为备选
         if '国家' not in formatted and 'asn_country_code' in data:
-            formatted['国家'] = data['asn_country_code']
+            country_code = data['asn_country_code']
+            try:
+                from utils.country_data import SUPPORTED_COUNTRIES, get_country_flag
+                if country_code in SUPPORTED_COUNTRIES:
+                    country_name = SUPPORTED_COUNTRIES[country_code]['name']
+                    flag = get_country_flag(country_code)
+                    formatted['国家'] = f"{flag} {country_name} ({country_code})"
+                else:
+                    formatted['国家'] = country_code
+            except ImportError:
+                formatted['国家'] = country_code
         
         # 尝试从其他字段提取地理信息
         if 'objects' in data and isinstance(data['objects'], dict):
@@ -864,7 +910,20 @@ class WhoisService:
                                     if 'region' in addr and '地区' not in formatted:
                                         formatted['地区'] = addr['region']
                                     if 'country' in addr and '国家' not in formatted:
-                                        formatted['国家'] = addr['country']
+                                        country = addr['country']
+                                        if len(country) == 2:  # 可能是国家代码
+                                            try:
+                                                from utils.country_data import SUPPORTED_COUNTRIES, get_country_flag
+                                                if country.upper() in SUPPORTED_COUNTRIES:
+                                                    country_name = SUPPORTED_COUNTRIES[country.upper()]['name']
+                                                    flag = get_country_flag(country.upper())
+                                                    formatted['国家'] = f"{flag} {country_name} ({country.upper()})"
+                                                else:
+                                                    formatted['国家'] = country
+                                            except ImportError:
+                                                formatted['国家'] = country
+                                        else:
+                                            formatted['国家'] = country
                                 elif isinstance(addr, list):
                                     # 处理地址列表格式
                                     for line in addr:
@@ -872,7 +931,21 @@ class WhoisService:
                                             # 简单的国家/地区识别
                                             if any(country in line.upper() for country in ['CN', 'US', 'UK', 'DE', 'FR', 'JP']):
                                                 if '国家' not in formatted:
-                                                    formatted['国家'] = line.strip()
+                                                    # 提取国家代码并优化显示
+                                                    for cc in ['CN', 'US', 'UK', 'DE', 'FR', 'JP']:
+                                                        if cc in line.upper():
+                                                            try:
+                                                                from utils.country_data import SUPPORTED_COUNTRIES, get_country_flag
+                                                                if cc in SUPPORTED_COUNTRIES:
+                                                                    country_name = SUPPORTED_COUNTRIES[cc]['name']
+                                                                    flag = get_country_flag(cc)
+                                                                    formatted['国家'] = f"{flag} {country_name} ({cc})"
+                                                                    break
+                                                                else:
+                                                                    formatted['国家'] = line.strip()
+                                                            except ImportError:
+                                                                formatted['国家'] = line.strip()
+                                                            break
         
         # 如果仍然没有足够信息，添加调试信息
         if len(formatted) < 3:
@@ -893,6 +966,10 @@ class WhoisService:
                         for key, value in raw_item.items():
                             if key.lower() in ['country', 'city', 'address', 'location'] and isinstance(value, str):
                                 formatted[f'原始_{key}'] = value[:50]
+        
+        # 添加说明信息，解释WHOIS与地理位置的区别
+        if 'asn_description' in data and any(keyword in data['asn_description'].upper() for keyword in ['MICROSOFT', 'AMAZON', 'GOOGLE', 'AZURE', 'AWS']):
+            formatted['💡 说明'] = 'WHOIS显示IP注册信息，服务器实际位置可能不同'
         
         return formatted
     
@@ -1031,6 +1108,7 @@ def format_whois_result(result: Dict[str, Any]) -> str:
             '📞 联系信息': ['邮箱', '电话', '传真', '联系人', '地址'],
             '🛡️ 安全信息': ['注册商举报邮箱', '注册商举报电话'],
             '🔗 参考信息': ['WHOIS数据库响应', '选项'],
+            '💡 说明信息': ['💡 说明'],
             '📄 其他信息': []  # 未分类的字段
         }
         
