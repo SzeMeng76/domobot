@@ -85,20 +85,28 @@ class TLDManager:
             return None
             
         # 清理TLD输入
-        tld_clean = tld.lower().lstrip('.')
-        
-        # 查找TLD
-        for item in self._tld_data:
-            if item.get('tld', '').lower() == tld_clean:
-                return {
-                    '类型': self._map_tld_type(item.get('tldType')),
-                    '管理机构': self._extract_nic_name(item.get('nic')),
-                    '创建时间': item.get('registration'),
-                    '最后更新': item.get('lastUpdate'),
-                    'WHOIS服务器': item.get('whois'),
-                    '国际化域名': '是' if item.get('isIDN') else '否'
-                }
+        tld_clean = tld.lower()
+        if not tld_clean.startswith('.'):
+            tld_clean = '.' + tld_clean
+            
+        # IANA数据是字典格式，key是完整的TLD（带点）
+        if tld_clean in self._tld_data:
+            item = self._tld_data[tld_clean]
+            return {
+                '类型': self._map_tld_type(item.get('tldType')),
+                '管理机构': self._extract_nic_name(item.get('nic')),
+                '创建时间': item.get('registration'),
+                '最后更新': item.get('lastUpdate'),
+                'WHOIS服务器': self._clean_whois_server(item.get('whois')),
+                '国际化域名': '是' if item.get('isIDN') == 'True' else '否'
+            }
         return None
+    
+    def _clean_whois_server(self, whois: str) -> str:
+        """清理WHOIS服务器信息"""
+        if not whois or whois == 'NULL':
+            return '无'
+        return whois
     
     def _map_tld_type(self, tld_type: str) -> str:
         """映射TLD类型为中文"""
