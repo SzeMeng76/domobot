@@ -551,19 +551,17 @@ async def news_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
 
 # 注册命令和回调处理器
 command_factory.register_command(
-    command="news",
-    handler=news_command,
-    description="获取各平台热门新闻",
+    "news",
+    news_command,
     permission=Permission.NONE,
-    args_description="[平台] [数量] - 如: /news zhihu 5"
+    description="获取各平台热门新闻"
 )
 
 command_factory.register_command(
-    command="hotnews", 
-    handler=hot_news_command,
-    description="获取今日热门新闻汇总",
+    "hotnews", 
+    hot_news_command,
     permission=Permission.NONE,
-    args_description="无需参数"
+    description="获取今日热门新闻汇总"
 )
 
 # 注册回调处理器
