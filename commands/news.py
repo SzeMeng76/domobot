@@ -472,19 +472,18 @@ async def news_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
             
             if results:
                 message = "🔥 **今日热门新闻**\n\n" + "\n".join(results)
-                message += "\n💡 点击返回选择其他新闻源"
             else:
                 message = "❌ 暂时无法获取热门新闻，请稍后重试"
             
-            keyboard = InlineKeyboardMarkup([[
-                InlineKeyboardButton("🔙 返回", callback_data="news_back"),
-                InlineKeyboardButton("❌ 关闭", callback_data="news_close")
-            ]])
+            # 删除带按钮的消息
+            await query.message.delete()
             
-            await query.edit_message_text(
-                text=message,
-                parse_mode='Markdown',
-                reply_markup=keyboard
+            # 发送最终结果作为自动删除的文本消息（无按钮）
+            await send_message_with_auto_delete(
+                context,
+                query.message.chat_id,
+                message,
+                parse_mode='Markdown'
             )
             return
             
@@ -516,18 +515,18 @@ async def news_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
                 # 获取新闻
                 news_items = await get_news(source, count)
                 
-                # 格式化并发送消息
+                # 格式化消息
                 message = format_news_message(source, news_items)
                 
-                keyboard = InlineKeyboardMarkup([[
-                    InlineKeyboardButton("🔙 返回", callback_data="news_back"),
-                    InlineKeyboardButton("❌ 关闭", callback_data="news_close")
-                ]])
+                # 删除带按钮的消息
+                await query.message.delete()
                 
-                await query.edit_message_text(
-                    text=message,
-                    parse_mode='Markdown',
-                    reply_markup=keyboard
+                # 发送最终结果作为自动删除的文本消息（无按钮）
+                await send_message_with_auto_delete(
+                    context,
+                    query.message.chat_id,
+                    message,
+                    parse_mode='Markdown'
                 )
                 
                 logger.info(f"通过回调获取 {source} 新闻 {len(news_items)} 条")
