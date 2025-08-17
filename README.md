@@ -21,6 +21,7 @@ Read this in other languages: [简体中文](./README.zh-CN.md)
 - 🌐 **WHOIS Lookup:** Domain, IP, ASN, and TLD information with real-time IANA data and IP geolocation
 - 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`
 - 👥 **Group Friendly:** Works in any Telegram group without requiring whitelist approval
+- 🔧 **Self-Service:** Use `/refresh` if new commands don't appear in your input suggestions
 
 *Advanced features (crypto, weather, Steam prices, movie/TV info, etc.) require whitelist access.*
 
@@ -286,6 +287,10 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 
 # WHOIS Cache Management  
 /whois_cleancache        # Clear WHOIS query cache
+
+# Command List Management
+/refresh_all             # Admin: Refresh command lists for all users and groups
+/refresh                 # User: Refresh your own command list (fixes new feature visibility)
 ```
 
 <details>
@@ -453,7 +458,16 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 
 ### 🆕 Recent Updates
 
-#### Enhanced WHOIS with IP Geolocation (Latest Feature)
+#### Command Refresh System (Latest Feature)
+- **Smart Command List Management:** New `/refresh_all` admin command refreshes command lists for all users and groups
+- **User Self-Service:** `/refresh` command allows any user to fix command visibility issues independently
+- **Telegram Cache Solution:** Resolves Telegram client-side command caching when new features are added
+- **Global + Personal Updates:** Updates both global default commands and individual user/group command lists
+- **Help Integration:** Automatic guidance in help and start commands for troubleshooting command visibility
+- **New Feature Rollout:** Streamlines deployment of new Permission.NONE features to all users
+- **Reduces Admin Burden:** Users can resolve command display issues without contacting administrators
+
+#### Enhanced WHOIS with IP Geolocation
 - **Dual Information System:** WHOIS registration data + actual server geolocation for IP addresses
 - **IP-API.com Integration:** Real-time IP geolocation service providing accurate server location data  
 - **Comprehensive Location Details:** Country with flags, region, city, postal code, coordinates, and timezone
