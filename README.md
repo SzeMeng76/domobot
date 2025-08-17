@@ -18,7 +18,7 @@ Read this in other languages: [简体中文](./README.zh-CN.md)
 - 👤 **User Information:** Telegram registration dates, account age, and ID lookup
 - ⏰ **Time & Timezone:** Current time queries, timezone conversion, and timezone lists
 - 📰 **News Aggregation:** Real-time news from 40+ sources including tech, social, finance, and general news
-- 🌐 **WHOIS Lookup:** Domain, IP, ASN, and TLD information with real-time IANA data
+- 🌐 **WHOIS Lookup:** Domain, IP, ASN, and TLD information with real-time IANA data and IP geolocation
 - 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`
 - 👥 **Group Friendly:** Works in any Telegram group without requiring whitelist approval
 
@@ -40,7 +40,7 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 -   👤 **Public User Information:** Available to all users - check Telegram user registration dates, account age, and get user/group IDs.
 -   ⏰ **Public Time & Timezone:** Available to all users - query current time in any timezone, convert time between zones, and view supported timezone lists with IANA integration.
 -   📰 **Public News Aggregation:** Available to all users - access real-time news from 40+ sources including GitHub trending, Zhihu hot topics, Weibo trending, tech news (IT Home, Hacker News), financial news (JinShi Data, Wallstreet CN), and general news sources with smart caching and categorized interface.
--   🌐 **Public WHOIS Lookup:** Available to all users - comprehensive domain, IP address, ASN, and TLD information lookup with real-time IANA data integration. Features intelligent query type detection, support for domains (.com, .io), IP addresses (IPv4/IPv6), ASN numbers (AS15169), and TLD information (.com, .me) with detailed registry, WHOIS server, creation dates, and management organization data.
+-   🌐 **Public WHOIS Lookup:** Available to all users - comprehensive domain, IP address, ASN, and TLD information lookup with real-time IANA data integration and IP geolocation services. Features intelligent query type detection, support for domains (.com, .io), IP addresses (IPv4/IPv6), ASN numbers (AS15169), and TLD information (.com, .me) with detailed registry, WHOIS server, creation dates, and management organization data. **NEW:** IP queries now include actual server location with country, region, city, coordinates, ISP information, and timezone data via IP-API.com integration, clearly distinguishing between WHOIS registration data and actual geographic location.
 -   🎬 **Movie & TV Information:** Query movie/TV details with posters, ratings, cast, trailers, reviews, recommendations, viewing platforms, and season/episode info. Features **3-platform data integration** (TMDB + JustWatch + Trakt) with **JustWatch streaming charts**, real-time ranking trends, platform availability, Telegraph integration for long content, trending discovery, people search, and enhanced statistics with watch counts and community data. *(Whitelist required)*
 -   🪙 **Crypto Prices:** Look up real-time cryptocurrency prices with support for custom amounts and currency conversion, including 24h and 7d percentage changes. *(Whitelist required)*
 -   💳 **BIN Lookup:** Query credit card BIN (Bank Identification Number) information including card brand, type, issuing bank, and country details. *(Whitelist required)*
@@ -151,11 +151,11 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /newslist github 15       # Get top 15 GitHub trending items
 /hotnews                  # Quick access to hot news from multiple sources
 
-# WHOIS lookup
-/whois google.com         # Domain information
-/whois 8.8.8.8           # IP address information
+# WHOIS lookup (Enhanced with IP Geolocation)
+/whois google.com         # Domain information with registrar details
+/whois 8.8.8.8           # IP address with WHOIS registration + actual geographic location
 /whois AS15169            # ASN information
-/whois .com               # TLD information
+/whois .com               # TLD information with IANA data
 ```
 
 #### Whitelist-Only Commands
@@ -283,6 +283,9 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 
 # News Cache Management
 /news_cleancache         # Clear all news cache
+
+# WHOIS Cache Management  
+/whois_cleancache        # Clear WHOIS query cache
 ```
 
 <details>
@@ -450,7 +453,20 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 
 ### 🆕 Recent Updates
 
-#### Time & Timezone Features (Latest Feature)
+#### Enhanced WHOIS with IP Geolocation (Latest Feature)
+- **Dual Information System:** WHOIS registration data + actual server geolocation for IP addresses
+- **IP-API.com Integration:** Real-time IP geolocation service providing accurate server location data  
+- **Comprehensive Location Details:** Country with flags, region, city, postal code, coordinates, and timezone
+- **ISP & Network Information:** Actual ISP, organization, and AS number from geolocation service
+- **Smart Field Categorization:** Separate display sections for registration info vs. actual location
+- **Enhanced Country Display:** Country flags and Chinese names using existing country_data integration
+- **Intelligent Cloud Detection:** Automatic detection of cloud providers (Microsoft, Amazon, Google) with explanatory notes
+- **Error Handling & Fallback:** Graceful degradation when geolocation service is unavailable
+- **Rate Limit Compliance:** Respects IP-API.com's 45 requests/minute free tier limitations
+- **Cache Integration:** Redis caching for both WHOIS and geolocation data with configurable TTL
+- **User-Friendly Explanations:** Clear distinction between "📍 注册位置" and "🌍 实际位置" for better understanding
+
+#### Time & Timezone Features
 - **Public Time Queries:** Available to all users - query current time in any timezone using country names, codes, cities, or IANA timezone identifiers
 - **Timezone Conversion:** Convert time between different timezones with intelligent parsing of various timezone formats
 - **Comprehensive Timezone Support:** Supports 200+ cities, 190+ countries with full IANA timezone database integration
@@ -530,6 +546,7 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 - **JustWatch API:** For streaming platform rankings, charts, and platform availability data
 - **HeFeng Weather API:** For weather forecast data
 - **Steam API:** For game pricing information
+- **IP-API.com:** For IP geolocation and actual server location data (free service)
 - **Various streaming service APIs:** For subscription pricing
 
 ### 🤝 Contributing
