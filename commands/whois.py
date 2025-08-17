@@ -396,215 +396,211 @@ class WhoisService:
         return result
     
     def _extract_whois21_data(self, whois_obj) -> Dict[str, Any]:
-        """提取whois21查询结果"""
+        """提取whois21查询结果，根据官方文档正确实现"""
         formatted = {}
         
-        # 根据GitHub文档，主要从whois_data字典中提取数据
+        # 添加调试信息
+        logger.debug(f"whois21对象类型: {type(whois_obj)}")
+        logger.debug(f"whois21.success: {whois_obj.success}")
+        
+        # 检查查询是否成功
+        if not whois_obj.success:
+            logger.warning(f"whois21查询失败: {whois_obj.error}")
+            return {}
+        
+        # 获取whois_data - 这是主要的数据源
         if hasattr(whois_obj, 'whois_data') and whois_obj.whois_data:
             whois_data = whois_obj.whois_data
+            logger.debug(f"whois_data字段: {list(whois_data.keys())}")
             
-            # 域名信息
-            if 'domain_name' in whois_data:
-                formatted['域名'] = whois_data['domain_name']
-            
-            # 注册商信息  
-            if 'registrar' in whois_data:
-                formatted['注册商'] = whois_data['registrar']
-            elif 'REGISTRAR' in whois_data:
-                formatted['注册商'] = whois_data['REGISTRAR']
-            
-            # 注册商详细信息
-            if 'REGISTRAR WHOIS SERVER' in whois_data:
-                formatted['注册商WHOIS服务器'] = whois_data['REGISTRAR WHOIS SERVER']
-            
-            if 'REGISTRAR URL' in whois_data:
-                formatted['注册商网址'] = whois_data['REGISTRAR URL']
-                
-            if 'REGISTRAR IANA ID' in whois_data:
-                formatted['注册商IANA ID'] = whois_data['REGISTRAR IANA ID']
-            
-            # 域名ID
-            if 'REGISTRY DOMAIN ID' in whois_data:
-                formatted['域名ID'] = whois_data['REGISTRY DOMAIN ID']
+            # 根据whois21的实际字段进行提取
+            for key, value in whois_data.items():
+                if value and value != []:  # 跳过空值
+                    # 转换为更友好的中文字段名
+                    chinese_key = self._translate_field_name(key)
+                    
+                    # 处理列表值
+                    if isinstance(value, list):
+                        if len(value) == 1:
+                            formatted[chinese_key] = str(value[0])
+                        else:
+                            formatted[chinese_key] = ', '.join(str(v) for v in value)
+                    else:
+                        formatted[chinese_key] = str(value)
         
-        # 也检查直接属性 - 注意：日期字段是列表类型 List[datetime]
+        # 获取日期信息 - whois21将这些作为对象属性
         if hasattr(whois_obj, 'creation_date') and whois_obj.creation_date:
-            # whois21的日期字段是列表，取第一个元素
             if isinstance(whois_obj.creation_date, list) and len(whois_obj.creation_date) > 0:
                 date_obj = whois_obj.creation_date[0]
                 if hasattr(date_obj, 'strftime'):
                     formatted['创建时间'] = date_obj.strftime('%Y-%m-%d %H:%M:%S UTC')
                 else:
                     formatted['创建时间'] = str(date_obj)
-            else:
-                formatted['创建时间'] = str(whois_obj.creation_date)
             
-        # 注意：根据文档是 expires_date 不是 expiration_date，且是列表类型
         if hasattr(whois_obj, 'expires_date') and whois_obj.expires_date:
-            # whois21的日期字段是列表，取第一个元素
             if isinstance(whois_obj.expires_date, list) and len(whois_obj.expires_date) > 0:
                 date_obj = whois_obj.expires_date[0]
                 if hasattr(date_obj, 'strftime'):
                     formatted['过期时间'] = date_obj.strftime('%Y-%m-%d %H:%M:%S UTC')
                 else:
                     formatted['过期时间'] = str(date_obj)
-            else:
-                formatted['过期时间'] = str(whois_obj.expires_date)
             
         if hasattr(whois_obj, 'updated_date') and whois_obj.updated_date:
-            # whois21的日期字段是列表，取第一个元素
             if isinstance(whois_obj.updated_date, list) and len(whois_obj.updated_date) > 0:
                 date_obj = whois_obj.updated_date[0]
                 if hasattr(date_obj, 'strftime'):
                     formatted['更新时间'] = date_obj.strftime('%Y-%m-%d %H:%M:%S UTC')
                 else:
                     formatted['更新时间'] = str(date_obj)
-            else:
-                formatted['更新时间'] = str(whois_obj.updated_date)
         
-        # 从whois_data中提取其他信息
-        if hasattr(whois_obj, 'whois_data') and whois_obj.whois_data:
-            whois_data = whois_obj.whois_data
+        # 如果提取的数据很少，添加原始数据用于调试
+        if len(formatted) < 3:
+            logger.warning(f"whois21数据提取结果很少: {formatted}")
+            if hasattr(whois_obj, 'raw') and whois_obj.raw:
+                try:
+                    raw_text = whois_obj.raw.decode('utf-8') if isinstance(whois_obj.raw, bytes) else str(whois_obj.raw)
+                    formatted['原始WHOIS数据'] = raw_text[:500]  # 限制长度
+                except Exception as e:
+                    logger.debug(f"无法获取原始数据: {e}")
+        
+        logger.debug(f"最终提取的数据: {formatted}")
+        return formatted
+    
+    def _translate_field_name(self, field_name: str) -> str:
+        """将英文字段名翻译为中文"""
+        translations = {
+            # 基本域名信息
+            'DOMAIN NAME': '域名',
+            'domain name': '域名',
+            'Domain Name': '域名',
+            'domain_name': '域名',
+            
+            # 注册商信息
+            'REGISTRAR': '注册商',
+            'registrar': '注册商',
+            'Registrar': '注册商',
+            'REGISTRAR NAME': '注册商',
+            'registrar_name': '注册商',
+            'SPONSORING REGISTRAR': '注册商',
+            
+            # 注册商详细信息
+            'REGISTRAR WHOIS SERVER': '注册商WHOIS服务器',
+            'registrar_whois_server': '注册商WHOIS服务器',
+            'REGISTRAR URL': '注册商网址',
+            'registrar_url': '注册商网址',
+            'REGISTRAR IANA ID': '注册商IANA ID',
+            'registrar_iana_id': '注册商IANA ID',
+            
+            # 域名ID和状态
+            'REGISTRY DOMAIN ID': '域名ID',
+            'registry_domain_id': '域名ID',
+            'domain_id': '域名ID',
+            'DOMAIN ID': '域名ID',
+            'Domain ID': '域名ID',
             
             # 状态信息
-            if 'status' in whois_data:
-                status = whois_data['status']
-                if isinstance(status, list):
-                    formatted['状态'] = ', '.join(str(s) for s in status)
-                else:
-                    formatted['状态'] = str(status)
-            elif 'DOMAIN STATUS' in whois_data:
-                status = whois_data['DOMAIN STATUS']
-                if isinstance(status, list):
-                    formatted['状态'] = ', '.join(str(s) for s in status)
-                else:
-                    formatted['状态'] = str(status)
-                    
-            # DNS服务器信息
-            if 'name_servers' in whois_data:
-                name_servers = whois_data['name_servers']
-                if isinstance(name_servers, list):
-                    formatted['DNS服务器'] = ', '.join(str(ns) for ns in name_servers)
-                else:
-                    formatted['DNS服务器'] = str(name_servers)
-            elif 'NAME SERVER' in whois_data:
-                name_servers = whois_data['NAME SERVER']
-                if isinstance(name_servers, list):
-                    formatted['DNS服务器'] = ', '.join(str(ns) for ns in name_servers)
-                else:
-                    formatted['DNS服务器'] = str(name_servers)
-            elif 'NSERVER' in whois_data:
-                name_servers = whois_data['NSERVER']
-                if isinstance(name_servers, list):
-                    formatted['DNS服务器'] = ', '.join(str(ns) for ns in name_servers)
-                else:
-                    formatted['DNS服务器'] = str(name_servers)
+            'STATUS': '状态',
+            'status': '状态',
+            'Status': '状态',
+            'DOMAIN STATUS': '域名状态',
+            'domain_status': '域名状态',
+            'Domain Status': '域名状态',
+            
+            # 时间信息
+            'CREATION DATE': '创建时间',
+            'creation_date': '创建时间',
+            'Creation Date': '创建时间',
+            'CREATED DATE': '创建时间',
+            'created': '创建时间',
+            'CREATED': '创建时间',
+            'Registration Date': '创建时间',
+            
+            'REGISTRY EXPIRY DATE': '过期时间',
+            'EXPIRY DATE': '过期时间',
+            'expiry_date': '过期时间',
+            'expires': '过期时间',
+            'EXPIRES': '过期时间',
+            'Expiry Date': '过期时间',
+            'Expiration Date': '过期时间',
+            'EXPIRATION DATE': '过期时间',
+            
+            'UPDATED DATE': '更新时间',
+            'updated_date': '更新时间',
+            'Updated Date': '更新时间',
+            'changed': '更新时间',
+            'CHANGED': '更新时间',
+            'Last Modified': '更新时间',
+            'LAST MODIFIED': '更新时间',
+            
+            # DNS和网络信息
+            'NAME SERVER': 'DNS服务器',
+            'name_servers': 'DNS服务器',
+            'NAME SERVERS': 'DNS服务器',
+            'nameservers': 'DNS服务器',
+            'NAMESERVERS': 'DNS服务器',
+            'nserver': 'DNS服务器',
+            'NSERVER': 'DNS服务器',
+            'Name Server': 'DNS服务器',
             
             # 联系信息
-            if 'EMAIL' in whois_data:
-                formatted['邮箱'] = whois_data['EMAIL']
-            elif 'E-MAIL' in whois_data:
-                formatted['邮箱'] = whois_data['E-MAIL']
-                
-            if 'PHONE' in whois_data:
-                formatted['电话'] = whois_data['PHONE']
-                
-            if 'FAX' in whois_data:
-                formatted['传真'] = whois_data['FAX']
-            elif 'FAX-NO' in whois_data:
-                formatted['传真'] = whois_data['FAX-NO']
+            'EMAIL': '邮箱',
+            'email': '邮箱',
+            'E-MAIL': '邮箱',
+            'e-mail': '邮箱',
+            'Email': '邮箱',
             
-            # 注册商联系信息
-            if 'REGISTRAR ABUSE CONTACT EMAIL' in whois_data:
-                formatted['注册商举报邮箱'] = whois_data['REGISTRAR ABUSE CONTACT EMAIL']
-                
-            if 'REGISTRAR ABUSE CONTACT PHONE' in whois_data:
-                formatted['注册商举报电话'] = whois_data['REGISTRAR ABUSE CONTACT PHONE']
-        
-        # 如果从whois_data没有获取到数据，尝试直接从对象属性获取
-        if not formatted.get('注册商') and hasattr(whois_obj, 'registrar_name') and whois_obj.registrar_name:
-            formatted['注册商'] = whois_obj.registrar_name
+            'PHONE': '电话',
+            'phone': '电话',
+            'Phone': '电话',
+            'TELEPHONE': '电话',
+            'telephone': '电话',
             
-        if not formatted.get('状态') and hasattr(whois_obj, 'status') and whois_obj.status:
-            if isinstance(whois_obj.status, list):
-                formatted['状态'] = ', '.join(str(s) for s in whois_obj.status)
-            else:
-                formatted['状态'] = str(whois_obj.status)
-                
-        if not formatted.get('DNS服务器') and hasattr(whois_obj, 'name_servers') and whois_obj.name_servers:
-            if isinstance(whois_obj.name_servers, list):
-                formatted['DNS服务器'] = ', '.join(str(ns) for ns in whois_obj.name_servers)
-            else:
-                formatted['DNS服务器'] = str(whois_obj.name_servers)
-        
-        # 添加更多直接属性
-        if not formatted.get('域名ID') and hasattr(whois_obj, 'registry_domain_id') and whois_obj.registry_domain_id:
-            formatted['域名ID'] = whois_obj.registry_domain_id
+            'FAX': '传真',
+            'fax': '传真',
+            'FAX-NO': '传真',
+            'fax-no': '传真',
+            'Fax': '传真',
             
-        if not formatted.get('注册商WHOIS服务器') and hasattr(whois_obj, 'registrar_whois_server') and whois_obj.registrar_whois_server:
-            formatted['注册商WHOIS服务器'] = whois_obj.registrar_whois_server
+            # 安全和联系信息
+            'REGISTRAR ABUSE CONTACT EMAIL': '注册商举报邮箱',
+            'registrar_abuse_contact_email': '注册商举报邮箱',
+            'REGISTRAR ABUSE CONTACT PHONE': '注册商举报电话',
+            'registrar_abuse_contact_phone': '注册商举报电话',
             
-        if not formatted.get('注册商网址') and hasattr(whois_obj, 'registrar_url') and whois_obj.registrar_url:
-            formatted['注册商网址'] = whois_obj.registrar_url
+            # 联系人类型
+            'admin_c': '管理联系人',
+            'ADMIN-C': '管理联系人',
+            'admin-c': '管理联系人',
+            'tech_c': '技术联系人',
+            'TECH-C': '技术联系人',
+            'tech-c': '技术联系人',
+            'billing_c': '计费联系人',
+            'BILLING-C': '计费联系人',
+            'billing-c': '计费联系人',
+            'registrant_c': '注册人联系人',
+            'REGISTRANT-C': '注册人联系人',
+            'registrant-c': '注册人联系人',
             
-        if not formatted.get('注册商IANA ID') and hasattr(whois_obj, 'registrar_iana_id') and whois_obj.registrar_iana_id:
-            formatted['注册商IANA ID'] = whois_obj.registrar_iana_id
-            
-        if not formatted.get('邮箱') and hasattr(whois_obj, 'emails') and whois_obj.emails:
-            if isinstance(whois_obj.emails, list):
-                formatted['邮箱'] = ', '.join(str(email) for email in whois_obj.emails)
-            else:
-                formatted['邮箱'] = str(whois_obj.emails)
-                
-        if not formatted.get('电话') and hasattr(whois_obj, 'phone_numbers') and whois_obj.phone_numbers:
-            if isinstance(whois_obj.phone_numbers, list):
-                formatted['电话'] = ', '.join(str(phone) for phone in whois_obj.phone_numbers)
-            else:
-                formatted['电话'] = str(whois_obj.phone_numbers)
-                
-        if not formatted.get('传真') and hasattr(whois_obj, 'fax_numbers') and whois_obj.fax_numbers:
-            if isinstance(whois_obj.fax_numbers, list):
-                formatted['传真'] = ', '.join(str(fax) for fax in whois_obj.fax_numbers)
-            else:
-                formatted['传真'] = str(whois_obj.fax_numbers)
+            # 其他信息
+            'DNSSEC': 'DNSSEC',
+            'dnssec': 'DNSSEC',
+            'Dnssec': 'DNSSEC',
+            'WHOIS SERVER': 'WHOIS服务器',
+            'whois_server': 'WHOIS服务器',
+            'Whois Server': 'WHOIS服务器',
+        }
         
-        if not formatted.get('注册商举报邮箱') and hasattr(whois_obj, 'registrar_abuse_contact_email') and whois_obj.registrar_abuse_contact_email:
-            formatted['注册商举报邮箱'] = whois_obj.registrar_abuse_contact_email
-            
-        if not formatted.get('注册商举报电话') and hasattr(whois_obj, 'registrar_abuse_contact_phone') and whois_obj.registrar_abuse_contact_phone:
-            formatted['注册商举报电话'] = whois_obj.registrar_abuse_contact_phone
-            
-        return formatted
-
-    def _format_domain_data(self, data: Dict) -> Dict[str, Any]:
-        """格式化域名查询结果"""
-        formatted = {}
+        # 首先尝试直接匹配
+        if field_name in translations:
+            return translations[field_name]
         
-        # 基础信息
-        if 'domain_name' in data:
-            formatted['域名'] = data['domain_name']
+        # 尝试大小写不敏感匹配
+        for key, value in translations.items():
+            if key.lower() == field_name.lower():
+                return value
         
-        # 注册商信息
-        if 'registrar' in data:
-            formatted['注册商'] = data['registrar']
-        
-        # 时间信息
-        if 'creation_date' in data:
-            formatted['创建时间'] = str(data['creation_date'])
-        if 'expiration_date' in data:
-            formatted['过期时间'] = str(data['expiration_date'])
-        if 'updated_date' in data:
-            formatted['更新时间'] = str(data['updated_date'])
-        
-        # 状态信息
-        if 'status' in data:
-            formatted['状态'] = data['status']
-        
-        # 名称服务器
-        if 'name_servers' in data:
-            formatted['DNS服务器'] = data['name_servers']
-        
-        return formatted
+        # 如果没有翻译，返回原字段名
+        return field_name
     
     def _format_python_whois_data(self, data) -> Dict[str, Any]:
         """格式化python-whois查询结果"""
