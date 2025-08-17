@@ -108,6 +108,10 @@ class TLDManager:
         if not nic_url:
             return '未知'
         
+        # 清理NULL值
+        if nic_url == 'NULL':
+            return '未知'
+        
         # 简单的URL到名称映射
         name_map = {
             'verisigninc.com': 'Verisign',
@@ -115,18 +119,25 @@ class TLDManager:
             'cnnic.cn': 'CNNIC',
             'neustar.biz': 'Neustar',
             'nominet.uk': 'Nominet',
-            'jprs.jp': 'JPRS'
+            'jprs.jp': 'JPRS',
+            'domain.me': 'doMEn d.o.o.',
+            'icb.co.uk': 'ICB',
+            'nic.io': 'Internet Computer Bureau'
         }
         
         for domain, name in name_map.items():
             if domain in nic_url.lower():
                 return name
                 
-        # 如果没有匹配，返回域名部分
+        # 如果没有匹配，返回清理后的URL
         try:
             from urllib.parse import urlparse
             parsed = urlparse(nic_url)
-            return parsed.netloc or nic_url
+            domain = parsed.netloc or nic_url
+            # 移除www前缀
+            if domain.startswith('www.'):
+                domain = domain[4:]
+            return domain
         except:
             return nic_url or '未知'
 
@@ -828,11 +839,11 @@ def format_whois_result(result: Dict[str, Any]) -> str:
     if data:
         # 定义字段分组和显示顺序
         field_groups = {
-            '📋 基本信息': ['域名', '域名ID', '查询IP'],
-            '🏢 注册商信息': ['注册商', '注册商WHOIS服务器', '注册商网址', '注册商IANA ID'],
-            '📅 时间信息': ['创建时间', '过期时间', '更新时间'],
+            '📋 基本信息': ['域名', '域名ID', '查询IP', '类型'],
+            '🏢 注册商信息': ['注册商', '注册商WHOIS服务器', '注册商网址', '注册商IANA ID', '管理机构'],
+            '📅 时间信息': ['创建时间', '过期时间', '更新时间', '最后更新'],
             '📊 状态信息': ['状态'],
-            '🌐 网络信息': ['DNS服务器', 'ASN', 'ASN描述', 'ASN国家', 'ASN注册机构', '网络名称', 'IP段', '起始地址', '结束地址', '网络国家', '网络类型', '组织'],
+            '🌐 网络信息': ['DNS服务器', 'ASN', 'ASN描述', 'ASN国家', 'ASN注册机构', '网络名称', 'IP段', '起始地址', '结束地址', '网络国家', '网络类型', '组织', 'WHOIS服务器', '国际化域名'],
             '📞 联系信息': ['邮箱', '电话', '传真', '联系人'],
             '🛡️ 安全信息': ['注册商举报邮箱', '注册商举报电话'],
             '📄 其他信息': []  # 未分类的字段
