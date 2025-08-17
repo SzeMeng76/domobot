@@ -444,7 +444,7 @@ def get_country_from_timezone(timezone: str) -> dict:
     }
     
     for country_code, timezones in multi_timezone_countries.items():
-        if timezone in timezones:
+        if timezone in timezones.keys():
             return {
                 "code": country_code,
                 "name": SUPPORTED_COUNTRIES[country_code]["name"],
