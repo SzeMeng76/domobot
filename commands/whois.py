@@ -234,19 +234,39 @@ class WhoisService:
             formatted['注册商'] = whois_obj.registrar
             
         if hasattr(whois_obj, 'creation_date') and whois_obj.creation_date:
-            formatted['创建时间'] = str(whois_obj.creation_date)
+            # 处理日期时间格式
+            if hasattr(whois_obj.creation_date, 'strftime'):
+                formatted['创建时间'] = whois_obj.creation_date.strftime('%Y-%m-%d %H:%M:%S UTC')
+            else:
+                formatted['创建时间'] = str(whois_obj.creation_date)
             
         if hasattr(whois_obj, 'expiration_date') and whois_obj.expiration_date:
-            formatted['过期时间'] = str(whois_obj.expiration_date)
+            # 处理日期时间格式
+            if hasattr(whois_obj.expiration_date, 'strftime'):
+                formatted['过期时间'] = whois_obj.expiration_date.strftime('%Y-%m-%d %H:%M:%S UTC')
+            else:
+                formatted['过期时间'] = str(whois_obj.expiration_date)
             
         if hasattr(whois_obj, 'updated_date') and whois_obj.updated_date:
-            formatted['更新时间'] = str(whois_obj.updated_date)
+            # 处理日期时间格式
+            if hasattr(whois_obj.updated_date, 'strftime'):
+                formatted['更新时间'] = whois_obj.updated_date.strftime('%Y-%m-%d %H:%M:%S UTC')
+            else:
+                formatted['更新时间'] = str(whois_obj.updated_date)
             
         if hasattr(whois_obj, 'status') and whois_obj.status:
-            formatted['状态'] = whois_obj.status
+            # 处理状态信息，可能是列表或字符串
+            if isinstance(whois_obj.status, list):
+                formatted['状态'] = ', '.join(str(s) for s in whois_obj.status)
+            else:
+                formatted['状态'] = str(whois_obj.status)
             
         if hasattr(whois_obj, 'name_servers') and whois_obj.name_servers:
-            formatted['DNS服务器'] = whois_obj.name_servers
+            # 处理DNS服务器列表
+            if isinstance(whois_obj.name_servers, list):
+                formatted['DNS服务器'] = ', '.join(str(ns) for ns in whois_obj.name_servers)
+            else:
+                formatted['DNS服务器'] = str(whois_obj.name_servers)
             
         return formatted
 
@@ -285,24 +305,45 @@ class WhoisService:
         formatted = {}
         
         if hasattr(data, 'domain_name') and data.domain_name:
-            formatted['域名'] = data.domain_name[0] if isinstance(data.domain_name, list) else data.domain_name
+            domain = data.domain_name[0] if isinstance(data.domain_name, list) else data.domain_name
+            formatted['域名'] = str(domain) if domain else None
         
         if hasattr(data, 'registrar') and data.registrar:
-            formatted['注册商'] = data.registrar[0] if isinstance(data.registrar, list) else data.registrar
+            registrar = data.registrar[0] if isinstance(data.registrar, list) else data.registrar
+            formatted['注册商'] = str(registrar) if registrar else None
         
         if hasattr(data, 'creation_date') and data.creation_date:
             date = data.creation_date[0] if isinstance(data.creation_date, list) else data.creation_date
-            formatted['创建时间'] = str(date)
+            if hasattr(date, 'strftime'):
+                formatted['创建时间'] = date.strftime('%Y-%m-%d %H:%M:%S')
+            else:
+                formatted['创建时间'] = str(date)
         
         if hasattr(data, 'expiration_date') and data.expiration_date:
             date = data.expiration_date[0] if isinstance(data.expiration_date, list) else data.expiration_date
-            formatted['过期时间'] = str(date)
+            if hasattr(date, 'strftime'):
+                formatted['过期时间'] = date.strftime('%Y-%m-%d %H:%M:%S')
+            else:
+                formatted['过期时间'] = str(date)
+        
+        if hasattr(data, 'updated_date') and data.updated_date:
+            date = data.updated_date[0] if isinstance(data.updated_date, list) else data.updated_date
+            if hasattr(date, 'strftime'):
+                formatted['更新时间'] = date.strftime('%Y-%m-%d %H:%M:%S')
+            else:
+                formatted['更新时间'] = str(date)
         
         if hasattr(data, 'status') and data.status:
-            formatted['状态'] = data.status
+            if isinstance(data.status, list):
+                formatted['状态'] = ', '.join(str(s) for s in data.status)
+            else:
+                formatted['状态'] = str(data.status)
         
         if hasattr(data, 'name_servers') and data.name_servers:
-            formatted['DNS服务器'] = data.name_servers
+            if isinstance(data.name_servers, list):
+                formatted['DNS服务器'] = ', '.join(str(ns) for ns in data.name_servers)
+            else:
+                formatted['DNS服务器'] = str(data.name_servers)
         
         return formatted
     
