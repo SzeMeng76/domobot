@@ -858,7 +858,7 @@ async def refresh_commands_command(update: Update, context: ContextTypes.DEFAULT
             error_count += 1
         
         # 刷新所有白名单用户
-        whitelist_users = await user_manager.get_all_whitelisted_users()
+        whitelist_users = await user_manager.get_whitelisted_users()
         for whitelist_user_id in whitelist_users:
             try:
                 is_admin_user = await is_admin(whitelist_user_id, context)
@@ -880,12 +880,14 @@ async def refresh_commands_command(update: Update, context: ContextTypes.DEFAULT
                 error_count += 1
         
         # 刷新所有白名单群组
-        whitelist_groups = await user_manager.get_all_whitelisted_groups()
-        for group_id in whitelist_groups:
+        whitelist_groups = await user_manager.get_whitelisted_groups()
+        for group_data in whitelist_groups:
             try:
+                group_id = group_data['group_id']  # 从字典中获取group_id
                 await update_group_command_menu(group_id, context, True)
                 success_count += 1
             except Exception as e:
+                group_id = group_data.get('group_id', 'unknown')
                 logger.error(f"刷新群组 {group_id} 命令失败: {e}")
                 error_count += 1
         
