@@ -84,12 +84,16 @@ class WhoisService:
         # 尝试使用whois21
         if self._whois21:
             try:
-                data = await asyncio.to_thread(self._whois21.query, domain)
-                if data:
-                    result['success'] = True
-                    result['data'] = self._format_domain_data(data)
-                    result['source'] = 'whois21'
-                    return result
+                # 正确的whois21用法：实例化WHOIS类（在异步线程中执行）
+                whois_obj = await asyncio.to_thread(self._whois21.WHOIS, domain)
+                if whois_obj.success:
+                    # whois21返回的是对象，需要获取其属性
+                    data = self._extract_whois21_data(whois_obj)
+                    if data:
+                        result['success'] = True
+                        result['data'] = data
+                        result['source'] = 'whois21'
+                        return result
             except Exception as e:
                 logger.debug(f"whois21查询失败: {e}")
         
@@ -218,6 +222,34 @@ class WhoisService:
         
         return result
     
+    def _extract_whois21_data(self, whois_obj) -> Dict[str, Any]:
+        """提取whois21查询结果"""
+        formatted = {}
+        
+        # whois21对象的属性提取
+        if hasattr(whois_obj, 'domain_name') and whois_obj.domain_name:
+            formatted['域名'] = whois_obj.domain_name
+        
+        if hasattr(whois_obj, 'registrar') and whois_obj.registrar:
+            formatted['注册商'] = whois_obj.registrar
+            
+        if hasattr(whois_obj, 'creation_date') and whois_obj.creation_date:
+            formatted['创建时间'] = str(whois_obj.creation_date)
+            
+        if hasattr(whois_obj, 'expiration_date') and whois_obj.expiration_date:
+            formatted['过期时间'] = str(whois_obj.expiration_date)
+            
+        if hasattr(whois_obj, 'updated_date') and whois_obj.updated_date:
+            formatted['更新时间'] = str(whois_obj.updated_date)
+            
+        if hasattr(whois_obj, 'status') and whois_obj.status:
+            formatted['状态'] = whois_obj.status
+            
+        if hasattr(whois_obj, 'name_servers') and whois_obj.name_servers:
+            formatted['DNS服务器'] = whois_obj.name_servers
+            
+        return formatted
+
     def _format_domain_data(self, data: Dict) -> Dict[str, Any]:
         """格式化域名查询结果"""
         formatted = {}
@@ -378,7 +410,13 @@ def format_whois_result(result: Dict[str, Any]) -> str:
     
     query_type = query_type_map.get(result['type'], '🔍 查询')
     safe_query = escape_markdown(result['query'], version=2)
-    source_info = f" \\({result['source']}\\)" if result.get('source') else ""
+    
+    # 正确转义source信息
+    if result.get('source'):
+        safe_source = escape_markdown(result['source'], version=2)
+        source_info = f" \\({safe_source}\\)"
+    else:
+        source_info = ""
     
     lines = [f"✅ **{query_type}查询结果**{source_info}\n"]
     lines.append(f"**查询对象**: `{safe_query}`\n")
@@ -390,7 +428,9 @@ def format_whois_result(result: Dict[str, Any]) -> str:
             safe_key = escape_markdown(str(key), version=2)
             
             if isinstance(value, list):
-                safe_value = escape_markdown(', '.join(str(v) for v in value), version=2)
+                # 对列表中的每个元素单独转义，然后用逗号连接
+                safe_values = [escape_markdown(str(v), version=2) for v in value]
+                safe_value = ', '.join(safe_values)
             else:
                 safe_value = escape_markdown(str(value), version=2)
             
@@ -468,12 +508,11 @@ async def whois_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             # 缓存结果
             if cache_manager and result['success']:
                 try:
-                    # 成功的查询结果缓存1小时
+                    # 成功的查询结果缓存
                     await cache_manager.save_cache(
                         cache_key, 
                         result, 
-                        subdirectory="whois",
-                        expire_time=3600
+                        subdirectory="whois"
                     )
                 except Exception as e:
                     logger.debug(f"缓存保存失败: {e}")
