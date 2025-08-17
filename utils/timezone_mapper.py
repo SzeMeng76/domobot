@@ -418,8 +418,9 @@ def resolve_timezone_with_country_data(user_input: str) -> tuple[str, dict]:
         }
         return timezone, country_info
     
-    # 4. 假设是IANA时区名，直接返回
-    return normalized_input, {}
+    # 4. 假设是IANA时区名，尝试推断国家信息
+    country_info = get_country_from_timezone(normalized_input)
+    return normalized_input, country_info
 
 def get_country_from_timezone(timezone: str) -> dict:
     """从时区推断国家信息"""
