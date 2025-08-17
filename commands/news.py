@@ -84,11 +84,11 @@ def create_news_sources_keyboard() -> InlineKeyboardMarkup:
     
     # 按类别分组显示新闻源
     categories = [
-        ("🔧 科技类", ['github', 'ithome', 'juejin', 'hackernews', 'solidot', 'sspai']),
-        ("💬 社交类", ['zhihu', 'weibo', 'v2ex', 'bilibili', 'douyin', 'tieba']),
-        ("💰 财经类", ['jin10', 'wallstreetcn', 'gelonghui', 'xueqiu', '36kr']),
-        ("📰 新闻类", ['toutiao', 'thepaper', 'ifeng', 'baidu']),
-        ("🛍️ 其他", ['smzdm', 'producthunt', 'weread'])
+        ("🔧 科技类", ['github', 'ithome', 'juejin', 'hackernews', 'solidot', 'sspai', 'ghxi', 'linuxdo', 'chongbuluo']),
+        ("💬 社交类", ['zhihu', 'weibo', 'v2ex', 'bilibili', 'douyin', 'tieba', 'kuaishou', 'coolapk', 'hupu']),
+        ("💰 财经类", ['jin10', 'wallstreetcn', 'gelonghui', 'xueqiu', '36kr', 'fastbull', 'mktnews']),
+        ("📰 新闻类", ['toutiao', 'thepaper', 'ifeng', 'baidu', 'cankaoxiaoxi', 'zaobao', 'sputniknewscn', 'kaopu']),
+        ("🛍️ 其他", ['smzdm', 'producthunt', 'weread', 'nowcoder', 'pcbeta'])
     ]
     
     for category_name, sources in categories:
@@ -349,11 +349,11 @@ async def newslist_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # 按类别分组显示
         categories = [
-            ("🔧 科技类", ['github', 'ithome', 'juejin', 'hackernews', 'solidot', 'sspai']),
-            ("💬 社交类", ['zhihu', 'weibo', 'v2ex', 'bilibili', 'douyin', 'tieba']),
-            ("💰 财经类", ['jin10', 'wallstreetcn', 'gelonghui', 'xueqiu', '36kr']),
-            ("📰 新闻类", ['toutiao', 'thepaper', 'ifeng', 'baidu']),
-            ("🛍️ 其他", ['smzdm', 'producthunt', 'weread', 'coolapk', 'hupu', 'nowcoder'])
+            ("🔧 科技类", ['github', 'ithome', 'juejin', 'hackernews', 'solidot', 'sspai', 'ghxi', 'linuxdo', 'chongbuluo']),
+            ("💬 社交类", ['zhihu', 'weibo', 'v2ex', 'bilibili', 'douyin', 'tieba', 'kuaishou', 'coolapk', 'hupu']),
+            ("💰 财经类", ['jin10', 'wallstreetcn', 'gelonghui', 'xueqiu', '36kr', 'fastbull', 'mktnews']),
+            ("📰 新闻类", ['toutiao', 'thepaper', 'ifeng', 'baidu', 'cankaoxiaoxi', 'zaobao', 'sputniknewscn', 'kaopu']),
+            ("🛍️ 其他", ['smzdm', 'producthunt', 'weread', 'nowcoder', 'pcbeta'])
         ]
         
         help_lines = ["📰 **NewsNow 新闻源列表**\n"]
