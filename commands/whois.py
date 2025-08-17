@@ -30,81 +30,47 @@ logger = logging.getLogger(__name__)
 cache_manager = None
 
 class TLDManager:
-    """TLD数据管理器 - 使用IANA数据库"""
+    """TLD数据管理器 - 直接从GitHub获取数据"""
     
-    def __init__(self, data_dir="data/tld"):
-        self.data_dir = Path(data_dir)
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-        self.tld_file = self.data_dir / "tld.json"
+    TLD_URL = "https://raw.githubusercontent.com/SzeMeng76/iana_tld_list/refs/heads/master/data/tld.json"
+    
+    def __init__(self):
         self._tld_data = None
-        self._updater = None
         
-    def get_updater(self):
-        """获取更新器实例"""
-        if not self._updater:
-            try:
-                from utils.tld_updater import TLDUpdater
-                self._updater = TLDUpdater(str(self.data_dir))
-            except ImportError:
-                logger.warning("TLD更新器不可用")
-        return self._updater
-        
-    async def ensure_data_available(self):
-        """确保TLD数据可用"""
-        if not self.tld_file.exists():
-            logger.info(f"TLD数据文件不存在: {self.tld_file}，尝试下载...")
-            updater = self.get_updater()
-            if updater:
-                try:
-                    success = await updater.update_data(force=True)
-                    if success:
-                        logger.info("TLD数据下载成功")
-                    else:
-                        logger.error("TLD数据下载失败")
-                except Exception as e:
-                    logger.error(f"下载TLD数据时出错: {e}")
-            else:
-                logger.error("无法获取TLD更新器")
-        else:
-            logger.debug(f"TLD数据文件已存在: {self.tld_file}")
-        
-    def load_tld_data(self):
-        """加载TLD数据"""
-        logger.debug(f"尝试加载TLD数据文件: {self.tld_file}")
-        if not self.tld_file.exists():
-            logger.warning(f"TLD数据文件不存在: {self.tld_file}")
-            return None
-            
+    async def _fetch_tld_data(self) -> Optional[Dict[str, Any]]:
+        """从GitHub获取TLD数据"""
+        headers = {
+            "User-Agent": "Mozilla/5.0 (compatible; DomoBot/1.0)"
+        }
         try:
-            with open(self.tld_file, 'r', encoding='utf-8') as f:
-                self._tld_data = json.load(f)
-            logger.info(f"已加载 {len(self._tld_data) if self._tld_data else 0} 个TLD记录")
-            if self._tld_data:
-                logger.debug(f"数据示例keys: {list(self._tld_data.keys())[:5]}")
-        except Exception as e:
-            logger.error(f"加载TLD数据失败: {e}")
-            self._tld_data = None
+            from utils.http_client import create_custom_client
             
-        return self._tld_data
+            async with create_custom_client(headers=headers) as client:
+                response = await client.get(self.TLD_URL, timeout=20.0)
+                response.raise_for_status()
+                return response.json()
+        except Exception as e:
+            logger.error(f"获取TLD数据失败: {e}")
+            return None
     
     async def get_tld_info(self, tld: str) -> Optional[Dict[str, Any]]:
         """获取TLD信息"""
-        # 确保数据可用
-        await self.ensure_data_available()
-        
+        # 如果数据未加载，先获取数据
         if not self._tld_data:
-            self.load_tld_data()
-            
-        if not self._tld_data:
-            logger.debug("TLD数据为空")
-            return None
+            logger.info("正在从GitHub获取TLD数据...")
+            self._tld_data = await self._fetch_tld_data()
+            if self._tld_data:
+                logger.info(f"成功获取 {len(self._tld_data)} 个TLD记录")
+            else:
+                logger.error("获取TLD数据失败")
+                return None
             
         # 清理TLD输入
         tld_clean = tld.lower()
         if not tld_clean.startswith('.'):
             tld_clean = '.' + tld_clean
             
-        logger.debug(f"查找TLD: '{tld_clean}', 数据中的keys示例: {list(self._tld_data.keys())[:5]}")
+        logger.debug(f"查找TLD: '{tld_clean}'")
         
         # IANA数据是字典格式，key是完整的TLD（带点）
         if tld_clean in self._tld_data:
@@ -775,7 +741,7 @@ class WhoisService:
         return formatted
     
     async def _get_tld_info(self, tld: str) -> Optional[Dict[str, Any]]:
-        """获取TLD基础信息 - 使用IANA数据库"""
+        """获取TLD基础信息 - 直接从GitHub获取IANA数据"""
         try:
             # 使用TLD管理器获取信息
             tld_manager = getattr(self, '_tld_manager', None)
@@ -786,7 +752,7 @@ class WhoisService:
             return await tld_manager.get_tld_info(tld)
         except Exception as e:
             logger.debug(f"获取TLD信息失败: {e}")
-            # 如果IANA数据不可用，回退到基础硬编码数据
+            # 如果GitHub数据不可用，回退到基础硬编码数据
             return self._get_fallback_tld_info(tld)
     
     def _get_fallback_tld_info(self, tld: str) -> Optional[Dict[str, Any]]:
