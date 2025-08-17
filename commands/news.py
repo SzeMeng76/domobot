@@ -20,7 +20,8 @@ from utils.message_manager import (
     delete_user_command,
     send_info,
     send_error,
-    send_success
+    send_success,
+    send_help
 )
 from utils.permissions import Permission
 
