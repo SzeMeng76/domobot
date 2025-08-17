@@ -423,6 +423,7 @@ def resolve_timezone_with_country_data(user_input: str) -> tuple[str, dict]:
 
 def get_country_from_timezone(timezone: str) -> dict:
     """从时区推断国家信息"""
+    # 1. 先检查单时区国家
     for country_code, tz in COUNTRY_TO_TIMEZONE.items():
         if tz == timezone:
             return {
@@ -432,6 +433,26 @@ def get_country_from_timezone(timezone: str) -> dict:
                 "currency": SUPPORTED_COUNTRIES[country_code]["currency"],
                 "symbol": SUPPORTED_COUNTRIES[country_code]["symbol"]
             }
+    
+    # 2. 检查多时区国家
+    multi_timezone_countries = {
+        "US": US_TIMEZONES,
+        "CA": CANADA_TIMEZONES,
+        "AU": AUSTRALIA_TIMEZONES,
+        "RU": RUSSIA_TIMEZONES,
+        "BR": BRAZIL_TIMEZONES,
+    }
+    
+    for country_code, timezones in multi_timezone_countries.items():
+        if timezone in timezones:
+            return {
+                "code": country_code,
+                "name": SUPPORTED_COUNTRIES[country_code]["name"],
+                "flag": get_country_flag(country_code),
+                "currency": SUPPORTED_COUNTRIES[country_code]["currency"],
+                "symbol": SUPPORTED_COUNTRIES[country_code]["symbol"]
+            }
+    
     return {}
 
 def get_supported_countries_for_timezone():
