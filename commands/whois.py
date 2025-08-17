@@ -416,8 +416,16 @@ class WhoisService:
             # 根据whois21的实际字段进行提取
             for key, value in whois_data.items():
                 if value and value != []:  # 跳过空值
+                    # 跳过不重要或过长的字段
+                    if self._should_skip_field(key, value):
+                        continue
+                    
                     # 转换为更友好的中文字段名
                     chinese_key = self._translate_field_name(key)
+                    
+                    # 避免重复添加相同的字段
+                    if chinese_key in formatted:
+                        continue
                     
                     # 处理列表值
                     if isinstance(value, list):
@@ -465,6 +473,60 @@ class WhoisService:
         
         logger.debug(f"最终提取的数据: {formatted}")
         return formatted
+    
+    def _should_skip_field(self, key: str, value: Any) -> bool:
+        """判断是否应该跳过某个字段"""
+        # 转换为字符串进行检查
+        str_value = str(value) if not isinstance(value, list) else ', '.join(str(v) for v in value)
+        
+        # 跳过过长的字段 (超过200字符)
+        if len(str_value) > 200:
+            return True
+        
+        # 跳过不重要的字段
+        skip_patterns = [
+            # 法律声明和条款
+            'TERMS OF USE', 'TERMS AND CONDITIONS', 'DISCLAIMER', 'NOTICE',
+            'COPYRIGHT', 'LEGAL NOTICE', 'ABUSE CONTACT', 'PRIVACY POLICY',
+            
+            # 冗长的描述文本
+            'DESCRIPTION', 'REMARKS', 'COMMENT', 'NOTE', 'NOTES',
+            
+            # 技术细节
+            'LAST UPDATE OF WHOIS DATABASE', 'WHOIS SERVER', 'REGISTRY WHOIS INFO',
+            'WHOIS DATABASE RESPONSES', 'DATABASE LAST UPDATED ON',
+            
+            # 重复的联系信息块
+            'REGISTRANT ORGANIZATION', 'REGISTRANT NAME', 'REGISTRANT EMAIL',
+            'REGISTRANT PHONE', 'REGISTRANT FAX', 'REGISTRANT ADDRESS',
+            'ADMIN ORGANIZATION', 'ADMIN NAME', 'ADMIN EMAIL',
+            'TECH ORGANIZATION', 'TECH NAME', 'TECH EMAIL',
+            
+            # URL和链接
+            'URL', 'HTTP', 'HTTPS', 'WWW',
+            
+            # 其他不重要信息
+            'SPONSORING REGISTRAR IANA ID', 'BILLING CONTACT',
+            'RESELLER', 'REGISTRY', 'WHOIS LOOKUP',
+        ]
+        
+        # 检查字段名是否包含跳过模式
+        key_upper = key.upper()
+        for pattern in skip_patterns:
+            if pattern in key_upper:
+                return True
+        
+        # 跳过明显的网址和长链接
+        if any(url_part in str_value.lower() for url_part in ['http://', 'https://', 'www.', '.com/', '.net/', '.org/']):
+            if len(str_value) > 50:  # 长网址
+                return True
+        
+        # 跳过包含大量法律文本的字段
+        legal_keywords = ['copyright', 'trademark', 'reserved', 'prohibited', 'violation', 'legal', 'terms', 'conditions']
+        if any(keyword in str_value.lower() for keyword in legal_keywords) and len(str_value) > 100:
+            return True
+        
+        return False
     
     def _translate_field_name(self, field_name: str) -> str:
         """将英文字段名翻译为中文"""
@@ -588,6 +650,40 @@ class WhoisService:
             'WHOIS SERVER': 'WHOIS服务器',
             'whois_server': 'WHOIS服务器',
             'Whois Server': 'WHOIS服务器',
+            
+            # .pl域名特有字段
+            'REGISTRANT TYPE': '注册人类型',
+            'registrant_type': '注册人类型',
+            'RENEWAL DATE': '续费时间',
+            'renewal_date': '续费时间',
+            'OPTION': '选项',
+            'option': '选项',
+            'TEL': '电话',
+            'tel': '电话',
+            'WHOIS DATABASE RESPONSES': 'WHOIS数据库响应',
+            'whois_database_responses': 'WHOIS数据库响应',
+            
+            # 通用联系信息
+            'ORGANIZATION': '组织',
+            'organization': '组织',
+            'Organization': '组织',
+            'ORG': '组织',
+            'org': '组织',
+            'COUNTRY': '国家',
+            'country': '国家',
+            'Country': '国家',
+            'CITY': '城市',
+            'city': '城市',
+            'City': '城市',
+            'STATE': '州/省',
+            'state': '州/省',
+            'State': '州/省',
+            'POSTAL CODE': '邮编',
+            'postal_code': '邮编',
+            'Postal Code': '邮编',
+            'ADDRESS': '地址',
+            'address': '地址',
+            'Address': '地址',
         }
         
         # 首先尝试直接匹配
@@ -858,13 +954,14 @@ def format_whois_result(result: Dict[str, Any]) -> str:
     if data:
         # 定义字段分组和显示顺序
         field_groups = {
-            '📋 基本信息': ['域名', '域名ID', '查询IP', '类型'],
-            '🏢 注册商信息': ['注册商', '注册商WHOIS服务器', '注册商网址', '注册商IANA ID', '管理机构'],
-            '📅 时间信息': ['创建时间', '过期时间', '更新时间', '最后更新'],
-            '📊 状态信息': ['状态'],
-            '🌐 网络信息': ['DNS服务器', 'ASN', 'ASN描述', 'ASN国家', 'ASN注册机构', '网络名称', 'IP段', '起始地址', '结束地址', '网络国家', '网络类型', '组织', 'WHOIS服务器', '国际化域名'],
-            '📞 联系信息': ['邮箱', '电话', '传真', '联系人'],
+            '📋 基本信息': ['域名', '域名ID', '查询IP', '类型', '注册人类型'],
+            '🏢 注册商信息': ['注册商', '注册商WHOIS服务器', '注册商网址', '注册商IANA ID', '管理机构', '组织'],
+            '📅 时间信息': ['创建时间', '过期时间', '更新时间', '最后更新', '续费时间'],
+            '📊 状态信息': ['状态', '域名状态', '选项'],
+            '🌐 网络信息': ['DNS服务器', 'ASN', 'ASN描述', 'ASN国家', 'ASN注册机构', '网络名称', 'IP段', '起始地址', '结束地址', '网络国家', '网络类型', 'WHOIS服务器', '国际化域名', 'DNSSEC'],
+            '📞 联系信息': ['邮箱', '电话', '传真', '联系人', '地址', '城市', '州/省', '国家', '邮编'],
             '🛡️ 安全信息': ['注册商举报邮箱', '注册商举报电话'],
+            '🔗 参考信息': ['WHOIS数据库响应', '选项'],
             '📄 其他信息': []  # 未分类的字段
         }
         
@@ -900,19 +997,39 @@ def format_whois_result(result: Dict[str, Any]) -> str:
                     lines.append(f"  • **{safe_key}**: {safe_value}")
                 lines.append("")  # 分组间空行
         
-        # 显示其他未分类字段
+        # 显示其他未分类字段 (限制数量)
         if '📄 其他信息' in grouped_data and grouped_data['📄 其他信息']:
-            lines.append("**📄 其他信息**")
-            for key, value in grouped_data['📄 其他信息']:
-                safe_key = safe_escape_markdown(key)
+            other_fields = grouped_data['📄 其他信息']
+            max_other_fields = 5  # 最多显示5个其他字段
+            
+            if len(other_fields) > max_other_fields:
+                lines.append("**📄 其他信息**")
+                for key, value in other_fields[:max_other_fields]:
+                    safe_key = safe_escape_markdown(key)
+                    
+                    if isinstance(value, list):
+                        safe_values = [safe_escape_markdown(v) for v in value]
+                        safe_value = ', '.join(safe_values)
+                    else:
+                        safe_value = safe_escape_markdown(value)
+                    
+                    lines.append(f"  • **{safe_key}**: {safe_value}")
                 
-                if isinstance(value, list):
-                    safe_values = [safe_escape_markdown(v) for v in value]
-                    safe_value = ', '.join(safe_values)
-                else:
-                    safe_value = safe_escape_markdown(value)
-                
-                lines.append(f"  • **{safe_key}**: {safe_value}")
+                # 显示省略信息
+                remaining = len(other_fields) - max_other_fields
+                lines.append(f"  ⋯ *还有 {remaining} 个字段未显示*")
+            else:
+                lines.append("**📄 其他信息**")
+                for key, value in other_fields:
+                    safe_key = safe_escape_markdown(key)
+                    
+                    if isinstance(value, list):
+                        safe_values = [safe_escape_markdown(v) for v in value]
+                        safe_value = ', '.join(safe_values)
+                    else:
+                        safe_value = safe_escape_markdown(value)
+                    
+                    lines.append(f"  • **{safe_key}**: {safe_value}")
     
     # 移除最后的空行
     while lines and lines[-1] == "":
