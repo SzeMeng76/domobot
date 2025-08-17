@@ -473,7 +473,7 @@ class WhoisService:
             formatted['组织'] = organization
         
         # 备用：查找objects中的信息
-        if 'objects' in data:
+        if 'objects' in data and isinstance(data['objects'], dict):
             for obj_key, obj_data in data['objects'].items():
                 if isinstance(obj_data, dict):
                     if 'contact' in obj_data and 'name' in obj_data['contact']:
@@ -640,7 +640,7 @@ async def whois_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         cached_result = None
         if cache_manager:
             try:
-                cached_result = await cache_manager.get_cache(cache_key, subdirectory="whois")
+                cached_result = await cache_manager.load_cache(cache_key, subdirectory="whois")
             except Exception as e:
                 logger.debug(f"缓存读取失败: {e}")
         
