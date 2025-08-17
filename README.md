@@ -17,7 +17,8 @@ Read this in other languages: [简体中文](./README.zh-CN.md)
 - 📺 **Streaming Prices:** Netflix, Disney+, Spotify, HBO Max pricing across global regions
 - 👤 **User Information:** Telegram registration dates, account age, and ID lookup
 - ⏰ **Time & Timezone:** Current time queries, timezone conversion, and timezone lists
-- 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`
+- 📰 **News Aggregation:** Real-time news from 40+ sources including tech, social, finance, and general news
+- 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`
 - 👥 **Group Friendly:** Works in any Telegram group without requiring whitelist approval
 
 *Advanced features (crypto, weather, Steam prices, movie/TV info, etc.) require whitelist access.*
@@ -37,6 +38,7 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 -   📺 **Public Streaming Prices:** Available to all users - query subscription prices for Netflix, Disney+, Spotify, and HBO Max across global regions.
 -   👤 **Public User Information:** Available to all users - check Telegram user registration dates, account age, and get user/group IDs.
 -   ⏰ **Public Time & Timezone:** Available to all users - query current time in any timezone, convert time between zones, and view supported timezone lists with IANA integration.
+-   📰 **Public News Aggregation:** Available to all users - access real-time news from 40+ sources including GitHub trending, Zhihu hot topics, Weibo trending, tech news (IT Home, Hacker News), financial news (JinShi Data, Wallstreet CN), and general news sources with smart caching and categorized interface.
 -   🎬 **Movie & TV Information:** Query movie/TV details with posters, ratings, cast, trailers, reviews, recommendations, viewing platforms, and season/episode info. Features **3-platform data integration** (TMDB + JustWatch + Trakt) with **JustWatch streaming charts**, real-time ranking trends, platform availability, Telegraph integration for long content, trending discovery, people search, and enhanced statistics with watch counts and community data. *(Whitelist required)*
 -   🪙 **Crypto Prices:** Look up real-time cryptocurrency prices with support for custom amounts and currency conversion, including 24h and 7d percentage changes. *(Whitelist required)*
 -   💳 **BIN Lookup:** Query credit card BIN (Bank Identification Number) information including card brand, type, issuing bank, and country details. *(Whitelist required)*
@@ -138,6 +140,14 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /time US                  # Current time in US
 /convert_time China 14:30 US    # Convert 2:30 PM from China to US time
 /timezone                 # View supported timezone list
+
+# News aggregation
+/news                     # Interactive news source selection
+/newslist                 # Show all news sources with categories
+/newslist zhihu           # Get Zhihu hot topics (default 10 items)
+/newslist zhihu 5         # Get top 5 Zhihu hot topics
+/newslist github 15       # Get top 15 GitHub trending items
+/hotnews                  # Quick access to hot news from multiple sources
 ```
 
 #### Whitelist-Only Commands
@@ -262,6 +272,9 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /tq_cleanlocation        # Clear weather location cache
 /tq_cleanforecast        # Clear weather forecast cache
 /tq_cleanrealtime        # Clear real-time weather cache
+
+# News Cache Management
+/news_cleancache         # Clear all news cache
 ```
 
 <details>

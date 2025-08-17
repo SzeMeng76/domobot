@@ -333,6 +333,133 @@ async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await delete_user_command(context, update.effective_chat.id, update.message.message_id)
 
 
+@with_error_handling
+async def newslist_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """新闻源列表和直接查询命令"""
+    config = get_config()
+    args = context.args or []
+    
+    if not args:
+        # 显示所有新闻源列表
+        help_lines = [
+            "📰 **NewsNow 新闻源列表**\n",
+            "🔧 **科技类:**"
+        ]
+        
+        # 按类别分组显示
+        categories = [
+            ("🔧 科技类", ['github', 'ithome', 'juejin', 'hackernews', 'solidot', 'sspai']),
+            ("💬 社交类", ['zhihu', 'weibo', 'v2ex', 'bilibili', 'douyin', 'tieba']),
+            ("💰 财经类", ['jin10', 'wallstreetcn', 'gelonghui', 'xueqiu', '36kr']),
+            ("📰 新闻类", ['toutiao', 'thepaper', 'ifeng', 'baidu']),
+            ("🛍️ 其他", ['smzdm', 'producthunt', 'weread', 'coolapk', 'hupu', 'nowcoder'])
+        ]
+        
+        help_lines = ["📰 **NewsNow 新闻源列表**\n"]
+        
+        for category_name, sources in categories:
+            help_lines.append(f"**{category_name}**")
+            for source in sources:
+                source_name = NEWS_SOURCES.get(source, source)
+                help_lines.append(f"• `{source}` - {source_name}")
+            help_lines.append("")  # 空行分隔
+        
+        help_lines.extend([
+            "**使用方法:**",
+            "`/newslist [源名称] [数量]` - 直接查询新闻",
+            "",
+            "**示例:**",
+            "• `/newslist zhihu` - 获取知乎热榜 (默认10条)",
+            "• `/newslist zhihu 5` - 获取知乎热榜前5条",
+            "• `/newslist github 15` - 获取GitHub趋势前15条",
+            "",
+            "💡 也可使用 `/news` 进入交互式选择界面"
+        ])
+        
+        message = "\n".join(help_lines)
+        await send_help(
+            context,
+            update.effective_chat.id,
+            message,
+            parse_mode='Markdown'
+        )
+        
+        # 删除用户命令
+        if update.message:
+            await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+        return
+    
+    # 解析参数进行直接查询
+    source = args[0].lower()
+    count = 10  # 默认获取10条
+    
+    if len(args) > 1 and args[1].isdigit():
+        count = int(args[1])
+        count = max(1, min(count, 30))  # 限制在1-30之间
+    
+    if source not in NEWS_SOURCES:
+        available_sources = ", ".join(list(NEWS_SOURCES.keys())[:10])
+        await send_error(
+            context, 
+            update.effective_chat.id, 
+            f"❌ 不支持的新闻源: `{source}`\n\n部分可用源: {available_sources}\n\n使用 `/newslist` 查看完整列表",
+            parse_mode='Markdown'
+        )
+        
+        # 删除用户命令
+        if update.message:
+            await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+        return
+    
+    # 发送加载提示
+    loading_message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"🔄 正在获取 {NEWS_SOURCES[source]} 新闻...",
+        parse_mode='Markdown'
+    )
+    
+    try:
+        # 获取新闻
+        news_items = await get_news(source, count)
+        
+        # 删除加载提示
+        await loading_message.delete()
+        
+        # 格式化并发送消息
+        message = format_news_message(source, news_items)
+        
+        await send_message_with_auto_delete(
+            context,
+            update.effective_chat.id,
+            message,
+            parse_mode='Markdown'
+        )
+        
+        # 删除用户命令
+        if update.message:
+            await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+        
+        logger.info(f"成功通过newslist获取 {source} 新闻 {len(news_items)} 条")
+        
+    except Exception as e:
+        # 删除加载提示
+        try:
+            await loading_message.delete()
+        except:
+            pass
+        
+        logger.error(f"newslist命令执行失败: {e}")
+        await send_error(
+            context,
+            update.effective_chat.id,
+            f"❌ 获取 {NEWS_SOURCES[source]} 新闻失败\n\n请稍后重试或联系管理员"
+        )
+        
+        # 删除用户命令
+        if update.message:
+            await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+
+
 @with_error_handling  
 async def hot_news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """热门新闻快捷命令"""
@@ -561,6 +688,13 @@ command_factory.register_command(
     hot_news_command,
     permission=Permission.NONE,
     description="获取今日热门新闻汇总"
+)
+
+command_factory.register_command(
+    "newslist",
+    newslist_command,
+    permission=Permission.NONE,
+    description="显示新闻源列表和直接查询"
 )
 
 # 注册回调处理器

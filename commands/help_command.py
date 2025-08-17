@@ -37,13 +37,14 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 💳 `/bin 123456` - BIN信息 | 🌦️ `/tq 北京` - 天气预报
 🎬 `/movie 复仇者` - 影视信息 | 📺 `/nf` - 流媒体价格
 🎮 `/steam 赛博朋克` - 游戏价格 | 👤 `/when 123` - 用户信息
-⏰ `/time 北京` - 时间查询 | 🕐 `/convert_time` - 时区转换
+⏰ `/time 北京` - 时间查询 | 📰 `/news` - 新闻聚合
 
 💱 *汇率* `/rate [货币] [数额]` - 支持表达式计算
 🪙 *加密货币* `/crypto <币种> [数量] [货币]` - 实时价格
 💳 *BIN查询* `/bin <6-8位>` - 信用卡信息
 🌦️ *天气* `/tq <城市> [天数]` - 天气&空气质量
 ⏰ *时间* `/time <时区>` - 时间查询 | `/convert_time <源> <时间> <目标>` - 时区转换
+📰 *新闻* `/news` - 交互式选择 | `/newslist [源] [数量]` - 列表查询
 
 🎬 *影视查询*
 搜索: `/movie <片名>` `/tv <剧名>` `/person <演员>`
@@ -56,11 +57,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 📱 *应用商店* `/app <名称>` - 详细内购项目 | `/gp <名称>` - 内购价格范围 | `/aps <服务>`
 👤 *用户* `/when <ID/@用户>` `/id` - 注册时间&ID信息
 ⏰ *时区* `/time <时区>` `/timezone` - 时间查询&时区列表
+📰 *新闻* `/news` `/newslist` `/hotnews` - 40+源实时资讯
 
 🌍 *支持地区* US CN TR IN MY JP GB DE 等40+国家
 💡 *特色* 支持中文地名 | 自动CNY转换 | 智能缓存 | 表达式计算
 
-⚡ 快速试用: `/nf` `/crypto btc` `/tq 北京` `/movie_hot` `/time 北京`"""
+⚡ 快速试用: `/nf` `/crypto btc` `/tq 北京` `/movie_hot` `/news` `/time 北京`"""
 
     admin_help_text = """
 
@@ -84,11 +86,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 📺 *流媒体价格* `/nf` `/ds` `/sp` `/max` - Netflix/Disney+/Spotify/HBO
 👤 *用户信息* `/when <ID/@用户>` `/id` - 注册时间&ID查询
 ⏰ *时间查询* `/time <时区>` `/convert_time` `/timezone` - 时区转换
+📰 *新闻聚合* `/news` `/newslist` `/hotnews` - 40+源实时资讯
 
 🌍 *支持地区* US CN TR IN MY JP GB DE 等40+国家
-💡 *特色* 支持中文地名 | 自动CNY转换 | 时区智能识别
+💡 *特色* 支持中文地名 | 自动CNY转换 | 时区智能识别 | 新闻分类
 
-⚡ *快速试用* `/nf` `/ds` `/sp` `/max` `/when` `/id` `/time 北京`
+⚡ *快速试用* `/nf` `/ds` `/sp` `/max` `/when` `/id` `/time 北京` `/news`
 
 🔒 *白名单专享*
 💱 汇率换算 | 🪙 加密货币 | 💳 BIN查询 | 🌦️ 天气预报
@@ -140,6 +143,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 📺 流媒体价格 `/nf` `/ds` `/sp` `/max`
 👤 用户信息 `/when` `/id`
 ⏰ 时间查询 `/time` `/convert_time` `/timezone`
+📰 新闻聚合 `/news` `/newslist` `/hotnews`
 
 🚀 *试试看*
 `/nf` - Netflix全球价格
@@ -147,22 +151,24 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 `/sp` - Spotify全球价格
 `/max` - HBO Max全球价格
 `/time 北京` - 北京时间
+`/news` - 交互式新闻界面
+`/newslist zhihu` - 知乎热榜
 `/convert_time 中国 14:30 美国` - 时区转换
 `/help` - 查看详细功能
 
-🌟 支持40+国家 | 自动CNY转换 | 中文地名 | 时区智能识别"""
+🌟 支持40+国家 | 自动CNY转换 | 中文地名 | 时区智能识别 | 新闻分类"""
     else:
         # 白名单用户 - 显示完整功能
         welcome_text = f"""👋 *欢迎 {user.first_name}! 多功能价格查询机器人*
 
 🎯 *全功能版本*
-💱 汇率 🪙 币价 💳 BIN 🌦️ 天气 🎬 影视 🎮 游戏 📺 流媒体 📱 应用 ⏰ 时间
+💱 汇率 🪙 币价 💳 BIN 🌦️ 天气 🎬 影视 🎮 游戏 📺 流媒体 📱 应用 ⏰ 时间 📰 新闻
 
 🚀 *快速开始*
 `/rate USD 100` `/crypto btc` `/tq 北京` `/movie_hot`
-`/steam 赛博朋克` `/nf` `/time 北京` `/help`
+`/steam 赛博朋克` `/nf` `/time 北京` `/news` `/help`
 
-🌟 40+国家 | CNY转换 | 智能缓存 | 表达式计算 | 时区转换"""
+🌟 40+国家 | CNY转换 | 智能缓存 | 表达式计算 | 时区转换 | 新闻聚合"""
 
     await send_help(context, update.message.chat_id, foldable_text_with_markdown_v2(welcome_text), parse_mode="MarkdownV2")
 
