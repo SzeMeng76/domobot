@@ -141,8 +141,25 @@ class WhoisService:
             data = await asyncio.to_thread(obj.lookup_rdap)
             
             if data:
-                result['success'] = True
-                result['data'] = self._format_ip_data(data)
+                formatted_data = self._format_ip_data(data)
+                if formatted_data:  # 确保格式化后有数据
+                    result['success'] = True
+                    result['data'] = formatted_data
+                else:
+                    # 如果格式化后没有数据，显示原始数据的一些关键字段
+                    fallback_data = {}
+                    if 'query' in data:
+                        fallback_data['查询IP'] = data['query']
+                    if 'asn' in data:
+                        fallback_data['ASN'] = f"AS{data['asn']}"
+                    if 'asn_description' in data:
+                        fallback_data['ASN描述'] = data['asn_description']
+                    
+                    if fallback_data:
+                        result['success'] = True
+                        result['data'] = fallback_data
+                    else:
+                        result['error'] = "查询成功但未能解析IP信息"
             else:
                 result['error'] = "未找到IP地址信息"
                 
@@ -351,6 +368,20 @@ class WhoisService:
         """格式化IP查询结果"""
         formatted = {}
         
+        # ASN信息（通常在顶级）
+        if 'asn' in data:
+            formatted['ASN'] = f"AS{data['asn']}"
+        
+        if 'asn_description' in data:
+            formatted['ASN描述'] = data['asn_description']
+            
+        if 'asn_country_code' in data:
+            formatted['ASN国家'] = data['asn_country_code']
+            
+        if 'asn_registry' in data:
+            formatted['ASN注册机构'] = data['asn_registry']
+        
+        # 网络信息
         if 'network' in data:
             network = data['network']
             if 'name' in network:
@@ -361,23 +392,55 @@ class WhoisService:
                 formatted['起始地址'] = network['start_address']
             if 'end_address' in network:
                 formatted['结束地址'] = network['end_address']
+            if 'country' in network:
+                formatted['网络国家'] = network['country']
+            if 'type' in network:
+                formatted['网络类型'] = network['type']
         
+        # 查找组织信息
+        organization = None
         if 'entities' in data:
             for entity in data['entities']:
-                if entity.get('roles') and 'registrant' in entity['roles']:
-                    if 'vcardArray' in entity:
-                        vcard = entity['vcardArray'][1] if len(entity['vcardArray']) > 1 else []
-                        for item in vcard:
-                            if item[0] == 'fn':
-                                formatted['组织'] = item[3]
-                            elif item[0] == 'adr':
-                                formatted['地址'] = item[3]
+                # 查找registrant或administrative角色
+                if entity.get('roles'):
+                    if any(role in entity['roles'] for role in ['registrant', 'administrative', 'technical']):
+                        if 'vcardArray' in entity and len(entity['vcardArray']) > 1:
+                            vcard = entity['vcardArray'][1]
+                            for item in vcard:
+                                if len(item) > 3:
+                                    if item[0] == 'fn':  # Full name
+                                        organization = item[3]
+                                        break
+                                    elif item[0] == 'org':  # Organization
+                                        organization = item[3]
+                                        break
+                        if organization:
+                            break
         
-        if 'asn' in data:
-            formatted['ASN'] = f"AS{data['asn']}"
+        if organization:
+            formatted['组织'] = organization
         
-        if 'asn_description' in data:
-            formatted['ASN描述'] = data['asn_description']
+        # 备用：查找objects中的信息
+        if 'objects' in data:
+            for obj_key, obj_data in data['objects'].items():
+                if isinstance(obj_data, dict):
+                    if 'contact' in obj_data and 'name' in obj_data['contact']:
+                        formatted['联系人'] = obj_data['contact']['name']
+                    if 'contact' in obj_data and 'organization' in obj_data['contact']:
+                        if '组织' not in formatted:
+                            formatted['组织'] = obj_data['contact']['organization']
+        
+        # 如果还是没有足够信息，添加一些调试信息
+        if not formatted:
+            # 至少显示一些基本信息
+            if 'query' in data:
+                formatted['查询IP'] = data['query']
+            
+            # 添加可用的顶级字段作为调试信息
+            debug_fields = ['nir', 'raw', 'referral']
+            for field in debug_fields:
+                if field in data and data[field]:
+                    formatted[f'调试_{field}'] = str(data[field])[:100] + "..." if len(str(data[field])) > 100 else str(data[field])
         
         return formatted
     
@@ -663,9 +726,48 @@ async def whois_tld_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     )
     await delete_user_command(context, update.effective_chat.id, update.effective_message.message_id)
 
+async def whois_clean_cache_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """清理WHOIS查询缓存"""
+    if not update.message or not update.effective_chat:
+        return
+    
+    try:
+        if cache_manager:
+            await cache_manager.clear_cache(subdirectory="whois")
+            success_message = "✅ WHOIS查询缓存已清理完成。\n\n包括：域名、IP地址、ASN和TLD查询结果。"
+        else:
+            success_message = "⚠️ 缓存管理器未初始化。"
+        
+        await send_message_with_auto_delete(
+            context=context,
+            chat_id=update.effective_chat.id,
+            text=success_message,
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+        await delete_user_command(
+            context=context,
+            chat_id=update.effective_chat.id,
+            message_id=update.effective_message.message_id
+        )
+        
+    except Exception as e:
+        logger.error(f"清理WHOIS缓存失败: {e}")
+        error_message = f"❌ 清理WHOIS缓存时发生错误: {str(e)}"
+        await send_error(
+            context=context,
+            chat_id=update.effective_chat.id,
+            text=error_message
+        )
+        await delete_user_command(
+            context=context,
+            chat_id=update.effective_chat.id,
+            message_id=update.effective_message.message_id
+        )
+
 # 注册命令
 command_factory.register_command("whois", whois_command, permission=Permission.NONE, description="WHOIS查询（智能识别类型）")
 command_factory.register_command("whois_domain", whois_domain_command, permission=Permission.NONE, description="域名WHOIS查询")
 command_factory.register_command("whois_ip", whois_ip_command, permission=Permission.NONE, description="IP地址WHOIS查询")
 command_factory.register_command("whois_asn", whois_asn_command, permission=Permission.NONE, description="ASN WHOIS查询")
 command_factory.register_command("whois_tld", whois_tld_command, permission=Permission.NONE, description="TLD信息查询")
+command_factory.register_command("whois_cleancache", whois_clean_cache_command, permission=Permission.ADMIN, description="清理WHOIS查询缓存")
