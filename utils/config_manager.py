@@ -59,12 +59,14 @@ class BotConfig:
         self.disney_cache_duration = 86400 * 8  # 8天，配合周日清理
         self.max_cache_duration = 86400 * 8  # 8天，配合周日清理
         self.movie_cache_duration = 7200   # 2小时，电影和电视剧缓存
+        self.news_cache_duration = 86400  # 1天，新闻缓存
 
         # 定时清理配置
         self.spotify_weekly_cleanup = True  # 默认启用
         self.disney_weekly_cleanup = True  # 默认启用
         self.max_weekly_cleanup = True  # 默认启用
         self.movie_weekly_cleanup = True  # 默认启用，电影和电视剧缓存
+        self.news_weekly_cleanup = True  # 默认启用，新闻缓存
 
         # API配置
         self.exchange_rate_api_keys = []
@@ -211,11 +213,13 @@ class ConfigManager:
         self.config.netflix_cache_duration = get_int_env("NETFLIX_CACHE_DURATION", "86400")
         self.config.crypto_cache_duration = get_int_env("CRYPTO_CACHE_DURATION", "60")
         self.config.movie_cache_duration = get_int_env("MOVIE_CACHE_DURATION", "7200")
+        self.config.news_cache_duration = get_int_env("NEWS_CACHE_DURATION", "86400")
 
         # 定时清理配置
         self.config.spotify_weekly_cleanup = get_bool_env("SPOTIFY_WEEKLY_CLEANUP")
         self.config.disney_weekly_cleanup = get_bool_env("DISNEY_WEEKLY_CLEANUP")
         self.config.movie_weekly_cleanup = get_bool_env("MOVIE_WEEKLY_CLEANUP", "True")
+        self.config.news_weekly_cleanup = get_bool_env("NEWS_WEEKLY_CLEANUP", "True")
 
         # API配置
         keys_str = os.getenv("EXCHANGE_RATE_API_KEYS") or os.getenv("EXCHANGE_RATE_API_KEY", "")
