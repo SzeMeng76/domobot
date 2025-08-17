@@ -98,6 +98,7 @@ from commands import (
     system_commands,
     time_command,
     weather,
+    whois,
 )
 from commands.rate_command import set_rate_converter
 from handlers.user_cache_handler import setup_user_cache_handler  # 新增：导入用户缓存处理器
@@ -253,6 +254,7 @@ async def setup_application(application: Application, config) -> None:
     movie.init_movie_service()
     time_command.set_dependencies(cache_manager)
     news.set_dependencies(cache_manager)
+    whois.set_dependencies(cache_manager)
 
     # 新增：为需要用户缓存的模块注入依赖
     # 这里可以根据实际需要为特定命令模块注入用户缓存管理器
