@@ -268,6 +268,22 @@ class WhoisService:
             # 注册商信息  
             if 'registrar' in whois_data:
                 formatted['注册商'] = whois_data['registrar']
+            elif 'REGISTRAR' in whois_data:
+                formatted['注册商'] = whois_data['REGISTRAR']
+            
+            # 注册商详细信息
+            if 'REGISTRAR WHOIS SERVER' in whois_data:
+                formatted['注册商WHOIS服务器'] = whois_data['REGISTRAR WHOIS SERVER']
+            
+            if 'REGISTRAR URL' in whois_data:
+                formatted['注册商网址'] = whois_data['REGISTRAR URL']
+                
+            if 'REGISTRAR IANA ID' in whois_data:
+                formatted['注册商IANA ID'] = whois_data['REGISTRAR IANA ID']
+            
+            # 域名ID
+            if 'REGISTRY DOMAIN ID' in whois_data:
+                formatted['域名ID'] = whois_data['REGISTRY DOMAIN ID']
         
         # 也检查直接属性 - 注意：日期字段是列表类型 List[datetime]
         if hasattr(whois_obj, 'creation_date') and whois_obj.creation_date:
@@ -308,23 +324,65 @@ class WhoisService:
         if hasattr(whois_obj, 'whois_data') and whois_obj.whois_data:
             whois_data = whois_obj.whois_data
             
+            # 状态信息
             if 'status' in whois_data:
-                # 处理状态信息，可能是列表或字符串
                 status = whois_data['status']
                 if isinstance(status, list):
                     formatted['状态'] = ', '.join(str(s) for s in status)
                 else:
                     formatted['状态'] = str(status)
+            elif 'DOMAIN STATUS' in whois_data:
+                status = whois_data['DOMAIN STATUS']
+                if isinstance(status, list):
+                    formatted['状态'] = ', '.join(str(s) for s in status)
+                else:
+                    formatted['状态'] = str(status)
                     
+            # DNS服务器信息
             if 'name_servers' in whois_data:
-                # 处理DNS服务器列表
                 name_servers = whois_data['name_servers']
                 if isinstance(name_servers, list):
                     formatted['DNS服务器'] = ', '.join(str(ns) for ns in name_servers)
                 else:
                     formatted['DNS服务器'] = str(name_servers)
+            elif 'NAME SERVER' in whois_data:
+                name_servers = whois_data['NAME SERVER']
+                if isinstance(name_servers, list):
+                    formatted['DNS服务器'] = ', '.join(str(ns) for ns in name_servers)
+                else:
+                    formatted['DNS服务器'] = str(name_servers)
+            elif 'NSERVER' in whois_data:
+                name_servers = whois_data['NSERVER']
+                if isinstance(name_servers, list):
+                    formatted['DNS服务器'] = ', '.join(str(ns) for ns in name_servers)
+                else:
+                    formatted['DNS服务器'] = str(name_servers)
+            
+            # 联系信息
+            if 'EMAIL' in whois_data:
+                formatted['邮箱'] = whois_data['EMAIL']
+            elif 'E-MAIL' in whois_data:
+                formatted['邮箱'] = whois_data['E-MAIL']
+                
+            if 'PHONE' in whois_data:
+                formatted['电话'] = whois_data['PHONE']
+                
+            if 'FAX' in whois_data:
+                formatted['传真'] = whois_data['FAX']
+            elif 'FAX-NO' in whois_data:
+                formatted['传真'] = whois_data['FAX-NO']
+            
+            # 注册商联系信息
+            if 'REGISTRAR ABUSE CONTACT EMAIL' in whois_data:
+                formatted['注册商举报邮箱'] = whois_data['REGISTRAR ABUSE CONTACT EMAIL']
+                
+            if 'REGISTRAR ABUSE CONTACT PHONE' in whois_data:
+                formatted['注册商举报电话'] = whois_data['REGISTRAR ABUSE CONTACT PHONE']
         
         # 如果从whois_data没有获取到数据，尝试直接从对象属性获取
+        if not formatted.get('注册商') and hasattr(whois_obj, 'registrar_name') and whois_obj.registrar_name:
+            formatted['注册商'] = whois_obj.registrar_name
+            
         if not formatted.get('状态') and hasattr(whois_obj, 'status') and whois_obj.status:
             if isinstance(whois_obj.status, list):
                 formatted['状态'] = ', '.join(str(s) for s in whois_obj.status)
@@ -336,6 +394,43 @@ class WhoisService:
                 formatted['DNS服务器'] = ', '.join(str(ns) for ns in whois_obj.name_servers)
             else:
                 formatted['DNS服务器'] = str(whois_obj.name_servers)
+        
+        # 添加更多直接属性
+        if not formatted.get('域名ID') and hasattr(whois_obj, 'registry_domain_id') and whois_obj.registry_domain_id:
+            formatted['域名ID'] = whois_obj.registry_domain_id
+            
+        if not formatted.get('注册商WHOIS服务器') and hasattr(whois_obj, 'registrar_whois_server') and whois_obj.registrar_whois_server:
+            formatted['注册商WHOIS服务器'] = whois_obj.registrar_whois_server
+            
+        if not formatted.get('注册商网址') and hasattr(whois_obj, 'registrar_url') and whois_obj.registrar_url:
+            formatted['注册商网址'] = whois_obj.registrar_url
+            
+        if not formatted.get('注册商IANA ID') and hasattr(whois_obj, 'registrar_iana_id') and whois_obj.registrar_iana_id:
+            formatted['注册商IANA ID'] = whois_obj.registrar_iana_id
+            
+        if not formatted.get('邮箱') and hasattr(whois_obj, 'emails') and whois_obj.emails:
+            if isinstance(whois_obj.emails, list):
+                formatted['邮箱'] = ', '.join(str(email) for email in whois_obj.emails)
+            else:
+                formatted['邮箱'] = str(whois_obj.emails)
+                
+        if not formatted.get('电话') and hasattr(whois_obj, 'phone_numbers') and whois_obj.phone_numbers:
+            if isinstance(whois_obj.phone_numbers, list):
+                formatted['电话'] = ', '.join(str(phone) for phone in whois_obj.phone_numbers)
+            else:
+                formatted['电话'] = str(whois_obj.phone_numbers)
+                
+        if not formatted.get('传真') and hasattr(whois_obj, 'fax_numbers') and whois_obj.fax_numbers:
+            if isinstance(whois_obj.fax_numbers, list):
+                formatted['传真'] = ', '.join(str(fax) for fax in whois_obj.fax_numbers)
+            else:
+                formatted['传真'] = str(whois_obj.fax_numbers)
+        
+        if not formatted.get('注册商举报邮箱') and hasattr(whois_obj, 'registrar_abuse_contact_email') and whois_obj.registrar_abuse_contact_email:
+            formatted['注册商举报邮箱'] = whois_obj.registrar_abuse_contact_email
+            
+        if not formatted.get('注册商举报电话') and hasattr(whois_obj, 'registrar_abuse_contact_phone') and whois_obj.registrar_abuse_contact_phone:
+            formatted['注册商举报电话'] = whois_obj.registrar_abuse_contact_phone
             
         return formatted
 
@@ -552,7 +647,7 @@ def detect_query_type(query: str) -> str:
     return 'domain'
 
 def format_whois_result(result: Dict[str, Any]) -> str:
-    """格式化WHOIS查询结果为Markdown"""
+    """格式化WHOIS查询结果为美化的Markdown"""
     if not result['success']:
         error_msg = escape_markdown(result.get('error', '查询失败'), version=2)
         return f"❌ **查询失败**\n\n{error_msg}"
@@ -574,23 +669,76 @@ def format_whois_result(result: Dict[str, Any]) -> str:
     else:
         source_info = ""
     
-    lines = [f"✅ **{query_type}查询结果**{source_info}\n"]
-    lines.append(f"**查询对象**: `{safe_query}`\n")
+    # 标题部分
+    lines = [f"✅ **{query_type}查询结果**{source_info}"]
+    lines.append("━" * 30)
+    lines.append(f"🔍 **查询对象**: `{safe_query}`")
+    lines.append("")
     
-    # 格式化数据
+    # 格式化数据 - 按类别分组
     data = result.get('data', {})
     if data:
+        # 定义字段分组和显示顺序
+        field_groups = {
+            '📋 基本信息': ['域名', '域名ID', '查询IP'],
+            '🏢 注册商信息': ['注册商', '注册商WHOIS服务器', '注册商网址', '注册商IANA ID'],
+            '📅 时间信息': ['创建时间', '过期时间', '更新时间'],
+            '📊 状态信息': ['状态'],
+            '🌐 网络信息': ['DNS服务器', 'ASN', 'ASN描述', 'ASN国家', 'ASN注册机构', '网络名称', 'IP段', '起始地址', '结束地址', '网络国家', '网络类型', '组织'],
+            '📞 联系信息': ['邮箱', '电话', '传真', '联系人'],
+            '🛡️ 安全信息': ['注册商举报邮箱', '注册商举报电话'],
+            '📄 其他信息': []  # 未分类的字段
+        }
+        
+        # 创建字段到分组的映射
+        field_to_group = {}
+        for group, fields in field_groups.items():
+            for field in fields:
+                field_to_group[field] = group
+        
+        # 按分组组织数据
+        grouped_data = {}
         for key, value in data.items():
-            safe_key = escape_markdown(str(key), version=2)
-            
-            if isinstance(value, list):
-                # 对列表中的每个元素单独转义，然后用逗号连接
-                safe_values = [escape_markdown(str(v), version=2) for v in value]
-                safe_value = ', '.join(safe_values)
-            else:
-                safe_value = escape_markdown(str(value), version=2)
-            
-            lines.append(f"**{safe_key}**: {safe_value}")
+            group = field_to_group.get(key, '📄 其他信息')
+            if group not in grouped_data:
+                grouped_data[group] = []
+            grouped_data[group].append((key, value))
+        
+        # 按分组顺序显示
+        for group_name in field_groups.keys():
+            if group_name in grouped_data and grouped_data[group_name]:
+                lines.append(f"**{group_name}**")
+                for key, value in grouped_data[group_name]:
+                    safe_key = escape_markdown(str(key), version=2)
+                    
+                    if isinstance(value, list):
+                        # 对列表中的每个元素单独转义，然后用逗号连接
+                        safe_values = [escape_markdown(str(v), version=2) for v in value]
+                        safe_value = ', '.join(safe_values)
+                    else:
+                        safe_value = escape_markdown(str(value), version=2)
+                    
+                    # 使用更美观的格式
+                    lines.append(f"  • **{safe_key}**: {safe_value}")
+                lines.append("")  # 分组间空行
+        
+        # 显示其他未分类字段
+        if '📄 其他信息' in grouped_data and grouped_data['📄 其他信息']:
+            lines.append("**📄 其他信息**")
+            for key, value in grouped_data['📄 其他信息']:
+                safe_key = escape_markdown(str(key), version=2)
+                
+                if isinstance(value, list):
+                    safe_values = [escape_markdown(str(v), version=2) for v in value]
+                    safe_value = ', '.join(safe_values)
+                else:
+                    safe_value = escape_markdown(str(value), version=2)
+                
+                lines.append(f"  • **{safe_key}**: {safe_value}")
+    
+    # 移除最后的空行
+    while lines and lines[-1] == "":
+        lines.pop()
     
     return '\n'.join(lines)
 
