@@ -847,12 +847,20 @@ async def refresh_commands_command(update: Update, context: ContextTypes.DEFAULT
         
         # 1. 首先更新全局默认命令（给所有普通用户）
         try:
-            from telegram import BotCommand
+            from telegram import BotCommand, BotCommandScopeDefault
             none_commands = command_factory.get_command_list(Permission.NONE)
             basic_bot_commands = [BotCommand(command, description) for command, description in none_commands.items()]
-            await context.bot.set_my_commands(basic_bot_commands)
+            
+            # 设置全局默认命令
+            await context.bot.set_my_commands(basic_bot_commands, scope=BotCommandScopeDefault())
             success_count += 1
             logger.info("已更新全局默认命令列表")
+            
+            # 清除所有非白名单用户的个人命令（让他们使用全局默认）
+            # 注意：这会清除所有个人化命令设置，但白名单用户会在后面重新设置
+            await context.bot.delete_my_commands()
+            logger.info("已清除个人命令设置，非白名单用户将使用全局默认命令")
+            
         except Exception as e:
             logger.error(f"更新全局默认命令失败: {e}")
             error_count += 1

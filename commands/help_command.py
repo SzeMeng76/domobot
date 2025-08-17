@@ -90,10 +90,14 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 ⏰ *时间查询* `/time <时区>` `/convert_time` `/timezone` - 时区转换
 📰 *新闻聚合* `/news` `/newslist` `/hotnews` - 40+源实时资讯
 
+🌐 *WHOIS查询* `/whois <查询>` - 域名/IP/ASN/TLD信息查询
+
 🌍 *支持地区* US CN TR IN MY JP GB DE 等40+国家
 💡 *特色* 支持中文地名 | 自动CNY转换 | 时区智能识别 | 新闻分类
 
 ⚡ *快速试用* `/nf` `/ds` `/sp` `/max` `/when` `/id` `/time 北京` `/news`
+
+🔧 *命令问题?* 如果新功能不显示，请使用 `/refresh` 刷新命令列表
 
 🔒 *白名单专享*
 💱 汇率换算 | 🪙 加密货币 | 💳 BIN查询 | 🌦️ 天气预报
@@ -146,6 +150,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 👤 用户信息 `/when` `/id`
 ⏰ 时间查询 `/time` `/convert_time` `/timezone`
 📰 新闻聚合 `/news` `/newslist` `/hotnews`
+🌐 WHOIS查询 `/whois` - 域名/IP/ASN/TLD
 
 🚀 *试试看*
 `/nf` - Netflix全球价格
@@ -158,7 +163,9 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 `/convert_time 中国 14:30 美国` - 时区转换
 `/help` - 查看详细功能
 
-🌟 支持40+国家 | 自动CNY转换 | 中文地名 | 时区智能识别 | 新闻分类"""
+🌟 支持40+国家 | 自动CNY转换 | 中文地名 | 时区智能识别 | 新闻分类
+
+🔧 命令不显示? 试试 `/refresh` 刷新命令列表"""
     else:
         # 白名单用户 - 显示完整功能
         welcome_text = f"""👋 *欢迎 {user.first_name}! 多功能价格查询机器人*
