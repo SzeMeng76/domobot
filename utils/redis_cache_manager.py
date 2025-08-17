@@ -80,7 +80,10 @@ class RedisCacheManager:
             "spotify": self.config.spotify_cache_duration,  # 8天，配合周日清理
             "disney_plus": self.config.disney_cache_duration,  # 8天，配合周日清理
             "max": self.config.max_cache_duration,  # 8天，配合周日清理
-            "movie": self.config.movie_cache_duration,  # 3天，电影和电视剧缓存
+            "movie": self.config.movie_cache_duration,  # 2小时，电影和电视剧缓存
+            "news": self.config.news_cache_duration,  # 1天，新闻缓存
+            "whois": self.config.whois_cache_duration,  # 6小时，WHOIS查询缓存
+            "time": self.config.time_cache_duration,  # 24小时，时区缓存
         }
 
         # 对于搜索结果特殊处理

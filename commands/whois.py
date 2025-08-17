@@ -757,7 +757,7 @@ class WhoisService:
         return formatted
     
     def _format_ip_data(self, data: Dict) -> Dict[str, Any]:
-        """格式化IP查询结果"""
+        """格式化IP查询结果，增强地理位置信息提取"""
         formatted = {}
         
         # ASN信息（通常在顶级）
@@ -789,53 +789,110 @@ class WhoisService:
             if 'type' in network:
                 formatted['网络类型'] = network['type']
         
-        # 查找组织信息
+        # 增强的地理位置和组织信息提取
         organization = None
+        location_info = {}
+        
         if 'entities' in data and isinstance(data['entities'], list):
             for entity in data['entities']:
-                # 确保entity是字典
                 if isinstance(entity, dict):
-                    # 查找registrant或administrative角色
+                    # 查找所有类型的角色，不仅限于特定角色
                     if entity.get('roles') and isinstance(entity['roles'], list):
-                        if any(role in entity['roles'] for role in ['registrant', 'administrative', 'technical']):
-                            if 'vcardArray' in entity and isinstance(entity['vcardArray'], list) and len(entity['vcardArray']) > 1:
-                                vcard = entity['vcardArray'][1]
-                                if isinstance(vcard, list):
-                                    for item in vcard:
-                                        if isinstance(item, list) and len(item) > 3:
-                                            if item[0] == 'fn':  # Full name
-                                                organization = item[3]
-                                                break
-                                            elif item[0] == 'org':  # Organization
-                                                organization = item[3]
-                                                break
-                            if organization:
-                                break
+                        # 提取vCard信息
+                        if 'vcardArray' in entity and isinstance(entity['vcardArray'], list) and len(entity['vcardArray']) > 1:
+                            vcard = entity['vcardArray'][1]
+                            if isinstance(vcard, list):
+                                for item in vcard:
+                                    if isinstance(item, list) and len(item) > 3:
+                                        field_type = item[0].lower()
+                                        field_value = item[3]
+                                        
+                                        # 组织信息
+                                        if field_type == 'fn' and not organization:  # Full name
+                                            organization = field_value
+                                        elif field_type == 'org' and not organization:  # Organization
+                                            organization = field_value
+                                        
+                                        # 地理位置信息
+                                        elif field_type == 'adr':  # Address
+                                            # vCard地址格式: [post-office-box, extended-address, street-address, locality, region, postal-code, country-name]
+                                            if isinstance(field_value, list) and len(field_value) >= 7:
+                                                if field_value[3]:  # locality (city)
+                                                    location_info['城市'] = field_value[3]
+                                                if field_value[4]:  # region (state/province)
+                                                    location_info['地区'] = field_value[4]
+                                                if field_value[6]:  # country-name
+                                                    location_info['国家'] = field_value[6]
+                                                if field_value[5]:  # postal-code
+                                                    location_info['邮编'] = field_value[5]
+                                        
+                                        elif field_type == 'geo':  # Geographic position
+                                            if isinstance(field_value, str) and ',' in field_value:
+                                                lat, lon = field_value.split(',', 1)
+                                                location_info['地理坐标'] = f"{lat.strip()}, {lon.strip()}"
         
+        # 添加组织信息
         if organization:
             formatted['组织'] = organization
+            
+        # 添加地理位置信息
+        formatted.update(location_info)
         
-        # 备用：查找objects中的信息
+        # 查找网络块中的国家信息作为备选
+        if '国家' not in formatted and 'asn_country_code' in data:
+            formatted['国家'] = data['asn_country_code']
+        
+        # 尝试从其他字段提取地理信息
         if 'objects' in data and isinstance(data['objects'], dict):
             for obj_key, obj_data in data['objects'].items():
                 if isinstance(obj_data, dict):
-                    if 'contact' in obj_data and 'name' in obj_data['contact']:
-                        formatted['联系人'] = obj_data['contact']['name']
-                    if 'contact' in obj_data and 'organization' in obj_data['contact']:
-                        if '组织' not in formatted:
-                            formatted['组织'] = obj_data['contact']['organization']
+                    # 联系信息
+                    if 'contact' in obj_data:
+                        contact = obj_data['contact']
+                        if isinstance(contact, dict):
+                            if 'name' in contact and '联系人' not in formatted:
+                                formatted['联系人'] = contact['name']
+                            if 'organization' in contact and '组织' not in formatted:
+                                formatted['组织'] = contact['organization']
+                            
+                            # 地址信息
+                            if 'address' in contact:
+                                addr = contact['address']
+                                if isinstance(addr, dict):
+                                    if 'city' in addr and '城市' not in formatted:
+                                        formatted['城市'] = addr['city']
+                                    if 'region' in addr and '地区' not in formatted:
+                                        formatted['地区'] = addr['region']
+                                    if 'country' in addr and '国家' not in formatted:
+                                        formatted['国家'] = addr['country']
+                                elif isinstance(addr, list):
+                                    # 处理地址列表格式
+                                    for line in addr:
+                                        if isinstance(line, str) and len(line) < 50:  # 避免过长的地址行
+                                            # 简单的国家/地区识别
+                                            if any(country in line.upper() for country in ['CN', 'US', 'UK', 'DE', 'FR', 'JP']):
+                                                if '国家' not in formatted:
+                                                    formatted['国家'] = line.strip()
         
-        # 如果还是没有足够信息，添加一些调试信息
-        if not formatted:
-            # 至少显示一些基本信息
+        # 如果仍然没有足够信息，添加调试信息
+        if len(formatted) < 3:
             if 'query' in data:
                 formatted['查询IP'] = data['query']
             
-            # 添加可用的顶级字段作为调试信息
-            debug_fields = ['nir', 'raw', 'referral']
+            # 添加一些有用的调试字段
+            debug_fields = ['nir', 'referral']
             for field in debug_fields:
                 if field in data and data[field]:
-                    formatted[f'调试_{field}'] = str(data[field])[:100] + "..." if len(str(data[field])) > 100 else str(data[field])
+                    value = str(data[field])
+                    formatted[f'调试_{field}'] = value[:100] + "..." if len(value) > 100 else value
+            
+            # 如果有原始数据，提取一些关键信息
+            if 'raw' in data and isinstance(data['raw'], list):
+                for raw_item in data['raw'][:3]:  # 只取前3个原始条目
+                    if isinstance(raw_item, dict):
+                        for key, value in raw_item.items():
+                            if key.lower() in ['country', 'city', 'address', 'location'] and isinstance(value, str):
+                                formatted[f'原始_{key}'] = value[:50]
         
         return formatted
     
@@ -970,7 +1027,8 @@ def format_whois_result(result: Dict[str, Any]) -> str:
             '📅 时间信息': ['创建时间', '过期时间', '更新时间', '最后更新', '续费时间'],
             '📊 状态信息': ['状态', '域名状态', '选项'],
             '🌐 网络信息': ['DNS服务器', 'ASN', 'ASN描述', 'ASN国家', 'ASN注册机构', '网络名称', 'IP段', '起始地址', '结束地址', '网络国家', '网络类型', 'WHOIS服务器', '国际化域名', 'DNSSEC'],
-            '📞 联系信息': ['邮箱', '电话', '传真', '联系人', '地址', '城市', '州/省', '国家', '邮编'],
+            '📍 地理位置': ['国家', '地区', '城市', '邮编', '地理坐标'],
+            '📞 联系信息': ['邮箱', '电话', '传真', '联系人', '地址'],
             '🛡️ 安全信息': ['注册商举报邮箱', '注册商举报电话'],
             '🔗 参考信息': ['WHOIS数据库响应', '选项'],
             '📄 其他信息': []  # 未分类的字段

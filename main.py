@@ -305,6 +305,16 @@ async def setup_application(application: Application, config) -> None:
         logger.info(" 已配置 新闻缓存 每周日UTC 5:00 定时清理")
         cleanup_tasks_added += 1
 
+    if config.whois_weekly_cleanup:
+        await task_scheduler.add_weekly_cache_cleanup("whois", "whois", weekday=6, hour=5, minute=0)
+        logger.info(" 已配置 WHOIS缓存 每周日UTC 5:00 定时清理")
+        cleanup_tasks_added += 1
+
+    if config.time_weekly_cleanup:
+        await task_scheduler.add_weekly_cache_cleanup("time", "time", weekday=6, hour=5, minute=0)
+        logger.info(" 已配置 时区缓存 每周日UTC 5:00 定时清理")
+        cleanup_tasks_added += 1
+
     # 启动任务调度器（包含汇率刷新任务）
     task_scheduler.start()
     if cleanup_tasks_added > 0:
