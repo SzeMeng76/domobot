@@ -18,7 +18,8 @@ Read this in other languages: [简体中文](./README.zh-CN.md)
 - 👤 **User Information:** Telegram registration dates, account age, and ID lookup
 - ⏰ **Time & Timezone:** Current time queries, timezone conversion, and timezone lists
 - 📰 **News Aggregation:** Real-time news from 40+ sources including tech, social, finance, and general news
-- 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`
+- 🌐 **WHOIS Lookup:** Domain, IP, ASN, and TLD information with real-time IANA data
+- 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`
 - 👥 **Group Friendly:** Works in any Telegram group without requiring whitelist approval
 
 *Advanced features (crypto, weather, Steam prices, movie/TV info, etc.) require whitelist access.*
@@ -39,6 +40,7 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 -   👤 **Public User Information:** Available to all users - check Telegram user registration dates, account age, and get user/group IDs.
 -   ⏰ **Public Time & Timezone:** Available to all users - query current time in any timezone, convert time between zones, and view supported timezone lists with IANA integration.
 -   📰 **Public News Aggregation:** Available to all users - access real-time news from 40+ sources including GitHub trending, Zhihu hot topics, Weibo trending, tech news (IT Home, Hacker News), financial news (JinShi Data, Wallstreet CN), and general news sources with smart caching and categorized interface.
+-   🌐 **Public WHOIS Lookup:** Available to all users - comprehensive domain, IP address, ASN, and TLD information lookup with real-time IANA data integration. Features intelligent query type detection, support for domains (.com, .io), IP addresses (IPv4/IPv6), ASN numbers (AS15169), and TLD information (.com, .me) with detailed registry, WHOIS server, creation dates, and management organization data.
 -   🎬 **Movie & TV Information:** Query movie/TV details with posters, ratings, cast, trailers, reviews, recommendations, viewing platforms, and season/episode info. Features **3-platform data integration** (TMDB + JustWatch + Trakt) with **JustWatch streaming charts**, real-time ranking trends, platform availability, Telegraph integration for long content, trending discovery, people search, and enhanced statistics with watch counts and community data. *(Whitelist required)*
 -   🪙 **Crypto Prices:** Look up real-time cryptocurrency prices with support for custom amounts and currency conversion, including 24h and 7d percentage changes. *(Whitelist required)*
 -   💳 **BIN Lookup:** Query credit card BIN (Bank Identification Number) information including card brand, type, issuing bank, and country details. *(Whitelist required)*
@@ -148,6 +150,12 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /newslist zhihu 5         # Get top 5 Zhihu hot topics
 /newslist github 15       # Get top 15 GitHub trending items
 /hotnews                  # Quick access to hot news from multiple sources
+
+# WHOIS lookup
+/whois google.com         # Domain information
+/whois 8.8.8.8           # IP address information
+/whois AS15169            # ASN information
+/whois .com               # TLD information
 ```
 
 #### Whitelist-Only Commands

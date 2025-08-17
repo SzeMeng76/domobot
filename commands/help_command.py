@@ -38,6 +38,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 🎬 `/movie 复仇者` - 影视信息 | 📺 `/nf` - 流媒体价格
 🎮 `/steam 赛博朋克` - 游戏价格 | 👤 `/when 123` - 用户信息
 ⏰ `/time 北京` - 时间查询 | 📰 `/news` - 新闻聚合
+🌐 `/whois google.com` - WHOIS查询
 
 💱 *汇率* `/rate [货币] [数额]` - 支持表达式计算
 🪙 *加密货币* `/crypto <币种> [数量] [货币]` - 实时价格
@@ -45,6 +46,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 🌦️ *天气* `/tq <城市> [天数]` - 天气&空气质量
 ⏰ *时间* `/time <时区>` - 时间查询 | `/convert_time <源> <时间> <目标>` - 时区转换
 📰 *新闻* `/news` - 交互式选择 | `/newslist [源] [数量]` - 列表查询
+🌐 *WHOIS* `/whois <查询>` - 域名/IP/ASN/TLD信息 | 智能识别查询类型
 
 🎬 *影视查询*
 搜索: `/movie <片名>` `/tv <剧名>` `/person <演员>`
