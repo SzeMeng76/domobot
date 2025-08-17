@@ -805,10 +805,33 @@ def detect_query_type(query: str) -> str:
     # 默认为域名
     return 'domain'
 
+def safe_escape_markdown(text: Any, version: int = 2) -> str:
+    """安全转义Markdown，处理可能的None值和特殊字符"""
+    if text is None:
+        return "N/A"
+    
+    text_str = str(text)
+    if not text_str.strip():
+        return "N/A"
+    
+    try:
+        # 先清理一些可能导致问题的字符
+        cleaned_text = text_str.replace('\x00', '').replace('\r', ' ').replace('\n', ' ')
+        # 限制长度防止过长
+        if len(cleaned_text) > 200:
+            cleaned_text = cleaned_text[:197] + "..."
+        
+        return escape_markdown(cleaned_text, version=version)
+    except Exception as e:
+        logger.debug(f"转义失败，使用安全回退: {e}")
+        # 如果转义失败，使用更简单的方法
+        safe_text = re.sub(r'[^\w\s\-\.@:/]', '', text_str)
+        return safe_text[:200] if len(safe_text) > 200 else safe_text
+
 def format_whois_result(result: Dict[str, Any]) -> str:
     """格式化WHOIS查询结果为美化的Markdown"""
     if not result['success']:
-        error_msg = escape_markdown(result.get('error', '查询失败'), version=2)
+        error_msg = safe_escape_markdown(result.get('error', '查询失败'))
         return f"❌ **查询失败**\n\n{error_msg}"
     
     query_type_map = {
@@ -819,11 +842,11 @@ def format_whois_result(result: Dict[str, Any]) -> str:
     }
     
     query_type = query_type_map.get(result['type'], '🔍 查询')
-    safe_query = escape_markdown(result['query'], version=2)
+    safe_query = safe_escape_markdown(result['query'])
     
     # 正确转义source信息
     if result.get('source'):
-        safe_source = escape_markdown(result['source'], version=2)
+        safe_source = safe_escape_markdown(result['source'])
         source_info = f" \\({safe_source}\\)"
     else:
         source_info = ""
@@ -868,14 +891,14 @@ def format_whois_result(result: Dict[str, Any]) -> str:
             if group_name in grouped_data and grouped_data[group_name]:
                 lines.append(f"**{group_name}**")
                 for key, value in grouped_data[group_name]:
-                    safe_key = escape_markdown(str(key), version=2)
+                    safe_key = safe_escape_markdown(key)
                     
                     if isinstance(value, list):
                         # 对列表中的每个元素单独转义，然后用逗号连接
-                        safe_values = [escape_markdown(str(v), version=2) for v in value]
+                        safe_values = [safe_escape_markdown(v) for v in value]
                         safe_value = ', '.join(safe_values)
                     else:
-                        safe_value = escape_markdown(str(value), version=2)
+                        safe_value = safe_escape_markdown(value)
                     
                     # 使用更美观的格式
                     lines.append(f"  • **{safe_key}**: {safe_value}")
@@ -885,13 +908,13 @@ def format_whois_result(result: Dict[str, Any]) -> str:
         if '📄 其他信息' in grouped_data and grouped_data['📄 其他信息']:
             lines.append("**📄 其他信息**")
             for key, value in grouped_data['📄 其他信息']:
-                safe_key = escape_markdown(str(key), version=2)
+                safe_key = safe_escape_markdown(key)
                 
                 if isinstance(value, list):
-                    safe_values = [escape_markdown(str(v), version=2) for v in value]
+                    safe_values = [safe_escape_markdown(v) for v in value]
                     safe_value = ', '.join(safe_values)
                 else:
-                    safe_value = escape_markdown(str(value), version=2)
+                    safe_value = safe_escape_markdown(value)
                 
                 lines.append(f"  • **{safe_key}**: {safe_value}")
     
@@ -981,14 +1004,32 @@ async def whois_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                     logger.debug(f"缓存保存失败: {e}")
         
         # 格式化并发送结果
-        response = format_whois_result(result)
-        
-        await send_message_with_auto_delete(
-            context=context,
-            chat_id=update.effective_chat.id,
-            text=response,
-            parse_mode=ParseMode.MARKDOWN_V2
-        )
+        try:
+            response = format_whois_result(result)
+            logger.debug(f"格式化后的响应长度: {len(response)}")
+            
+            # 检查消息长度是否超过Telegram限制
+            if len(response) > 4000:  # Telegram消息限制约4096字符
+                # 截断过长的消息
+                response = response[:3900] + "\n\n⚠️ 内容过长，已截断显示"
+                logger.warning(f"WHOIS响应过长，已截断。查询: {query}")
+            
+            await send_message_with_auto_delete(
+                context=context,
+                chat_id=update.effective_chat.id,
+                text=response,
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+        except Exception as format_error:
+            logger.error(f"格式化或发送响应失败: {format_error}")
+            # 发送简化的错误信息
+            simple_response = f"✅ 查询完成\n查询对象: {query}\n类型: {result.get('type', 'unknown')}\n\n⚠️ 格式化显示时出现问题，请尝试其他查询。"
+            await send_message_with_auto_delete(
+                context=context,
+                chat_id=update.effective_chat.id,
+                text=simple_response,
+                parse_mode=None  # 使用普通文本模式
+            )
         
         await delete_user_command(
             context=context,
