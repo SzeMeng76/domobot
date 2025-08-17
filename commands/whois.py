@@ -483,6 +483,10 @@ class WhoisService:
         if len(str_value) > 200:
             return True
         
+        # 跳过隐私保护的字段 (REDACTED)
+        if 'REDACTED' in str_value.upper():
+            return True
+        
         # 跳过不重要的字段
         skip_patterns = [
             # 法律声明和条款
@@ -496,11 +500,18 @@ class WhoisService:
             'LAST UPDATE OF WHOIS DATABASE', 'WHOIS SERVER', 'REGISTRY WHOIS INFO',
             'WHOIS DATABASE RESPONSES', 'DATABASE LAST UPDATED ON',
             
-            # 重复的联系信息块
+            # 重复的联系信息块 (通常都是REDACTED)
             'REGISTRANT ORGANIZATION', 'REGISTRANT NAME', 'REGISTRANT EMAIL',
             'REGISTRANT PHONE', 'REGISTRANT FAX', 'REGISTRANT ADDRESS',
-            'ADMIN ORGANIZATION', 'ADMIN NAME', 'ADMIN EMAIL',
-            'TECH ORGANIZATION', 'TECH NAME', 'TECH EMAIL',
+            'REGISTRANT STREET', 'REGISTRANT CITY', 'REGISTRANT STATE',
+            'REGISTRANT POSTAL CODE', 'REGISTRANT COUNTRY',
+            'ADMIN ORGANIZATION', 'ADMIN NAME', 'ADMIN EMAIL', 'ADMIN STREET',
+            'ADMIN CITY', 'ADMIN STATE', 'ADMIN POSTAL CODE', 'ADMIN COUNTRY',
+            'ADMIN PHONE', 'ADMIN FAX', 'ADMIN PHONE EXT', 'ADMIN FAX EXT',
+            'TECH ORGANIZATION', 'TECH NAME', 'TECH EMAIL', 'TECH STREET',
+            'TECH CITY', 'TECH STATE', 'TECH POSTAL CODE', 'TECH COUNTRY',
+            'TECH PHONE', 'TECH FAX', 'TECH PHONE EXT', 'TECH FAX EXT',
+            'BILLING ORGANIZATION', 'BILLING NAME', 'BILLING EMAIL',
             
             # URL和链接
             'URL', 'HTTP', 'HTTPS', 'WWW',
@@ -979,9 +990,9 @@ def format_whois_result(result: Dict[str, Any]) -> str:
                 grouped_data[group] = []
             grouped_data[group].append((key, value))
         
-        # 按分组顺序显示
+        # 按分组顺序显示 (除了"其他信息"，单独处理)
         for group_name in field_groups.keys():
-            if group_name in grouped_data and grouped_data[group_name]:
+            if group_name != '📄 其他信息' and group_name in grouped_data and grouped_data[group_name]:
                 lines.append(f"**{group_name}**")
                 for key, value in grouped_data[group_name]:
                     safe_key = safe_escape_markdown(key)
