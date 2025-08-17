@@ -51,8 +51,9 @@ class WhoisService:
         
         try:
             if self._ipwhois is None:
-                from ipwhois import IPWhois
-                self._ipwhois = IPWhois
+                # 导入整个ipwhois模块，而不只是IPWhois类
+                import ipwhois
+                self._ipwhois = ipwhois
         except ImportError:
             logger.warning("ipwhois库未安装，IP/ASN查询功能不可用")
         
@@ -136,32 +137,58 @@ class WhoisService:
             # 验证IP地址格式
             ipaddress.ip_address(ip)
             
-            # 使用RDAP查询（推荐方式）
-            obj = self._ipwhois(ip)
+            # 使用RDAP查询（推荐方式）- 正确的API使用方法
+            obj = self._ipwhois.IPWhois(ip)
             data = await asyncio.to_thread(obj.lookup_rdap)
+            
+            # 添加调试信息
+            logger.debug(f"IP查询返回数据类型: {type(data)}")
+            if isinstance(data, dict):
+                logger.debug(f"数据的顶级键: {list(data.keys())}")
             
             if data:
                 # 检查data是否为字典类型
                 if isinstance(data, dict):
-                    formatted_data = self._format_ip_data(data)
-                    if formatted_data:  # 确保格式化后有数据
-                        result['success'] = True
-                        result['data'] = formatted_data
-                    else:
-                        # 如果格式化后没有数据，显示原始数据的一些关键字段
-                        fallback_data = {}
-                        if 'query' in data:
-                            fallback_data['查询IP'] = data['query']
-                        if 'asn' in data:
-                            fallback_data['ASN'] = f"AS{data['asn']}"
-                        if 'asn_description' in data:
-                            fallback_data['ASN描述'] = data['asn_description']
-                        
-                        if fallback_data:
+                    try:
+                        formatted_data = self._format_ip_data(data)
+                        if formatted_data:  # 确保格式化后有数据
                             result['success'] = True
-                            result['data'] = fallback_data
+                            result['data'] = formatted_data
                         else:
-                            result['error'] = "查询成功但未能解析IP信息"
+                            # 如果格式化后没有数据，显示原始数据的一些关键字段
+                            fallback_data = {}
+                            if 'query' in data:
+                                fallback_data['查询IP'] = data['query']
+                            if 'asn' in data:
+                                fallback_data['ASN'] = f"AS{data['asn']}"
+                            if 'asn_description' in data:
+                                fallback_data['ASN描述'] = data['asn_description']
+                            
+                            if fallback_data:
+                                result['success'] = True
+                                result['data'] = fallback_data
+                            else:
+                                # 显示所有顶级字段作为调试信息
+                                debug_data = {}
+                                for key, value in data.items():
+                                    if isinstance(value, (str, int, float)):
+                                        debug_data[f'调试_{key}'] = str(value)[:100]
+                                    else:
+                                        debug_data[f'调试_{key}'] = f"类型: {type(value).__name__}"
+                                
+                                result['success'] = True
+                                result['data'] = debug_data if debug_data else {'调试': '无可显示数据'}
+                    except Exception as format_error:
+                        logger.error(f"格式化IP数据时出错: {format_error}")
+                        # 直接显示原始数据结构
+                        debug_data = {'调试错误': str(format_error)}
+                        for key, value in data.items():
+                            if isinstance(value, (str, int, float)):
+                                debug_data[f'原始_{key}'] = str(value)[:100]
+                            else:
+                                debug_data[f'原始_{key}_类型'] = type(value).__name__
+                        result['success'] = True
+                        result['data'] = debug_data
                 elif isinstance(data, str):
                     # 如果返回的是字符串，可能是错误信息或原始whois数据
                     result['success'] = True
@@ -206,7 +233,7 @@ class WhoisService:
             asn_number = asn_match.group(1)
             
             # 使用任意IP查询ASN信息（使用8.8.8.8作为查询入口）
-            obj = self._ipwhois('8.8.8.8')
+            obj = self._ipwhois.IPWhois('8.8.8.8')
             data = await asyncio.to_thread(obj.lookup_rdap, asn=asn_number)
             
             if data:
@@ -529,7 +556,7 @@ class WhoisService:
             formatted['ASN注册机构'] = data['asn_registry']
         
         # 网络信息
-        if 'network' in data:
+        if 'network' in data and isinstance(data['network'], dict):
             network = data['network']
             if 'name' in network:
                 formatted['网络名称'] = network['name']
@@ -546,23 +573,26 @@ class WhoisService:
         
         # 查找组织信息
         organization = None
-        if 'entities' in data:
+        if 'entities' in data and isinstance(data['entities'], list):
             for entity in data['entities']:
-                # 查找registrant或administrative角色
-                if entity.get('roles'):
-                    if any(role in entity['roles'] for role in ['registrant', 'administrative', 'technical']):
-                        if 'vcardArray' in entity and len(entity['vcardArray']) > 1:
-                            vcard = entity['vcardArray'][1]
-                            for item in vcard:
-                                if len(item) > 3:
-                                    if item[0] == 'fn':  # Full name
-                                        organization = item[3]
-                                        break
-                                    elif item[0] == 'org':  # Organization
-                                        organization = item[3]
-                                        break
-                        if organization:
-                            break
+                # 确保entity是字典
+                if isinstance(entity, dict):
+                    # 查找registrant或administrative角色
+                    if entity.get('roles') and isinstance(entity['roles'], list):
+                        if any(role in entity['roles'] for role in ['registrant', 'administrative', 'technical']):
+                            if 'vcardArray' in entity and isinstance(entity['vcardArray'], list) and len(entity['vcardArray']) > 1:
+                                vcard = entity['vcardArray'][1]
+                                if isinstance(vcard, list):
+                                    for item in vcard:
+                                        if isinstance(item, list) and len(item) > 3:
+                                            if item[0] == 'fn':  # Full name
+                                                organization = item[3]
+                                                break
+                                            elif item[0] == 'org':  # Organization
+                                                organization = item[3]
+                                                break
+                            if organization:
+                                break
         
         if organization:
             formatted['组织'] = organization
