@@ -141,25 +141,33 @@ class WhoisService:
             data = await asyncio.to_thread(obj.lookup_rdap)
             
             if data:
-                formatted_data = self._format_ip_data(data)
-                if formatted_data:  # 确保格式化后有数据
-                    result['success'] = True
-                    result['data'] = formatted_data
-                else:
-                    # 如果格式化后没有数据，显示原始数据的一些关键字段
-                    fallback_data = {}
-                    if 'query' in data:
-                        fallback_data['查询IP'] = data['query']
-                    if 'asn' in data:
-                        fallback_data['ASN'] = f"AS{data['asn']}"
-                    if 'asn_description' in data:
-                        fallback_data['ASN描述'] = data['asn_description']
-                    
-                    if fallback_data:
+                # 检查data是否为字典类型
+                if isinstance(data, dict):
+                    formatted_data = self._format_ip_data(data)
+                    if formatted_data:  # 确保格式化后有数据
                         result['success'] = True
-                        result['data'] = fallback_data
+                        result['data'] = formatted_data
                     else:
-                        result['error'] = "查询成功但未能解析IP信息"
+                        # 如果格式化后没有数据，显示原始数据的一些关键字段
+                        fallback_data = {}
+                        if 'query' in data:
+                            fallback_data['查询IP'] = data['query']
+                        if 'asn' in data:
+                            fallback_data['ASN'] = f"AS{data['asn']}"
+                        if 'asn_description' in data:
+                            fallback_data['ASN描述'] = data['asn_description']
+                        
+                        if fallback_data:
+                            result['success'] = True
+                            result['data'] = fallback_data
+                        else:
+                            result['error'] = "查询成功但未能解析IP信息"
+                elif isinstance(data, str):
+                    # 如果返回的是字符串，可能是错误信息或原始whois数据
+                    result['success'] = True
+                    result['data'] = {'原始数据': data[:500] + "..." if len(data) > 500 else data}
+                else:
+                    result['error'] = f"查询返回了意外的数据类型: {type(data)}"
             else:
                 result['error'] = "未找到IP地址信息"
                 
@@ -201,9 +209,15 @@ class WhoisService:
             obj = self._ipwhois('8.8.8.8')
             data = await asyncio.to_thread(obj.lookup_rdap, asn=asn_number)
             
-            if data and 'asn' in data:
-                result['success'] = True
-                result['data'] = self._format_asn_data(data, asn_number)
+            if data:
+                if isinstance(data, dict) and 'asn' in data:
+                    result['success'] = True
+                    result['data'] = self._format_asn_data(data, asn_number)
+                elif isinstance(data, str):
+                    result['success'] = True
+                    result['data'] = {'原始数据': data[:300] + "..." if len(data) > 300 else data}
+                else:
+                    result['error'] = f"未找到ASN {asn}的信息"
             else:
                 result['error'] = f"未找到ASN {asn}的信息"
                 
