@@ -269,26 +269,38 @@ class WhoisService:
             if 'registrar' in whois_data:
                 formatted['注册商'] = whois_data['registrar']
         
-        # 也检查直接属性
+        # 也检查直接属性 - 注意：日期字段是列表类型 List[datetime]
         if hasattr(whois_obj, 'creation_date') and whois_obj.creation_date:
-            # 处理日期时间格式
-            if hasattr(whois_obj.creation_date, 'strftime'):
-                formatted['创建时间'] = whois_obj.creation_date.strftime('%Y-%m-%d %H:%M:%S UTC')
+            # whois21的日期字段是列表，取第一个元素
+            if isinstance(whois_obj.creation_date, list) and len(whois_obj.creation_date) > 0:
+                date_obj = whois_obj.creation_date[0]
+                if hasattr(date_obj, 'strftime'):
+                    formatted['创建时间'] = date_obj.strftime('%Y-%m-%d %H:%M:%S UTC')
+                else:
+                    formatted['创建时间'] = str(date_obj)
             else:
                 formatted['创建时间'] = str(whois_obj.creation_date)
             
-        # 注意：根据文档是 expires_date 不是 expiration_date
+        # 注意：根据文档是 expires_date 不是 expiration_date，且是列表类型
         if hasattr(whois_obj, 'expires_date') and whois_obj.expires_date:
-            # 处理日期时间格式
-            if hasattr(whois_obj.expires_date, 'strftime'):
-                formatted['过期时间'] = whois_obj.expires_date.strftime('%Y-%m-%d %H:%M:%S UTC')
+            # whois21的日期字段是列表，取第一个元素
+            if isinstance(whois_obj.expires_date, list) and len(whois_obj.expires_date) > 0:
+                date_obj = whois_obj.expires_date[0]
+                if hasattr(date_obj, 'strftime'):
+                    formatted['过期时间'] = date_obj.strftime('%Y-%m-%d %H:%M:%S UTC')
+                else:
+                    formatted['过期时间'] = str(date_obj)
             else:
                 formatted['过期时间'] = str(whois_obj.expires_date)
             
         if hasattr(whois_obj, 'updated_date') and whois_obj.updated_date:
-            # 处理日期时间格式
-            if hasattr(whois_obj.updated_date, 'strftime'):
-                formatted['更新时间'] = whois_obj.updated_date.strftime('%Y-%m-%d %H:%M:%S UTC')
+            # whois21的日期字段是列表，取第一个元素
+            if isinstance(whois_obj.updated_date, list) and len(whois_obj.updated_date) > 0:
+                date_obj = whois_obj.updated_date[0]
+                if hasattr(date_obj, 'strftime'):
+                    formatted['更新时间'] = date_obj.strftime('%Y-%m-%d %H:%M:%S UTC')
+                else:
+                    formatted['更新时间'] = str(date_obj)
             else:
                 formatted['更新时间'] = str(whois_obj.updated_date)
         
