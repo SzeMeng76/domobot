@@ -16,7 +16,7 @@ COUNTRY_TO_TIMEZONE = {
     "AO": "Africa/Luanda",
     "AR": "America/Argentina/Buenos_Aires",
     "AT": "Europe/Vienna",
-    "AU": "Australia/Sydney",  # 注意：澳大利亚有多个时区
+    "AU": "Australia/Sydney",  # 注意：澳大利亚有多个时区，默认东部时间
     "AZ": "Asia/Baku",
     "BB": "America/Barbados",
     "BE": "Europe/Brussels",
@@ -27,12 +27,12 @@ COUNTRY_TO_TIMEZONE = {
     "BM": "Atlantic/Bermuda",
     "BN": "Asia/Brunei",
     "BO": "America/La_Paz",
-    "BR": "America/Sao_Paulo",  # 注意：巴西有多个时区
+    "BR": "America/Sao_Paulo",  # 注意：巴西有多个时区，默认巴西利亚时间
     "BS": "America/Nassau",
     "BW": "Africa/Gaborone",
     "BY": "Europe/Minsk",
     "BZ": "America/Belize",
-    "CA": "America/Toronto",  # 注意：加拿大有多个时区
+    "CA": "America/Toronto",  # 注意：加拿大有多个时区，默认东部时间
     "CH": "Europe/Zurich",
     "CL": "America/Santiago",
     "CN": "Asia/Shanghai",
@@ -128,7 +128,7 @@ COUNTRY_TO_TIMEZONE = {
     "QA": "Asia/Qatar",
     "RO": "Europe/Bucharest",
     "RS": "Europe/Belgrade",
-    "RU": "Europe/Moscow",  # 注意：俄罗斯有多个时区
+    "RU": "Europe/Moscow",  # 注意：俄罗斯有多个时区，默认莫斯科时间
     "RW": "Africa/Kigali",
     "SA": "Asia/Riyadh",
     "SB": "Pacific/Guadalcanal",
@@ -156,7 +156,7 @@ COUNTRY_TO_TIMEZONE = {
     "TZ": "Africa/Dar_es_Salaam",
     "UA": "Europe/Kiev",
     "UG": "Africa/Kampala",
-    "US": "America/New_York",  # 注意：美国有多个时区
+    "US": "America/New_York",  # 注意：美国有多个时区，默认东部时间
     "UY": "America/Montevideo",
     "UZ": "Asia/Tashkent",
     "VC": "America/St_Vincent",
@@ -167,6 +167,64 @@ COUNTRY_TO_TIMEZONE = {
     "YE": "Asia/Aden",
     "ZA": "Africa/Johannesburg",
     "ZM": "Africa/Lusaka",
+}
+
+# 美国各时区映射
+US_TIMEZONES = {
+    "America/New_York": ["纽约", "华盛顿", "波士顿", "亚特兰大", "迈阿密", "费城", "巴尔的摩", "底特律", "匹兹堡", "夏洛特"],
+    "America/Chicago": ["芝加哥", "达拉斯", "休斯顿", "明尼阿波利斯", "新奥尔良", "堪萨斯城", "圣安东尼奥", "奥斯汀", "孟菲斯"],
+    "America/Denver": ["丹佛", "盐湖城", "阿尔伯克基", "博伊西", "夏延", "比林斯"],
+    "America/Los_Angeles": ["洛杉矶", "旧金山", "西雅图", "波特兰", "拉斯维加斯", "圣地亚哥", "萨克拉门托", "弗雷斯诺"],
+    "America/Phoenix": ["凤凰城", "图森"],  # 亚利桑那州大部分不使用夏时制
+    "America/Anchorage": ["安克雷奇", "费尔班克斯"],
+    "America/Honolulu": ["檀香山", "希洛"],
+    "America/Adak": ["阿达克"],  # 阿留申群岛
+}
+
+# 加拿大各时区映射
+CANADA_TIMEZONES = {
+    "America/St_Johns": ["圣约翰斯"],  # 纽芬兰时间
+    "America/Halifax": ["哈利法克斯", "弗雷德里克顿", "夏洛特敦"],  # 大西洋时间
+    "America/Toronto": ["多伦多", "渥太华", "蒙特利尔", "魁北克城", "哈密尔顿"],  # 东部时间
+    "America/Winnipeg": ["温尼伯", "里贾纳", "萨斯卡通"],  # 中部时间
+    "America/Edmonton": ["埃德蒙顿", "卡尔加里"],  # 山地时间
+    "America/Vancouver": ["温哥华", "维多利亚"],  # 太平洋时间
+    "America/Whitehorse": ["白马市"],  # 育空时间
+    "America/Yellowknife": ["黄刀镇"],  # 西北地区时间
+    "America/Iqaluit": ["伊魁特"],  # 努纳武特东部时间
+}
+
+# 澳大利亚各时区映射
+AUSTRALIA_TIMEZONES = {
+    "Australia/Perth": ["珀斯"],  # 西澳时间
+    "Australia/Darwin": ["达尔文"],  # 中澳时间
+    "Australia/Adelaide": ["阿德莱德"],  # 中澳时间（夏时制）
+    "Australia/Brisbane": ["布里斯班"],  # 东澳时间
+    "Australia/Sydney": ["悉尼", "墨尔本", "堪培拉"],  # 东澳时间（夏时制）
+    "Australia/Hobart": ["霍巴特"],  # 塔斯马尼亚时间
+    "Australia/Lord_Howe": ["豪勋爵岛"],  # 豪勋爵岛时间
+}
+
+# 俄罗斯主要时区映射
+RUSSIA_TIMEZONES = {
+    "Europe/Moscow": ["莫斯科", "圣彼得堡", "下诺夫哥罗德", "喀山", "萨马拉"],  # 莫斯科时间
+    "Asia/Yekaterinburg": ["叶卡捷琳堡", "车里雅宾斯克", "彼尔姆"],  # 叶卡捷琳堡时间
+    "Asia/Omsk": ["鄂木斯克"],  # 鄂木斯克时间
+    "Asia/Krasnoyarsk": ["克拉斯诺亚尔斯克", "新西伯利亚"],  # 克拉斯诺亚尔斯克时间
+    "Asia/Irkutsk": ["伊尔库茨克"],  # 伊尔库茨克时间
+    "Asia/Yakutsk": ["雅库茨克"],  # 雅库茨克时间
+    "Asia/Vladivostok": ["符拉迪沃斯托克", "哈巴罗夫斯克"],  # 符拉迪沃斯托克时间
+    "Asia/Magadan": ["马加丹"],  # 马加丹时间
+    "Asia/Kamchatka": ["彼得罗巴甫洛夫斯克"],  # 堪察加时间
+}
+
+# 巴西各时区映射
+BRAZIL_TIMEZONES = {
+    "America/Sao_Paulo": ["圣保罗", "里约热内卢", "贝洛奥里藏特", "萨尔瓦多", "库里提巴"],  # 巴西利亚时间
+    "America/Manaus": ["马瑙斯", "波多韦柳"],  # 亚马逊时间
+    "America/Fortaleza": ["福塔莱萨", "累西腓", "纳塔尔"],  # 巴西东北时间
+    "America/Noronha": ["费尔南多·迪诺罗尼亚"],  # 费尔南多时间
+    "America/Rio_Branco": ["里奥布兰科"],  # 阿克里时间
 }
 
 # 城市名称到时区的映射（中文）
@@ -193,14 +251,104 @@ CITY_TO_TIMEZONE = {
     "墨尔本": "Australia/Melbourne",
     "珀斯": "Australia/Perth",
     "奥克兰": "Pacific/Auckland",
+    # 美国城市
     "纽约": "America/New_York",
-    "洛杉矶": "America/Los_Angeles",
+    "华盛顿": "America/New_York",
+    "波士顿": "America/New_York",
+    "亚特兰大": "America/New_York",
+    "迈阿密": "America/New_York",
+    "费城": "America/New_York",
+    "巴尔的摩": "America/New_York",
+    "底特律": "America/New_York",
+    "匹兹堡": "America/New_York",
+    "夏洛特": "America/New_York",
     "芝加哥": "America/Chicago",
+    "达拉斯": "America/Chicago",
+    "休斯顿": "America/Chicago",
+    "明尼阿波利斯": "America/Chicago",
+    "新奥尔良": "America/Chicago",
+    "堪萨斯城": "America/Chicago",
+    "圣安东尼奥": "America/Chicago",
+    "奥斯汀": "America/Chicago",
+    "孟菲斯": "America/Chicago",
     "丹佛": "America/Denver",
-    "拉斯维加斯": "America/Los_Angeles",
+    "盐湖城": "America/Denver",
+    "阿尔伯克基": "America/Denver",
+    "博伊西": "America/Denver",
+    "夏延": "America/Denver",
+    "比林斯": "America/Denver",
+    "洛杉矶": "America/Los_Angeles",
     "旧金山": "America/Los_Angeles",
     "西雅图": "America/Los_Angeles",
-    "迈阿密": "America/New_York",
+    "波特兰": "America/Los_Angeles",
+    "拉斯维加斯": "America/Los_Angeles",
+    "圣地亚哥": "America/Los_Angeles",
+    "萨克拉门托": "America/Los_Angeles",
+    "弗雷斯诺": "America/Los_Angeles",
+    "凤凰城": "America/Phoenix",
+    "图森": "America/Phoenix",
+    "安克雷奇": "America/Anchorage",
+    "费尔班克斯": "America/Anchorage",
+    "檀香山": "America/Honolulu",
+    "希洛": "America/Honolulu",
+    "阿达克": "America/Adak",
+    # 加拿大城市
+    "圣约翰斯": "America/St_Johns",
+    "哈利法克斯": "America/Halifax",
+    "弗雷德里克顿": "America/Halifax",
+    "夏洛特敦": "America/Halifax",
+    "多伦多": "America/Toronto",
+    "渥太华": "America/Toronto",
+    "蒙特利尔": "America/Toronto",
+    "魁北克城": "America/Toronto",
+    "哈密尔顿": "America/Toronto",
+    "温尼伯": "America/Winnipeg",
+    "里贾纳": "America/Winnipeg",
+    "萨斯卡通": "America/Winnipeg",
+    "埃德蒙顿": "America/Edmonton",
+    "卡尔加里": "America/Edmonton",
+    "温哥华": "America/Vancouver",
+    "维多利亚": "America/Vancouver",
+    "白马市": "America/Whitehorse",
+    "黄刀镇": "America/Yellowknife",
+    "伊魁特": "America/Iqaluit",
+    # 澳大利亚城市
+    # "珀斯": "Australia/Perth",  # 重复，已在上面定义
+    "达尔文": "Australia/Darwin",
+    "阿德莱德": "Australia/Adelaide",
+    "布里斯班": "Australia/Brisbane",
+    "堪培拉": "Australia/Sydney",
+    "霍巴特": "Australia/Hobart",
+    "豪勋爵岛": "Australia/Lord_Howe",
+    # 俄罗斯城市
+    "圣彼得堡": "Europe/Moscow",
+    "下诺夫哥罗德": "Europe/Moscow",
+    "喀山": "Europe/Moscow",
+    "萨马拉": "Europe/Moscow",
+    "叶卡捷琳堡": "Asia/Yekaterinburg",
+    "车里雅宾斯克": "Asia/Yekaterinburg",
+    "彼尔姆": "Asia/Yekaterinburg",
+    "鄂木斯克": "Asia/Omsk",
+    "克拉斯诺亚尔斯克": "Asia/Krasnoyarsk",
+    "新西伯利亚": "Asia/Krasnoyarsk",
+    "伊尔库茨克": "Asia/Irkutsk",
+    "雅库茨克": "Asia/Yakutsk",
+    "符拉迪沃斯托克": "Asia/Vladivostok",
+    "哈巴罗夫斯克": "Asia/Vladivostok",
+    "马加丹": "Asia/Magadan",
+    "彼得罗巴甫洛夫斯克": "Asia/Kamchatka",
+    # 巴西城市
+    "里约热内卢": "America/Sao_Paulo",
+    "贝洛奥里藏特": "America/Sao_Paulo",
+    "萨尔瓦多": "America/Sao_Paulo",
+    "库里提巴": "America/Sao_Paulo",
+    "马瑙斯": "America/Manaus",
+    "波多韦柳": "America/Manaus",
+    "福塔莱萨": "America/Fortaleza",
+    "累西腓": "America/Fortaleza",
+    "纳塔尔": "America/Fortaleza",
+    "费尔南多·迪诺罗尼亚": "America/Noronha",
+    "里奥布兰科": "America/Rio_Branco",
     "伦敦": "Europe/London",
     "巴黎": "Europe/Paris",
     "柏林": "Europe/Berlin",
@@ -303,3 +451,41 @@ def get_supported_countries_for_timezone():
 def get_supported_cities():
     """获取支持的城市列表"""
     return list(CITY_TO_TIMEZONE.keys())
+
+def get_country_timezones(country_code: str) -> dict:
+    """获取指定国家的所有时区信息"""
+    country_code = country_code.upper()
+    
+    # 多时区国家的特殊处理
+    if country_code == "US":
+        return US_TIMEZONES
+    elif country_code == "CA":
+        return CANADA_TIMEZONES
+    elif country_code == "AU":
+        return AUSTRALIA_TIMEZONES
+    elif country_code == "RU":
+        return RUSSIA_TIMEZONES
+    elif country_code == "BR":
+        return BRAZIL_TIMEZONES
+    else:
+        # 单时区国家
+        if country_code in COUNTRY_TO_TIMEZONE:
+            return {COUNTRY_TO_TIMEZONE[country_code]: []}
+        return {}
+
+def get_all_supported_timezones():
+    """获取所有支持的时区列表"""
+    timezones = set()
+    
+    # 添加单时区国家的时区
+    for tz in COUNTRY_TO_TIMEZONE.values():
+        timezones.add(tz)
+    
+    # 添加多时区国家的时区
+    for tz_dict in [US_TIMEZONES, CANADA_TIMEZONES, AUSTRALIA_TIMEZONES, RUSSIA_TIMEZONES, BRAZIL_TIMEZONES]:
+        timezones.update(tz_dict.keys())
+    
+    # 添加城市映射中的时区
+    timezones.update(CITY_TO_TIMEZONE.values())
+    
+    return sorted(list(timezones))
