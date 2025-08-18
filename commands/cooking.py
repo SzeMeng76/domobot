@@ -275,10 +275,14 @@ async def recipe_search_command(update: Update, context: ContextTypes.DEFAULT_TY
 
 📋 可用分类: 荤菜、素菜、主食、汤羹、水产、早餐、甜品等
         """
-        await context.bot.send_message(
+        message = await context.bot.send_message(
             chat_id=update.message.chat_id,
             text=f"✅ {help_text}"
         )
+        # 调度自动删除帮助信息
+        from utils.config_manager import get_config
+        config = get_config()
+        await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
         await delete_user_command(context, update.message.chat_id, update.message.message_id)
         return
         
@@ -316,6 +320,9 @@ async def recipe_search_command(update: Update, context: ContextTypes.DEFAULT_TY
                 callback_data=f"recipe_detail:{short_id}"
             )
             keyboard.append([button])
+        
+        # 添加关闭按钮
+        keyboard.append([InlineKeyboardButton("❌ 关闭", callback_data="cooking_close")])
             
         reply_markup = InlineKeyboardMarkup(keyboard)
         
@@ -397,6 +404,9 @@ async def recipe_category_command(update: Update, context: ContextTypes.DEFAULT_
                     )
                     row.append(button)
             keyboard.append(row)
+        
+        # 添加关闭按钮
+        keyboard.append([InlineKeyboardButton("❌ 关闭", callback_data="cooking_close")])
             
         reply_markup = InlineKeyboardMarkup(keyboard)
         
@@ -464,6 +474,10 @@ async def _execute_category_search(update: Update, context: ContextTypes.DEFAULT
             )
             keyboard.append([button])
             
+        # 添加返回按钮（返回分类选择）
+        keyboard.append([InlineKeyboardButton("🔙 返回分类", callback_data="recipe_category_back")])
+        keyboard.append([InlineKeyboardButton("❌ 关闭", callback_data="cooking_close")])
+        
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         result_text = f"📋 {category} ({len(results)} 个菜谱)\n\n请点击下方按钮查看详细信息:"
@@ -584,6 +598,9 @@ async def what_to_eat_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     ]
     keyboard.append(row3)
     
+    # 添加关闭按钮
+    keyboard.append([InlineKeyboardButton("❌ 关闭", callback_data="cooking_close")])
+    
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     help_text = "🍽️ 今天吃什么？\n\n请选择用餐人数:"
@@ -700,6 +717,9 @@ async def meal_plan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 InlineKeyboardButton("7️⃣ 7人", callback_data="meal_plan_select:7"),
                 InlineKeyboardButton("8️⃣ 8人", callback_data="meal_plan_select:8"),
                 InlineKeyboardButton("🔟 更多", callback_data="meal_plan_select:10")
+            ],
+            [
+                InlineKeyboardButton("❌ 关闭", callback_data="cooking_close")
             ]
         ]
         
@@ -1603,6 +1623,103 @@ async def _execute_meal_plan(query_or_update, context: ContextTypes.DEFAULT_TYPE
 
 # back_to_search_callback 已删除，因为菜谱详情是最终结果，消息会自动删除
 
+async def cooking_close_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理关闭按钮点击"""
+    query = update.callback_query
+    await query.answer("消息已关闭")
+    
+    if not query:
+        return
+        
+    try:
+        # 直接删除消息
+        await query.delete_message()
+    except Exception as e:
+        logger.error(f"删除消息时发生错误: {e}")
+        try:
+            # 如果删除失败，编辑为关闭状态
+            await query.edit_message_text(
+                text=foldable_text_v2("✅ 消息已关闭"),
+                parse_mode="MarkdownV2"
+            )
+        except:
+            pass
+
+async def recipe_category_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理返回分类选择按钮点击"""
+    query = update.callback_query
+    await query.answer("返回分类选择")
+    
+    if not query:
+        return
+        
+    try:
+        # 重新显示分类选择界面
+        loading_message = "📋 正在加载分类信息... ⏳"
+        await query.edit_message_text(
+            text=foldable_text_v2(loading_message),
+            parse_mode="MarkdownV2"
+        )
+        
+        if not await cooking_service.load_recipes_data():
+            await query.edit_message_text(foldable_text_v2("❌ 无法获取分类信息"), parse_mode="MarkdownV2")
+            return
+            
+        # 创建分类按钮 - 4列布局更紧凑
+        categories = sorted(cooking_service.categories)
+        keyboard = []
+        
+        # 分类按钮映射（使用emoji让按钮更直观）
+        category_emojis = {
+            "主食": "🍚",
+            "荤菜": "🥩", 
+            "素菜": "🥬",
+            "水产": "🐟",
+            "汤": "🍲",
+            "早餐": "🥐",
+            "甜品": "🍰",
+            "饮品": "🥤",
+            "调料": "🧂",
+            "半成品加工": "📦"
+        }
+        
+        # 按3个一行排列
+        for i in range(0, len(categories), 3):
+            row = []
+            for j in range(3):
+                if i + j < len(categories):
+                    cat = categories[i + j]
+                    emoji = category_emojis.get(cat, "📋")
+                    button = InlineKeyboardButton(
+                        text=f"{emoji} {cat}",
+                        callback_data=f"recipe_category_select:{cat}"
+                    )
+                    row.append(button)
+            keyboard.append(row)
+        
+        # 添加关闭按钮
+        keyboard.append([InlineKeyboardButton("❌ 关闭", callback_data="cooking_close")])
+            
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        help_text = "📋 菜谱分类\n\n请选择要查看的分类:"
+        
+        await query.edit_message_text(
+            text=foldable_text_with_markdown_v2(help_text),
+            parse_mode="MarkdownV2",
+            reply_markup=reply_markup
+        )
+        
+    except Exception as e:
+        logger.error(f"返回分类选择时发生错误: {e}", exc_info=True)
+        try:
+            await query.edit_message_text(
+                foldable_text_v2(f"❌ 处理请求时发生错误: {str(e)}"),
+                parse_mode="MarkdownV2"
+            )
+        except:
+            pass
+
 # =============================================================================
 # 注册命令和回调
 # =============================================================================
@@ -1623,3 +1740,5 @@ command_factory.register_callback(r"^what_to_eat_select:", what_to_eat_select_ca
 command_factory.register_callback(r"^what_to_eat_again:", what_to_eat_again_callback, permission=Permission.NONE, description="重新推荐今日菜单")
 command_factory.register_callback(r"^meal_plan_select:", meal_plan_select_callback, permission=Permission.NONE, description="选择智能膳食推荐人数")
 command_factory.register_callback(r"^meal_plan_again:", meal_plan_again_callback, permission=Permission.NONE, description="重新智能推荐")
+command_factory.register_callback(r"^cooking_close$", cooking_close_callback, permission=Permission.NONE, description="关闭烹饪消息")
+command_factory.register_callback(r"^recipe_category_back$", recipe_category_back_callback, permission=Permission.NONE, description="返回菜谱分类选择")
