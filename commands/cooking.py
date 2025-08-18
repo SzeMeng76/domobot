@@ -760,7 +760,7 @@ async def cooking_clean_cache_command(update: Update, context: ContextTypes.DEFA
         
     try:
         if cache_manager:
-            await cache_manager.delete("cooking:recipes_data")
+            await cache_manager.clear_cache("recipes_data", subdirectory="cooking")
             cooking_service.recipes_data = []
             cooking_service.categories = []
             cooking_service.last_fetch_time = 0
@@ -809,11 +809,11 @@ def format_recipe_detail(recipe: Dict[str, Any]) -> str:
     ingredients_list = []
     for ing in ingredients[:15]:
         if isinstance(ing, dict):
-            ing_name = ing.get('name', '').strip()
+            ing_name = (ing.get('name') or '').strip()
             quantity = ing.get('quantity')
-            unit = ing.get('unit', '').strip()
-            text_quantity = ing.get('text_quantity', '').strip()
-            notes = ing.get('notes', '').strip()
+            unit = (ing.get('unit') or '').strip()
+            text_quantity = (ing.get('text_quantity') or '').strip()
+            notes = (ing.get('notes') or '').strip()
             
             if not ing_name:
                 continue
@@ -850,7 +850,7 @@ def format_recipe_detail(recipe: Dict[str, Any]) -> str:
     for step in steps[:10]:
         if isinstance(step, dict):
             step_num = step.get('step', len(steps_list) + 1)
-            description = step.get('description', '').strip()
+            description = (step.get('description') or '').strip()
             
             if description:
                 steps_list.append(f"{step_num}. {description}")
@@ -1156,8 +1156,8 @@ async def meal_plan_again_callback(update: Update, context: ContextTypes.DEFAULT
             avoid_items = parts[2].split(",") if parts[2] else []
             
             # 过滤空值
-            allergies = [a for a in allergies if a.strip()]
-            avoid_items = [a for a in avoid_items if a.strip()]
+            allergies = [a for a in allergies if a and a.strip()]
+            avoid_items = [a for a in avoid_items if a and a.strip()]
             
             # 确保数据已加载
             if not await cooking_service.load_recipes_data():
