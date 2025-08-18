@@ -391,23 +391,22 @@ async def setup_application(application: Application, config) -> None:
         basic_bot_commands = [BotCommand(command, description) for command, description in basic_commands.items()]
         await application.bot.set_my_commands(basic_bot_commands)
         
-        # 准备白名单用户命令菜单（仅显示核心用户命令，限制在50个以内）
+        # 准备白名单用户命令菜单（基础命令 + 用户命令）
         user_level_commands = {}
         user_level_commands.update(none_commands)
-        # 只添加核心用户命令，跳过一些不常用的
-        core_user_commands = {k: v for i, (k, v) in enumerate(user_commands.items()) if i < 25}
-        user_level_commands.update(core_user_commands)
+        user_level_commands.update(user_commands)
         user_bot_commands = [BotCommand(command, description) for command, description in user_level_commands.items()]
         
-        # 准备管理员命令菜单（仅显示核心管理命令，限制在50个以内）
-        admin_core_commands = {}
-        admin_core_commands.update(none_commands)
-        # 只添加最重要的管理员命令
-        important_admin_commands = {k: v for i, (k, v) in enumerate(admin_commands.items()) if i < 20}
-        admin_core_commands.update(important_admin_commands)
-        admin_core_commands["admin"] = "打开管理员面板"  # 手动添加admin命令
+        # 准备管理员完整命令菜单
+        all_commands = {}
+        all_commands.update(none_commands)
+        all_commands.update(user_commands)
+        all_commands.update(admin_commands)
+        all_commands.update(super_admin_commands)
+        # 手动添加由ConversationHandler处理的admin命令
+        all_commands["admin"] = "打开管理员面板"
         
-        full_bot_commands = [BotCommand(command, description) for command, description in admin_core_commands.items()]
+        full_bot_commands = [BotCommand(command, description) for command, description in all_commands.items()]
         
         from telegram import BotCommandScopeChat
         
@@ -457,7 +456,7 @@ async def setup_application(application: Application, config) -> None:
         logger.info("✅ 命令菜单设置完成:")
         logger.info(f"🌐 默认显示基础命令: {len(basic_commands)} 条")
         logger.info(f"👥 白名单用户显示: {len(user_level_commands)} 条")
-        logger.info(f"🔧 管理员显示核心命令: {len(admin_core_commands)} 条")
+        logger.info(f"🔧 管理员显示全部命令: {len(all_commands)} 条")
         logger.info("ℹ️ 用户权限在运行时检查")
         
     except Exception as e:

@@ -1786,7 +1786,8 @@ command_factory.register_command("recipe_category", recipe_category_command, per
 command_factory.register_command("recipe_random", recipe_random_command, permission=Permission.NONE, description="随机菜谱推荐")
 command_factory.register_command("what_to_eat", what_to_eat_command, permission=Permission.NONE, description="今天吃什么")
 command_factory.register_command("meal_plan", meal_plan_command, permission=Permission.NONE, description="智能膳食推荐")
-command_factory.register_command("cooking_cleancache", cooking_clean_cache_command, permission=Permission.ADMIN, description="清理烹饪模块缓存")
+# 已迁移到统一缓存管理命令 /cleancache
+# command_factory.register_command("cooking_cleancache", cooking_clean_cache_command, permission=Permission.ADMIN, description="清理烹饪模块缓存")
 
 # 注册回调处理器
 command_factory.register_callback(r"^recipe_detail:", recipe_detail_callback, permission=Permission.NONE, description="菜谱详情")

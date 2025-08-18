@@ -519,6 +519,7 @@ command_factory.register_command(
     permission=Permission.USER,
     description="查询Apple服务价格 (iCloud, Apple One, Apple Music)",
 )
-command_factory.register_command(
-    "aps_cleancache", apple_services_clean_cache_command, permission=Permission.ADMIN, description="清理Apple服务缓存"
-)
+# 已迁移到统一缓存管理命令 /cleancache
+# command_factory.register_command(
+#     "aps_cleancache", apple_services_clean_cache_command, permission=Permission.ADMIN, description="清理Apple服务缓存"
+# )

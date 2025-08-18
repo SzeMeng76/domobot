@@ -1170,6 +1170,7 @@ sp_command = spotify_command
 command_factory.register_command("sp", sp_command, permission=Permission.NONE, description="Spotify订阅价格查询")
 command_factory.register_command("spi", spotify_prepaid_individual_command, permission=Permission.NONE, description="Spotify个人1年预付费排行榜")
 command_factory.register_command("spf", spotify_prepaid_family_command, permission=Permission.NONE, description="Spotify家庭1年预付费排行榜")
-command_factory.register_command(
-    "sp_cleancache", spotify_clean_cache_command, permission=Permission.ADMIN, description="清理Spotify缓存"
-)
+# 已迁移到统一缓存管理命令 /cleancache
+# command_factory.register_command(
+#     "sp_cleancache", spotify_clean_cache_command, permission=Permission.ADMIN, description="清理Spotify缓存"
+# )

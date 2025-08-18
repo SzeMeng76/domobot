@@ -7612,7 +7612,8 @@ command_factory.register_command("movie_reviews", movie_reviews_command, permiss
 command_factory.register_command("movie_trending", movie_trending_command, permission=Permission.USER, description="获取Trakt热门电影")
 command_factory.register_command("streaming_movie_ranking", streaming_movie_ranking_command, permission=Permission.USER, description="获取综合流媒体电影热度排行榜")
 command_factory.register_command("movie_related", movie_related_command, permission=Permission.USER, description="获取Trakt相关电影推荐")
-command_factory.register_command("movie_cleancache", movie_clean_cache_command, permission=Permission.ADMIN, description="清理电影和电视剧查询缓存")
+# 已迁移到统一缓存管理命令 /cleancache
+# command_factory.register_command("movie_cleancache", movie_clean_cache_command, permission=Permission.ADMIN, description="清理电影和电视剧查询缓存")
 
 # 注册电视剧命令
 command_factory.register_command("tv", tv_command, permission=Permission.USER, description="搜索电视剧信息（按钮选择）")

@@ -1304,9 +1304,10 @@ async def app_store_clean_cache_command(update: Update, context: ContextTypes.DE
 command_factory.register_command(
     "app", app_command, permission=Permission.USER, description="App Store应用搜索（支持iOS/macOS/iPadOS平台筛选）"
 )
-command_factory.register_command(
-    "app_cleancache", app_store_clean_cache_command, permission=Permission.ADMIN, description="清理App Store缓存"
-)
+# 已迁移到统一缓存管理命令 /cleancache
+# command_factory.register_command(
+#     "app_cleancache", app_store_clean_cache_command, permission=Permission.ADMIN, description="清理App Store缓存"
+# )
 command_factory.register_callback(
     "^app_", handle_app_search_callback, permission=Permission.USER, description="App搜索回调处理"
 )

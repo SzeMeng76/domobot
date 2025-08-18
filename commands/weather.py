@@ -547,30 +547,32 @@ command_factory.register_command(
     permission=Permission.USER,
     description="查询天气预报，支持多日、小时、指数等"
 )
-command_factory.register_command(
-    "tq_cleancache", 
-    tq_clean_cache_command, 
-    permission=Permission.ADMIN, 
-    description="清理天气查询缓存"
-)
+# 已迁移到统一缓存管理命令 /cleancache
+# command_factory.register_command(
+#     "tq_cleancache", 
+#     tq_clean_cache_command, 
+#     permission=Permission.ADMIN, 
+#     description="清理天气查询缓存"
+# )
 
-command_factory.register_command(
-    "tq_cleanlocation", 
-    tq_clean_location_cache_command, 
-    permission=Permission.ADMIN, 
-    description="清理天气位置缓存"
-)
+# 已迁移到统一缓存管理命令 /cleancache
+# command_factory.register_command(
+#     "tq_cleanlocation", 
+#     tq_clean_location_cache_command, 
+#     permission=Permission.ADMIN, 
+#     description="清理天气位置缓存"
+# )
 
-command_factory.register_command(
-    "tq_cleanforecast", 
-    tq_clean_forecast_cache_command, 
-    permission=Permission.ADMIN, 
-    description="清理天气预报缓存"
-)
+# command_factory.register_command(
+#     "tq_cleanforecast", 
+#     tq_clean_forecast_cache_command, 
+#     permission=Permission.ADMIN, 
+#     description="清理天气预报缓存"
+# )
 
-command_factory.register_command(
-    "tq_cleanrealtime", 
-    tq_clean_realtime_cache_command, 
-    permission=Permission.ADMIN, 
-    description="清理实时天气缓存"
-)
+# command_factory.register_command(
+#     "tq_cleanrealtime", 
+#     tq_clean_realtime_cache_command, 
+#     permission=Permission.ADMIN, 
+#     description="清理实时天气缓存"
+# )

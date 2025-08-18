@@ -326,6 +326,7 @@ async def rate_clean_cache_command(update: Update, context: ContextTypes.DEFAULT
 
 # Register commands
 command_factory.register_command("rate", rate_command, permission=Permission.USER, description="汇率查询和转换")
-command_factory.register_command(
-    "rate_cleancache", rate_clean_cache_command, permission=Permission.ADMIN, description="清理汇率缓存"
-)
+# 已迁移到统一缓存管理命令 /cleancache
+# command_factory.register_command(
+#     "rate_cleancache", rate_clean_cache_command, permission=Permission.ADMIN, description="清理汇率缓存"
+# )

@@ -291,6 +291,7 @@ async def netflix_clean_cache_command(update: Update, context: ContextTypes.DEFA
 
 # Register commands
 command_factory.register_command("nf", netflix_command, permission=Permission.NONE, description="Netflix订阅价格查询")
-command_factory.register_command(
-    "nf_cleancache", netflix_clean_cache_command, permission=Permission.ADMIN, description="清理Netflix缓存"
-)
+# 已迁移到统一缓存管理命令 /cleancache
+# command_factory.register_command(
+#     "nf_cleancache", netflix_clean_cache_command, permission=Permission.ADMIN, description="清理Netflix缓存"
+# )

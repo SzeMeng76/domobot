@@ -2048,4 +2048,5 @@ command_factory.register_command("whois_ip", whois_ip_command, permission=Permis
 command_factory.register_command("whois_asn", whois_asn_command, permission=Permission.NONE, description="ASN WHOIS查询")
 command_factory.register_command("whois_tld", whois_tld_command, permission=Permission.NONE, description="TLD信息查询")
 command_factory.register_command("dns", dns_command, permission=Permission.NONE, description="DNS记录查询")
-command_factory.register_command("whois_cleancache", whois_clean_cache_command, permission=Permission.ADMIN, description="清理WHOIS和DNS查询缓存")
+# 已迁移到统一缓存管理命令 /cleancache
+# command_factory.register_command("whois_cleancache", whois_clean_cache_command, permission=Permission.ADMIN, description="清理WHOIS和DNS查询缓存")

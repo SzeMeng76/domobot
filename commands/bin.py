@@ -282,9 +282,10 @@ command_factory.register_command(
     description="查询信用卡BIN信息，例如 /bin 123456"
 )
 
-command_factory.register_command(
-    "bin_cleancache", 
-    bin_clean_cache_command, 
-    permission=Permission.ADMIN, 
-    description="清理BIN查询缓存"
+# 已迁移到统一缓存管理命令 /cleancache
+# command_factory.register_command(
+#     "bin_cleancache", 
+#     bin_clean_cache_command, 
+#     permission=Permission.ADMIN, 
+#     description="清理BIN查询缓存"
 )

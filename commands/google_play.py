@@ -447,6 +447,7 @@ gp_clean_cache_command = google_play_clean_cache_command
 
 # Register commands
 command_factory.register_command("gp", gp_command, permission=Permission.USER, description="Google Play应用价格查询")
-command_factory.register_command(
-    "gp_cleancache", gp_clean_cache_command, permission=Permission.ADMIN, description="清理Google Play缓存"
-)
+# 已迁移到统一缓存管理命令 /cleancache
+# command_factory.register_command(
+#     "gp_cleancache", gp_clean_cache_command, permission=Permission.ADMIN, description="清理Google Play缓存"
+# )

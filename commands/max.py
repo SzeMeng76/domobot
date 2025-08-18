@@ -988,6 +988,7 @@ async def max_clean_cache_command(update: Update, context: ContextTypes.DEFAULT_
 
 # Register commands
 command_factory.register_command("max", max_command, permission=Permission.NONE, description="HBO Max订阅价格查询")
-command_factory.register_command(
-    "max_cleancache", max_clean_cache_command, permission=Permission.ADMIN, description="清理HBO Max缓存"
-)
+# 已迁移到统一缓存管理命令 /cleancache
+# command_factory.register_command(
+#     "max_cleancache", max_clean_cache_command, permission=Permission.ADMIN, description="清理HBO Max缓存"
+# )
