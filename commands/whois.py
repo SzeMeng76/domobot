@@ -1195,12 +1195,19 @@ class WhoisService:
                         if record_type == 'MX':
                             records.append(f"{rdata.preference} {rdata.exchange}")
                         elif record_type == 'SOA':
-                            records.append(f"{rdata.mname} {rdata.rname} {rdata.serial}")
+                            # 将SOA记录格式化为多行显示
+                            soa_info = (
+                                f"{rdata.mname} {rdata.rname} "
+                                f"序列:{rdata.serial} 刷新:{rdata.refresh}s "
+                                f"重试:{rdata.retry}s 过期:{rdata.expire}s TTL:{rdata.minimum}s"
+                            )
+                            records.append(soa_info)
                         else:
                             records.append(str(rdata))
                     
                     if records:
                         dns_data[f'{record_type}记录'] = records
+                        logger.debug(f"DNS查询 - {record_type}记录: {len(records)} 条, 内容: {records}")
                         
                 except self._dns.resolver.NoAnswer:
                     # 没有该类型的记录，跳过
@@ -1422,16 +1429,18 @@ def safe_escape_markdown(text: Any, version: int = 2) -> str:
     try:
         # 先清理一些可能导致问题的字符
         cleaned_text = text_str.replace('\x00', '').replace('\r', ' ').replace('\n', ' ')
-        # 限制长度防止过长
-        if len(cleaned_text) > 200:
-            cleaned_text = cleaned_text[:197] + "..."
+        # 限制长度防止过长，但对于DNS记录等重要信息给予更多空间
+        max_length = 500 if any(keyword in text_str for keyword in ['序列:', 'refresh', 'retry', 'expire', 'minimum', '记录']) else 200
+        if len(cleaned_text) > max_length:
+            cleaned_text = cleaned_text[:max_length-3] + "..."
         
         return escape_markdown(cleaned_text, version=version)
     except Exception as e:
         logger.debug(f"转义失败，使用安全回退: {e}")
         # 如果转义失败，使用更简单的方法
         safe_text = re.sub(r'[^\w\s\-\.@:/]', '', text_str)
-        return safe_text[:200] if len(safe_text) > 200 else safe_text
+        max_length = 500 if any(keyword in text_str for keyword in ['序列:', 'refresh', 'retry', 'expire', 'minimum', '记录']) else 200
+        return safe_text[:max_length] if len(safe_text) > max_length else safe_text
 
 def format_whois_result(result: Dict[str, Any]) -> str:
     """格式化WHOIS查询结果为美化的Markdown"""
@@ -1513,16 +1522,15 @@ def format_whois_result(result: Dict[str, Any]) -> str:
                         # 对列表中的每个元素单独转义
                         safe_values = [safe_escape_markdown(v) for v in value]
                         
-                        # 为DNS记录做特殊处理 - 如果记录很多，限制显示数量
-                        if group_name == '🔍 DNS记录' and len(safe_values) > 5:
-                            displayed_values = safe_values[:5]
-                            safe_value = '\n    ◦ ' + '\n    ◦ '.join(displayed_values)
-                            safe_value += f"\n    ⋯ *还有 {len(safe_values) - 5} 条记录*"
-                        elif group_name == '🔍 DNS记录' and len(safe_values) > 1:
-                            # 多条记录时使用换行显示
+                        # DNS记录和其他多条记录的显示处理
+                        if group_name == '🔍 DNS记录' and len(safe_values) > 1:
+                            # 多条DNS记录使用换行显示，不限制数量
+                            safe_value = '\n    ◦ ' + '\n    ◦ '.join(safe_values)
+                        elif len(safe_values) > 1:
+                            # 其他多条记录使用换行显示
                             safe_value = '\n    ◦ ' + '\n    ◦ '.join(safe_values)
                         else:
-                            # 其他情况使用逗号分隔
+                            # 单条记录直接显示
                             safe_value = ', '.join(safe_values)
                     else:
                         safe_value = safe_escape_markdown(value)
@@ -1531,57 +1539,26 @@ def format_whois_result(result: Dict[str, Any]) -> str:
                     lines.append(f"  • **{safe_key}**: {safe_value}")
                 lines.append("")  # 分组间空行
         
-        # 显示其他未分类字段 (限制数量)
+        # 显示其他未分类字段（全部显示，不限制数量）
         if '📄 其他信息' in grouped_data and grouped_data['📄 其他信息']:
             other_fields = grouped_data['📄 其他信息']
-            max_other_fields = 5  # 最多显示5个其他字段
             
-            if len(other_fields) > max_other_fields:
-                lines.append("**📄 其他信息**")
-                for key, value in other_fields[:max_other_fields]:
-                    safe_key = safe_escape_markdown(key)
-                    
-                    if isinstance(value, list):
-                        safe_values = [safe_escape_markdown(v) for v in value]
-                        
-                        # 为DNS记录做特殊处理（如果在其他信息中）
-                        if '记录' in key and len(safe_values) > 5:
-                            displayed_values = safe_values[:5]
-                            safe_value = '\n    ◦ ' + '\n    ◦ '.join(displayed_values)
-                            safe_value += f"\n    ⋯ *还有 {len(safe_values) - 5} 条记录*"
-                        elif '记录' in key and len(safe_values) > 1:
-                            safe_value = '\n    ◦ ' + '\n    ◦ '.join(safe_values)
-                        else:
-                            safe_value = ', '.join(safe_values)
-                    else:
-                        safe_value = safe_escape_markdown(value)
-                    
-                    lines.append(f"  • **{safe_key}**: {safe_value}")
+            lines.append("**📄 其他信息**")
+            for key, value in other_fields:
+                safe_key = safe_escape_markdown(key)
                 
-                # 显示省略信息
-                remaining = len(other_fields) - max_other_fields
-                lines.append(f"  ⋯ *还有 {remaining} 个字段未显示*")
-            else:
-                lines.append("**📄 其他信息**")
-                for key, value in other_fields:
-                    safe_key = safe_escape_markdown(key)
+                if isinstance(value, list):
+                    safe_values = [safe_escape_markdown(v) for v in value]
                     
-                    if isinstance(value, list):
-                        safe_values = [safe_escape_markdown(v) for v in value]
-                        
-                        # 为DNS记录做特殊处理（如果在其他信息中）
-                        if '记录' in key and len(safe_values) > 5:
-                            displayed_values = safe_values[:5]
-                            safe_value = '\n    ◦ ' + '\n    ◦ '.join(displayed_values)
-                            safe_value += f"\n    ⋯ *还有 {len(safe_values) - 5} 条记录*"
-                        elif '记录' in key and len(safe_values) > 1:
-                            safe_value = '\n    ◦ ' + '\n    ◦ '.join(safe_values)
-                        else:
-                            safe_value = ', '.join(safe_values)
+                    # 多条记录使用换行显示，不限制数量
+                    if len(safe_values) > 1:
+                        safe_value = '\n    ◦ ' + '\n    ◦ '.join(safe_values)
                     else:
-                        safe_value = safe_escape_markdown(value)
-                    
-                    lines.append(f"  • **{safe_key}**: {safe_value}")
+                        safe_value = ', '.join(safe_values)
+                else:
+                    safe_value = safe_escape_markdown(value)
+                
+                lines.append(f"  • **{safe_key}**: {safe_value}")
     
     # 移除最后的空行
     while lines and lines[-1] == "":

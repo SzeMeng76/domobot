@@ -18,9 +18,9 @@ Read this in other languages: [简体中文](./README.zh-CN.md)
 - 👤 **User Information:** Telegram registration dates, account age, and ID lookup
 - ⏰ **Time & Timezone:** Current time queries, timezone conversion, and timezone lists
 - 📰 **News Aggregation:** Real-time news from 40+ sources including tech, social, finance, and general news
-- 🌐 **WHOIS Lookup:** Domain, IP, ASN, and TLD information with real-time IANA data and IP geolocation
+- 🌐 **WHOIS & DNS Lookup:** Domain, IP, ASN, TLD information with DNS records and Telegraph integration
 - 🍳 **Cooking Assistant:** Recipe search, categorized browsing, intelligent meal planning, and daily menu recommendations
-- 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`, `/recipe`, `/recipe_category`, `/recipe_random`, `/what_to_eat`, `/meal_plan`
+- 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`, `/dns`, `/recipe`, `/recipe_category`, `/recipe_random`, `/what_to_eat`, `/meal_plan`
 - 👥 **Group Friendly:** Works in any Telegram group without requiring whitelist approval
 - 🔧 **Self-Service:** Use `/refresh` if new commands don't appear in your input suggestions
 
@@ -42,7 +42,7 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 -   👤 **Public User Information:** Available to all users - check Telegram user registration dates, account age, and get user/group IDs.
 -   ⏰ **Public Time & Timezone:** Available to all users - query current time in any timezone, convert time between zones, and view supported timezone lists with IANA integration.
 -   📰 **Public News Aggregation:** Available to all users - access real-time news from 40+ sources including GitHub trending, Zhihu hot topics, Weibo trending, tech news (IT Home, Hacker News), financial news (JinShi Data, Wallstreet CN), and general news sources with smart caching and categorized interface.
--   🌐 **Public WHOIS Lookup:** Available to all users - comprehensive domain, IP address, ASN, and TLD information lookup with real-time IANA data integration and IP geolocation services. Features intelligent query type detection, support for domains (.com, .io), IP addresses (IPv4/IPv6), ASN numbers (AS15169), and TLD information (.com, .me) with detailed registry, WHOIS server, creation dates, and management organization data. **NEW:** IP queries now include actual server location with country, region, city, coordinates, ISP information, and timezone data via IP-API.com integration, clearly distinguishing between WHOIS registration data and actual geographic location.
+-   🌐 **Public WHOIS & DNS Lookup:** Available to all users - comprehensive domain, IP address, ASN, and TLD information lookup with real-time IANA data integration and IP geolocation services. Features intelligent query type detection, support for domains (.com, .io), IP addresses (IPv4/IPv6), ASN numbers (AS15169), and TLD information (.com, .me) with detailed registry, WHOIS server, creation dates, and management organization data. **NEW:** IP queries now include actual server location with country, region, city, coordinates, ISP information, and timezone data via IP-API.com integration, clearly distinguishing between WHOIS registration data and actual geographic location. **ENHANCED:** Domain WHOIS queries now automatically include comprehensive DNS records (A, AAAA, MX, NS, CNAME, TXT, SOA, PTR) with intelligent display formatting. Standalone `/dns` command available for DNS-only queries. Long query results automatically use Telegraph integration for complete information display with summary previews.
 -   🍳 **Public Cooking Assistant:** Available to all users - comprehensive recipe search and meal planning system with 1000+ recipes from HowToCook database. Features include **smart recipe search** with keyword matching, **categorized browsing** (荤菜, 素菜, 主食, 汤羹, 水产, 早餐, 甜品, etc.), **intelligent meal planning** with dietary restrictions and allergy considerations, **daily menu recommendations** with people count selection, **random recipe discovery**, and **Telegraph integration** for long recipes with complete ingredients and step-by-step instructions. All recipes include difficulty ratings, cooking time, serving sizes, and detailed nutritional guidance.
 -   🎬 **Movie & TV Information:** Query movie/TV details with posters, ratings, cast, trailers, reviews, recommendations, viewing platforms, and season/episode info. Features **3-platform data integration** (TMDB + JustWatch + Trakt) with **JustWatch streaming charts**, real-time ranking trends, platform availability, Telegraph integration for long content, trending discovery, people search, and enhanced statistics with watch counts and community data. *(Whitelist required)*
 -   🪙 **Crypto Prices:** Look up real-time cryptocurrency prices with support for custom amounts and currency conversion, including 24h and 7d percentage changes. *(Whitelist required)*
@@ -154,11 +154,12 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /newslist github 15       # Get top 15 GitHub trending items
 /hotnews                  # Quick access to hot news from multiple sources
 
-# WHOIS lookup (Enhanced with IP Geolocation)
-/whois google.com         # Domain information with registrar details
+# WHOIS & DNS lookup (Enhanced with DNS Records & Telegraph Integration)
+/whois google.com         # Domain WHOIS + DNS records (A, AAAA, MX, NS, CNAME, TXT, SOA, PTR)
 /whois 8.8.8.8           # IP address with WHOIS registration + actual geographic location
 /whois AS15169            # ASN information
 /whois .com               # TLD information with IANA data
+/dns github.com           # DNS records only (A, AAAA, MX, NS, CNAME, TXT, SOA, PTR)
 
 # Cooking Assistant (Recipe & Meal Planning)
 /recipe 红烧肉             # Search recipes by name or ingredients

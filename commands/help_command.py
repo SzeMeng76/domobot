@@ -38,7 +38,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 🎬 `/movie 复仇者` - 影视信息 | 📺 `/nf` - 流媒体价格
 🎮 `/steam 赛博朋克` - 游戏价格 | 👤 `/when 123` - 用户信息
 ⏰ `/time 北京` - 时间查询 | 📰 `/news` - 新闻聚合
-🌐 `/whois google.com` - WHOIS查询 | 🍳 `/recipe 红烧肉` - 菜谱搜索
+🌐 `/whois google.com` - WHOIS查询 | 🔍 `/dns domain.com` - DNS记录
+🍳 `/recipe 红烧肉` - 菜谱搜索
 
 💱 *汇率* `/rate [货币] [数额]` - 支持表达式计算
 🪙 *加密货币* `/crypto <币种> [数量] [货币]` - 实时价格
@@ -46,7 +47,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 🌦️ *天气* `/tq <城市> [天数]` - 天气&空气质量
 ⏰ *时间* `/time <时区>` - 时间查询 | `/convert_time <源> <时间> <目标>` - 时区转换
 📰 *新闻* `/news` - 交互式选择 | `/newslist [源] [数量]` - 列表查询
-🌐 *WHOIS* `/whois <查询>` - 域名/IP/ASN/TLD信息 | 智能识别查询类型
+🌐 *WHOIS&DNS* `/whois <查询>` - 域名/IP/ASN/TLD信息(含DNS) | `/dns <域名>` - 仅DNS记录
 🍳 *烹饪助手* `/recipe <菜名>` - 菜谱搜索 | `/what_to_eat` - 今天吃什么 | `/meal_plan` - 智能膳食
 
 🎬 *影视查询*
@@ -65,7 +66,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 🌍 *支持地区* US CN TR IN MY JP GB DE 等40+国家
 💡 *特色* 支持中文地名 | 自动CNY转换 | 智能缓存 | 表达式计算
 
-⚡ 快速试用: `/nf` `/crypto btc` `/tq 北京` `/movie_hot` `/news` `/time 北京` `/recipe 红烧肉` `/what_to_eat`"""
+⚡ 快速试用: `/nf` `/crypto btc` `/tq 北京` `/movie_hot` `/news` `/time 北京` `/whois google.com` `/dns github.com` `/recipe 红烧肉` `/what_to_eat`"""
 
     admin_help_text = """
 
@@ -90,7 +91,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 👤 *用户信息* `/when <ID/@用户>` `/id` - 注册时间&ID查询
 ⏰ *时间查询* `/time <时区>` `/convert_time` `/timezone` - 时区转换
 📰 *新闻聚合* `/news` `/newslist` `/hotnews` - 40+源实时资讯
-🌐 *WHOIS查询* `/whois <查询>` - 域名/IP/ASN/TLD信息查询
+🌐 *WHOIS&DNS查询* `/whois <查询>` - 域名/IP/ASN/TLD信息(含DNS) | `/dns <域名>` - 仅DNS记录
 
 🍳 *烹饪助手*
 搜索: `/recipe <菜名>` - 智能菜谱搜索 | `/recipe_category` - 分类浏览
@@ -155,7 +156,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 👤 用户信息 `/when` `/id`
 ⏰ 时间查询 `/time` `/convert_time` `/timezone`
 📰 新闻聚合 `/news` `/newslist` `/hotnews`
-🌐 WHOIS查询 `/whois` - 域名/IP/ASN/TLD
+🌐 WHOIS&DNS查询 `/whois` `/dns` - 域名/IP/ASN/TLD+DNS记录
 🍳 烹饪助手 `/recipe` `/what_to_eat` `/meal_plan`
 
 🚀 *试试看*
@@ -167,6 +168,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 `/news` - 交互式新闻界面
 `/newslist zhihu` - 知乎热榜
 `/convert_time 中国 14:30 美国` - 时区转换
+`/whois google.com` - WHOIS+DNS查询
+`/dns github.com` - DNS记录查询
 `/recipe 红烧肉` - 菜谱搜索
 `/what_to_eat` - 今天吃什么
 `/help` - 查看详细功能
@@ -183,7 +186,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 🚀 *快速开始*
 `/rate USD 100` `/crypto btc` `/tq 北京` `/movie_hot`
-`/steam 赛博朋克` `/nf` `/time 北京` `/news` `/recipe 红烧肉` `/help`
+`/steam 赛博朋克` `/nf` `/time 北京` `/whois google.com` `/dns github.com` `/news` `/recipe 红烧肉` `/help`
 
 🌟 40+国家 | CNY转换 | 智能缓存 | 表达式计算 | 时区转换 | 新闻聚合 | 1000+中文菜谱"""
 
