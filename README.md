@@ -20,7 +20,7 @@ Read this in other languages: [简体中文](./README.zh-CN.md)
 - 📰 **News Aggregation:** Real-time news from 40+ sources including tech, social, finance, and general news
 - 🌐 **WHOIS & DNS Lookup:** Domain, IP, ASN, TLD information with DNS records and Telegraph integration
 - 🍳 **Cooking Assistant:** Recipe search, categorized browsing, intelligent meal planning, and daily menu recommendations
-- 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`, `/dns`, `/recipe`, `/recipe_category`, `/recipe_random`, `/what_to_eat`, `/meal_plan`
+- 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`, `/dns`, `/recipe`, `/recipe_category`, `/recipe_random`, `/what_to_eat`, `/meal_plan`, `/meme`
 - 👥 **Group Friendly:** Works in any Telegram group without requiring whitelist approval
 - 🔧 **Self-Service:** Use `/refresh` if new commands don't appear in your input suggestions
 
@@ -44,6 +44,7 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 -   📰 **Public News Aggregation:** Available to all users - access real-time news from 40+ sources including GitHub trending, Zhihu hot topics, Weibo trending, tech news (IT Home, Hacker News), financial news (JinShi Data, Wallstreet CN), and general news sources with smart caching and categorized interface.
 -   🌐 **Public WHOIS & DNS Lookup:** Available to all users - comprehensive domain, IP address, ASN, and TLD information lookup with real-time IANA data integration and IP geolocation services. Features intelligent query type detection, support for domains (.com, .io), IP addresses (IPv4/IPv6), ASN numbers (AS15169), and TLD information (.com, .me) with detailed registry, WHOIS server, creation dates, and management organization data. **NEW:** IP queries now include actual server location with country, region, city, coordinates, ISP information, and timezone data via IP-API.com integration, clearly distinguishing between WHOIS registration data and actual geographic location. **ENHANCED:** Domain WHOIS queries now automatically include comprehensive DNS records (A, AAAA, MX, NS, CNAME, TXT, SOA, PTR) with intelligent display formatting. Standalone `/dns` command available for DNS-only queries. Long query results automatically use Telegraph integration for complete information display with summary previews.
 -   🍳 **Public Cooking Assistant:** Available to all users - comprehensive recipe search and meal planning system with 1000+ recipes from HowToCook database. Features include **smart recipe search** with keyword matching, **categorized browsing** (荤菜, 素菜, 主食, 汤羹, 水产, 早餐, 甜品, etc.), **intelligent meal planning** with dietary restrictions and allergy considerations, **daily menu recommendations** with people count selection, **random recipe discovery**, and **Telegraph integration** for long recipes with complete ingredients and step-by-step instructions. All recipes include difficulty ratings, cooking time, serving sizes, and detailed nutritional guidance.
+-   🎭 **Public Memes:** Available to all users - fetch random memes from memes.bupt.site API with support for custom quantities (1-20), intelligent caching system, auto-deletion scheduling, and fallback link display. Features include parameter validation, real-time status updates, and comprehensive error handling for reliable meme delivery.
 -   🎬 **Movie & TV Information:** Query movie/TV details with posters, ratings, cast, trailers, reviews, recommendations, viewing platforms, and season/episode info. Features **3-platform data integration** (TMDB + JustWatch + Trakt) with **JustWatch streaming charts**, real-time ranking trends, platform availability, Telegraph integration for long content, trending discovery, people search, and enhanced statistics with watch counts and community data. *(Whitelist required)*
 -   🪙 **Crypto Prices:** Look up real-time cryptocurrency prices with support for custom amounts and currency conversion, including 24h and 7d percentage changes. *(Whitelist required)*
 -   💳 **BIN Lookup:** Query credit card BIN (Bank Identification Number) information including card brand, type, issuing bank, and country details. *(Whitelist required)*
@@ -275,34 +276,26 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /cleanid                  # Clean all user ID cache
 /cleanid 30               # Clean user cache older than 30 days
 
-# Service Cache Management
-/rate_cleancache          # Clear exchange rate cache
-/crypto_cleancache        # Clear cryptocurrency cache
-/bin_cleancache           # Clear BIN query cache
-/movie_cleancache         # Clear movie/TV cache
-/steamcc                  # Clear Steam cache
-/nf_cleancache           # Clear Netflix cache
-/ds_cleancache           # Clear Disney+ cache
-/sp_cleancache           # Clear Spotify cache
-/max_cleancache          # Clear HBO Max cache
-/gp_cleancache           # Clear Google Play cache
-/app_cleancache          # Clear App Store cache
-/aps_cleancache          # Clear Apple services cache
-
-# Weather Cache Management
-/tq_cleancache           # Clear all weather cache
-/tq_cleanlocation        # Clear weather location cache
-/tq_cleanforecast        # Clear weather forecast cache
-/tq_cleanrealtime        # Clear real-time weather cache
-
-# News Cache Management
-/news_cleancache         # Clear all news cache
-
-# WHOIS Cache Management  
-/whois_cleancache        # Clear WHOIS query cache
-
-# Cooking Cache Management
-/cooking_cleancache      # Clear cooking recipe cache
+# Unified Cache Management
+/cleancache               # Interactive cache management menu
+/cleancache all           # Clear all service caches
+/cleancache memes         # Clear memes cache
+/cleancache news          # Clear news cache
+/cleancache crypto        # Clear cryptocurrency cache
+/cleancache movie         # Clear movie/TV cache
+/cleancache steam         # Clear Steam cache
+/cleancache weather       # Clear weather cache (all types)
+/cleancache cooking       # Clear cooking recipe cache
+/cleancache whois         # Clear WHOIS query cache
+/cleancache app           # Clear App Store cache
+/cleancache netflix       # Clear Netflix cache
+/cleancache spotify       # Clear Spotify cache
+/cleancache disney        # Clear Disney+ cache
+/cleancache max           # Clear HBO Max cache
+/cleancache rate          # Clear exchange rate cache
+/cleancache bin           # Clear BIN query cache
+/cleancache google_play   # Clear Google Play cache
+/cleancache apple_services # Clear Apple services cache
 
 # Command List Management
 /refresh_all             # Admin: Refresh command lists for all users and groups
@@ -474,7 +467,28 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 
 ### 🆕 Recent Updates
 
-#### Command Refresh System (Latest Feature)
+#### Memes Feature Integration (Latest)
+- **New `/meme` Command:** Fetch random memes from memes.bupt.site API with support for 1-20 memes per request
+- **Parameter Validation:** Smart input validation with clear error messages and usage guidance
+- **Auto-deletion System:** Meme images automatically delete after 15 minutes to keep chats clean
+- **Intelligent Caching:** Redis-powered caching system for improved performance with configurable TTL
+- **Fallback Support:** Link-based fallback display when direct image sending fails
+- **Unified Cache Management:** Integrated with `/cleancache` system for easy cache administration
+- **Error Handling:** Comprehensive error handling with loading indicators and user feedback
+- **Pydantic Validation:** Type-safe API response parsing using Pydantic models
+- **Weekly Cleanup:** Configurable weekly cache cleanup via `memes_weekly_cleanup` setting
+
+#### Unified Cache Management System (Latest)
+- **Single Command Interface:** Replaced 20+ individual `*_cleancache` commands with unified `/cleancache` system
+- **Interactive Menu:** Button-based service selection with clear categorization and status feedback
+- **Command-line Support:** Direct cache clearing via `/cleancache [service]` for power users
+- **Special Handling:** Complex cache structures (weather with 7 prefixes) handled automatically
+- **Comprehensive Coverage:** All services included - memes, news, crypto, movie, steam, weather, cooking, whois, app stores, streaming services, rate, and BIN
+- **Admin Permission:** Secure admin-only access with proper error handling and logging
+- **Real-time Feedback:** Immediate status updates during cache clearing operations
+- **Service Mapping:** Clear service name mappings for better user experience
+
+#### Command Refresh System (Previous Feature)
 - **Smart Command List Management:** New `/refresh_all` admin command refreshes command lists for all users and groups
 - **User Self-Service:** `/refresh` command allows any user to fix command visibility issues independently
 - **Telegram Cache Solution:** Resolves Telegram client-side command caching when new features are added
@@ -555,13 +569,13 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 - **Comprehensive Search:** `/steams` for combined games and bundles search results
 - **Region Comparison:** Multi-country price comparison for better deals
 - **Smart Caching:** Intelligent caching system for improved performance
-- **Admin Cache Management:** Dedicated `/steamcc` command for cache control
+- **Unified Cache Management:** Integrated with `/cleancache steam` command for cache control
 
 #### BIN Lookup Feature
 - **New `/bin` command** for credit card BIN information lookup
 - **Comprehensive data display** including card brand, type, issuing bank, and country
 - **Smart caching system** for improved performance
-- **Admin cache management** with `/bin_cleancache` command
+- **Unified cache management** via `/cleancache bin` command
 - **Chinese localization support** for card brands and countries
 - **Environment variable configuration** via `BIN_API_KEY`
 

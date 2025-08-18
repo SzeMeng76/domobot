@@ -20,7 +20,7 @@
 - 📰 **新闻聚合:** 来自40+源的实时新闻，包括科技、社交、财经和综合新闻
 - 🌐 **WHOIS和DNS查询:** 域名、IP、ASN、TLD信息查询，包含DNS记录和Telegraph集成
 - 🍳 **烹饪助手:** 菜谱搜索、分类浏览、智能膳食规划和每日菜单推荐
-- 🆔 **快速命令:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`, `/dns`, `/recipe`, `/recipe_category`, `/recipe_random`, `/what_to_eat`, `/meal_plan`
+- 🆔 **快速命令:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`, `/dns`, `/recipe`, `/recipe_category`, `/recipe_random`, `/what_to_eat`, `/meal_plan`, `/meme`
 - 👥 **群组友好:** 在任意 Telegram 群组中都可使用，无需白名单申请
 - 🔧 **自助服务:** 如果新命令不在输入建议中显示，请使用 `/refresh` 刷新
 
@@ -44,6 +44,7 @@
 -   📰 **公开新闻聚合:** 所有用户可用 - 接入40+新闻源的实时资讯，包括GitHub趋势、知乎热榜、微博热搜、科技新闻（IT之家、Hacker News）、财经新闻（金十数据、华尔街见闻）等，支持智能缓存和分类界面。
 -   🌐 **公开WHOIS和DNS查询:** 所有用户可用 - 全面的域名、IP地址、ASN和TLD信息查询，集成实时IANA数据库和IP地理位置服务。支持智能查询类型检测，支持域名（.com、.io）、IP地址（IPv4/IPv6）、ASN号码（AS15169）和TLD信息（.com、.me）查询，提供详细的注册机构、WHOIS服务器、创建日期和管理组织数据。**新功能:** IP查询现在包含服务器实际地理位置信息，包括国家、地区、城市、坐标、ISP信息和时区数据，通过IP-API.com集成实现，清晰区分WHOIS注册数据和实际地理位置。**增强功能:** 域名WHOIS查询现在自动包含完整的DNS记录（A、AAAA、MX、NS、CNAME、TXT、SOA、PTR），支持智能显示格式化。提供独立的`/dns`命令进行纯DNS记录查询。长查询结果自动使用Telegraph集成显示完整信息，并提供摘要预览。
 -   🍳 **公开烹饪助手:** 所有用户可用 - 基于HowToCook数据库的全面菜谱搜索和膳食规划系统，包含1000+中文菜谱。功能包括**智能菜谱搜索**（关键词匹配）、**分类浏览**（荤菜、素菜、主食、汤羹、水产、早餐、甜品等）、**智能膳食规划**（支持过敏原和忌口设置）、**每日菜单推荐**（人数选择）、**随机菜谱发现**和**Telegraph集成**（长菜谱显示完整食材和制作步骤）。所有菜谱包含难度评级、烹饪时间、份量和详细营养指导。
+-   🎭 **公开表情包:** 所有用户可用 - 从memes.bupt.site API获取随机表情包，支持自定义数量（1-20），智能缓存系统，自动删除调度和链接后备显示。功能包括参数验证、实时状态更新和全面的错误处理，确保可靠的表情包投递。
 -   🎬 **电影和电视剧信息:** 查询电影/电视剧详情及海报、评分、演员、预告片、评价、推荐、观看平台和季集信息。支持**三平台数据整合**（TMDB + JustWatch + Trakt）及**JustWatch流媒体排行榜**，实时排名趋势、平台可用性、Telegraph长内容集成，热门趋势发现、人物搜索和增强的统计数据（观看数、社区数据）。*(需要白名单)*
 -   🪙 **加密货币价格:** 查询实时加密货币价格，支持自定义数量和货币转换，并显示 24 小时和 7 天的价格变化率。*(需要白名单)*
 -   💳 **BIN查询:** 查询信用卡BIN（银行识别号）信息，包括卡片品牌、类型、发卡银行和国家等详细信息。*(需要白名单)*
@@ -174,6 +175,11 @@ docker-compose down
 
 #### 白名单专享命令
 ```bash
+# 表情包娱乐
+/meme 3                  # 获取3个随机表情包
+/meme 5                  # 获取5个随机表情包（1-20范围）
+/meme                    # 显示帮助和使用指南
+
 # BIN查询
 /bin 123456
 /bin 12345678
@@ -275,34 +281,26 @@ docker-compose down
 /cleanid                  # 清理所有用户ID缓存
 /cleanid 30               # 清理30天前的用户缓存
 
-# 服务缓存管理
-/rate_cleancache          # 清理汇率缓存
-/crypto_cleancache        # 清理加密货币缓存
-/bin_cleancache           # 清理BIN查询缓存
-/movie_cleancache         # 清理电影/电视缓存
-/steamcc                  # 清理Steam缓存
-/nf_cleancache           # 清理Netflix缓存
-/ds_cleancache           # 清理Disney+缓存
-/sp_cleancache           # 清理Spotify缓存
-/max_cleancache          # 清理HBO Max缓存
-/gp_cleancache           # 清理Google Play缓存
-/app_cleancache          # 清理App Store缓存
-/aps_cleancache          # 清理Apple服务缓存
-
-# 天气缓存管理
-/tq_cleancache           # 清理所有天气缓存
-/tq_cleanlocation        # 清理天气位置缓存
-/tq_cleanforecast        # 清理天气预报缓存
-/tq_cleanrealtime        # 清理实时天气缓存
-
-# 新闻缓存管理
-/news_cleancache         # 清理所有新闻缓存
-
-# WHOIS缓存管理  
-/whois_cleancache        # 清理WHOIS查询缓存
-
-# 烹饪缓存管理
-/cooking_cleancache      # 清理烹饪菜谱缓存
+# 统一缓存管理
+/cleancache               # 交互式缓存管理菜单
+/cleancache all           # 清理所有服务缓存
+/cleancache memes         # 清理表情包缓存
+/cleancache news          # 清理新闻缓存
+/cleancache crypto        # 清理加密货币缓存
+/cleancache movie         # 清理电影/电视缓存
+/cleancache steam         # 清理Steam缓存
+/cleancache weather       # 清理天气缓存（所有类型）
+/cleancache cooking       # 清理烹饪菜谱缓存
+/cleancache whois         # 清理WHOIS查询缓存
+/cleancache app           # 清理App Store缓存
+/cleancache netflix       # 清理Netflix缓存
+/cleancache spotify       # 清理Spotify缓存
+/cleancache disney        # 清理Disney+缓存
+/cleancache max           # 清理HBO Max缓存
+/cleancache rate          # 清理汇率缓存
+/cleancache bin           # 清理BIN查询缓存
+/cleancache google_play   # 清理Google Play缓存
+/cleancache apple_services # 清理Apple服务缓存
 
 # 命令列表管理
 /refresh_all             # 管理员：刷新所有用户和群组的命令列表
@@ -460,7 +458,28 @@ docker-compose down
 
 ### 🆕 最新更新
 
-#### 命令刷新系统 (最新功能)
+#### 表情包功能集成 (最新)
+- **新增 `/meme` 命令:** 从memes.bupt.site API获取随机表情包，支持1-20个表情包请求
+- **参数验证:** 智能输入验证，提供清晰的错误消息和使用指南
+- **自动删除系统:** 表情包图片15分钟后自动删除，保持聊天清洁
+- **智能缓存:** Redis驱动的缓存系统，可配置TTL，提升性能
+- **后备支持:** 直接图片发送失败时的链接式后备显示
+- **统一缓存管理:** 集成到 `/cleancache` 系统，便于缓存管理
+- **错误处理:** 全面的错误处理，包含加载指示器和用户反馈
+- **Pydantic验证:** 使用Pydantic模型进行类型安全的API响应解析
+- **每周清理:** 通过 `memes_weekly_cleanup` 设置可配置的每周缓存清理
+
+#### 统一缓存管理系统 (最新)
+- **单一命令界面:** 将20+个单独的 `*_cleancache` 命令统一为 `/cleancache` 系统
+- **交互式菜单:** 按钮式服务选择，清晰分类和状态反馈
+- **命令行支持:** 通过 `/cleancache [服务]` 为高级用户提供直接缓存清理
+- **特殊处理:** 自动处理复杂缓存结构（如天气的7个前缀）
+- **全面覆盖:** 包含所有服务 - 表情包、新闻、加密货币、电影、steam、天气、烹饪、whois、应用商店、流媒体服务、汇率和BIN
+- **管理员权限:** 安全的仅管理员访问，完善的错误处理和日志记录
+- **实时反馈:** 缓存清理操作期间的即时状态更新
+- **服务映射:** 清晰的服务名称映射，提供更好的用户体验
+
+#### 命令刷新系统 (之前功能)
 - **智能命令列表管理:** 新增 `/refresh_all` 管理员命令，可刷新所有用户和群组的命令列表
 - **用户自助服务:** `/refresh` 命令允许任何用户独立解决命令可见性问题
 - **Telegram缓存解决方案:** 解决新功能添加时Telegram客户端命令缓存问题
@@ -551,13 +570,13 @@ docker-compose down
 - **综合搜索功能:** `/steams` 同时搜索游戏和捆绑包的综合结果
 - **区域价格对比:** 多国价格对比，帮助找到更优惠的价格
 - **智能缓存系统:** 智能缓存机制提升性能表现
-- **管理员缓存管理:** 专用的 `/steamcc` 命令进行缓存控制
+- **统一缓存管理:** 集成到 `/cleancache steam` 命令进行缓存控制
 
 #### BIN查询功能
 - **新增 `/bin` 命令** 用于信用卡BIN信息查询
 - **全面的数据展示** 包括卡片品牌、类型、发卡银行和国家
 - **智能缓存系统** 提升性能表现
-- **管理员缓存管理** 通过 `/bin_cleancache` 命令
+- **统一缓存管理** 通过 `/cleancache bin` 命令
 - **中文本地化支持** 卡片品牌和国家名称中文显示
 - **环境变量配置** 通过 `BIN_API_KEY` 进行配置
 

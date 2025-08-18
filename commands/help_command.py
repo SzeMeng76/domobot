@@ -39,7 +39,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 🎮 `/steam 赛博朋克` - 游戏价格 | 👤 `/when 123` - 用户信息
 ⏰ `/time 北京` - 时间查询 | 📰 `/news` - 新闻聚合
 🌐 `/whois google.com` - WHOIS查询 | 🔍 `/dns domain.com` - DNS记录
-🍳 `/recipe 红烧肉` - 菜谱搜索
+🍳 `/recipe 红烧肉` - 菜谱搜索 | 🎭 `/meme 3` - 表情包
 
 💱 *汇率* `/rate [货币] [数额]` - 支持表达式计算
 🪙 *加密货币* `/crypto <币种> [数量] [货币]` - 实时价格
@@ -66,13 +66,13 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 🌍 *支持地区* US CN TR IN MY JP GB DE 等40+国家
 💡 *特色* 支持中文地名 | 自动CNY转换 | 智能缓存 | 表达式计算
 
-⚡ 快速试用: `/nf` `/crypto btc` `/tq 北京` `/movie_hot` `/news` `/time 北京` `/whois google.com` `/dns github.com` `/recipe 红烧肉` `/what_to_eat`"""
+⚡ 快速试用: `/nf` `/crypto btc` `/tq 北京` `/movie_hot` `/news` `/time 北京` `/whois google.com` `/dns github.com` `/recipe 红烧肉` `/what_to_eat` `/meme 3`"""
 
     admin_help_text = """
 
 🔧 *管理员*
 权限: `/admin` `/add <ID>` `/addgroup`
-缓存: `/rate_cleancache` `/crypto_cleancache` `/cooking_cleancache` 等
+缓存: `/cleancache` - 统一缓存管理菜单 | `/cleancache all` - 清理全部
 用户: `/cache` `/cleanid [天数]`
 数据: `/addpoint` `/removepoint` `/listpoints`"""
 
@@ -101,7 +101,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 🌍 *支持地区* US CN TR IN MY JP GB DE 等40+国家
 💡 *特色* 支持中文地名 | 自动CNY转换 | 时区智能识别 | 新闻分类 | 1000+中文菜谱
 
-⚡ *快速试用* `/nf` `/ds` `/sp` `/max` `/when` `/id` `/time 北京` `/news` `/recipe 红烧肉` `/what_to_eat`
+⚡ *快速试用* `/nf` `/ds` `/sp` `/max` `/when` `/id` `/time 北京` `/news` `/recipe 红烧肉` `/what_to_eat` `/meme 3`
 
 🔧 *命令问题?* 如果新功能不显示，请使用 `/refresh` 刷新命令列表
 
@@ -164,6 +164,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 `/ds` - Disney+全球价格
 `/sp` - Spotify全球价格
 `/max` - HBO Max全球价格
+`/meme 3` - 获取3个表情包
 `/time 北京` - 北京时间
 `/news` - 交互式新闻界面
 `/newslist zhihu` - 知乎热榜
@@ -182,11 +183,11 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         welcome_text = f"""👋 *欢迎 {user.first_name}! 多功能价格查询机器人*
 
 🎯 *全功能版本*
-💱 汇率 🪙 币价 💳 BIN 🌦️ 天气 🎬 影视 🎮 游戏 📺 流媒体 📱 应用 ⏰ 时间 📰 新闻 🍳 烹饪
+💱 汇率 🪙 币价 💳 BIN 🌦️ 天气 🎬 影视 🎮 游戏 📺 流媒体 📱 应用 ⏰ 时间 📰 新闻 🍳 烹饪 🎭 表情包
 
 🚀 *快速开始*
 `/rate USD 100` `/crypto btc` `/tq 北京` `/movie_hot`
-`/steam 赛博朋克` `/nf` `/time 北京` `/whois google.com` `/dns github.com` `/news` `/recipe 红烧肉` `/help`
+`/steam 赛博朋克` `/nf` `/time 北京` `/whois google.com` `/dns github.com` `/news` `/recipe 红烧肉` `/meme 3` `/help`
 
 🌟 40+国家 | CNY转换 | 智能缓存 | 表达式计算 | 时区转换 | 新闻聚合 | 1000+中文菜谱"""
 
