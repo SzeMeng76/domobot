@@ -288,4 +288,4 @@ command_factory.register_command(
 #     bin_clean_cache_command, 
 #     permission=Permission.ADMIN, 
 #     description="清理BIN查询缓存"
-)
+# )

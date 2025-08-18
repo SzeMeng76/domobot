@@ -257,18 +257,46 @@ async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # 逐个发送表情包图片
             for i, url in enumerate(meme_urls, 1):
                 try:
-                    await context.bot.send_photo(
+                    photo_message = await context.bot.send_photo(
                         chat_id=update.effective_chat.id,
                         photo=url,
                         caption=f"🎭 表情包 {i}/{len(meme_urls)}"
                     )
+                    # 调度自动删除表情包消息
+                    try:
+                        scheduler = context.bot_data.get("message_delete_scheduler")
+                        if scheduler and hasattr(scheduler, "schedule_deletion"):
+                            await scheduler.schedule_deletion(
+                                update.effective_chat.id, 
+                                photo_message.message_id, 
+                                900,  # 15分钟后删除
+                                None
+                            )
+                    except Exception as e:
+                        logger.warning(f"调度表情包 {i} 自动删除失败: {e}")
+                        
                 except Exception as e:
                     logger.warning(f"发送表情包 {i} 失败: {e}")
-                    await context.bot.send_message(
-                        chat_id=update.effective_chat.id,
-                        text=f"🖼️ 表情包 {i}: [点击查看]({url})",
-                        parse_mode='Markdown'
-                    )
+                    try:
+                        fallback_message = await context.bot.send_message(
+                            chat_id=update.effective_chat.id,
+                            text=f"🖼️ 表情包 {i}: [点击查看]({url})",
+                            parse_mode='Markdown'
+                        )
+                        # 调度自动删除链接消息
+                        try:
+                            scheduler = context.bot_data.get("message_delete_scheduler")
+                            if scheduler and hasattr(scheduler, "schedule_deletion"):
+                                await scheduler.schedule_deletion(
+                                    update.effective_chat.id, 
+                                    fallback_message.message_id, 
+                                    900,  # 15分钟后删除
+                                    None
+                                )
+                        except Exception as e:
+                            logger.warning(f"调度表情包链接 {i} 自动删除失败: {e}")
+                    except Exception as e:
+                        logger.error(f"发送表情包链接 {i} 也失败: {e}")
         
         # 删除用户命令
         if update.message:
