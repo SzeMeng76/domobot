@@ -92,13 +92,7 @@ async def get_memes(limit: int = 10) -> List[dict]:
             cached_data = await _cache_manager.load_cache(cache_key, subdirectory="memes")
             if cached_data:
                 logger.info(f"使用缓存获取 {limit} 个表情包")
-                # 检查缓存数据格式，如果是旧格式（URL字符串列表），则重新获取
-                if cached_data and isinstance(cached_data[0], str):
-                    logger.info("检测到旧格式缓存，重新获取数据")
-                    # 清理旧缓存
-                    await _cache_manager.delete_cache(cache_key, subdirectory="memes")
-                else:
-                    return cached_data
+                return cached_data
         except Exception as e:
             logger.warning(f"缓存读取失败: {e}")
     
@@ -115,9 +109,7 @@ async def get_memes(limit: int = 10) -> List[dict]:
         response.raise_for_status()
         
         # 使用Pydantic验证响应数据
-        json_data = response.json()
-        logger.info(f"API响应样例数据: {json_data}")
-        response_model = ResponseModel(**json_data)
+        response_model = ResponseModel(**response.json())
         
         # 提取图片URL和描述信息
         meme_data = []
@@ -130,8 +122,6 @@ async def get_memes(limit: int = 10) -> List[dict]:
                     'description': media_content.llmDescription,
                     'id': media_content.id
                 }
-                # 添加调试日志
-                logger.debug(f"Meme {media_content.id}: URL={media_content.dataContent[:50]}..., Description={media_content.llmDescription}")
                 meme_data.append(meme_info)
         
         # 缓存结果（使用配置的缓存时长）
@@ -272,24 +262,13 @@ async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             # 逐个发送表情包图片
             for i, meme_info in enumerate(meme_data, 1):
-                # 兼容处理：确保meme_info是字典类型
-                if isinstance(meme_info, str):
-                    # 如果是旧格式的URL字符串，转换为字典格式
-                    url = meme_info
-                    description = None
-                    logger.warning(f"检测到旧格式数据，表情包 {i}")
-                else:
-                    url = meme_info['url']
-                    description = meme_info.get('description')
+                url = meme_info['url']
+                description = meme_info.get('description')
                 
                 # 构建caption
                 caption = f"🎭 表情包 {i}/{len(meme_data)}"
-                logger.debug(f"表情包 {i} 描述: {description}")
                 if description and description.strip():
                     caption += f"\n💬 {description.strip()}"
-                    logger.debug(f"添加描述到caption: {description.strip()}")
-                else:
-                    logger.debug("没有描述信息或描述为空")
                 
                 try:
                     photo_message = await context.bot.send_photo(
