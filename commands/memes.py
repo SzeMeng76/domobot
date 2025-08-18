@@ -376,7 +376,7 @@ async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.message:
             await delete_user_command(context, update.effective_chat.id, update.message.message_id)
         
-        logger.info(f"成功获取并发送 {len(meme_urls)} 个表情包")
+        logger.info(f"成功获取并发送 {len(meme_list)} 个表情包")
         
     except ValueError as e:
         # 删除加载提示
