@@ -156,6 +156,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 ⏰ 时间查询 `/time` `/convert_time` `/timezone`
 📰 新闻聚合 `/news` `/newslist` `/hotnews`
 🌐 WHOIS查询 `/whois` - 域名/IP/ASN/TLD
+🍳 烹饪助手 `/recipe` `/what_to_eat` `/meal_plan`
 
 🚀 *试试看*
 `/nf` - Netflix全球价格
@@ -166,9 +167,11 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 `/news` - 交互式新闻界面
 `/newslist zhihu` - 知乎热榜
 `/convert_time 中国 14:30 美国` - 时区转换
+`/recipe 红烧肉` - 菜谱搜索
+`/what_to_eat` - 今天吃什么
 `/help` - 查看详细功能
 
-🌟 支持40+国家 | 自动CNY转换 | 中文地名 | 时区智能识别 | 新闻分类
+🌟 支持40+国家 | 自动CNY转换 | 中文地名 | 时区智能识别 | 新闻分类 | 1000+中文菜谱
 
 🔧 命令不显示? 试试 `/refresh` 刷新命令列表"""
     else:
@@ -176,13 +179,13 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         welcome_text = f"""👋 *欢迎 {user.first_name}! 多功能价格查询机器人*
 
 🎯 *全功能版本*
-💱 汇率 🪙 币价 💳 BIN 🌦️ 天气 🎬 影视 🎮 游戏 📺 流媒体 📱 应用 ⏰ 时间 📰 新闻
+💱 汇率 🪙 币价 💳 BIN 🌦️ 天气 🎬 影视 🎮 游戏 📺 流媒体 📱 应用 ⏰ 时间 📰 新闻 🍳 烹饪
 
 🚀 *快速开始*
 `/rate USD 100` `/crypto btc` `/tq 北京` `/movie_hot`
-`/steam 赛博朋克` `/nf` `/time 北京` `/news` `/help`
+`/steam 赛博朋克` `/nf` `/time 北京` `/news` `/recipe 红烧肉` `/help`
 
-🌟 40+国家 | CNY转换 | 智能缓存 | 表达式计算 | 时区转换 | 新闻聚合"""
+🌟 40+国家 | CNY转换 | 智能缓存 | 表达式计算 | 时区转换 | 新闻聚合 | 1000+中文菜谱"""
 
     await send_help(context, update.message.chat_id, foldable_text_with_markdown_v2(welcome_text), parse_mode="MarkdownV2")
 

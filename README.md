@@ -20,7 +20,7 @@ Read this in other languages: [简体中文](./README.zh-CN.md)
 - 📰 **News Aggregation:** Real-time news from 40+ sources including tech, social, finance, and general news
 - 🌐 **WHOIS Lookup:** Domain, IP, ASN, and TLD information with real-time IANA data and IP geolocation
 - 🍳 **Cooking Assistant:** Recipe search, categorized browsing, intelligent meal planning, and daily menu recommendations
-- 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`, `/recipe`, `/what_to_eat`
+- 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`, `/recipe`, `/recipe_category`, `/recipe_random`, `/what_to_eat`, `/meal_plan`
 - 👥 **Group Friendly:** Works in any Telegram group without requiring whitelist approval
 - 🔧 **Self-Service:** Use `/refresh` if new commands don't appear in your input suggestions
 
@@ -159,6 +159,16 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /whois 8.8.8.8           # IP address with WHOIS registration + actual geographic location
 /whois AS15169            # ASN information
 /whois .com               # TLD information with IANA data
+
+# Cooking Assistant (Recipe & Meal Planning)
+/recipe 红烧肉             # Search recipes by name or ingredients
+/recipe_category          # Browse recipes by category (荤菜, 素菜, 主食, etc.)
+/recipe_category 荤菜      # View recipes in specific category
+/recipe_random            # Get random recipe recommendations
+/what_to_eat              # Daily menu recommendations (select people count)
+/what_to_eat 4            # Daily menu for 4 people
+/meal_plan                # Intelligent meal planning (select people count)
+/meal_plan 3 虾 香菜       # Smart meal planning for 3 people, avoiding shrimp and cilantro
 ```
 
 #### Whitelist-Only Commands
@@ -289,6 +299,9 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 
 # WHOIS Cache Management  
 /whois_cleancache        # Clear WHOIS query cache
+
+# Cooking Cache Management
+/cooking_cleancache      # Clear cooking recipe cache
 
 # Command List Management
 /refresh_all             # Admin: Refresh command lists for all users and groups

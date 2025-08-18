@@ -20,7 +20,7 @@
 - 📰 **新闻聚合:** 来自40+源的实时新闻，包括科技、社交、财经和综合新闻
 - 🌐 **WHOIS查询:** 域名、IP地址、ASN和TLD信息查询，集成实时IANA数据和IP地理位置
 - 🍳 **烹饪助手:** 菜谱搜索、分类浏览、智能膳食规划和每日菜单推荐
-- 🆔 **快速命令:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`, `/recipe`, `/what_to_eat`
+- 🆔 **快速命令:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`, `/recipe`, `/recipe_category`, `/recipe_random`, `/what_to_eat`, `/meal_plan`
 - 👥 **群组友好:** 在任意 Telegram 群组中都可使用，无需白名单申请
 - 🔧 **自助服务:** 如果新命令不在输入建议中显示，请使用 `/refresh` 刷新
 
@@ -159,6 +159,16 @@ docker-compose down
 /whois 8.8.8.8           # IP地址信息，包含WHOIS注册信息 + 实际地理位置
 /whois AS15169            # ASN信息查询
 /whois .com               # TLD信息，包含IANA数据
+
+# 烹饪助手（菜谱搜索与膳食规划）
+/recipe 红烧肉             # 通过菜名或食材搜索菜谱
+/recipe_category          # 按分类浏览菜谱（荤菜、素菜、主食等）
+/recipe_category 荤菜      # 查看指定分类的菜谱
+/recipe_random            # 获取随机菜谱推荐
+/what_to_eat              # 每日菜单推荐（选择用餐人数）
+/what_to_eat 4            # 为4人推荐今日菜单
+/meal_plan                # 智能膳食规划（选择用餐人数）
+/meal_plan 3 虾 香菜       # 为3人智能规划膳食，避开虾和香菜
 ```
 
 #### 白名单专享命令
@@ -289,6 +299,9 @@ docker-compose down
 
 # WHOIS缓存管理  
 /whois_cleancache        # 清理WHOIS查询缓存
+
+# 烹饪缓存管理
+/cooking_cleancache      # 清理烹饪菜谱缓存
 
 # 命令列表管理
 /refresh_all             # 管理员：刷新所有用户和群组的命令列表
