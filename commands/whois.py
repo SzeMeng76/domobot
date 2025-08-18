@@ -29,6 +29,9 @@ logger = logging.getLogger(__name__)
 # 全局变量
 cache_manager = None
 
+# Telegraph 相关配置
+TELEGRAPH_API_URL = "https://api.telegra.ph"
+
 class TLDManager:
     """TLD数据管理器 - 直接从GitHub获取数据"""
     
@@ -40,7 +43,7 @@ class TLDManager:
     async def _fetch_tld_data(self) -> Optional[Dict[str, Any]]:
         """从GitHub获取TLD数据"""
         headers = {
-            "User-Agent": "Mozilla/5.0 (compatible; DomoBot/1.0)"
+            "User-Agent": "Mozilla/5.0 (compatible; MengBot/1.0)"
         }
         try:
             from utils.http_client import create_custom_client
@@ -407,7 +410,7 @@ class WhoisService:
             url = f"http://ip-api.com/json/{ip}?fields=status,message,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,query"
             
             headers = {
-                "User-Agent": "Mozilla/5.0 (compatible; DomoBot/1.0)"
+                "User-Agent": "Mozilla/5.0 (compatible; MengBot/1.0)"
             }
             
             async with create_custom_client(headers=headers) as client:
@@ -1236,6 +1239,155 @@ class WhoisService:
         
         return result
 
+async def create_telegraph_page(title: str, content: str) -> Optional[str]:
+    """创建Telegraph页面"""
+    try:
+        from utils.http_client import create_custom_client
+        
+        # 创建Telegraph账户
+        account_data = {
+            "short_name": "MengBot",
+            "author_name": "MengBot WHOIS",
+            "author_url": "https://t.me/mengpricebot"
+        }
+        
+        async with create_custom_client() as client:
+            response = await client.post(f"{TELEGRAPH_API_URL}/createAccount", data=account_data)
+            if response.status_code != 200:
+                logger.warning(f"Telegraph账户创建失败: {response.status_code}")
+                return None
+                
+            account_info = response.json()
+            if not account_info.get("ok"):
+                logger.warning(f"Telegraph账户创建响应失败: {account_info}")
+                return None
+                
+            access_token = account_info["result"]["access_token"]
+            
+            # 创建页面内容
+            page_content = [
+                {
+                    "tag": "p",
+                    "children": [content]
+                }
+            ]
+            
+            page_data = {
+                "access_token": access_token,
+                "title": title,
+                "content": json.dumps(page_content),
+                "return_content": "true"
+            }
+            
+            response = await client.post(f"{TELEGRAPH_API_URL}/createPage", data=page_data)
+            if response.status_code != 200:
+                logger.warning(f"Telegraph页面创建失败: {response.status_code}")
+                return None
+                
+            page_info = response.json()
+            if not page_info.get("ok"):
+                logger.warning(f"Telegraph页面创建响应失败: {page_info}")
+                return None
+                
+            return page_info["result"]["url"]
+    
+    except Exception as e:
+        logger.error(f"创建Telegraph页面失败: {e}")
+        return None
+
+def format_whois_result_for_telegraph(result: Dict[str, Any]) -> str:
+    """将WHOIS/DNS查询结果格式化为Telegraph友好的纯文本格式"""
+    if not result['success']:
+        error_msg = result.get('error', '查询失败')
+        return f"❌ 查询失败\n\n{error_msg}"
+    
+    query_type_map = {
+        'domain': '🌐 域名',
+        'ip': '🖥️ IP地址', 
+        'asn': '🔢 ASN',
+        'tld': '🏷️ 顶级域名',
+        'dns': '🔍 DNS记录'
+    }
+    
+    query_type = query_type_map.get(result['type'], '🔍 查询')
+    query = result['query']
+    source_info = f" ({result['source']})" if result.get('source') else ""
+    
+    # 标题部分
+    lines = [f"✅ {query_type}查询结果{source_info}"]
+    lines.append("=" * 50)
+    lines.append(f"🔍 查询对象: {query}")
+    lines.append("")
+    
+    # 格式化数据 - 按类别分组（Telegraph版本不需要Markdown转义）
+    data = result.get('data', {})
+    if data:
+        # 定义字段分组和显示顺序
+        field_groups = {
+            '📋 基本信息': ['域名', '域名ID', '查询IP', '类型', '注册人类型'],
+            '🏢 注册商信息': ['注册商', '注册商WHOIS服务器', '注册商网址', '注册商IANA ID', '管理机构', '组织'],
+            '📅 时间信息': ['创建时间', '过期时间', '更新时间', '最后更新', '续费时间'],
+            '📊 状态信息': ['状态', '域名状态', '选项'],
+            '🌐 网络信息': ['DNS服务器', 'ASN', 'ASN描述', 'ASN国家', 'ASN注册机构', '网络名称', 'IP段', '起始地址', '结束地址', '网络国家', '网络类型', 'WHOIS服务器', '国际化域名', 'DNSSEC'],
+            '🔍 DNS记录': ['🌐 A记录', '🌐 AAAA记录', '🌐 MX记录', '🌐 NS记录', '🌐 CNAME记录', '🌐 TXT记录', '🌐 SOA记录', '🌐 PTR记录', 'A记录', 'AAAA记录', 'MX记录', 'NS记录', 'CNAME记录', 'TXT记录', 'SOA记录', 'PTR记录'],
+            '📍 注册位置': ['国家', '地区', '城市', '邮编', '地理坐标'],
+            '🌍 实际位置': ['🌍 实际国家', '🏞️ 实际地区', '🏙️ 实际城市', '📮 邮政编码', '📍 坐标', '🕐 时区'],
+            '🏢 实际网络': ['🌐 ISP', '🏢 实际组织', '🔢 实际AS'],
+            '📞 联系信息': ['邮箱', '电话', '传真', '联系人', '地址'],
+            '🛡️ 安全信息': ['注册商举报邮箱', '注册商举报电话'],
+            '🔗 参考信息': ['WHOIS数据库响应', '选项'],
+            '💡 说明信息': ['💡 说明'],
+            '📄 其他信息': []  # 未分类的字段
+        }
+        
+        # 创建字段到分组的映射
+        field_to_group = {}
+        for group, fields in field_groups.items():
+            for field in fields:
+                field_to_group[field] = group
+        
+        # 按分组组织数据
+        grouped_data = {}
+        for key, value in data.items():
+            group = field_to_group.get(key, '📄 其他信息')
+            if group not in grouped_data:
+                grouped_data[group] = []
+            grouped_data[group].append((key, value))
+        
+        # 按分组顺序显示
+        for group_name in field_groups.keys():
+            if group_name != '📄 其他信息' and group_name in grouped_data and grouped_data[group_name]:
+                lines.append(f"{group_name}")
+                lines.append("-" * 30)
+                for key, value in grouped_data[group_name]:
+                    if isinstance(value, list):
+                        if len(value) > 1:
+                            lines.append(f"• {key}:")
+                            for item in value:
+                                lines.append(f"  ◦ {item}")
+                        else:
+                            lines.append(f"• {key}: {value[0]}")
+                    else:
+                        lines.append(f"• {key}: {value}")
+                lines.append("")  # 分组间空行
+        
+        # 显示其他未分类字段（全部显示，不限制数量）
+        if '📄 其他信息' in grouped_data and grouped_data['📄 其他信息']:
+            lines.append("📄 其他信息")
+            lines.append("-" * 30)
+            for key, value in grouped_data['📄 其他信息']:
+                if isinstance(value, list):
+                    if len(value) > 1:
+                        lines.append(f"• {key}:")
+                        for item in value:
+                            lines.append(f"  ◦ {item}")
+                    else:
+                        lines.append(f"• {key}: {value[0]}")
+                else:
+                    lines.append(f"• {key}: {value}")
+    
+    return '\n'.join(lines)
+
 def detect_query_type(query: str) -> str:
     """智能检测查询类型"""
     query = query.strip()
@@ -1321,7 +1473,7 @@ def format_whois_result(result: Dict[str, Any]) -> str:
             '📅 时间信息': ['创建时间', '过期时间', '更新时间', '最后更新', '续费时间'],
             '📊 状态信息': ['状态', '域名状态', '选项'],
             '🌐 网络信息': ['DNS服务器', 'ASN', 'ASN描述', 'ASN国家', 'ASN注册机构', '网络名称', 'IP段', '起始地址', '结束地址', '网络国家', '网络类型', 'WHOIS服务器', '国际化域名', 'DNSSEC'],
-            '🔍 DNS记录': ['🌐 A记录', '🌐 AAAA记录', '🌐 MX记录', '🌐 NS记录', '🌐 CNAME记录', '🌐 TXT记录', '🌐 SOA记录', '🌐 PTR记录'],
+            '🔍 DNS记录': ['🌐 A记录', '🌐 AAAA记录', '🌐 MX记录', '🌐 NS记录', '🌐 CNAME记录', '🌐 TXT记录', '🌐 SOA记录', '🌐 PTR记录', 'A记录', 'AAAA记录', 'MX记录', 'NS记录', 'CNAME记录', 'TXT记录', 'SOA记录', 'PTR记录'],
             '📍 注册位置': ['国家', '地区', '城市', '邮编', '地理坐标'],
             '🌍 实际位置': ['🌍 实际国家', '🏞️ 实际地区', '🏙️ 实际城市', '📮 邮政编码', '📍 坐标', '🕐 时区'],
             '🏢 实际网络': ['🌐 ISP', '🏢 实际组织', '🔢 实际AS'],
@@ -1347,16 +1499,31 @@ def format_whois_result(result: Dict[str, Any]) -> str:
             grouped_data[group].append((key, value))
         
         # 按分组顺序显示 (除了"其他信息"，单独处理)
+        # 特别处理DNS记录分组 - 确保DNS记录显示在正确位置
         for group_name in field_groups.keys():
             if group_name != '📄 其他信息' and group_name in grouped_data and grouped_data[group_name]:
+                # 特别处理DNS记录分组
+                if group_name == '🔍 DNS记录':
+                    logger.debug(f"处理DNS记录分组，包含字段: {[key for key, value in grouped_data[group_name]]}")
                 lines.append(f"**{group_name}**")
                 for key, value in grouped_data[group_name]:
                     safe_key = safe_escape_markdown(key)
                     
                     if isinstance(value, list):
-                        # 对列表中的每个元素单独转义，然后用逗号连接
+                        # 对列表中的每个元素单独转义
                         safe_values = [safe_escape_markdown(v) for v in value]
-                        safe_value = ', '.join(safe_values)
+                        
+                        # 为DNS记录做特殊处理 - 如果记录很多，限制显示数量
+                        if group_name == '🔍 DNS记录' and len(safe_values) > 5:
+                            displayed_values = safe_values[:5]
+                            safe_value = '\n    ◦ ' + '\n    ◦ '.join(displayed_values)
+                            safe_value += f"\n    ⋯ *还有 {len(safe_values) - 5} 条记录*"
+                        elif group_name == '🔍 DNS记录' and len(safe_values) > 1:
+                            # 多条记录时使用换行显示
+                            safe_value = '\n    ◦ ' + '\n    ◦ '.join(safe_values)
+                        else:
+                            # 其他情况使用逗号分隔
+                            safe_value = ', '.join(safe_values)
                     else:
                         safe_value = safe_escape_markdown(value)
                     
@@ -1376,7 +1543,16 @@ def format_whois_result(result: Dict[str, Any]) -> str:
                     
                     if isinstance(value, list):
                         safe_values = [safe_escape_markdown(v) for v in value]
-                        safe_value = ', '.join(safe_values)
+                        
+                        # 为DNS记录做特殊处理（如果在其他信息中）
+                        if '记录' in key and len(safe_values) > 5:
+                            displayed_values = safe_values[:5]
+                            safe_value = '\n    ◦ ' + '\n    ◦ '.join(displayed_values)
+                            safe_value += f"\n    ⋯ *还有 {len(safe_values) - 5} 条记录*"
+                        elif '记录' in key and len(safe_values) > 1:
+                            safe_value = '\n    ◦ ' + '\n    ◦ '.join(safe_values)
+                        else:
+                            safe_value = ', '.join(safe_values)
                     else:
                         safe_value = safe_escape_markdown(value)
                     
@@ -1392,7 +1568,16 @@ def format_whois_result(result: Dict[str, Any]) -> str:
                     
                     if isinstance(value, list):
                         safe_values = [safe_escape_markdown(v) for v in value]
-                        safe_value = ', '.join(safe_values)
+                        
+                        # 为DNS记录做特殊处理（如果在其他信息中）
+                        if '记录' in key and len(safe_values) > 5:
+                            displayed_values = safe_values[:5]
+                            safe_value = '\n    ◦ ' + '\n    ◦ '.join(displayed_values)
+                            safe_value += f"\n    ⋯ *还有 {len(safe_values) - 5} 条记录*"
+                        elif '记录' in key and len(safe_values) > 1:
+                            safe_value = '\n    ◦ ' + '\n    ◦ '.join(safe_values)
+                        else:
+                            safe_value = ', '.join(safe_values)
                     else:
                         safe_value = safe_escape_markdown(value)
                     
@@ -1489,11 +1674,84 @@ async def whois_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             response = format_whois_result(result)
             logger.debug(f"格式化后的响应长度: {len(response)}")
             
-            # 检查消息长度是否超过Telegram限制
+            # 检查消息长度并选择合适的处理方式
             if len(response) > 4000:  # Telegram消息限制约4096字符
-                # 截断过长的消息
-                response = response[:3900] + "\n\n⚠️ 内容过长，已截断显示"
-                logger.warning(f"WHOIS响应过长，已截断。查询: {query}")
+                logger.info(f"WHOIS响应过长({len(response)}字符)，尝试使用Telegraph。查询: {query}")
+                
+                # 创建Telegraph页面
+                query_type = result.get('type', 'unknown')
+                query_obj = result.get('query', query)
+                telegraph_title = f"{query_obj} - {query_type.upper()}查询结果"
+                telegraph_content = format_whois_result_for_telegraph(result)
+                telegraph_url = await create_telegraph_page(telegraph_title, telegraph_content)
+                
+                if telegraph_url:
+                    # 创建简化的Telegram消息，包含Telegraph链接
+                    query_type_map = {
+                        'domain': '🌐 域名',
+                        'ip': '🖥️ IP地址', 
+                        'asn': '🔢 ASN',
+                        'tld': '🏷️ 顶级域名',
+                        'dns': '🔍 DNS记录'
+                    }
+                    query_type_display = query_type_map.get(query_type, '🔍 查询')
+                    source_info = f" \\({safe_escape_markdown(result['source'])}\\)" if result.get('source') else ""
+                    safe_query_obj = safe_escape_markdown(query_obj)
+                    
+                    # 提取一些关键信息显示在消息中
+                    data = result.get('data', {})
+                    key_info_lines = []
+                    
+                    # 根据查询类型显示关键信息
+                    if query_type == 'domain':
+                        if '注册商' in data:
+                            key_info_lines.append(f"• **注册商**: {safe_escape_markdown(str(data['注册商']))}")
+                        if '创建时间' in data:
+                            key_info_lines.append(f"• **创建时间**: {safe_escape_markdown(str(data['创建时间']))}")
+                        if '🌐 A记录' in data:
+                            a_records = data['🌐 A记录']
+                            if isinstance(a_records, list) and a_records:
+                                key_info_lines.append(f"• **A记录**: {safe_escape_markdown(str(a_records[0]))}")
+                    elif query_type == 'ip':
+                        if 'ASN' in data:
+                            key_info_lines.append(f"• **ASN**: {safe_escape_markdown(str(data['ASN']))}")
+                        if '🌍 实际国家' in data:
+                            key_info_lines.append(f"• **国家**: {safe_escape_markdown(str(data['🌍 实际国家']))}")
+                        if '🏙️ 实际城市' in data:
+                            key_info_lines.append(f"• **城市**: {safe_escape_markdown(str(data['🏙️ 实际城市']))}")
+                    elif query_type == 'dns':
+                        record_count = len([k for k in data.keys() if '记录' in k])
+                        key_info_lines.append(f"• **DNS记录类型**: {record_count} 种")
+                    
+                    short_response_lines = [
+                        f"✅ **{query_type_display}查询结果**{source_info}",
+                        "━" * 30,
+                        f"🔍 **查询对象**: `{safe_query_obj}`",
+                        ""
+                    ]
+                    
+                    if key_info_lines:
+                        short_response_lines.append("**📋 关键信息**:")
+                        short_response_lines.extend(key_info_lines)
+                        short_response_lines.append("")
+                    
+                    short_response_lines.extend([
+                        f"📄 **完整查询结果**: 内容较长，已生成Telegraph页面",
+                        f"🔗 **查看完整信息**: {telegraph_url}"
+                    ])
+                    
+                    response = '\n'.join(short_response_lines)
+                    logger.info(f"WHOIS响应已生成Telegraph页面: {telegraph_url}")
+                else:
+                    # Telegraph创建失败，使用foldable text
+                    from utils.formatter import foldable_text_with_markdown_v2
+                    response = foldable_text_with_markdown_v2(response)
+                    logger.warning(f"Telegraph页面创建失败，使用foldable text。查询: {query}")
+                    
+                    # 如果仍然过长，截断
+                    if len(response) > 4000:
+                        response = response[:3900] + "\n\n⚠️ 内容过长，已截断显示"
+                        logger.warning(f"WHOIS响应即使使用foldable text仍过长，已截断。查询: {query}")
             
             await send_message_with_auto_delete(
                 context=context,
@@ -1676,10 +1934,61 @@ async def dns_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             response = format_whois_result(result)
             logger.debug(f"格式化后的响应长度: {len(response)}")
             
-            # 检查消息长度
+            # 检查消息长度并选择合适的处理方式
             if len(response) > 4000:
-                response = response[:3900] + "\n\n⚠️ 内容过长，已截断显示"
-                logger.warning(f"DNS响应过长，已截断。查询: {domain}")
+                logger.info(f"DNS响应过长({len(response)}字符)，尝试使用Telegraph。查询: {domain}")
+                
+                # 创建Telegraph页面
+                telegraph_title = f"{domain} - DNS记录查询结果"
+                telegraph_content = format_whois_result_for_telegraph(result)
+                telegraph_url = await create_telegraph_page(telegraph_title, telegraph_content)
+                
+                if telegraph_url:
+                    # 创建简化的Telegram消息，包含Telegraph链接
+                    safe_domain = safe_escape_markdown(domain)
+                    
+                    # 提取DNS记录概要
+                    data = result.get('data', {})
+                    record_summary = []
+                    record_types = ['A记录', 'AAAA记录', 'MX记录', 'NS记录', 'CNAME记录', 'TXT记录', 'SOA记录', 'PTR记录']
+                    
+                    for record_type in record_types:
+                        if record_type in data:
+                            records = data[record_type]
+                            if isinstance(records, list):
+                                count = len(records)
+                                if count > 0:
+                                    record_summary.append(f"• **{record_type}**: {count} 条")
+                    
+                    short_response_lines = [
+                        f"✅ **🔍 DNS记录查询结果** \\(dnspython\\)",
+                        "━" * 30,
+                        f"🔍 **查询对象**: `{safe_domain}`",
+                        ""
+                    ]
+                    
+                    if record_summary:
+                        short_response_lines.append("**📋 记录概要**:")
+                        short_response_lines.extend(record_summary)
+                        short_response_lines.append("")
+                    
+                    short_response_lines.extend([
+                        f"📄 **完整DNS记录**: 内容较长，已生成Telegraph页面",
+                        f"🔗 **查看完整记录**: {telegraph_url}"
+                    ])
+                    
+                    response = '\n'.join(short_response_lines)
+                    logger.info(f"DNS响应已生成Telegraph页面: {telegraph_url}")
+                else:
+                    # Telegraph创建失败，使用foldable text
+                    from utils.formatter import foldable_text_with_markdown_v2
+                    response = foldable_text_with_markdown_v2(response)
+                    logger.warning(f"Telegraph页面创建失败，使用foldable text。查询: {domain}")
+                    
+                    # 如果仍然过长，截断
+                    if len(response) > 4000:
+                        response = response[:3900] + "\n\n⚠️ 内容过长，已截断显示"
+                        logger.warning(f"DNS响应即使使用foldable text仍过长，已截断。查询: {domain}")
             
             await send_message_with_auto_delete(
                 context=context,
