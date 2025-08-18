@@ -131,12 +131,13 @@ async def get_media_details(media_id: int) -> Optional[str]:
         return None
 
 
-async def get_memes(limit: int = 10) -> List[MemeWithDescription]:
+async def get_memes(limit: int = 10, retry_for_description: bool = True) -> List[MemeWithDescription]:
     """
     从 memes.bupt.site 获取随机表情包（包含描述信息）
     
     Args:
         limit: 获取数量 (1-20)
+        retry_for_description: 当limit=1且无描述时是否重试
         
     Returns:
         包含URL和描述的表情包列表
@@ -144,11 +145,38 @@ async def get_memes(limit: int = 10) -> List[MemeWithDescription]:
     if not 1 <= limit <= 20:
         raise ValueError("limit must be between 1 and 20")
     
-    # 暂时禁用缓存以确保总是获取最新的描述信息
-    # TODO: 未来可以改进缓存机制来存储完整的MemeWithDescription对象
-    use_cache = False
+    # 智能重试逻辑：当limit=1时，如果没有获取到描述，重试几次
+    max_retries = 3 if (limit == 1 and retry_for_description) else 1
     
-    # 检查缓存（暂时禁用）
+    for attempt in range(max_retries):
+        if attempt > 0:
+            logger.info(f"第 {attempt + 1} 次尝试获取有描述的表情包")
+            
+        result = await _fetch_memes_once(limit)
+        
+        # 如果是单个表情包且启用重试
+        if limit == 1 and retry_for_description and result:
+            if result[0].description:
+                logger.info(f"成功获取到有描述的表情包 (第 {attempt + 1} 次尝试)")
+                return result
+            elif attempt < max_retries - 1:
+                logger.info(f"表情包无描述，将重试获取 (尝试 {attempt + 1}/{max_retries})")
+                continue
+        
+        # 其他情况直接返回
+        return result
+    
+    # 如果所有重试都失败了，返回最后一次的结果
+    logger.warning(f"经过 {max_retries} 次尝试仍未获取到有描述的表情包")
+    return result or []
+
+
+async def _fetch_memes_once(limit: int) -> List[MemeWithDescription]:
+    """单次获取表情包的内部函数"""
+    # 恢复缓存机制
+    use_cache = True
+    
+    # 检查缓存
     cache_key = f"memes_{limit}"
     if _cache_manager and use_cache:
         try:
@@ -156,6 +184,7 @@ async def get_memes(limit: int = 10) -> List[MemeWithDescription]:
             if cached_data:
                 logger.info(f"使用缓存获取 {limit} 个表情包")
                 # 将缓存的URL列表转换为MemeWithDescription对象（无描述信息）
+                # 注意：缓存的数据没有描述信息，但通过重试机制可以获得有描述的表情包
                 return [MemeWithDescription(url=url) for url in cached_data]
         except Exception as e:
             logger.warning(f"缓存读取失败: {e}")
@@ -177,12 +206,16 @@ async def get_memes(limit: int = 10) -> List[MemeWithDescription]:
         
         # 提取图片URL和媒体ID，并获取描述信息
         meme_list = []
+        logger.info(f"API返回 {len(response_model.data)} 个submission")
+        
         for item in response_model.data:
             if (len(item.mediaContentIdList) == 1 
                 and item.mediaContentList[0].dataType == "IMAGE"):
                 media_content = item.mediaContentList[0]
                 media_id = media_content.id
                 url = media_content.dataContent
+                
+                logger.info(f"处理表情包 ID: {media_id}")
                 
                 # 获取详细描述信息
                 description = await get_media_details(media_id)
@@ -193,7 +226,9 @@ async def get_memes(limit: int = 10) -> List[MemeWithDescription]:
                     media_id=media_id
                 ))
         
-        # 缓存结果（暂时禁用以确保总是获取描述信息）
+        logger.info(f"最终获取 {len(meme_list)} 个表情包，其中有描述的: {sum(1 for m in meme_list if m.description)}")
+        
+        # 缓存结果（使用配置的缓存时长）
         if _cache_manager and meme_list and use_cache:
             try:
                 # 为了向后兼容，缓存时只存储URL列表
