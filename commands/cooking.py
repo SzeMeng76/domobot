@@ -300,6 +300,11 @@ async def recipe_search_command(update: Update, context: ContextTypes.DEFAULT_TY
         # 加载菜谱数据
         if not await cooking_service.load_recipes_data():
             await message.edit_text(foldable_text_v2("❌ 无法获取菜谱数据，请稍后重试"), parse_mode="MarkdownV2")
+            # 调度自动删除错误消息
+            from utils.config_manager import get_config
+            config = get_config()
+            await _schedule_auto_delete(context, message.chat_id, message.message_id, 5)  # 错误消息5秒删除
+            await delete_user_command(context, update.message.chat_id, update.message.message_id)
             return
             
         # 搜索菜谱
@@ -307,6 +312,9 @@ async def recipe_search_command(update: Update, context: ContextTypes.DEFAULT_TY
         
         if not results:
             await message.edit_text(foldable_text_v2(f"❌ 未找到关于 '{query}' 的菜谱"), parse_mode="MarkdownV2")
+            # 调度自动删除错误消息
+            await _schedule_auto_delete(context, message.chat_id, message.message_id, 5)  # 错误消息5秒删除
+            await delete_user_command(context, update.message.chat_id, update.message.message_id)
             return
             
         # 创建inline按钮
@@ -348,6 +356,9 @@ async def recipe_search_command(update: Update, context: ContextTypes.DEFAULT_TY
     except Exception as e:
         logger.error(f"搜索菜谱时发生错误: {e}", exc_info=True)
         await message.edit_text(foldable_text_v2(f"❌ 搜索时发生错误: {str(e)}"), parse_mode="MarkdownV2")
+        # 调度自动删除错误消息
+        await _schedule_auto_delete(context, message.chat_id, message.message_id, 5)  # 错误消息5秒删除
+        await delete_user_command(context, update.message.chat_id, update.message.message_id)
 
 async def recipe_category_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """按分类查看菜谱 /recipe_category"""
@@ -371,6 +382,9 @@ async def recipe_category_command(update: Update, context: ContextTypes.DEFAULT_
     try:
         if not await cooking_service.load_recipes_data():
             await message.edit_text(foldable_text_v2("❌ 无法获取分类信息"), parse_mode="MarkdownV2")
+            # 调度自动删除错误消息
+            await _schedule_auto_delete(context, message.chat_id, message.message_id, 5)  # 错误消息5秒删除
+            await delete_user_command(context, update.message.chat_id, update.message.message_id)
             return
             
         # 创建分类按钮 - 4列布局更紧凑
@@ -423,6 +437,9 @@ async def recipe_category_command(update: Update, context: ContextTypes.DEFAULT_
     except Exception as e:
         logger.error(f"加载分类信息时发生错误: {e}", exc_info=True)
         await message.edit_text(foldable_text_v2(f"❌ 加载时发生错误: {str(e)}"), parse_mode="MarkdownV2")
+        # 调度自动删除错误消息
+        await _schedule_auto_delete(context, message.chat_id, message.message_id, 5)  # 错误消息5秒删除
+        await delete_user_command(context, update.message.chat_id, update.message.message_id)
 
 async def _execute_category_search(update: Update, context: ContextTypes.DEFAULT_TYPE, category: str, query: CallbackQuery = None) -> None:
     """执行分类搜索"""
@@ -448,8 +465,12 @@ async def _execute_category_search(update: Update, context: ContextTypes.DEFAULT
             text = foldable_text_v2("❌ 无法获取菜谱数据")
             if query:
                 await query.edit_message_text(text, parse_mode="MarkdownV2")
+                # 调度自动删除错误消息
+                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
             else:
                 await message.edit_text(text, parse_mode="MarkdownV2")
+                # 调度自动删除错误消息
+                await _schedule_auto_delete(context, message.chat_id, message.message_id, 5)
             return
             
         results = cooking_service.get_recipes_by_category(category, limit=10)
@@ -458,8 +479,12 @@ async def _execute_category_search(update: Update, context: ContextTypes.DEFAULT
             text = foldable_text_v2(f"❌ '{category}' 分类下没有找到菜谱")
             if query:
                 await query.edit_message_text(text, parse_mode="MarkdownV2")
+                # 调度自动删除错误消息
+                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
             else:
                 await message.edit_text(text, parse_mode="MarkdownV2")
+                # 调度自动删除错误消息
+                await _schedule_auto_delete(context, message.chat_id, message.message_id, 5)
             return
             
         # 创建inline按钮
@@ -518,12 +543,18 @@ async def recipe_random_command(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         if not await cooking_service.load_recipes_data():
             await message.edit_text(foldable_text_v2("❌ 无法获取菜谱数据"), parse_mode="MarkdownV2")
+            # 调度自动删除错误消息
+            await _schedule_auto_delete(context, message.chat_id, message.message_id, 5)  # 错误消息5秒删除
+            await delete_user_command(context, update.message.chat_id, update.message.message_id)
             return
             
         results = cooking_service.get_random_recipes(count=6)
         
         if not results:
             await message.edit_text(foldable_text_v2("❌ 暂无菜谱数据"), parse_mode="MarkdownV2")
+            # 调度自动删除错误消息
+            await _schedule_auto_delete(context, message.chat_id, message.message_id, 5)  # 错误消息5秒删除
+            await delete_user_command(context, update.message.chat_id, update.message.message_id)
             return
             
         # 创建inline按钮
@@ -556,6 +587,9 @@ async def recipe_random_command(update: Update, context: ContextTypes.DEFAULT_TY
     except Exception as e:
         logger.error(f"随机推荐菜谱时发生错误: {e}", exc_info=True)
         await message.edit_text(foldable_text_v2(f"❌ 推荐时发生错误: {str(e)}"), parse_mode="MarkdownV2")
+        # 调度自动删除错误消息
+        await _schedule_auto_delete(context, message.chat_id, message.message_id, 5)  # 错误消息5秒删除
+        await delete_user_command(context, update.message.chat_id, update.message.message_id)
 
 async def what_to_eat_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """今天吃什么 /what_to_eat"""
@@ -638,8 +672,12 @@ async def _execute_what_to_eat(update: Update, context: ContextTypes.DEFAULT_TYP
             text = foldable_text_v2("❌ 无法获取菜谱数据")
             if query:
                 await query.edit_message_text(text, parse_mode="MarkdownV2")
+                # 调度自动删除错误消息
+                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
             else:
                 await message.edit_text(text, parse_mode="MarkdownV2")
+                # 调度自动删除错误消息
+                await _schedule_auto_delete(context, message.chat_id, message.message_id, 5)
             return
             
         # 智能推荐
@@ -1125,6 +1163,8 @@ async def recipe_detail_callback(update: Update, context: ContextTypes.DEFAULT_T
                     foldable_text_v2("❌ 菜谱信息已过期，请重新搜索"),
                     parse_mode="MarkdownV2"
                 )
+                # 调度自动删除错误消息
+                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
                 return
             
             # 确保数据已加载
@@ -1133,6 +1173,8 @@ async def recipe_detail_callback(update: Update, context: ContextTypes.DEFAULT_T
                     foldable_text_v2("❌ 无法获取菜谱数据"),
                     parse_mode="MarkdownV2"
                 )
+                # 调度自动删除错误消息
+                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
                 return
                 
             # 获取菜谱详情
@@ -1142,6 +1184,8 @@ async def recipe_detail_callback(update: Update, context: ContextTypes.DEFAULT_T
                     foldable_text_v2("❌ 未找到指定菜谱"),
                     parse_mode="MarkdownV2"
                 )
+                # 调度自动删除错误消息
+                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
                 return
                 
             # 格式化详情
@@ -1263,6 +1307,8 @@ async def recipe_random_again_callback(update: Update, context: ContextTypes.DEF
                 foldable_text_v2("❌ 无法获取菜谱数据"),
                 parse_mode="MarkdownV2"
             )
+            # 调度自动删除错误消息
+            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
             return
             
         # 获取新的随机菜谱
@@ -1273,6 +1319,8 @@ async def recipe_random_again_callback(update: Update, context: ContextTypes.DEF
                 foldable_text_v2("❌ 暂无菜谱数据"),
                 parse_mode="MarkdownV2"
             )
+            # 调度自动删除错误消息
+            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
             return
             
         # 创建新的按钮
@@ -1383,6 +1431,8 @@ async def what_to_eat_again_callback(update: Update, context: ContextTypes.DEFAU
                     foldable_text_v2("❌ 无法获取菜谱数据"),
                     parse_mode="MarkdownV2"
                 )
+                # 调度自动删除错误消息
+                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
                 return
                 
             # 重新推荐
@@ -1394,6 +1444,8 @@ async def what_to_eat_again_callback(update: Update, context: ContextTypes.DEFAU
                     foldable_text_v2("❌ 暂无合适的菜谱推荐"),
                     parse_mode="MarkdownV2"
                 )
+                # 调度自动删除错误消息
+                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
                 return
                 
             # 创建新的按钮
@@ -1458,6 +1510,8 @@ async def meal_plan_again_callback(update: Update, context: ContextTypes.DEFAULT
                     foldable_text_v2("❌ 无法获取菜谱数据"),
                     parse_mode="MarkdownV2"
                 )
+                # 调度自动删除错误消息
+                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
                 return
                 
             # 重新智能推荐
@@ -1469,6 +1523,8 @@ async def meal_plan_again_callback(update: Update, context: ContextTypes.DEFAULT
                     foldable_text_v2(f"❌ {recommendation['message']}，请尝试减少限制条件"),
                     parse_mode="MarkdownV2"
                 )
+                # 调度自动删除错误消息
+                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
                 return
                 
             # 创建新的按钮
@@ -1559,6 +1615,8 @@ async def _execute_meal_plan(query_or_update, context: ContextTypes.DEFAULT_TYPE
                 foldable_text_v2("❌ 无法获取菜谱数据"),
                 parse_mode="MarkdownV2"
             )
+            # 调度自动删除错误消息
+            await _schedule_auto_delete(context, query_or_update.message.chat_id, query_or_update.message.message_id, 5)
         else:
             await send_error(context, query_or_update.message.chat_id, foldable_text_v2("❌ 无法获取菜谱数据"))
         return
@@ -1586,6 +1644,8 @@ async def _execute_meal_plan(query_or_update, context: ContextTypes.DEFAULT_TYPE
                 foldable_text_v2(error_text),
                 parse_mode="MarkdownV2"
             )
+            # 调度自动删除错误消息
+            await _schedule_auto_delete(context, query_or_update.message.chat_id, query_or_update.message.message_id, 5)
         else:
             await send_error(context, query_or_update.message.chat_id, foldable_text_v2(error_text))
         return
@@ -1663,6 +1723,8 @@ async def recipe_category_back_callback(update: Update, context: ContextTypes.DE
         
         if not await cooking_service.load_recipes_data():
             await query.edit_message_text(foldable_text_v2("❌ 无法获取分类信息"), parse_mode="MarkdownV2")
+            # 调度自动删除错误消息
+            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
             return
             
         # 创建分类按钮 - 4列布局更紧凑
