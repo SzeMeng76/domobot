@@ -85,6 +85,7 @@ from commands import (
     app_store,
     apple_services,
     bin,
+    cooking,
     crypto,
     disney_plus,
     google_play,
@@ -255,6 +256,7 @@ async def setup_application(application: Application, config) -> None:
     time_command.set_dependencies(cache_manager)
     news.set_dependencies(cache_manager)
     whois.set_dependencies(cache_manager)
+    cooking.set_dependencies(cache_manager)
 
     # 新增：为需要用户缓存的模块注入依赖
     # 这里可以根据实际需要为特定命令模块注入用户缓存管理器
@@ -314,6 +316,14 @@ async def setup_application(application: Application, config) -> None:
         await task_scheduler.add_weekly_cache_cleanup("time", "time", weekday=6, hour=5, minute=0)
         logger.info(" 已配置 时区缓存 每周日UTC 5:00 定时清理")
         cleanup_tasks_added += 1
+
+    # 添加烹饪模块缓存清理（默认开启）
+    try:
+        await task_scheduler.add_weekly_cache_cleanup("cooking", "cooking", weekday=6, hour=5, minute=0)
+        logger.info(" 已配置 烹饪菜谱缓存 每周日UTC 5:00 定时清理")
+        cleanup_tasks_added += 1
+    except Exception as e:
+        logger.warning(f"配置烹饪模块定时清理失败: {e}")
 
     # 启动任务调度器（包含汇率刷新任务）
     task_scheduler.start()
