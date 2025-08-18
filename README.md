@@ -171,6 +171,11 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /what_to_eat 4            # Daily menu for 4 people
 /meal_plan                # Intelligent meal planning (select people count)
 /meal_plan 3 虾 香菜       # Smart meal planning for 3 people, avoiding shrimp and cilantro
+
+# Memes & Entertainment
+/meme 3                  # Get 3 random memes
+/meme 5                  # Get 5 random memes (1-20 range)
+/meme                    # Show help and usage guide
 ```
 
 #### Whitelist-Only Commands

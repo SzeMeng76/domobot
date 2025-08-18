@@ -98,6 +98,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 推荐: `/what_to_eat` - 今天吃什么 | `/meal_plan` - 智能膳食规划
 发现: `/recipe_random` - 随机菜谱 | 支持过敏&忌口设置
 
+🎭 *表情包娱乐*
+随机: `/meme <数量>` - 获取1-20个随机表情包 | 自动删除 | 智能缓存
+
 🌍 *支持地区* US CN TR IN MY JP GB DE 等40+国家
 💡 *特色* 支持中文地名 | 自动CNY转换 | 时区智能识别 | 新闻分类 | 1000+中文菜谱
 
@@ -158,6 +161,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 📰 新闻聚合 `/news` `/newslist` `/hotnews`
 🌐 WHOIS&DNS查询 `/whois` `/dns` - 域名/IP/ASN/TLD+DNS记录
 🍳 烹饪助手 `/recipe` `/what_to_eat` `/meal_plan`
+🎭 表情包娱乐 `/meme` - 随机表情包获取
 
 🚀 *试试看*
 `/nf` - Netflix全球价格
@@ -175,7 +179,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 `/what_to_eat` - 今天吃什么
 `/help` - 查看详细功能
 
-🌟 支持40+国家 | 自动CNY转换 | 中文地名 | 时区智能识别 | 新闻分类 | 1000+中文菜谱
+🌟 支持40+国家 | 自动CNY转换 | 中文地名 | 时区智能识别 | 新闻分类 | 1000+中文菜谱 | 随机表情包
 
 🔧 命令不显示? 试试 `/refresh` 刷新命令列表"""
     else:
