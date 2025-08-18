@@ -152,7 +152,9 @@ async def get_memes(limit: int = 10, retry_for_description: bool = True) -> List
         if attempt > 0:
             logger.info(f"第 {attempt + 1} 次尝试获取有描述的表情包")
             
-        result = await _fetch_memes_once(limit)
+        # 重试时跳过缓存，确保获取不同的表情包
+        use_cache_for_retry = (attempt == 0)  # 只有第一次尝试使用缓存
+        result = await _fetch_memes_once(limit, use_cache_for_retry)
         
         # 如果是单个表情包且启用重试
         if limit == 1 and retry_for_description and result:
@@ -171,12 +173,10 @@ async def get_memes(limit: int = 10, retry_for_description: bool = True) -> List
     return result or []
 
 
-async def _fetch_memes_once(limit: int) -> List[MemeWithDescription]:
+async def _fetch_memes_once(limit: int, use_cache: bool = True) -> List[MemeWithDescription]:
     """单次获取表情包的内部函数"""
-    # 恢复缓存机制
-    use_cache = True
     
-    # 检查缓存
+    # 检查缓存（只有在use_cache=True时才使用）
     cache_key = f"memes_{limit}"
     if _cache_manager and use_cache:
         try:
@@ -190,7 +190,7 @@ async def _fetch_memes_once(limit: int) -> List[MemeWithDescription]:
             logger.warning(f"缓存读取失败: {e}")
     
     try:
-        logger.info(f"从 memes API 获取 {limit} 个表情包")
+        logger.info(f"从 memes API 获取 {limit} 个表情包 (缓存: {'启用' if use_cache else '禁用'})")
         url = urljoin(BASE_URL, "submission")
         
         response = await _httpx_client.get(
@@ -228,7 +228,7 @@ async def _fetch_memes_once(limit: int) -> List[MemeWithDescription]:
         
         logger.info(f"最终获取 {len(meme_list)} 个表情包，其中有描述的: {sum(1 for m in meme_list if m.description)}")
         
-        # 缓存结果（使用配置的缓存时长）
+        # 缓存结果（使用配置的缓存时长，但只在use_cache=True时缓存）
         if _cache_manager and meme_list and use_cache:
             try:
                 # 为了向后兼容，缓存时只存储URL列表
