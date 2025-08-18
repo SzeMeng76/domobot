@@ -42,6 +42,21 @@ def set_dependencies(cm, hc=None):
         from utils.http_client import get_http_client
         httpx_client = get_http_client()
 
+async def _schedule_auto_delete(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, delay: int):
+    """调度自动删除消息"""
+    try:
+        if context and hasattr(context, "bot_data"):
+            scheduler = context.bot_data.get("message_delete_scheduler")
+            if scheduler and hasattr(scheduler, "schedule_deletion"):
+                await scheduler.schedule_deletion(chat_id, message_id, delay, None)
+                logger.debug(f"已调度菜谱消息删除: chat_id={chat_id}, message_id={message_id}, delay={delay}s")
+            else:
+                logger.warning(f"消息删除调度器未正确初始化: scheduler={scheduler}")
+        else:
+            logger.warning("无法获取bot_data或context")
+    except Exception as e:
+        logger.error(f"调度自动删除失败: {e}")
+
 def get_short_recipe_id(full_recipe_id: str) -> str:
     """获取短菜谱ID用于callback_data"""
     global recipe_id_mapping, mapping_counter
@@ -803,6 +818,8 @@ def format_recipe_detail(recipe: Dict[str, Any]) -> str:
                 desc_lines.append(line)
         if desc_lines:
             description = ' '.join(desc_lines[:2])  # 取前两行作为描述
+            if description.strip() == "--":
+                description = "暂无描述"
         else:
             description = "暂无描述"
     else:
@@ -878,7 +895,7 @@ def format_recipe_detail(recipe: Dict[str, Any]) -> str:
             step_num = step.get('step', len(steps_list) + 1)
             description = (step.get('description') or '').strip()
             
-            if description:
+            if description and description != "--":
                 steps_list.append(f"{step_num}. {description}")
         elif isinstance(step, str):
             # 如果步骤是字符串格式
@@ -927,7 +944,7 @@ async def create_telegraph_page(title: str, content: str) -> Optional[str]:
         # 创建Telegraph账户
         account_data = {
             "short_name": "CookingBot",
-            "author_name": "MengBot Cooking",
+            "author_name": "DomoBot Cooking",
             "author_url": "https://t.me/mengpricebot"
         }
         
@@ -1046,7 +1063,7 @@ def format_recipe_for_telegraph(recipe: Dict[str, Any]) -> str:
         if isinstance(step, dict):
             step_num = step.get('step', len(steps_list) + 1)
             description = (step.get('description') or '').strip()
-            if description:
+            if description and description != "--":
                 steps_list.append(f"{step_num}. {description}")
         elif isinstance(step, str):
             step_text = step.strip()
@@ -1085,7 +1102,7 @@ def format_recipe_for_telegraph(recipe: Dict[str, Any]) -> str:
 {tags_text}
 
 ---
-来源: MengBot 烹饪助手"""
+来源: DomoBot 烹饪助手"""
     
     return content
 
@@ -1201,6 +1218,11 @@ async def recipe_detail_callback(update: Update, context: ContextTypes.DEFAULT_T
                         text=foldable_text_with_markdown_v2(short_text),
                         parse_mode="MarkdownV2"
                     )
+                    
+                    # 调度自动删除
+                    from utils.config_manager import get_config
+                    config = get_config()
+                    await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
                 else:
                     # Telegraph发布失败，发送截断的消息
                     await query.edit_message_text(
@@ -1213,6 +1235,11 @@ async def recipe_detail_callback(update: Update, context: ContextTypes.DEFAULT_T
                     text=foldable_text_with_markdown_v2(detail_text),
                     parse_mode="MarkdownV2"
                 )
+                
+                # 调度自动删除
+                from utils.config_manager import get_config
+                config = get_config()
+                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
             
     except Exception as e:
         logger.error(f"处理菜谱详情回调时发生错误: {e}", exc_info=True)
