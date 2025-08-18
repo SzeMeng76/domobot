@@ -23,14 +23,24 @@ logger = logging.getLogger(__name__)
 # 全局变量
 cache_manager = None
 
+# Telegraph 相关配置
+TELEGRAPH_API_URL = "https://api.telegra.ph"
+httpx_client = None
+
 # ID映射缓存 - 用于解决callback_data长度限制
 recipe_id_mapping = {}
 mapping_counter = 0
 
-def set_dependencies(cm):
+def set_dependencies(cm, hc=None):
     """初始化依赖"""
-    global cache_manager
+    global cache_manager, httpx_client
     cache_manager = cm
+    if hc:
+        httpx_client = hc
+    else:
+        # 创建默认的httpx客户端
+        from utils.http_client import get_http_client
+        httpx_client = get_http_client()
 
 def get_short_recipe_id(full_recipe_id: str) -> str:
     """获取短菜谱ID用于callback_data"""
@@ -783,7 +793,19 @@ def format_recipe_detail(recipe: Dict[str, Any]) -> str:
         name = "未知菜谱"
         
     description = recipe.get("description", "")
-    if not description or description.strip() == "":
+    if description and description.strip():
+        # 从 markdown 内容中提取实际描述
+        lines = description.split('\n')
+        desc_lines = []
+        for line in lines:
+            line = line.strip()
+            if line and not line.startswith('#') and not line.startswith('预估烹饪难度'):
+                desc_lines.append(line)
+        if desc_lines:
+            description = ' '.join(desc_lines[:2])  # 取前两行作为描述
+        else:
+            description = "暂无描述"
+    else:
         description = "暂无描述"
         
     category = recipe.get("category", "其他")
@@ -815,26 +837,30 @@ def format_recipe_detail(recipe: Dict[str, Any]) -> str:
             text_quantity = (ing.get('text_quantity') or '').strip()
             notes = (ing.get('notes') or '').strip()
             
-            if not ing_name:
+            if not ing_name or ing_name == "--":
                 continue
                 
             # 构建食材显示文本
-            parts = []
-            
-            # 优先使用text_quantity，因为它是格式化好的
             if text_quantity:
-                parts.append(text_quantity)
-            elif quantity and unit:
-                parts.append(f"{quantity}{unit}")
-            elif quantity:
-                parts.append(str(quantity))
+                # text_quantity 已经是格式化好的完整文本，直接使用
+                ingredient_text = text_quantity.strip()
+                if ingredient_text.startswith('- '):
+                    ingredient_text = ingredient_text[2:]  # 移除"- "前缀
+                ingredients_list.append(f"• {ingredient_text}")
+            else:
+                # 手动构建食材文本
+                parts = []
+                if quantity and unit:
+                    parts.append(f"{quantity}{unit}")
+                elif quantity:
+                    parts.append(str(quantity))
+                    
+                parts.append(ing_name)
                 
-            parts.append(ing_name)
-            
-            if notes:
-                parts.append(f"({notes})")
-                
-            ingredients_list.append(f"• {' '.join(parts)}")
+                if notes:
+                    parts.append(f"({notes})")
+                    
+                ingredients_list.append(f"• {' '.join(parts)}")
         elif isinstance(ing, str):
             # 如果食材是字符串格式
             ingredients_list.append(f"• {ing.strip()}")
@@ -895,6 +921,174 @@ def format_recipe_detail(recipe: Dict[str, Any]) -> str:
     
     return result
 
+async def create_telegraph_page(title: str, content: str) -> Optional[str]:
+    """创建Telegraph页面"""
+    try:
+        # 创建Telegraph账户
+        account_data = {
+            "short_name": "CookingBot",
+            "author_name": "MengBot Cooking",
+            "author_url": "https://t.me/mengpricebot"
+        }
+        
+        response = await httpx_client.post(f"{TELEGRAPH_API_URL}/createAccount", data=account_data)
+        if response.status_code != 200:
+            return None
+            
+        account_info = response.json()
+        if not account_info.get("ok"):
+            return None
+            
+        access_token = account_info["result"]["access_token"]
+        
+        # 创建页面内容
+        page_content = [
+            {
+                "tag": "p",
+                "children": [content]
+            }
+        ]
+        
+        page_data = {
+            "access_token": access_token,
+            "title": title,
+            "content": json.dumps(page_content),
+            "return_content": "true"
+        }
+        
+        response = await httpx_client.post(f"{TELEGRAPH_API_URL}/createPage", data=page_data)
+        if response.status_code != 200:
+            return None
+            
+        page_info = response.json()
+        if not page_info.get("ok"):
+            return None
+            
+        return page_info["result"]["url"]
+    
+    except Exception as e:
+        logger.error(f"创建Telegraph页面失败: {e}")
+        return None
+
+def format_recipe_for_telegraph(recipe: Dict[str, Any]) -> str:
+    """将菜谱格式化为Telegraph友好的格式"""
+    name = recipe.get("name", "未知菜谱")
+    description = recipe.get("description", "")
+    
+    # 处理描述
+    if description and description.strip():
+        lines = description.split('\n')
+        desc_lines = []
+        for line in lines:
+            line = line.strip()
+            if line and not line.startswith('#') and not line.startswith('预估烹饪难度'):
+                desc_lines.append(line)
+        description = '\n\n'.join(desc_lines) if desc_lines else "暂无描述"
+    else:
+        description = "暂无描述"
+    
+    category = recipe.get("category", "其他")
+    difficulty = "★" * max(1, recipe.get("difficulty", 1))
+    servings = recipe.get("servings", 2)
+    
+    # 时间信息
+    prep_time = recipe.get("prep_time") or recipe.get("prep_time_minutes")
+    cook_time = recipe.get("cook_time") or recipe.get("cook_time_minutes") 
+    total_time = recipe.get("total_time") or recipe.get("total_time_minutes")
+    
+    time_info = []
+    if prep_time:
+        time_info.append(f"准备 {prep_time}分钟")
+    if cook_time:
+        time_info.append(f"烹饪 {cook_time}分钟")
+    if total_time:
+        time_info.append(f"总计 {total_time}分钟")
+    time_text = " | ".join(time_info) if time_info else "时间未知"
+    
+    # 完整食材列表
+    ingredients = recipe.get("ingredients", [])
+    ingredients_list = []
+    for ing in ingredients:
+        if isinstance(ing, dict):
+            ing_name = (ing.get('name') or '').strip()
+            text_quantity = (ing.get('text_quantity') or '').strip()
+            notes = (ing.get('notes') or '').strip()
+            
+            if not ing_name or ing_name == "--":
+                continue
+                
+            if text_quantity:
+                ingredient_text = text_quantity.strip()
+                if ingredient_text.startswith('- '):
+                    ingredient_text = ingredient_text[2:]
+                ingredients_list.append(f"• {ingredient_text}")
+            else:
+                quantity = ing.get('quantity')
+                unit = (ing.get('unit') or '').strip()
+                parts = []
+                if quantity and unit:
+                    parts.append(f"{quantity}{unit}")
+                elif quantity:
+                    parts.append(str(quantity))
+                parts.append(ing_name)
+                if notes:
+                    parts.append(f"({notes})")
+                ingredients_list.append(f"• {' '.join(parts)}")
+        elif isinstance(ing, str):
+            ingredients_list.append(f"• {ing.strip()}")
+    
+    ingredients_text = "\n".join(ingredients_list) if ingredients_list else "• 暂无详细食材信息"
+    
+    # 完整制作步骤
+    steps = recipe.get("steps", [])
+    steps_list = []
+    for step in steps:
+        if isinstance(step, dict):
+            step_num = step.get('step', len(steps_list) + 1)
+            description = (step.get('description') or '').strip()
+            if description:
+                steps_list.append(f"{step_num}. {description}")
+        elif isinstance(step, str):
+            step_text = step.strip()
+            if step_text:
+                steps_list.append(f"{len(steps_list) + 1}. {step_text}")
+    
+    steps_text = "\n\n".join(steps_list) if steps_list else "暂无详细制作步骤"
+    
+    # 标签处理
+    tags = recipe.get("tags", [])
+    if isinstance(tags, list):
+        valid_tags = [tag for tag in tags[:10] if tag and str(tag).strip()]
+        tags_text = " ".join([f"#{tag}" for tag in valid_tags]) if valid_tags else "无标签"
+    else:
+        tags_text = "无标签"
+    
+    # 构建Telegraph内容
+    content = f"""{name}
+
+📝 简介
+{description}
+
+📋 基本信息
+• 分类: {category}
+• 难度: {difficulty}
+• 份量: {servings}人份
+• 时间: {time_text}
+
+🥕 所需食材
+{ingredients_text}
+
+👨‍🍳 制作步骤
+{steps_text}
+
+🏷️ 标签
+{tags_text}
+
+---
+来源: MengBot 烹饪助手"""
+    
+    return content
+
 # =============================================================================
 # Callback 处理器
 # =============================================================================
@@ -939,11 +1133,86 @@ async def recipe_detail_callback(update: Update, context: ContextTypes.DEFAULT_T
             # 格式化详情
             detail_text = format_recipe_detail(recipe)
             
-            # 菜谱详情是最终结果，不需要返回按钮，消息会自动删除
-            await query.edit_message_text(
-                text=foldable_text_with_markdown_v2(detail_text),
-                parse_mode="MarkdownV2"
+            # 检查是否需要使用Telegraph（内容长度判断）
+            ingredients = recipe.get("ingredients", [])
+            steps = recipe.get("steps", [])
+            
+            # Telegraph触发条件：食材超过15个或步骤超过10个或总内容长度超过3000字符
+            should_use_telegraph = (
+                len(ingredients) > 15 or 
+                len(steps) > 10 or 
+                len(detail_text) > 3000
             )
+            
+            if should_use_telegraph:
+                # 创建Telegraph页面
+                recipe_name = recipe.get("name", "未知菜谱")
+                telegraph_content = format_recipe_for_telegraph(recipe)
+                telegraph_url = await create_telegraph_page(f"{recipe_name} - 详细制作方法", telegraph_content)
+                
+                if telegraph_url:
+                    # 发送包含Telegraph链接的简短消息
+                    short_detail = format_recipe_detail(recipe)  # 使用截断版本
+                    
+                    # 截断食材和步骤
+                    lines = short_detail.split('\n')
+                    result_lines = []
+                    in_ingredients = False
+                    in_steps = False
+                    ingredient_count = 0
+                    step_count = 0
+                    
+                    for line in lines:
+                        if '🥕 食材:' in line:
+                            in_ingredients = True
+                            in_steps = False
+                            result_lines.append(line)
+                        elif '👨‍🍳 步骤:' in line:
+                            in_ingredients = False
+                            in_steps = True
+                            if ingredient_count >= 10:
+                                result_lines.append(f"• ... 等{len(ingredients)}种食材")
+                            result_lines.append(line)
+                        elif '🏷️ 标签:' in line:
+                            in_ingredients = False
+                            in_steps = False
+                            if step_count >= 5:
+                                result_lines.append(f"{step_count + 1}. ... 等{len(steps)}个步骤")
+                            result_lines.append("")
+                            result_lines.append(f"📄 **完整制作方法**: 由于内容较长，已生成Telegraph页面")
+                            result_lines.append(f"🔗 **查看完整菜谱**: {telegraph_url}")
+                            result_lines.append("")
+                            result_lines.append(line)
+                        else:
+                            if in_ingredients and line.startswith('• '):
+                                ingredient_count += 1
+                                if ingredient_count <= 10:
+                                    result_lines.append(line)
+                            elif in_steps and line.strip() and not line.startswith('🏷️'):
+                                step_count += 1
+                                if step_count <= 5:
+                                    result_lines.append(line)
+                            else:
+                                result_lines.append(line)
+                    
+                    short_text = '\n'.join(result_lines)
+                    
+                    await query.edit_message_text(
+                        text=foldable_text_with_markdown_v2(short_text),
+                        parse_mode="MarkdownV2"
+                    )
+                else:
+                    # Telegraph发布失败，发送截断的消息
+                    await query.edit_message_text(
+                        text=foldable_text_with_markdown_v2(detail_text[:4000] + "...\n\n❌ 内容过长，Telegraph页面创建失败"),
+                        parse_mode="MarkdownV2"
+                    )
+            else:
+                # 内容不长，直接显示
+                await query.edit_message_text(
+                    text=foldable_text_with_markdown_v2(detail_text),
+                    parse_mode="MarkdownV2"
+                )
             
     except Exception as e:
         logger.error(f"处理菜谱详情回调时发生错误: {e}", exc_info=True)

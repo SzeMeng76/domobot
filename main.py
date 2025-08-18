@@ -256,7 +256,7 @@ async def setup_application(application: Application, config) -> None:
     time_command.set_dependencies(cache_manager)
     news.set_dependencies(cache_manager)
     whois.set_dependencies(cache_manager)
-    cooking.set_dependencies(cache_manager)
+    cooking.set_dependencies(cache_manager, httpx_client)
 
     # 新增：为需要用户缓存的模块注入依赖
     # 这里可以根据实际需要为特定命令模块注入用户缓存管理器
