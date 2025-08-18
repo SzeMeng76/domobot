@@ -357,11 +357,12 @@ command_factory.register_command(
     description="获取随机表情包 (需要参数)"
 )
 
-command_factory.register_command(
-    "memes_cleancache",
-    memes_clean_cache_command,
-    permission=Permission.ADMIN,
-    description="清理表情包缓存"
-)
+# 已迁移到统一缓存管理命令 /cleancache
+# command_factory.register_command(
+#     "memes_cleancache",
+#     memes_clean_cache_command,
+#     permission=Permission.ADMIN,
+#     description="清理表情包缓存"
+# )
 
 logger.info("表情包命令模块已加载")

@@ -745,12 +745,13 @@ async def news_clean_cache_command(update: Update, context: ContextTypes.DEFAULT
             await delete_user_command(context, update.effective_chat.id, update.message.message_id)
 
 
+# 已迁移到统一缓存管理命令 /cleancache
 # 注册缓存清理命令
-command_factory.register_command(
-    "news_cleancache", 
-    news_clean_cache_command, 
-    permission=Permission.ADMIN, 
-    description="清理新闻缓存"
-)
+# command_factory.register_command(
+#     "news_cleancache", 
+#     news_clean_cache_command, 
+#     permission=Permission.ADMIN, 
+#     description="清理新闻缓存"
+# )
 
 logger.info("新闻命令模块已加载")

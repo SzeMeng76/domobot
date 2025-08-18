@@ -85,6 +85,7 @@ from commands import (
     app_store,
     apple_services,
     bin,
+    cache_manager_command,
     cooking,
     crypto,
     disney_plus,

@@ -212,6 +212,7 @@ command_factory.register_command(
     permission=Permission.USER,
     description="查询加密货币价格，例如 /crypto btc 0.5 usd"
 )
-command_factory.register_command(
-    "crypto_cleancache", crypto_clean_cache_command, permission=Permission.ADMIN, description="清理加密货币缓存"
-)
+# 已迁移到统一缓存管理命令 /cleancache
+# command_factory.register_command(
+#     "crypto_cleancache", crypto_clean_cache_command, permission=Permission.ADMIN, description="清理加密货币缓存"
+# )
