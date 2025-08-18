@@ -91,6 +91,7 @@ async def get_media_details(media_id: int) -> Optional[str]:
         描述信息（优先级：sharpReview > llmDescription > None）
     """
     try:
+        logger.debug(f"获取媒体 {media_id} 的详细信息")
         url = urljoin(BASE_URL, f"media/{media_id}")
         
         response = await _httpx_client.get(
@@ -102,19 +103,27 @@ async def get_media_details(media_id: int) -> Optional[str]:
         
         # 解析响应
         response_data = response.json()
+        logger.debug(f"媒体 {media_id} API响应状态: {response_data.get('status')}")
+        
         if response_data.get("status") != 200:
+            logger.warning(f"媒体 {media_id} API返回非200状态: {response_data}")
             return None
         
         media_data = response_data.get("data", {})
         sharp_review = media_data.get("sharpReview")
         llm_description = media_data.get("llmDescription")
         
+        logger.debug(f"媒体 {media_id} - sharpReview: {bool(sharp_review)}, llmDescription: {bool(llm_description)}")
+        
         # 按优先级返回描述（与前端逻辑一致）
         if sharp_review and sharp_review.strip():
+            logger.debug(f"媒体 {media_id} 使用sharpReview")
             return sharp_review.strip()
         elif llm_description and llm_description.strip():
+            logger.debug(f"媒体 {media_id} 使用llmDescription")
             return llm_description.strip()
         else:
+            logger.debug(f"媒体 {media_id} 没有可用的描述信息")
             return None
             
     except Exception as e:
@@ -135,9 +144,13 @@ async def get_memes(limit: int = 10) -> List[MemeWithDescription]:
     if not 1 <= limit <= 20:
         raise ValueError("limit must be between 1 and 20")
     
-    # 检查缓存
+    # 暂时禁用缓存以确保总是获取最新的描述信息
+    # TODO: 未来可以改进缓存机制来存储完整的MemeWithDescription对象
+    use_cache = False
+    
+    # 检查缓存（暂时禁用）
     cache_key = f"memes_{limit}"
-    if _cache_manager:
+    if _cache_manager and use_cache:
         try:
             cached_data = await _cache_manager.load_cache(cache_key, subdirectory="memes")
             if cached_data:
@@ -180,8 +193,8 @@ async def get_memes(limit: int = 10) -> List[MemeWithDescription]:
                     media_id=media_id
                 ))
         
-        # 缓存结果（使用配置的缓存时长）
-        if _cache_manager and meme_list:
+        # 缓存结果（暂时禁用以确保总是获取描述信息）
+        if _cache_manager and meme_list and use_cache:
             try:
                 # 为了向后兼容，缓存时只存储URL列表
                 cache_urls = [meme.url for meme in meme_list]
