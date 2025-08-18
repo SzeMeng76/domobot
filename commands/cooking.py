@@ -275,7 +275,7 @@ async def recipe_search_command(update: Update, context: ContextTypes.DEFAULT_TY
 
 📋 可用分类: 荤菜、素菜、主食、汤羹、水产、早餐、甜品等
         """
-        await send_success(context, update.message.chat_id, foldable_text_with_markdown_v2(help_text))
+        await send_success(context, update.message.chat_id, foldable_text_v2(help_text))
         await delete_user_command(context, update.message.chat_id, update.message.message_id)
         return
         
@@ -918,7 +918,7 @@ async def create_telegraph_page(title: str, content: str) -> Optional[str]:
         # 创建Telegraph账户
         account_data = {
             "short_name": "CookingBot",
-            "author_name": "MengBot Cooking",
+            "author_name": "DomoBot Cooking",
             "author_url": "https://t.me/mengpricebot"
         }
         
@@ -1076,7 +1076,7 @@ def format_recipe_for_telegraph(recipe: Dict[str, Any]) -> str:
 {tags_text}
 
 ---
-来源: MengBot 烹饪助手"""
+来源: DomoBot 烹饪助手"""
     
     return content
 
