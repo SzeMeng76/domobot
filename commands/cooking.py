@@ -681,19 +681,34 @@ async def meal_plan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
         
     if not context.args:
-        help_text = """🧩 智能膳食推荐
-
-使用方法:
-/meal_plan 人数 [过敏原] [忌口食材]
-
-示例:
-• /meal_plan 3 - 为3人推荐
-• /meal_plan 4 虾 蟹 - 4人，对虾蟹过敏
-• /meal_plan 2 花生 香菜 葱 - 2人，过敏花生，忌口香菜葱
-
-系统会根据人数和饮食限制智能推荐合适的菜品组合。
-        """
-        await send_success(context, update.message.chat_id, foldable_text_with_markdown_v2(help_text))
+        # 显示人数选择按钮
+        buttons = [
+            [
+                InlineKeyboardButton("1️⃣ 1人", callback_data="meal_plan_select:1"),
+                InlineKeyboardButton("2️⃣ 2人", callback_data="meal_plan_select:2"),
+                InlineKeyboardButton("3️⃣ 3人", callback_data="meal_plan_select:3")
+            ],
+            [
+                InlineKeyboardButton("4️⃣ 4人", callback_data="meal_plan_select:4"),
+                InlineKeyboardButton("5️⃣ 5人", callback_data="meal_plan_select:5"),
+                InlineKeyboardButton("6️⃣ 6人", callback_data="meal_plan_select:6")
+            ],
+            [
+                InlineKeyboardButton("7️⃣ 7人", callback_data="meal_plan_select:7"),
+                InlineKeyboardButton("8️⃣ 8人", callback_data="meal_plan_select:8"),
+                InlineKeyboardButton("🔟 更多", callback_data="meal_plan_select:10")
+            ]
+        ]
+        
+        reply_markup = InlineKeyboardMarkup(buttons)
+        text = "🧩 智能膳食推荐\n\n请选择用餐人数:"
+        
+        await context.bot.send_message(
+            chat_id=update.message.chat_id,
+            text=foldable_text_v2(text),
+            parse_mode="MarkdownV2",
+            reply_markup=reply_markup
+        )
         await delete_user_command(context, update.message.chat_id, update.message.message_id)
         return
         
@@ -729,49 +744,8 @@ async def meal_plan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     )
     
     try:
-        if not await cooking_service.load_recipes_data():
-            await message.edit_text(foldable_text_v2("❌ 无法获取菜谱数据"), parse_mode="MarkdownV2")
-            return
-            
-        # 智能推荐
-        recommendation = cooking_service.recommend_meals(people_count, allergies, avoid_items)
-        dishes = recommendation["dishes"]
-        
-        if not dishes:
-            await message.edit_text(
-                foldable_text_v2(f"❌ {recommendation['message']}，请尝试减少限制条件"),
-                parse_mode="MarkdownV2"
-            )
-            return
-            
-        # 创建inline按钮
-        keyboard = []
-        for dish in dishes:
-            dish_name = dish.get("name", "未知菜谱")
-            dish_id = dish.get("id", "")
-            short_id = get_short_recipe_id(dish_id)
-            category = dish.get("category", "")
-            difficulty = "★" * dish.get("difficulty", 1)
-            button = InlineKeyboardButton(
-                text=f"🍽️ {dish_name} ({category}) {difficulty}",
-                callback_data=f"recipe_detail:{short_id}"
-            )
-            keyboard.append([button])
-            
-        # 添加重新推荐按钮
-        callback_data = f"meal_plan_again:{people_count}:{','.join(allergies)}:{','.join(avoid_items)}"
-        keyboard.append([InlineKeyboardButton("🔄 重新推荐", callback_data=callback_data)])
-        
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        result_text = f"🧩 智能膳食推荐\n\n{recommendation['message']}{restrictions_text}\n\n请点击查看详细信息:"
-        
-        await message.edit_text(
-            text=foldable_text_with_markdown_v2(result_text),
-            parse_mode="MarkdownV2",
-            reply_markup=reply_markup
-        )
-        
+        # 使用统一的逻辑处理
+        await _execute_meal_plan(message, context, people_count, allergies, avoid_items)
         await delete_user_command(context, update.message.chat_id, update.message.message_id)
         
     except Exception as e:
@@ -1520,6 +1494,110 @@ async def meal_plan_again_callback(update: Update, context: ContextTypes.DEFAULT
         except:
             pass
 
+async def meal_plan_select_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理智能膳食推荐人数选择"""
+    query = update.callback_query
+    await query.answer()
+    
+    if not query or not query.data:
+        return
+        
+    try:
+        callback_data = query.data
+        if callback_data.startswith("meal_plan_select:"):
+            people_count = int(callback_data.replace("meal_plan_select:", ""))
+            
+            # 更新消息显示加载中
+            loading_text = f"🧩 正在为 {people_count} 人生成智能膳食推荐... ⏳"
+            await query.edit_message_text(
+                text=foldable_text_v2(loading_text),
+                parse_mode="MarkdownV2"
+            )
+            
+            # 执行智能膳食推荐逻辑
+            await _execute_meal_plan(query, context, people_count, [], [])
+            
+    except Exception as e:
+        logger.error(f"处理智能膳食推荐人数选择回调时发生错误: {e}", exc_info=True)
+        try:
+            await query.edit_message_text(
+                foldable_text_v2(f"❌ 处理请求时发生错误: {str(e)}"),
+                parse_mode="MarkdownV2"
+            )
+        except Exception as e:
+            logger.warning(f"发送错误提示失败: {e}")
+
+async def _execute_meal_plan(query_or_update, context: ContextTypes.DEFAULT_TYPE, people_count: int, allergies: List[str], avoid_items: List[str]):
+    """执行智能膳食推荐的核心逻辑"""
+    # 确保数据已加载
+    if not await cooking_service.load_recipes_data():
+        if hasattr(query_or_update, 'edit_message_text'):
+            await query_or_update.edit_message_text(
+                foldable_text_v2("❌ 无法获取菜谱数据"),
+                parse_mode="MarkdownV2"
+            )
+        else:
+            await send_error(context, query_or_update.message.chat_id, foldable_text_v2("❌ 无法获取菜谱数据"))
+        return
+        
+    # 生成推荐
+    recommendation = cooking_service.recommend_meals(people_count, allergies, avoid_items)
+    
+    # 限制条件文本
+    restrictions_text = ""
+    if allergies or avoid_items:
+        parts = []
+        if allergies:
+            parts.append(f"过敏: {', '.join(allergies)}")
+        if avoid_items:
+            parts.append(f"忌口: {', '.join(avoid_items)}")
+        restrictions_text = f"\n限制条件: {' | '.join(parts)}"
+    
+    # 获取推荐的菜品
+    dishes = recommendation.get("dishes", [])
+    
+    if not dishes:
+        error_text = f"❌ {recommendation.get('message', '未找到合适的菜谱')}，请尝试减少限制条件"
+        if hasattr(query_or_update, 'edit_message_text'):
+            await query_or_update.edit_message_text(
+                foldable_text_v2(error_text),
+                parse_mode="MarkdownV2"
+            )
+        else:
+            await send_error(context, query_or_update.message.chat_id, foldable_text_v2(error_text))
+        return
+    
+    # 创建菜谱详情按钮
+    keyboard = []
+    for dish in dishes:
+        dish_id = dish.get('id', dish.get('name', ''))
+        short_id = get_short_recipe_id(dish_id)
+        category = dish.get('category', '其他')
+        difficulty = "★" * dish.get("difficulty", 1)
+        button_text = f"🍽️ {dish['name']} ({category}) {difficulty}"
+        keyboard.append([InlineKeyboardButton(button_text, callback_data=f"recipe_detail:{short_id}")])
+    
+    # 添加重新推荐按钮
+    keyboard.append([InlineKeyboardButton("🔄 重新推荐", callback_data=f"meal_plan_again:{people_count}:{','.join(allergies)}:{','.join(avoid_items)}")])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    result_text = f"🧩 智能膳食推荐\n\n{recommendation['message']}{restrictions_text}\n\n请点击查看详细信息:"
+    
+    if hasattr(query_or_update, 'edit_message_text'):
+        await query_or_update.edit_message_text(
+            text=foldable_text_with_markdown_v2(result_text),
+            parse_mode="MarkdownV2",
+            reply_markup=reply_markup
+        )
+    else:
+        await context.bot.send_message(
+            chat_id=query_or_update.message.chat_id,
+            text=foldable_text_with_markdown_v2(result_text),
+            parse_mode="MarkdownV2",
+            reply_markup=reply_markup
+        )
+
 # back_to_search_callback 已删除，因为菜谱详情是最终结果，消息会自动删除
 
 # =============================================================================
@@ -1540,4 +1618,5 @@ command_factory.register_callback(r"^recipe_random_again$", recipe_random_again_
 command_factory.register_callback(r"^recipe_category_select:", recipe_category_select_callback, permission=Permission.NONE, description="选择菜谱分类")
 command_factory.register_callback(r"^what_to_eat_select:", what_to_eat_select_callback, permission=Permission.NONE, description="选择用餐人数")
 command_factory.register_callback(r"^what_to_eat_again:", what_to_eat_again_callback, permission=Permission.NONE, description="重新推荐今日菜单")
+command_factory.register_callback(r"^meal_plan_select:", meal_plan_select_callback, permission=Permission.NONE, description="选择智能膳食推荐人数")
 command_factory.register_callback(r"^meal_plan_again:", meal_plan_again_callback, permission=Permission.NONE, description="重新智能推荐")

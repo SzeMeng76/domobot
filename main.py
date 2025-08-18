@@ -317,13 +317,10 @@ async def setup_application(application: Application, config) -> None:
         logger.info(" 已配置 时区缓存 每周日UTC 5:00 定时清理")
         cleanup_tasks_added += 1
 
-    # 添加烹饪模块缓存清理（默认开启）
-    try:
+    if config.cooking_weekly_cleanup:
         await task_scheduler.add_weekly_cache_cleanup("cooking", "cooking", weekday=6, hour=5, minute=0)
         logger.info(" 已配置 烹饪菜谱缓存 每周日UTC 5:00 定时清理")
         cleanup_tasks_added += 1
-    except Exception as e:
-        logger.warning(f"配置烹饪模块定时清理失败: {e}")
 
     # 启动任务调度器（包含汇率刷新任务）
     task_scheduler.start()
