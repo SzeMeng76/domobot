@@ -777,16 +777,23 @@ async def cooking_clean_cache_command(update: Update, context: ContextTypes.DEFA
 
 def format_recipe_detail(recipe: Dict[str, Any]) -> str:
     """格式化菜谱详情"""
+    # 基本信息
     name = recipe.get("name", "未知菜谱")
-    description = recipe.get("description", "暂无描述")
+    if not name or name.strip() == "":
+        name = "未知菜谱"
+        
+    description = recipe.get("description", "")
+    if not description or description.strip() == "":
+        description = "暂无描述"
+        
     category = recipe.get("category", "其他")
-    difficulty = "★" * recipe.get("difficulty", 1)
+    difficulty = "★" * max(1, recipe.get("difficulty", 1))
     servings = recipe.get("servings", 2)
     
-    # 时间信息
-    prep_time = recipe.get("prep_time_minutes")
-    cook_time = recipe.get("cook_time_minutes")
-    total_time = recipe.get("total_time_minutes")
+    # 时间信息 - 检查多种可能的字段名
+    prep_time = recipe.get("prep_time") or recipe.get("prep_time_minutes")
+    cook_time = recipe.get("cook_time") or recipe.get("cook_time_minutes") 
+    total_time = recipe.get("total_time") or recipe.get("total_time_minutes")
     
     time_info = []
     if prep_time:
@@ -797,51 +804,76 @@ def format_recipe_detail(recipe: Dict[str, Any]) -> str:
         time_info.append(f"总计 {total_time}分钟")
     time_text = " | ".join(time_info) if time_info else "时间未知"
     
-    # 食材列表 - 清理格式
+    # 食材列表 - 按实际JSON结构解析
     ingredients = recipe.get("ingredients", [])
     ingredients_list = []
-    for ing in ingredients[:15]:  # 增加到15个食材
-        name = ing.get('name', '').strip()
-        text_quantity = ing.get('text_quantity', '').strip()
-        
-        # 跳过空的或无效的食材
-        if not name or name == "--":
-            continue
+    for ing in ingredients[:15]:
+        if isinstance(ing, dict):
+            ing_name = ing.get('name', '').strip()
+            quantity = ing.get('quantity')
+            unit = ing.get('unit', '').strip()
+            text_quantity = ing.get('text_quantity', '').strip()
+            notes = ing.get('notes', '').strip()
             
-        if text_quantity and text_quantity != "--":
-            ingredients_list.append(f"• {text_quantity} {name}")
-        else:
-            ingredients_list.append(f"• {name}")
+            if not ing_name:
+                continue
+                
+            # 构建食材显示文本
+            parts = []
+            
+            # 优先使用text_quantity，因为它是格式化好的
+            if text_quantity:
+                parts.append(text_quantity)
+            elif quantity and unit:
+                parts.append(f"{quantity}{unit}")
+            elif quantity:
+                parts.append(str(quantity))
+                
+            parts.append(ing_name)
+            
+            if notes:
+                parts.append(f"({notes})")
+                
+            ingredients_list.append(f"• {' '.join(parts)}")
+        elif isinstance(ing, str):
+            # 如果食材是字符串格式
+            ingredients_list.append(f"• {ing.strip()}")
     
     ingredients_text = "\n".join(ingredients_list) if ingredients_list else "• 暂无详细食材信息"
     
     if len(ingredients) > 15:
         ingredients_text += f"\n• ... 等{len(ingredients)}种食材"
     
-    # 制作步骤 - 修复转义和数据问题
+    # 制作步骤 - 按实际JSON结构解析
     steps = recipe.get("steps", [])
     steps_list = []
-    for i, step in enumerate(steps[:10]):  # 增加到10个步骤
-        step_num = step.get('step', i+1)
-        description = step.get('description', '').strip()
-        
-        # 跳过空的或无效的步骤
-        if not description or description == "--":
-            continue
+    for step in steps[:10]:
+        if isinstance(step, dict):
+            step_num = step.get('step', len(steps_list) + 1)
+            description = step.get('description', '').strip()
             
-        steps_list.append(f"{step_num}. {description}")
+            if description:
+                steps_list.append(f"{step_num}. {description}")
+        elif isinstance(step, str):
+            # 如果步骤是字符串格式
+            step_text = step.strip()
+            if step_text:
+                steps_list.append(f"{len(steps_list) + 1}. {step_text}")
     
     steps_text = "\n".join(steps_list) if steps_list else "暂无详细制作步骤"
     
     if len(steps) > 10:
         steps_text += f"\n... 等{len(steps)}个步骤"
     
-    # 标签 - 过滤无效标签
+    # 标签处理
     tags = recipe.get("tags", [])
-    valid_tags = [tag for tag in tags[:5] if tag and tag.strip() and tag != "--"]
-    tags_text = " ".join([f"#{tag}" for tag in valid_tags]) if valid_tags else "无标签"
+    if isinstance(tags, list):
+        valid_tags = [tag for tag in tags[:5] if tag and str(tag).strip()]
+        tags_text = " ".join([f"#{tag}" for tag in valid_tags]) if valid_tags else "无标签"
+    else:
+        tags_text = "无标签"
     
-    # 构建最终文本，避免手动转义
+    # 构建最终文本
     result = f"""🍽️ {name}
 
 📝 简介: {description}
