@@ -156,7 +156,7 @@ class WhoisService:
         self._python_whois = None
     
     def _import_libraries(self):
-        """延迟导入WHOIS库"""
+        """延迟导入WHOIS和DNS库"""
         try:
             if self._whois21 is None:
                 import whois21
@@ -178,6 +178,16 @@ class WhoisService:
                 self._python_whois = python_whois
         except ImportError:
             logger.warning("python-whois库未安装，域名查询备选方案不可用")
+        
+        try:
+            if not hasattr(self, '_dns'):
+                import dns.resolver
+                import dns.reversename
+                import dns.exception
+                self._dns = dns
+        except ImportError:
+            logger.warning("dnspython库未安装，DNS查询功能不可用")
+            self._dns = None
     
     async def query_domain(self, domain: str) -> Dict[str, Any]:
         """查询域名WHOIS信息"""
@@ -221,10 +231,21 @@ class WhoisService:
                     result['success'] = True
                     result['data'] = self._format_python_whois_data(data)
                     result['source'] = 'python-whois'
-                    return result
             except Exception as e:
                 logger.debug(f"python-whois查询失败: {e}")
                 result['error'] = str(e)
+        
+        # 如果WHOIS查询成功，尝试添加DNS信息
+        if result['success']:
+            try:
+                dns_result = await self.query_dns(domain)
+                if dns_result['success'] and dns_result.get('data'):
+                    # 将DNS数据合并到WHOIS结果中
+                    for key, value in dns_result['data'].items():
+                        result['data'][f'🌐 {key}'] = value
+                    logger.debug(f"已添加DNS信息到域名查询结果")
+            except Exception as e:
+                logger.debug(f"添加DNS信息失败: {e}")
         
         if not result['success']:
             result['error'] = "无法查询域名信息，请检查域名是否有效"
@@ -1123,6 +1144,97 @@ class WhoisService:
         }
         
         return tld_database.get(tld.lower())
+    
+    async def query_dns(self, domain: str) -> Dict[str, Any]:
+        """查询域名DNS记录"""
+        self._import_libraries()
+        
+        result = {
+            'type': 'dns',
+            'query': domain,
+            'success': False,
+            'data': {},
+            'error': None,
+            'source': 'dnspython'
+        }
+        
+        if not self._dns:
+            result['error'] = "DNS查询功能不可用，请安装dnspython库"
+            return result
+        
+        # 清理域名输入
+        domain = domain.lower().strip()
+        if domain.startswith(('http://', 'https://')):
+            domain = domain.split('//', 1)[1].split('/')[0]
+        
+        dns_data = {}
+        
+        # 定义要查询的DNS记录类型
+        record_types = [
+            ('A', 'IPv4地址'),
+            ('AAAA', 'IPv6地址'),
+            ('MX', '邮件服务器'),
+            ('NS', '域名服务器'),
+            ('CNAME', '别名记录'),
+            ('TXT', '文本记录'),
+            ('SOA', '授权开始')
+        ]
+        
+        try:
+            for record_type, description in record_types:
+                try:
+                    answers = await asyncio.to_thread(
+                        self._dns.resolver.resolve, domain, record_type
+                    )
+                    
+                    records = []
+                    for rdata in answers:
+                        if record_type == 'MX':
+                            records.append(f"{rdata.preference} {rdata.exchange}")
+                        elif record_type == 'SOA':
+                            records.append(f"{rdata.mname} {rdata.rname} {rdata.serial}")
+                        else:
+                            records.append(str(rdata))
+                    
+                    if records:
+                        dns_data[f'{record_type}记录'] = records
+                        
+                except self._dns.resolver.NoAnswer:
+                    # 没有该类型的记录，跳过
+                    continue
+                except self._dns.resolver.NXDOMAIN:
+                    # 域名不存在
+                    result['error'] = f"域名 {domain} 不存在"
+                    return result
+                except Exception as e:
+                    logger.debug(f"查询{record_type}记录失败: {e}")
+                    continue
+            
+            # 尝试反向DNS查询（如果有A记录）
+            if 'A记录' in dns_data and dns_data['A记录']:
+                try:
+                    first_ip = dns_data['A记录'][0]
+                    reversed_name = self._dns.reversename.from_address(first_ip)
+                    ptr_answers = await asyncio.to_thread(
+                        self._dns.resolver.resolve, reversed_name, 'PTR'
+                    )
+                    ptr_records = [str(rdata) for rdata in ptr_answers]
+                    if ptr_records:
+                        dns_data['PTR记录'] = ptr_records
+                except Exception as e:
+                    logger.debug(f"反向DNS查询失败: {e}")
+            
+            if dns_data:
+                result['success'] = True
+                result['data'] = dns_data
+            else:
+                result['error'] = f"未找到域名 {domain} 的DNS记录"
+                
+        except Exception as e:
+            logger.error(f"DNS查询失败: {e}")
+            result['error'] = f"DNS查询失败: {str(e)}"
+        
+        return result
 
 def detect_query_type(query: str) -> str:
     """智能检测查询类型"""
@@ -1179,7 +1291,8 @@ def format_whois_result(result: Dict[str, Any]) -> str:
         'domain': '🌐 域名',
         'ip': '🖥️ IP地址', 
         'asn': '🔢 ASN',
-        'tld': '🏷️ 顶级域名'
+        'tld': '🏷️ 顶级域名',
+        'dns': '🔍 DNS记录'
     }
     
     query_type = query_type_map.get(result['type'], '🔍 查询')
@@ -1208,6 +1321,7 @@ def format_whois_result(result: Dict[str, Any]) -> str:
             '📅 时间信息': ['创建时间', '过期时间', '更新时间', '最后更新', '续费时间'],
             '📊 状态信息': ['状态', '域名状态', '选项'],
             '🌐 网络信息': ['DNS服务器', 'ASN', 'ASN描述', 'ASN国家', 'ASN注册机构', '网络名称', 'IP段', '起始地址', '结束地址', '网络国家', '网络类型', 'WHOIS服务器', '国际化域名', 'DNSSEC'],
+            '🔍 DNS记录': ['🌐 A记录', '🌐 AAAA记录', '🌐 MX记录', '🌐 NS记录', '🌐 CNAME记录', '🌐 TXT记录', '🌐 SOA记录', '🌐 PTR记录'],
             '📍 注册位置': ['国家', '地区', '城市', '邮编', '地理坐标'],
             '🌍 实际位置': ['🌍 实际国家', '🏞️ 实际地区', '🏙️ 实际城市', '📮 邮政编码', '📍 坐标', '🕐 时区'],
             '🏢 实际网络': ['🌐 ISP', '🏢 实际组织', '🔢 实际AS'],
@@ -1299,7 +1413,7 @@ async def whois_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 "**使用方法:**\n"
                 "• `/whois <查询内容>` \\- 智能识别并查询\n\n"
                 "**支持查询类型:**\n"
-                "• 🌐 域名: `example\\.com`\n"
+                "• 🌐 域名: `example\\.com` \\(包含DNS记录\\)\n"
                 "• 🖥️ IP地址: `8\\.8\\.8\\.8`\n"
                 "• 🔢 ASN: `AS15169` 或 `15169`\n"
                 "• 🏷️ TLD: `\\.com` 或 `com`\n\n"
@@ -1307,7 +1421,8 @@ async def whois_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 "• `/whois_domain <域名>`\n"
                 "• `/whois_ip <IP地址>`\n"
                 "• `/whois_asn <ASN>`\n"
-                "• `/whois_tld <TLD>`\n\n"
+                "• `/whois_tld <TLD>`\n"
+                "• `/dns <域名>` \\- 仅查询DNS记录\n\n"
                 "**示例:**\n"
                 "• `/whois google\\.com`\n"
                 "• `/whois 1\\.1\\.1\\.1`\n"
@@ -1492,6 +1607,115 @@ async def whois_tld_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     )
     await delete_user_command(context, update.effective_chat.id, update.effective_message.message_id)
 
+async def dns_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """DNS记录查询命令"""
+    try:
+        if not context.args:
+            help_text = (
+                "🔍 **DNS查询帮助**\n\n"
+                "**使用方法:**\n"
+                "• `/dns <域名>` \\- 查询域名的DNS记录\n\n"
+                "**支持的DNS记录类型:**\n"
+                "• 🅰️ A记录 \\- IPv4地址\n"
+                "• 🅰️🅰️🅰️🅰️ AAAA记录 \\- IPv6地址\n"
+                "• 📧 MX记录 \\- 邮件服务器\n"
+                "• 🌐 NS记录 \\- 域名服务器\n"
+                "• 🔗 CNAME记录 \\- 别名记录\n"
+                "• 📄 TXT记录 \\- 文本记录\n"
+                "• 🏛️ SOA记录 \\- 授权开始\n"
+                "• ↩️ PTR记录 \\- 反向DNS\n\n"
+                "**示例:**\n"
+                "• `/dns google\\.com`\n"
+                "• `/dns github\\.com`"
+            )
+            
+            await send_message_with_auto_delete(
+                context=context,
+                chat_id=update.effective_chat.id,
+                text=help_text,
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+            await delete_user_command(
+                context=context,
+                chat_id=update.effective_chat.id,
+                message_id=update.effective_message.message_id
+            )
+            return
+        
+        domain = ' '.join(context.args)
+        
+        # 检查缓存
+        cache_key = f"dns_{domain}"
+        cached_result = None
+        if cache_manager:
+            try:
+                cached_result = await cache_manager.load_cache(cache_key, subdirectory="dns")
+            except Exception as e:
+                logger.debug(f"缓存读取失败: {e}")
+        
+        if cached_result:
+            result = cached_result
+        else:
+            # 执行DNS查询
+            service = WhoisService()
+            result = await service.query_dns(domain)
+            
+            # 缓存结果
+            if cache_manager and result['success']:
+                try:
+                    await cache_manager.save_cache(
+                        cache_key, 
+                        result, 
+                        subdirectory="dns"
+                    )
+                except Exception as e:
+                    logger.debug(f"缓存保存失败: {e}")
+        
+        # 格式化并发送结果
+        try:
+            response = format_whois_result(result)
+            logger.debug(f"格式化后的响应长度: {len(response)}")
+            
+            # 检查消息长度
+            if len(response) > 4000:
+                response = response[:3900] + "\n\n⚠️ 内容过长，已截断显示"
+                logger.warning(f"DNS响应过长，已截断。查询: {domain}")
+            
+            await send_message_with_auto_delete(
+                context=context,
+                chat_id=update.effective_chat.id,
+                text=response,
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+        except Exception as format_error:
+            logger.error(f"格式化或发送响应失败: {format_error}")
+            simple_response = f"✅ DNS查询完成\n查询对象: {domain}\n\n⚠️ 格式化显示时出现问题，请尝试其他查询。"
+            await send_message_with_auto_delete(
+                context=context,
+                chat_id=update.effective_chat.id,
+                text=simple_response,
+                parse_mode=None
+            )
+        
+        await delete_user_command(
+            context=context,
+            chat_id=update.effective_chat.id,
+            message_id=update.effective_message.message_id
+        )
+        
+    except Exception as e:
+        logger.error(f"DNS查询失败: {e}")
+        await send_error(
+            context=context,
+            chat_id=update.effective_chat.id,
+            text="DNS查询失败，请稍后重试"
+        )
+        await delete_user_command(
+            context=context,
+            chat_id=update.effective_chat.id,
+            message_id=update.effective_message.message_id
+        )
+
 async def whois_clean_cache_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """清理WHOIS查询缓存"""
     if not update.message or not update.effective_chat:
@@ -1500,7 +1724,8 @@ async def whois_clean_cache_command(update: Update, context: ContextTypes.DEFAUL
     try:
         if cache_manager:
             await cache_manager.clear_cache(subdirectory="whois")
-            success_message = "✅ WHOIS查询缓存已清理完成。\n\n包括：域名、IP地址、ASN和TLD查询结果。"
+            await cache_manager.clear_cache(subdirectory="dns")
+            success_message = "✅ WHOIS和DNS查询缓存已清理完成。\n\n包括：域名、IP地址、ASN、TLD和DNS查询结果。"
         else:
             success_message = "⚠️ 缓存管理器未初始化。"
         
@@ -1531,9 +1756,10 @@ async def whois_clean_cache_command(update: Update, context: ContextTypes.DEFAUL
         )
 
 # 注册命令
-command_factory.register_command("whois", whois_command, permission=Permission.NONE, description="WHOIS查询（智能识别类型）")
+command_factory.register_command("whois", whois_command, permission=Permission.NONE, description="WHOIS查询（智能识别类型，包含DNS记录）")
 command_factory.register_command("whois_domain", whois_domain_command, permission=Permission.NONE, description="域名WHOIS查询")
 command_factory.register_command("whois_ip", whois_ip_command, permission=Permission.NONE, description="IP地址WHOIS查询")
 command_factory.register_command("whois_asn", whois_asn_command, permission=Permission.NONE, description="ASN WHOIS查询")
 command_factory.register_command("whois_tld", whois_tld_command, permission=Permission.NONE, description="TLD信息查询")
-command_factory.register_command("whois_cleancache", whois_clean_cache_command, permission=Permission.ADMIN, description="清理WHOIS查询缓存")
+command_factory.register_command("dns", dns_command, permission=Permission.NONE, description="DNS记录查询")
+command_factory.register_command("whois_cleancache", whois_clean_cache_command, permission=Permission.ADMIN, description="清理WHOIS和DNS查询缓存")
