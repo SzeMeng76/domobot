@@ -85,6 +85,7 @@ class RedisCacheManager:
             "whois": self.config.whois_cache_duration,  # 6小时，WHOIS查询缓存
             "time": self.config.time_cache_duration,  # 24小时，时区缓存
             "cooking": self.config.cooking_cache_duration,  # 7天，烹饪菜谱缓存
+            "memes": self.config.memes_cache_duration,  # 10分钟，表情包缓存
         }
 
         # 对于搜索结果特殊处理

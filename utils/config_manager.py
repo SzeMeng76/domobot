@@ -63,6 +63,7 @@ class BotConfig:
         self.whois_cache_duration = 3600 * 6  # 6小时，WHOIS查询缓存
         self.time_cache_duration = 86400  # 24小时，时区缓存
         self.cooking_cache_duration = 86400 * 7  # 7天，烹饪菜谱缓存
+        self.memes_cache_duration = 600  # 10分钟，表情包缓存
 
         # 定时清理配置
         self.spotify_weekly_cleanup = True  # 默认启用
@@ -73,6 +74,7 @@ class BotConfig:
         self.whois_weekly_cleanup = True  # 默认启用，WHOIS缓存
         self.time_weekly_cleanup = True  # 默认启用，时区缓存
         self.cooking_weekly_cleanup = True  # 默认启用，烹饪菜谱缓存
+        self.memes_weekly_cleanup = True  # 默认启用，表情包缓存
 
         # API配置
         self.exchange_rate_api_keys = []
@@ -222,6 +224,7 @@ class ConfigManager:
         self.config.news_cache_duration = get_int_env("NEWS_CACHE_DURATION", "86400")
         self.config.whois_cache_duration = get_int_env("WHOIS_CACHE_DURATION", str(3600 * 6))
         self.config.time_cache_duration = get_int_env("TIME_CACHE_DURATION", "86400")
+        self.config.memes_cache_duration = get_int_env("MEMES_CACHE_DURATION", "600")
 
         # 定时清理配置
         self.config.spotify_weekly_cleanup = get_bool_env("SPOTIFY_WEEKLY_CLEANUP")

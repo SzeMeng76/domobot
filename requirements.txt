@@ -41,3 +41,6 @@ python-whois==0.9.5
 
 # DNS Query Library
 dnspython==2.7.0
+
+# Data Validation and Settings Management
+pydantic~=2.11.7
