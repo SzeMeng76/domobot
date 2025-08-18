@@ -944,7 +944,7 @@ async def create_telegraph_page(title: str, content: str) -> Optional[str]:
         # 创建Telegraph账户
         account_data = {
             "short_name": "CookingBot",
-            "author_name": "DomoBot Cooking",
+            "author_name": "MengBot Cooking",
             "author_url": "https://t.me/mengpricebot"
         }
         
@@ -1102,7 +1102,7 @@ def format_recipe_for_telegraph(recipe: Dict[str, Any]) -> str:
 {tags_text}
 
 ---
-来源: DomoBot 烹饪助手"""
+来源: MengBot 烹饪助手"""
     
     return content
 
