@@ -72,7 +72,7 @@ class ResponseModel(BaseModel):
     timestamp: int
 
 
-async def get_memes(limit: int = 10) -> List[dict]:
+async def get_memes(limit: int = 10) -> List[str]:
     """
     从 memes.bupt.site 获取随机表情包
     
@@ -80,7 +80,7 @@ async def get_memes(limit: int = 10) -> List[dict]:
         limit: 获取数量 (1-20)
         
     Returns:
-        表情包信息列表，包含URL和描述
+        表情包图片URL列表
     """
     if not 1 <= limit <= 20:
         raise ValueError("limit must be between 1 and 20")
@@ -111,27 +111,21 @@ async def get_memes(limit: int = 10) -> List[dict]:
         # 使用Pydantic验证响应数据
         response_model = ResponseModel(**response.json())
         
-        # 提取图片URL和描述信息
-        meme_data = []
+        # 提取图片URL
+        meme_urls = []
         for item in response_model.data:
             if (len(item.mediaContentIdList) == 1 
                 and item.mediaContentList[0].dataType == "IMAGE"):
-                media_content = item.mediaContentList[0]
-                meme_info = {
-                    'url': media_content.dataContent,
-                    'description': media_content.llmDescription,
-                    'id': media_content.id
-                }
-                meme_data.append(meme_info)
+                meme_urls.append(item.mediaContentList[0].dataContent)
         
         # 缓存结果（使用配置的缓存时长）
-        if _cache_manager and meme_data:
+        if _cache_manager and meme_urls:
             try:
-                await _cache_manager.save_cache(cache_key, meme_data, subdirectory="memes")
+                await _cache_manager.save_cache(cache_key, meme_urls, subdirectory="memes")
             except Exception as e:
                 logger.warning(f"缓存写入失败: {e}")
         
-        return meme_data
+        return meme_urls
         
     except ValidationError as e:
         logger.error(f"API响应数据格式错误: {e}")
@@ -240,12 +234,12 @@ async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         # 获取表情包
-        meme_data = await get_memes(limit)
+        meme_urls = await get_memes(limit)
         
         # 删除加载提示
         await loading_message.delete()
         
-        if not meme_data:
+        if not meme_urls:
             await send_error(
                 context,
                 update.effective_chat.id,
@@ -253,7 +247,7 @@ async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         else:
             # 发送成功获取的消息
-            success_text = f"🎭 成功获取 {len(meme_data)} 个表情包："
+            success_text = f"🎭 成功获取 {len(meme_urls)} 个表情包："
             await send_success(
                 context,
                 update.effective_chat.id,
@@ -261,20 +255,12 @@ async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             
             # 逐个发送表情包图片
-            for i, meme_info in enumerate(meme_data, 1):
-                url = meme_info['url']
-                description = meme_info.get('description')
-                
-                # 构建caption
-                caption = f"🎭 表情包 {i}/{len(meme_data)}"
-                if description and description.strip():
-                    caption += f"\n💬 {description.strip()}"
-                
+            for i, url in enumerate(meme_urls, 1):
                 try:
                     photo_message = await context.bot.send_photo(
                         chat_id=update.effective_chat.id,
                         photo=url,
-                        caption=caption
+                        caption=f"🎭 表情包 {i}/{len(meme_urls)}"
                     )
                     # 调度自动删除表情包消息
                     try:
@@ -292,14 +278,9 @@ async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 except Exception as e:
                     logger.warning(f"发送表情包 {i} 失败: {e}")
                     try:
-                        # 构建fallback消息
-                        fallback_text = f"🖼️ 表情包 {i}: [点击查看]({url})"
-                        if description and description.strip():
-                            fallback_text += f"\n💬 {description.strip()}"
-                        
                         fallback_message = await context.bot.send_message(
                             chat_id=update.effective_chat.id,
-                            text=fallback_text,
+                            text=f"🖼️ 表情包 {i}: [点击查看]({url})",
                             parse_mode='Markdown'
                         )
                         # 调度自动删除链接消息
@@ -321,7 +302,7 @@ async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.message:
             await delete_user_command(context, update.effective_chat.id, update.message.message_id)
         
-        logger.info(f"成功获取并发送 {len(meme_data)} 个表情包")
+        logger.info(f"成功获取并发送 {len(meme_urls)} 个表情包")
         
     except ValueError as e:
         # 删除加载提示
