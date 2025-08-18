@@ -108,7 +108,10 @@ async def get_memes(limit: int = 10) -> List[dict]:
         
         response = await _httpx_client.get(
             url=url,
-            params={"pageSize": str(limit), "random": "true"},
+            params={
+                "pageSize": str(limit * 3),  # 获取更多数据以增加找到有描述的概率
+                "random": "true"
+            },
             headers={"uuid": "domobot-mcp"},
             timeout=10.0
         )
@@ -116,11 +119,13 @@ async def get_memes(limit: int = 10) -> List[dict]:
         
         # 使用Pydantic验证响应数据
         json_data = response.json()
-        logger.info(f"API响应样例数据: {json_data}")
+        logger.info(f"API返回 {len(json_data.get('data', []))} 个表情包数据")
         response_model = ResponseModel(**json_data)
         
         # 提取图片URL和描述信息
-        meme_data = []
+        all_meme_data = []
+        memes_with_description = []
+        
         for item in response_model.data:
             if (len(item.mediaContentIdList) == 1 
                 and item.mediaContentList[0].dataType == "IMAGE"):
@@ -132,7 +137,25 @@ async def get_memes(limit: int = 10) -> List[dict]:
                 }
                 # 添加调试日志
                 logger.debug(f"Meme {media_content.id}: URL={media_content.dataContent[:50]}..., Description={media_content.llmDescription}")
-                meme_data.append(meme_info)
+                
+                all_meme_data.append(meme_info)
+                # 优先收集有描述的表情包
+                if media_content.llmDescription and media_content.llmDescription.strip():
+                    memes_with_description.append(meme_info)
+        
+        # 优先返回有描述的表情包，不足时用无描述的补充
+        meme_data = []
+        if memes_with_description:
+            meme_data.extend(memes_with_description[:limit])
+            logger.info(f"找到 {len(memes_with_description)} 个有描述的表情包")
+        
+        # 如果有描述的表情包不够，用无描述的补充
+        if len(meme_data) < limit:
+            remaining_needed = limit - len(meme_data)
+            for meme in all_meme_data:
+                if meme not in meme_data and len(meme_data) < limit:
+                    meme_data.append(meme)
+            logger.info(f"总共返回 {len(meme_data)} 个表情包，其中 {len(memes_with_description)} 个有描述")
         
         # 缓存结果（使用配置的缓存时长）
         if _cache_manager and meme_data:
