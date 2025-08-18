@@ -23,10 +23,41 @@ logger = logging.getLogger(__name__)
 # 全局变量
 cache_manager = None
 
+# ID映射缓存 - 用于解决callback_data长度限制
+recipe_id_mapping = {}
+mapping_counter = 0
+
 def set_dependencies(cm):
     """初始化依赖"""
     global cache_manager
     cache_manager = cm
+
+def get_short_recipe_id(full_recipe_id: str) -> str:
+    """获取短菜谱ID用于callback_data"""
+    global recipe_id_mapping, mapping_counter
+    
+    # 查找是否已存在映射
+    for short_id, full_id in recipe_id_mapping.items():
+        if full_id == full_recipe_id:
+            return short_id
+    
+    # 创建新的短ID
+    mapping_counter += 1
+    short_id = str(mapping_counter)
+    recipe_id_mapping[short_id] = full_recipe_id
+    
+    # 清理过多的映射（保持最近1000个）
+    if len(recipe_id_mapping) > 1000:
+        # 删除前100个旧映射
+        old_keys = list(recipe_id_mapping.keys())[:100]
+        for key in old_keys:
+            del recipe_id_mapping[key]
+    
+    return short_id
+
+def get_full_recipe_id(short_recipe_id: str) -> Optional[str]:
+    """根据短ID获取完整菜谱ID"""
+    return recipe_id_mapping.get(short_recipe_id)
 
 class CookingService:
     """烹饪菜谱服务类"""
@@ -208,17 +239,16 @@ async def recipe_search_command(update: Update, context: ContextTypes.DEFAULT_TY
         
     # 检查参数
     if not context.args:
-        help_text = """
-🍳 **菜谱搜索帮助**
+        help_text = """🍳 菜谱搜索帮助
 
-使用方法：
-• `/recipe 红烧肉` - 搜索菜谱
-• `/recipe_category 荤菜` - 按分类查看
-• `/recipe_random` - 随机菜谱
-• `/what_to_eat 4` - 今天吃什么(人数)
-• `/meal_plan 3 虾 香菜` - 智能推荐(人数 过敏原 忌口)
+使用方法:
+• /recipe 红烧肉 - 搜索菜谱
+• /recipe_category 荤菜 - 按分类查看
+• /recipe_random - 随机菜谱  
+• /what_to_eat 4 - 今天吃什么
+• /meal_plan 3 虾 香菜 - 智能推荐
 
-📋 可用分类：荤菜、素菜、主食、汤羹、水产、早餐、甜品等
+📋 可用分类: 荤菜、素菜、主食、汤羹、水产、早餐、甜品等
         """
         await send_success(context, update.message.chat_id, foldable_text_with_markdown_v2(help_text))
         await delete_user_command(context, update.message.chat_id, update.message.message_id)
@@ -252,15 +282,16 @@ async def recipe_search_command(update: Update, context: ContextTypes.DEFAULT_TY
         for i, recipe in enumerate(results[:8]):  # 限制8个按钮
             recipe_name = recipe.get("name", "未知菜谱")
             recipe_id = recipe.get("id", str(i))
+            short_id = get_short_recipe_id(recipe_id)
             button = InlineKeyboardButton(
                 text=f"🍽️ {recipe_name}",
-                callback_data=f"recipe_detail:{recipe_id}"
+                callback_data=f"recipe_detail:{short_id}"
             )
             keyboard.append([button])
             
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        result_text = f"🔍 **搜索结果** ({len(results)} 个菜谱)\n\n请点击下方按钮查看详细信息："
+        result_text = f"🔍 搜索结果 ({len(results)} 个菜谱)\n\n请点击下方按钮查看详细信息:"
         
         await message.edit_text(
             text=foldable_text_with_markdown_v2(result_text),
@@ -341,7 +372,7 @@ async def recipe_category_command(update: Update, context: ContextTypes.DEFAULT_
             
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        help_text = "📋 **菜谱分类**\n\n请选择要查看的分类："
+        help_text = "📋 菜谱分类\n\n请选择要查看的分类:"
         
         await message.edit_text(
             text=foldable_text_with_markdown_v2(help_text),
@@ -398,15 +429,16 @@ async def _execute_category_search(update: Update, context: ContextTypes.DEFAULT
         for recipe in results[:8]:
             recipe_name = recipe.get("name", "未知菜谱")
             recipe_id = recipe.get("id", "")
+            short_id = get_short_recipe_id(recipe_id)
             button = InlineKeyboardButton(
                 text=f"🍽️ {recipe_name}",
-                callback_data=f"recipe_detail:{recipe_id}"
+                callback_data=f"recipe_detail:{short_id}"
             )
             keyboard.append([button])
             
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        result_text = f"📋 **{category}** ({len(results)} 个菜谱)\n\n请点击下方按钮查看详细信息："
+        result_text = f"📋 {category} ({len(results)} 个菜谱)\n\n请点击下方按钮查看详细信息:"
         
         if query:
             await query.edit_message_text(
@@ -457,9 +489,10 @@ async def recipe_random_command(update: Update, context: ContextTypes.DEFAULT_TY
         for recipe in results:
             recipe_name = recipe.get("name", "未知菜谱")
             recipe_id = recipe.get("id", "")
+            short_id = get_short_recipe_id(recipe_id)
             button = InlineKeyboardButton(
                 text=f"🍽️ {recipe_name}",
-                callback_data=f"recipe_detail:{recipe_id}"
+                callback_data=f"recipe_detail:{short_id}"
             )
             keyboard.append([button])
             
@@ -468,7 +501,7 @@ async def recipe_random_command(update: Update, context: ContextTypes.DEFAULT_TY
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        result_text = f"🎲 **随机推荐** ({len(results)} 个菜谱)\n\n请点击下方按钮查看详细信息："
+        result_text = f"🎲 随机推荐 ({len(results)} 个菜谱)\n\n请点击下方按钮查看详细信息:"
         
         await message.edit_text(
             text=foldable_text_with_markdown_v2(result_text),
@@ -525,7 +558,7 @@ async def what_to_eat_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    help_text = "🍽️ **今天吃什么？**\n\n请选择用餐人数："
+    help_text = "🍽️ 今天吃什么？\n\n请选择用餐人数:"
     
     message = await context.bot.send_message(
         chat_id=update.message.chat_id,
@@ -581,10 +614,11 @@ async def _execute_what_to_eat(update: Update, context: ContextTypes.DEFAULT_TYP
         for dish in dishes:
             dish_name = dish.get("name", "未知菜谱")
             dish_id = dish.get("id", "")
+            short_id = get_short_recipe_id(dish_id)
             category = dish.get("category", "")
             button = InlineKeyboardButton(
                 text=f"🍽️ {dish_name} ({category})",
-                callback_data=f"recipe_detail:{dish_id}"
+                callback_data=f"recipe_detail:{short_id}"
             )
             keyboard.append([button])
             
@@ -593,7 +627,7 @@ async def _execute_what_to_eat(update: Update, context: ContextTypes.DEFAULT_TYP
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        result_text = f"🍽️ **今日推荐** ({people_count}人份)\n\n{recommendation['message']}，请点击查看详情："
+        result_text = f"🍽️ 今日推荐 ({people_count}人份)\n\n{recommendation['message']}，请点击查看详情:"
         
         if query:
             await query.edit_message_text(
@@ -622,16 +656,15 @@ async def meal_plan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
         
     if not context.args:
-        help_text = """
-🧩 **智能膳食推荐**
+        help_text = """🧩 智能膳食推荐
 
-使用方法：
-`/meal_plan 人数 [过敏原] [忌口食材]`
+使用方法:
+/meal_plan 人数 [过敏原] [忌口食材]
 
-示例：
-• `/meal_plan 3` - 为3人推荐
-• `/meal_plan 4 虾 蟹` - 4人，对虾蟹过敏
-• `/meal_plan 2 花生 香菜 葱` - 2人，过敏花生，忌口香菜葱
+示例:
+• /meal_plan 3 - 为3人推荐
+• /meal_plan 4 虾 蟹 - 4人，对虾蟹过敏
+• /meal_plan 2 花生 香菜 葱 - 2人，过敏花生，忌口香菜葱
 
 系统会根据人数和饮食限制智能推荐合适的菜品组合。
         """
@@ -691,11 +724,12 @@ async def meal_plan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         for dish in dishes:
             dish_name = dish.get("name", "未知菜谱")
             dish_id = dish.get("id", "")
+            short_id = get_short_recipe_id(dish_id)
             category = dish.get("category", "")
             difficulty = "★" * dish.get("difficulty", 1)
             button = InlineKeyboardButton(
                 text=f"🍽️ {dish_name} ({category}) {difficulty}",
-                callback_data=f"recipe_detail:{dish_id}"
+                callback_data=f"recipe_detail:{short_id}"
             )
             keyboard.append([button])
             
@@ -705,7 +739,7 @@ async def meal_plan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        result_text = f"🧩 **智能膳食推荐**\n\n{recommendation['message']}{restrictions_text}\n\n请点击查看详细信息："
+        result_text = f"🧩 智能膳食推荐\n\n{recommendation['message']}{restrictions_text}\n\n请点击查看详细信息:"
         
         await message.edit_text(
             text=foldable_text_with_markdown_v2(result_text),
@@ -763,45 +797,68 @@ def format_recipe_detail(recipe: Dict[str, Any]) -> str:
         time_info.append(f"总计 {total_time}分钟")
     time_text = " | ".join(time_info) if time_info else "时间未知"
     
-    # 食材列表
+    # 食材列表 - 清理格式
     ingredients = recipe.get("ingredients", [])
-    ingredients_text = "\n".join([
-        f"• {ing.get('text_quantity', '')} {ing.get('name', '')}"
-        for ing in ingredients[:10]  # 限制显示前10个食材
-    ])
-    if len(ingredients) > 10:
-        ingredients_text += f"\n... 等{len(ingredients)}种食材"
+    ingredients_list = []
+    for ing in ingredients[:15]:  # 增加到15个食材
+        name = ing.get('name', '').strip()
+        text_quantity = ing.get('text_quantity', '').strip()
+        
+        # 跳过空的或无效的食材
+        if not name or name == "--":
+            continue
+            
+        if text_quantity and text_quantity != "--":
+            ingredients_list.append(f"• {text_quantity} {name}")
+        else:
+            ingredients_list.append(f"• {name}")
     
-    # 制作步骤
+    ingredients_text = "\n".join(ingredients_list) if ingredients_list else "• 暂无详细食材信息"
+    
+    if len(ingredients) > 15:
+        ingredients_text += f"\n• ... 等{len(ingredients)}种食材"
+    
+    # 制作步骤 - 修复转义和数据问题
     steps = recipe.get("steps", [])
-    steps_text = "\n".join([
-        f"{step.get('step', i+1)}\\. {step.get('description', '')}"
-        for i, step in enumerate(steps[:5])  # 限制显示前5个步骤
-    ])
-    if len(steps) > 5:
+    steps_list = []
+    for i, step in enumerate(steps[:10]):  # 增加到10个步骤
+        step_num = step.get('step', i+1)
+        description = step.get('description', '').strip()
+        
+        # 跳过空的或无效的步骤
+        if not description or description == "--":
+            continue
+            
+        steps_list.append(f"{step_num}. {description}")
+    
+    steps_text = "\n".join(steps_list) if steps_list else "暂无详细制作步骤"
+    
+    if len(steps) > 10:
         steps_text += f"\n... 等{len(steps)}个步骤"
     
-    # 标签
+    # 标签 - 过滤无效标签
     tags = recipe.get("tags", [])
-    tags_text = " ".join([f"#{tag}" for tag in tags[:5]]) if tags else "无标签"
+    valid_tags = [tag for tag in tags[:5] if tag and tag.strip() and tag != "--"]
+    tags_text = " ".join([f"#{tag}" for tag in valid_tags]) if valid_tags else "无标签"
     
-    result = f"""🍽️ **{name}**
+    # 构建最终文本，避免手动转义
+    result = f"""🍽️ {name}
 
-📝 **简介：** {description}
+📝 简介: {description}
 
-📋 **信息：**
-• 分类：{category}
-• 难度：{difficulty}
-• 份量：{servings}人份
-• 时间：{time_text}
+📋 信息:
+• 分类: {category}
+• 难度: {difficulty}
+• 份量: {servings}人份
+• 时间: {time_text}
 
-🥕 **食材：**
+🥕 食材:
 {ingredients_text}
 
-👨‍🍳 **步骤：**
+👨‍🍳 步骤:
 {steps_text}
 
-🏷️ **标签：** {tags_text}
+🏷️ 标签: {tags_text}
 """
     
     return result
@@ -821,7 +878,14 @@ async def recipe_detail_callback(update: Update, context: ContextTypes.DEFAULT_T
     try:
         callback_data = query.data
         if callback_data.startswith("recipe_detail:"):
-            recipe_id = callback_data.replace("recipe_detail:", "")
+            short_id = callback_data.replace("recipe_detail:", "")
+            recipe_id = get_full_recipe_id(short_id)
+            if not recipe_id:
+                await query.edit_message_text(
+                    foldable_text_v2("❌ 菜谱信息已过期，请重新搜索"),
+                    parse_mode="MarkdownV2"
+                )
+                return
             
             # 确保数据已加载
             if not await cooking_service.load_recipes_data():
@@ -891,9 +955,10 @@ async def recipe_random_again_callback(update: Update, context: ContextTypes.DEF
         for recipe in results:
             recipe_name = recipe.get("name", "未知菜谱")
             recipe_id = recipe.get("id", "")
+            short_id = get_short_recipe_id(recipe_id)
             button = InlineKeyboardButton(
                 text=f"🍽️ {recipe_name}",
-                callback_data=f"recipe_detail:{recipe_id}"
+                callback_data=f"recipe_detail:{short_id}"
             )
             keyboard.append([button])
             
@@ -902,7 +967,7 @@ async def recipe_random_again_callback(update: Update, context: ContextTypes.DEF
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        result_text = f"🎲 **随机推荐** ({len(results)} 个菜谱)\n\n请点击下方按钮查看详细信息："
+        result_text = f"🎲 随机推荐 ({len(results)} 个菜谱)\n\n请点击下方按钮查看详细信息:"
         
         await query.edit_message_text(
             text=foldable_text_with_markdown_v2(result_text),
@@ -1011,10 +1076,11 @@ async def what_to_eat_again_callback(update: Update, context: ContextTypes.DEFAU
             for dish in dishes:
                 dish_name = dish.get("name", "未知菜谱")
                 dish_id = dish.get("id", "")
+                short_id = get_short_recipe_id(dish_id)
                 category = dish.get("category", "")
                 button = InlineKeyboardButton(
                     text=f"🍽️ {dish_name} ({category})",
-                    callback_data=f"recipe_detail:{dish_id}"
+                    callback_data=f"recipe_detail:{short_id}"
                 )
                 keyboard.append([button])
                 
@@ -1023,7 +1089,7 @@ async def what_to_eat_again_callback(update: Update, context: ContextTypes.DEFAU
             
             reply_markup = InlineKeyboardMarkup(keyboard)
             
-            result_text = f"🍽️ **今日推荐** ({people_count}人份)\n\n{recommendation['message']}，请点击查看详情："
+            result_text = f"🍽️ 今日推荐 ({people_count}人份)\n\n{recommendation['message']}，请点击查看详情:"
             
             await query.edit_message_text(
                 text=foldable_text_with_markdown_v2(result_text),
@@ -1085,11 +1151,12 @@ async def meal_plan_again_callback(update: Update, context: ContextTypes.DEFAULT
             for dish in dishes:
                 dish_name = dish.get("name", "未知菜谱")
                 dish_id = dish.get("id", "")
+                short_id = get_short_recipe_id(dish_id)
                 category = dish.get("category", "")
                 difficulty = "★" * dish.get("difficulty", 1)
                 button = InlineKeyboardButton(
                     text=f"🍽️ {dish_name} ({category}) {difficulty}",
-                    callback_data=f"recipe_detail:{dish_id}"
+                    callback_data=f"recipe_detail:{short_id}"
                 )
                 keyboard.append([button])
                 
@@ -1107,7 +1174,7 @@ async def meal_plan_again_callback(update: Update, context: ContextTypes.DEFAULT
                 restrictions.append(f"忌口: {', '.join(avoid_items)}")
             restrictions_text = f" ({'; '.join(restrictions)})" if restrictions else ""
             
-            result_text = f"🧩 **智能膳食推荐**\n\n{recommendation['message']}{restrictions_text}\n\n请点击查看详细信息："
+            result_text = f"🧩 智能膳食推荐\n\n{recommendation['message']}{restrictions_text}\n\n请点击查看详细信息:"
             
             await query.edit_message_text(
                 text=foldable_text_with_markdown_v2(result_text),
