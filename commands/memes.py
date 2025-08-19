@@ -80,55 +80,73 @@ class ResponseModel(BaseModel):
     timestamp: int
 
 
-async def get_media_details(media_id: int) -> Optional[str]:
+async def get_media_details(media_id: int, retry_count: int = 2) -> Optional[str]:
     """
-    获取单个媒体内容的详细描述信息
+    获取单个媒体内容的详细描述信息（带重试机制）
     
     Args:
         media_id: 媒体内容ID
+        retry_count: 重试次数，默认2次
         
     Returns:
         描述信息（优先级：sharpReview > llmDescription > None）
     """
-    try:
-        logger.debug(f"获取媒体 {media_id} 的详细信息")
-        url = urljoin(BASE_URL, f"media/{media_id}")
-        
-        response = await _httpx_client.get(
-            url=url,
-            headers={"uuid": "domobot-mcp"},
-            timeout=5.0
-        )
-        response.raise_for_status()
-        
-        # 解析响应
-        response_data = response.json()
-        logger.debug(f"媒体 {media_id} API响应状态: {response_data.get('status')}")
-        
-        if response_data.get("status") != 200:
-            logger.warning(f"媒体 {media_id} API返回非200状态: {response_data}")
-            return None
-        
-        media_data = response_data.get("data", {})
-        sharp_review = media_data.get("sharpReview")
-        llm_description = media_data.get("llmDescription")
-        
-        logger.debug(f"媒体 {media_id} - sharpReview: {bool(sharp_review)}, llmDescription: {bool(llm_description)}")
-        
-        # 按优先级返回描述（与前端逻辑一致）
-        if sharp_review and sharp_review.strip():
-            logger.debug(f"媒体 {media_id} 使用sharpReview")
-            return sharp_review.strip()
-        elif llm_description and llm_description.strip():
-            logger.debug(f"媒体 {media_id} 使用llmDescription")
-            return llm_description.strip()
-        else:
-            logger.debug(f"媒体 {media_id} 没有可用的描述信息")
-            return None
+    last_exception = None
+    
+    for attempt in range(retry_count):
+        try:
+            if attempt > 0:
+                logger.debug(f"重试获取媒体 {media_id} 详细信息 (第 {attempt + 1} 次)")
+                # 短暂延迟避免频繁请求
+                import asyncio
+                await asyncio.sleep(0.5)
+            else:
+                logger.debug(f"获取媒体 {media_id} 的详细信息")
+                
+            url = urljoin(BASE_URL, f"media/{media_id}")
             
-    except Exception as e:
-        logger.warning(f"获取媒体 {media_id} 详细信息失败: {e}")
-        return None
+            response = await _httpx_client.get(
+                url=url,
+                headers={"uuid": "domobot-mcp"},
+                timeout=8.0  # 增加超时时间到8秒
+            )
+            response.raise_for_status()
+            
+            # 解析响应
+            response_data = response.json()
+            logger.debug(f"媒体 {media_id} API响应状态: {response_data.get('status')}")
+            
+            if response_data.get("status") != 200:
+                logger.warning(f"媒体 {media_id} API返回非200状态: {response_data}")
+                last_exception = Exception(f"API返回状态 {response_data.get('status')}")
+                continue
+            
+            media_data = response_data.get("data", {})
+            sharp_review = media_data.get("sharpReview")
+            llm_description = media_data.get("llmDescription")
+            
+            logger.debug(f"媒体 {media_id} - sharpReview: {bool(sharp_review)}, llmDescription: {bool(llm_description)}")
+            
+            # 按优先级返回描述（与前端逻辑一致）
+            if sharp_review and sharp_review.strip():
+                logger.debug(f"媒体 {media_id} 使用sharpReview")
+                return sharp_review.strip()
+            elif llm_description and llm_description.strip():
+                logger.debug(f"媒体 {media_id} 使用llmDescription")
+                return llm_description.strip()
+            else:
+                logger.debug(f"媒体 {media_id} 没有可用的描述信息")
+                return None
+                
+        except Exception as e:
+            last_exception = e
+            if attempt < retry_count - 1:
+                logger.debug(f"获取媒体 {media_id} 详细信息失败，将重试: {e}")
+                continue
+    
+    # 所有重试都失败
+    logger.warning(f"获取媒体 {media_id} 详细信息最终失败 (重试 {retry_count} 次): {last_exception}")
+    return None
 
 
 async def get_memes(limit: int = 10, retry_for_description: bool = True) -> List[MemeWithDescription]:
@@ -145,32 +163,53 @@ async def get_memes(limit: int = 10, retry_for_description: bool = True) -> List
     if not 1 <= limit <= 20:
         raise ValueError("limit must be between 1 and 20")
     
-    # 智能重试逻辑：当limit=1时，如果没有获取到描述，重试几次
-    max_retries = 3 if (limit == 1 and retry_for_description) else 1
+    # 优化的智能重试逻辑：针对需要描述的情况使用批量获取+筛选策略
+    if limit == 1 and retry_for_description:
+        return await _get_memes_with_description_optimized(limit)
     
-    for attempt in range(max_retries):
-        if attempt > 0:
-            logger.info(f"第 {attempt + 1} 次尝试获取有描述的表情包")
+    # 普通情况直接获取
+    return await _fetch_memes_once(limit, use_cache=True)
+
+
+async def _get_memes_with_description_optimized(limit: int) -> List[MemeWithDescription]:
+    """
+    优化的获取有描述表情包方法
+    使用批量获取+筛选策略，提高成功率和效率
+    """
+    max_attempts = 3  # 最多尝试3轮
+    batch_sizes = [8, 10, 12]  # 递增的批量大小
+    
+    for attempt in range(max_attempts):
+        batch_size = batch_sizes[attempt] if attempt < len(batch_sizes) else 12
+        logger.info(f"第 {attempt + 1} 次尝试，批量获取 {batch_size} 个表情包筛选有描述的")
+        
+        try:
+            # 批量获取表情包（跳过缓存确保多样性）
+            candidates = await _fetch_memes_once(batch_size, use_cache=(attempt == 0))
             
-        # 重试时跳过缓存，确保获取不同的表情包
-        use_cache_for_retry = (attempt == 0)  # 只有第一次尝试使用缓存
-        result = await _fetch_memes_once(limit, use_cache_for_retry)
-        
-        # 如果是单个表情包且启用重试
-        if limit == 1 and retry_for_description and result:
-            if result[0].description:
-                logger.info(f"成功获取到有描述的表情包 (第 {attempt + 1} 次尝试)")
-                return result
-            elif attempt < max_retries - 1:
-                logger.info(f"表情包无描述，将重试获取 (尝试 {attempt + 1}/{max_retries})")
+            if not candidates:
                 continue
-        
-        # 其他情况直接返回
-        return result
+                
+            # 筛选有描述的表情包
+            with_description = [meme for meme in candidates if meme.description and meme.description.strip()]
+            
+            logger.info(f"批量获取 {len(candidates)} 个，其中有描述的 {len(with_description)} 个")
+            
+            if with_description:
+                # 随机选择一个有描述的表情包
+                import random
+                selected = random.choice(with_description)
+                logger.info(f"成功获取到有描述的表情包 (第 {attempt + 1} 次尝试)")
+                return [selected]
+                
+        except Exception as e:
+            logger.warning(f"第 {attempt + 1} 次批量获取失败: {e}")
+            continue
     
-    # 如果所有重试都失败了，返回最后一次的结果
-    logger.warning(f"经过 {max_retries} 次尝试仍未获取到有描述的表情包")
-    return result or []
+    # 如果所有尝试都失败，最后尝试获取一个普通的表情包
+    logger.warning(f"经过 {max_attempts} 次尝试仍未获取到有描述的表情包，返回普通表情包")
+    fallback_result = await _fetch_memes_once(1, use_cache=False)
+    return fallback_result or []
 
 
 async def _fetch_memes_once(limit: int, use_cache: bool = True) -> List[MemeWithDescription]:
