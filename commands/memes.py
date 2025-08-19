@@ -406,7 +406,6 @@ async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         if meme.description:
                             fallback_text += f"\n💬 {meme.description}"
                         
-                        from utils.message_manager import send_success
                         await send_success(
                             context,
                             update.effective_chat.id,
