@@ -434,14 +434,18 @@ async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             await temp_msg.delete()
                             
                             # 为可能的延迟图片消息调度删除
-                            # 但要避免重复调度成功消息（success_text消息）
-                            possible_photo_ids = [current_msg_id - 1, current_msg_id - 2]
+                            # 扩大范围：temp消息前后的消息都可能是延迟图片
+                            possible_photo_ids = [
+                                current_msg_id - 3,  # temp消息前3个
+                                current_msg_id - 2,  # temp消息前2个 
+                                current_msg_id - 1,  # temp消息前1个
+                                current_msg_id + 1,  # temp消息后1个（延迟到达）
+                                current_msg_id + 2   # temp消息后2个（延迟到达）
+                            ]
                             
                             for possible_id in possible_photo_ids:
-                                # 检查是否已经调度过删除，避免重复调度
-                                if possible_id in scheduled_message_ids:
-                                    logger.debug(f"消息 {possible_id} 已调度删除，跳过")
-                                    continue
+                                # 不再跳过已调度的消息ID，因为延迟图片可能和其他消息同ID
+                                # Redis调度器可以安全处理重复调度
                                     
                                 try:
                                     from utils.message_manager import _schedule_deletion
