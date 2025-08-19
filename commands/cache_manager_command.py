@@ -135,12 +135,16 @@ async def cleancache_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
             "`/cleancache all` - 清理所有缓存"
         )
         
-        await context.bot.send_message(
+        sent_message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
             text=message,
             parse_mode='Markdown',
             reply_markup=keyboard
         )
+        
+        # 调度删除菜单消息 - 给用户足够时间操作菜单
+        from utils.message_manager import _schedule_deletion
+        await _schedule_deletion(context, update.effective_chat.id, sent_message.message_id, 300)  # 5分钟后删除菜单
         
         # 删除用户命令
         await delete_user_command(context, update.effective_chat.id, update.message.message_id)
@@ -220,6 +224,10 @@ async def cleancache_callback_handler(update: Update, context: ContextTypes.DEFA
         
         # 显示结果
         await query.edit_message_text(message)
+        
+        # 调度删除机器人回复消息
+        from utils.message_manager import _schedule_deletion
+        await _schedule_deletion(context, query.message.chat_id, query.message.message_id, 60)
         
         logger.info(f"通过回调清理缓存: {service}, 结果: {success}")
 
