@@ -374,11 +374,14 @@ async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     if meme.description:
                         caption += f"\n💬 {meme.description}"
                     
+                    logger.info(f"尝试发送表情包 {i}: {meme.url}")
                     photo_message = await context.bot.send_photo(
                         chat_id=update.effective_chat.id,
                         photo=meme.url,
                         caption=caption
                     )
+                    logger.info(f"表情包 {i} 发送成功: message_id={photo_message.message_id}")
+                    
                     # 调度自动删除表情包消息
                     try:
                         scheduler = context.bot_data.get("message_delete_scheduler")
@@ -389,6 +392,9 @@ async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 900,  # 15分钟后删除
                                 None
                             )
+                            logger.info(f"已调度表情包 {i} 删除: message_id={photo_message.message_id}")
+                        else:
+                            logger.warning(f"调度器不可用，无法调度表情包 {i} 自动删除")
                     except Exception as e:
                         logger.warning(f"调度表情包 {i} 自动删除失败: {e}")
                         
