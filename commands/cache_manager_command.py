@@ -27,15 +27,17 @@ CACHE_SERVICES = {
     'weather': '天气缓存',
     'cooking': '烹饪菜谱缓存',
     'whois': 'WHOIS查询缓存',
-    'app': 'App Store缓存',
+    'app_store': 'App Store缓存',
     'netflix': 'Netflix缓存',
     'spotify': 'Spotify缓存',
-    'disney': 'Disney+缓存',
+    'disney_plus': 'Disney+缓存',
     'max': 'HBO Max缓存',
     'rate': '汇率缓存',
     'bin': 'BIN查询缓存',
     'google_play': 'Google Play缓存',
     'apple_services': 'Apple服务缓存',
+    'timezone': '时区缓存',
+    'dns': 'DNS查询缓存',
 }
 
 async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
@@ -57,6 +59,10 @@ async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
                         ]
                         for prefix in prefixes:
                             await cache_manager.clear_cache(subdirectory="weather", key_prefix=prefix)
+                    elif svc == 'whois':
+                        # 特殊处理whois的双子目录结构
+                        await cache_manager.clear_cache(subdirectory="whois")
+                        await cache_manager.clear_cache(subdirectory="dns")
                     else:
                         await cache_manager.clear_cache(subdirectory=svc)
             return True, "✅ 所有缓存已清理完成"
@@ -70,6 +76,10 @@ async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
                 ]
                 for prefix in prefixes:
                     await cache_manager.clear_cache(subdirectory="weather", key_prefix=prefix)
+            elif service == 'whois':
+                # 特殊处理whois的双子目录结构
+                await cache_manager.clear_cache(subdirectory="whois")
+                await cache_manager.clear_cache(subdirectory="dns")
             else:
                 await cache_manager.clear_cache(subdirectory=service)
             
