@@ -404,6 +404,47 @@ async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         
                 except Exception as e:
                     logger.warning(f"发送表情包 {i} 失败: {e}")
+                    
+                    # 特殊处理超时异常：可能图片已发送但响应超时
+                    is_timeout = "timeout" in str(e).lower() or "timed out" in str(e).lower()
+                    
+                    if is_timeout:
+                        logger.warning(f"表情包 {i} 发送超时，图片可能已发送但未收到响应")
+                        # 等待一小段时间，让可能的消息完全处理
+                        import asyncio
+                        await asyncio.sleep(2)
+                        
+                        # 尝试获取最新消息ID来调度可能存在的图片消息删除
+                        try:
+                            # 发送一个临时消息来获取当前的message_id
+                            temp_msg = await context.bot.send_message(
+                                chat_id=update.effective_chat.id,
+                                text="temp"
+                            )
+                            current_msg_id = temp_msg.message_id
+                            await temp_msg.delete()  # 立即删除临时消息
+                            
+                            # 假设超时的图片消息可能是前一个或前两个message_id
+                            possible_photo_ids = [current_msg_id - 1, current_msg_id - 2]
+                            
+                            for possible_id in possible_photo_ids:
+                                try:
+                                    from utils.message_manager import _schedule_deletion
+                                    success = await _schedule_deletion(
+                                        context,
+                                        update.effective_chat.id,
+                                        possible_id,
+                                        900,  # 15分钟后删除
+                                        None
+                                    )
+                                    if success:
+                                        logger.info(f"已为可能的超时图片消息调度删除: message_id={possible_id}")
+                                except Exception as sched_e:
+                                    logger.debug(f"调度可能的图片消息删除失败 {possible_id}: {sched_e}")
+                                    
+                        except Exception as temp_e:
+                            logger.warning(f"无法确定可能的图片消息ID: {temp_e}")
+                    
                     try:
                         # 构建fallback消息，包含描述信息
                         fallback_text = f"🖼️ 表情包 {i}: [点击查看]({meme.url})"
