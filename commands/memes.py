@@ -406,23 +406,13 @@ async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         if meme.description:
                             fallback_text += f"\n💬 {meme.description}"
                         
-                        fallback_message = await context.bot.send_message(
-                            chat_id=update.effective_chat.id,
-                            text=fallback_text,
+                        from utils.message_manager import send_success
+                        await send_success(
+                            context,
+                            update.effective_chat.id,
+                            fallback_text,
                             parse_mode='Markdown'
                         )
-                        # 调度自动删除链接消息
-                        try:
-                            scheduler = context.bot_data.get("message_delete_scheduler")
-                            if scheduler and hasattr(scheduler, "schedule_deletion"):
-                                await scheduler.schedule_deletion(
-                                    update.effective_chat.id, 
-                                    fallback_message.message_id, 
-                                    900,  # 15分钟后删除
-                                    None
-                                )
-                        except Exception as e:
-                            logger.warning(f"调度表情包链接 {i} 自动删除失败: {e}")
                     except Exception as e:
                         logger.error(f"发送表情包链接 {i} 也失败: {e}")
         
