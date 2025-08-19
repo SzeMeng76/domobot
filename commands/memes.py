@@ -382,21 +382,25 @@ async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     logger.info(f"表情包 {i} 发送成功: message_id={photo_message.message_id}")
                     
-                    # 调度自动删除表情包消息
+                    # 使用内部函数调度删除（与message_manager保持一致）
                     try:
-                        scheduler = context.bot_data.get("message_delete_scheduler")
-                        if scheduler and hasattr(scheduler, "schedule_deletion"):
-                            await scheduler.schedule_deletion(
-                                update.effective_chat.id, 
-                                photo_message.message_id, 
-                                900,  # 15分钟后删除
-                                None
-                            )
+                        from utils.message_manager import _schedule_deletion
+                        success = await _schedule_deletion(
+                            context,
+                            update.effective_chat.id,
+                            photo_message.message_id,
+                            900,  # 15分钟后删除
+                            None
+                        )
+                        if success:
                             logger.info(f"已调度表情包 {i} 删除: message_id={photo_message.message_id}")
                         else:
-                            logger.warning(f"调度器不可用，无法调度表情包 {i} 自动删除")
+                            logger.warning(f"调度表情包 {i} 自动删除失败: 调度器不可用")
                     except Exception as e:
-                        logger.warning(f"调度表情包 {i} 自动删除失败: {e}")
+                        logger.error(f"调度表情包 {i} 自动删除失败: {e}")
+                        # 添加更详细的错误信息
+                        import traceback
+                        logger.error(f"调度错误详情: {traceback.format_exc()}")
                         
                 except Exception as e:
                     logger.warning(f"发送表情包 {i} 失败: {e}")
@@ -406,12 +410,14 @@ async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         if meme.description:
                             fallback_text += f"\n💬 {meme.description}"
                         
-                        await send_success(
+                        # 使用统一的消息管理器发送fallback消息
+                        fallback_message = await send_success(
                             context,
                             update.effective_chat.id,
                             fallback_text,
                             parse_mode='Markdown'
                         )
+                        logger.info(f"表情包 {i} fallback消息发送成功: message_id={fallback_message.message_id if fallback_message else 'unknown'}")
                     except Exception as e:
                         logger.error(f"发送表情包链接 {i} 也失败: {e}")
         
