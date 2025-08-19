@@ -409,8 +409,8 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         search_status_message = f"🔍 正在在 {country_code.upper()} 区域搜索 {platform_display} 应用 '{final_query}' ..."
         await message.edit_text(foldable_text_v2(search_status_message), parse_mode="MarkdownV2")
 
-        # 生成搜索缓存键
-        search_cache_key = f"search_{final_query}_{country_code}_{app_type}"
+        # 生成搜索缓存键（统一使用小写country_code）
+        search_cache_key = f"search_{final_query}_{country_code.lower()}_{app_type}"
 
         # 尝试从缓存加载搜索结果
         cached_search_data = await cache_manager.load_cache(
@@ -422,7 +422,7 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         if cached_search_data:
             # 使用缓存的搜索结果
             all_results = cached_search_data.get("results", [])
-            logger.info(f"使用缓存的搜索结果: {final_query} in {country_code}")
+            logger.info(f"使用缓存的搜索结果: {final_query} in {country_code.lower()}")
         else:
             # 从API获取搜索结果
             raw_search_data = await SappSearchAPI.search_apps(
@@ -433,13 +433,13 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             # 保存搜索结果到缓存
             search_cache_data = {
                 "query": final_query,
-                "country": country_code,
+                "country": country_code.lower(),  # 统一存储小写
                 "app_type": app_type,
                 "results": all_results,
                 "timestamp": time.time(),
             }
             await cache_manager.save_cache(search_cache_key, search_cache_data, subdirectory="app_store")
-            logger.info(f"缓存搜索结果: {final_query} in {country_code}, 找到 {len(all_results)} 个结果")
+            logger.info(f"缓存搜索结果: {final_query} in {country_code.lower()}, 找到 {len(all_results)} 个结果")
 
         per_page = 5
         total_results = len(all_results)
