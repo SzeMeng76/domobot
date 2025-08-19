@@ -253,6 +253,9 @@ async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     config = get_config()
     args = context.args or []
     
+    # 用于记录已调度删除的消息ID，避免重复调度
+    scheduled_message_ids = set()
+    
     # 如果没有参数，显示帮助信息
     if not args:
         help_text = (
@@ -360,11 +363,14 @@ async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             # 发送成功获取的消息
             success_text = f"🎭 成功获取 {len(meme_list)} 个表情包："
-            await send_success(
+            success_message = await send_success(
                 context,
                 update.effective_chat.id,
                 success_text
             )
+            # 记录成功消息ID，避免重复调度删除
+            if success_message:
+                scheduled_message_ids.add(success_message.message_id)
             
             # 逐个发送表情包图片
             for i, meme in enumerate(meme_list, 1):
@@ -381,6 +387,9 @@ async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         caption=caption
                     )
                     logger.info(f"表情包 {i} 发送成功: message_id={photo_message.message_id}")
+                    
+                    # 记录图片消息ID，避免重复调度删除
+                    scheduled_message_ids.add(photo_message.message_id)
                     
                     # 使用内部函数调度删除（与message_manager保持一致）
                     try:
@@ -405,7 +414,7 @@ async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 except Exception as e:
                     logger.warning(f"发送表情包 {i} 失败: {e}")
                     
-                    # 特殊处理超时异常：可能图片已发送但响应超时
+                    # 特殊处理超时异常：图片可能已发送但响应超时
                     is_timeout = "timeout" in str(e).lower() or "timed out" in str(e).lower()
                     
                     if is_timeout:
@@ -414,20 +423,26 @@ async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         import asyncio
                         await asyncio.sleep(2)
                         
-                        # 尝试获取最新消息ID来调度可能存在的图片消息删除
+                        # 尝试为可能延迟到达的图片消息调度删除
                         try:
-                            # 发送一个临时消息来获取当前的message_id
+                            # 发送临时消息获取当前message_id
                             temp_msg = await context.bot.send_message(
                                 chat_id=update.effective_chat.id,
                                 text="temp"
                             )
                             current_msg_id = temp_msg.message_id
-                            await temp_msg.delete()  # 立即删除临时消息
+                            await temp_msg.delete()
                             
-                            # 假设超时的图片消息可能是前一个或前两个message_id
+                            # 为可能的延迟图片消息调度删除
+                            # 但要避免重复调度成功消息（success_text消息）
                             possible_photo_ids = [current_msg_id - 1, current_msg_id - 2]
                             
                             for possible_id in possible_photo_ids:
+                                # 检查是否已经调度过删除，避免重复调度
+                                if possible_id in scheduled_message_ids:
+                                    logger.debug(f"消息 {possible_id} 已调度删除，跳过")
+                                    continue
+                                    
                                 try:
                                     from utils.message_manager import _schedule_deletion
                                     success = await _schedule_deletion(
@@ -439,6 +454,8 @@ async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                     )
                                     if success:
                                         logger.info(f"已为可能的超时图片消息调度删除: message_id={possible_id}")
+                                        # 记录已调度的消息ID
+                                        scheduled_message_ids.add(possible_id)
                                 except Exception as sched_e:
                                     logger.debug(f"调度可能的图片消息删除失败 {possible_id}: {sched_e}")
                                     
