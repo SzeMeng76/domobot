@@ -146,7 +146,7 @@ async def get_news(source_id: str, count: int = 10) -> List[Dict]:
         新闻列表
     """
     httpx_client = get_http_client()
-    base_url = "https://newsnow.busiyi.world"
+    base_url = "https://news.smone.us"
     url = f"{base_url}/api/s?id={source_id}"
     
     # 检查缓存
