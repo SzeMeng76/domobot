@@ -59,7 +59,7 @@ class BotConfig:
         self.disney_cache_duration = 86400 * 8  # 8天，配合周日清理
         self.max_cache_duration = 86400 * 8  # 8天，配合周日清理
         self.movie_cache_duration = 7200   # 2小时，电影和电视剧缓存
-        self.news_cache_duration = 86400  # 1天，新闻缓存
+        self.news_cache_duration = 300  # 5分钟，新闻缓存
         self.whois_cache_duration = 3600 * 6  # 6小时，WHOIS查询缓存
         self.time_cache_duration = 86400  # 24小时，时区缓存
         self.cooking_cache_duration = 86400 * 7  # 7天，烹饪菜谱缓存
@@ -221,7 +221,7 @@ class ConfigManager:
         self.config.netflix_cache_duration = get_int_env("NETFLIX_CACHE_DURATION", "86400")
         self.config.crypto_cache_duration = get_int_env("CRYPTO_CACHE_DURATION", "60")
         self.config.movie_cache_duration = get_int_env("MOVIE_CACHE_DURATION", "7200")
-        self.config.news_cache_duration = get_int_env("NEWS_CACHE_DURATION", "86400")
+        self.config.news_cache_duration = get_int_env("NEWS_CACHE_DURATION", "300")
         self.config.whois_cache_duration = get_int_env("WHOIS_CACHE_DURATION", str(3600 * 6))
         self.config.time_cache_duration = get_int_env("TIME_CACHE_DURATION", "86400")
         self.config.memes_cache_duration = get_int_env("MEMES_CACHE_DURATION", "600")
