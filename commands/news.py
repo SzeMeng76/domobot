@@ -505,10 +505,17 @@ def get_balanced_hot_sources() -> List[str]:
     """获取平衡的热门源列表"""
     sources = []
     # 每个类别选择1-2个源
-    sources.extend(HOT_NEWS_SOURCES['social'][:2])   # 社交类取前2个
-    sources.extend(HOT_NEWS_SOURCES['tech'][:2])     # 科技类取前2个
-    sources.extend(HOT_NEWS_SOURCES['finance'][:1])  # 财经类取前1个
-    sources.extend(HOT_NEWS_SOURCES['news'][:1])     # 新闻类取前1个
+    social_sources = HOT_NEWS_SOURCES['social'][:2]
+    tech_sources = HOT_NEWS_SOURCES['tech'][:2]
+    finance_sources = HOT_NEWS_SOURCES['finance'][:1]
+    news_sources = HOT_NEWS_SOURCES['news'][:1]
+    
+    sources.extend(social_sources)   # 社交类取前2个
+    sources.extend(tech_sources)     # 科技类取前2个  
+    sources.extend(finance_sources)  # 财经类取前1个
+    sources.extend(news_sources)     # 新闻类取前1个
+    
+    logger.info(f"热门新闻源配置: 社交{social_sources} + 科技{tech_sources} + 财经{finance_sources} + 新闻{news_sources} = 总计{sources}")
     return sources
 
 @with_error_handling  
