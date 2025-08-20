@@ -27,25 +27,24 @@ from utils.permissions import Permission
 
 logger = logging.getLogger(__name__)
 
-# 新闻源配置
+# 新闻源配置（使用API实际支持的源名称）
 NEWS_SOURCES = {
     'zhihu': '知乎热榜',
-    'github': 'GitHub趋势',
+    'github-trending-today': 'GitHub趋势',
     'weibo': '微博热搜', 
-    'v2ex': 'V2EX最新',
+    'v2ex-share': 'V2EX最新',
     'ithome': 'IT之家',
-    'juejin': '掘金热门',
+    'juejin': '稀土掘金',
     'hackernews': 'Hacker News',
     'solidot': 'Solidot',
     'sspai': '少数派',
-    'bilibili': '哔哩哔哩热门',
+    'bilibili-hot-search': '哔哩哔哩热搜',
     'douyin': '抖音热点',
-    'weread': '微信读书',
     'producthunt': 'Product Hunt',
     'jin10': '金十数据',
-    'wallstreetcn': '华尔街见闻',
+    'wallstreetcn-quick': '华尔街见闻快讯',
     'gelonghui': '格隆汇',
-    'xueqiu': '雪球',
+    'xueqiu-hotstock': '雪球热门股票',
     'smzdm': '什么值得买',
     'coolapk': '酷安',
     'tieba': '百度贴吧',
@@ -54,20 +53,50 @@ NEWS_SOURCES = {
     'ifeng': '凤凰网',
     'hupu': '虎扑',
     'nowcoder': '牛客网',
-    'chongbuluo': '虫部落',
+    'chongbuluo-latest': '虫部落最新',
     'linuxdo': 'Linux.do',
-    'pcbeta': '远景论坛',
+    'pcbeta-windows11': '远景论坛Win11',
     'kaopu': '靠谱新闻',
     'kuaishou': '快手',
-    'fastbull': '快讯通财经',
+    'fastbull-express': '法布财经快讯',
     'ghxi': '极客公园',
     'cankaoxiaoxi': '参考消息',
     'zaobao': '联合早报',
-    'sputniknewscn': '俄罗斯卫星通讯社',
-    'mktnews': 'MKT新闻',
+    'sputniknewscn': '卫星通讯社',
+    'mktnews-flash': 'MKTNews快讯',
     'baidu': '百度热搜',
-    '36kr': '36氪',
+    '36kr-quick': '36氪快讯',
+    'cls-telegraph': '财联社电报',
+    # 兼容性别名（保持原有源名称可用）
+    'github': 'GitHub趋势',
+    'v2ex': 'V2EX最新',
+    'bilibili': '哔哩哔哩热搜',
+    'wallstreetcn': '华尔街见闻快讯',
+    'xueqiu': '雪球热门股票',
+    'chongbuluo': '虫部落最新',
+    'pcbeta': '远景论坛Win11',
+    'fastbull': '法布财经快讯',
+    'mktnews': 'MKTNews快讯',
+    '36kr': '36氪快讯',
 }
+
+# 源名称映射（兼容性处理）
+SOURCE_MAPPING = {
+    'github': 'github-trending-today',
+    'v2ex': 'v2ex-share',
+    'bilibili': 'bilibili-hot-search',
+    'wallstreetcn': 'wallstreetcn-quick',
+    'xueqiu': 'xueqiu-hotstock',
+    'chongbuluo': 'chongbuluo-latest',
+    'pcbeta': 'pcbeta-windows11',
+    'fastbull': 'fastbull-express',
+    'mktnews': 'mktnews-flash',
+    '36kr': '36kr-quick',
+}
+
+def get_actual_source_name(source: str) -> str:
+    """获取实际的API源名称"""
+    return SOURCE_MAPPING.get(source, source)
 
 # 全局变量
 _cache_manager = None
@@ -82,13 +111,13 @@ def create_news_sources_keyboard() -> InlineKeyboardMarkup:
     """创建新闻源选择键盘"""
     keyboard = []
     
-    # 按类别分组显示新闻源
+    # 按类别分组显示新闻源（使用兼容名称，便于用户识别）
     categories = [
         ("🔧 科技类", ['github', 'ithome', 'juejin', 'hackernews', 'solidot', 'sspai', 'ghxi', 'linuxdo', 'chongbuluo']),
         ("💬 社交类", ['zhihu', 'weibo', 'v2ex', 'bilibili', 'douyin', 'tieba', 'kuaishou', 'coolapk', 'hupu']),
-        ("💰 财经类", ['jin10', 'wallstreetcn', 'gelonghui', 'xueqiu', '36kr', 'fastbull', 'mktnews']),
+        ("💰 财经类", ['jin10', 'wallstreetcn', 'gelonghui', 'xueqiu', '36kr', 'fastbull', 'mktnews', 'cls-telegraph']),
         ("📰 新闻类", ['toutiao', 'thepaper', 'ifeng', 'baidu', 'cankaoxiaoxi', 'zaobao', 'sputniknewscn', 'kaopu']),
-        ("🛍️ 其他", ['smzdm', 'producthunt', 'weread', 'nowcoder', 'pcbeta'])
+        ("🛍️ 其他", ['smzdm', 'producthunt', 'nowcoder', 'pcbeta'])
     ]
     
     for category_name, sources in categories:
@@ -145,9 +174,12 @@ async def get_news(source_id: str, count: int = 10) -> List[Dict]:
     Returns:
         新闻列表
     """
+    # 映射到实际的API源名称
+    actual_source_id = get_actual_source_name(source_id)
+    
     httpx_client = get_http_client()
     base_url = "https://news.smone.us"
-    url = f"{base_url}/api/s?id={source_id}"
+    url = f"{base_url}/api/s?id={actual_source_id}"
     
     # 检查缓存
     cache_key = f"{source_id}_{count}"
@@ -347,13 +379,13 @@ async def newslist_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🔧 **科技类:**"
         ]
         
-        # 按类别分组显示
+        # 按类别分组显示（使用兼容名称）
         categories = [
             ("🔧 科技类", ['github', 'ithome', 'juejin', 'hackernews', 'solidot', 'sspai', 'ghxi', 'linuxdo', 'chongbuluo']),
             ("💬 社交类", ['zhihu', 'weibo', 'v2ex', 'bilibili', 'douyin', 'tieba', 'kuaishou', 'coolapk', 'hupu']),
-            ("💰 财经类", ['jin10', 'wallstreetcn', 'gelonghui', 'xueqiu', '36kr', 'fastbull', 'mktnews']),
+            ("💰 财经类", ['jin10', 'wallstreetcn', 'gelonghui', 'xueqiu', '36kr', 'fastbull', 'mktnews', 'cls-telegraph']),
             ("📰 新闻类", ['toutiao', 'thepaper', 'ifeng', 'baidu', 'cankaoxiaoxi', 'zaobao', 'sputniknewscn', 'kaopu']),
-            ("🛍️ 其他", ['smzdm', 'producthunt', 'weread', 'nowcoder', 'pcbeta'])
+            ("🛍️ 其他", ['smzdm', 'producthunt', 'nowcoder', 'pcbeta'])
         ]
         
         help_lines = ["📰 **NewsNow 新闻源列表**\n"]
@@ -461,11 +493,29 @@ async def newslist_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await delete_user_command(context, update.effective_chat.id, update.message.message_id)
 
 
+# 热门新闻源配置（按类别平衡选择）
+HOT_NEWS_SOURCES = {
+    'social': ['zhihu', 'weibo', 'bilibili'],  # 社交热点
+    'tech': ['github', 'ithome', 'juejin'],    # 科技资讯  
+    'finance': ['wallstreetcn', 'jin10'],      # 财经快讯
+    'news': ['toutiao', 'baidu']               # 综合新闻
+}
+
+def get_balanced_hot_sources() -> List[str]:
+    """获取平衡的热门源列表"""
+    sources = []
+    # 每个类别选择1-2个源
+    sources.extend(HOT_NEWS_SOURCES['social'][:2])   # 社交类取前2个
+    sources.extend(HOT_NEWS_SOURCES['tech'][:2])     # 科技类取前2个
+    sources.extend(HOT_NEWS_SOURCES['finance'][:1])  # 财经类取前1个
+    sources.extend(HOT_NEWS_SOURCES['news'][:1])     # 新闻类取前1个
+    return sources
+
 @with_error_handling  
 async def hot_news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """热门新闻快捷命令"""
-    # 获取多个热门源的新闻
-    hot_sources = ['zhihu', 'weibo', 'github', 'ithome']
+    # 使用平衡的热门源选择
+    hot_sources = get_balanced_hot_sources()
     config = get_config()
     
     loading_message = await context.bot.send_message(
@@ -480,11 +530,17 @@ async def hot_news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         tasks = [get_news(source, 5) for source in hot_sources]
         news_results = await asyncio.gather(*tasks, return_exceptions=True)
         
+        successful_sources = 0
+        failed_sources = []
+        
         for i, (source, news_items) in enumerate(zip(hot_sources, news_results)):
             if isinstance(news_items, Exception):
+                failed_sources.append(source)
+                logger.warning(f"热门新闻获取失败 {source}: {news_items}")
                 continue
                 
             if news_items:
+                successful_sources += 1
                 source_name = NEWS_SOURCES.get(source, source)
                 results.append(f"📰 **{source_name}** (前5条)")
                 
@@ -498,14 +554,21 @@ async def hot_news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         results.append(f"{j}. {title}")
                 
                 results.append("")  # 空行分隔
+            else:
+                failed_sources.append(source)
+                logger.warning(f"热门新闻源 {source} 返回空数据")
         
         await loading_message.delete()
         
         if results:
-            message = "🔥 **今日热门新闻**\n\n" + "\n".join(results)
+            message = f"🔥 **今日热门新闻** (成功获取 {successful_sources} 个源)\n\n" + "\n".join(results)
             message += "\n💡 使用 `/news [源名称]` 获取更多新闻"
+            if failed_sources:
+                message += f"\n\n⚠️ 部分源暂时不可用: {', '.join(failed_sources)}"
         else:
-            message = "❌ 暂时无法获取热门新闻，请稍后重试"
+            message = f"❌ 暂时无法获取热门新闻，所有源都不可用\n失败源: {', '.join(failed_sources)}\n请稍后重试"
+        
+        logger.info(f"热门新闻获取完成：成功 {successful_sources} 个源，失败 {len(failed_sources)} 个源")
         
         await send_success(
             context,
@@ -570,20 +633,26 @@ async def news_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
             
         elif data == "news_hot":
             # 获取热门新闻汇总
-            await query.edit_message_text("🔄 正在获取热门新闻...")
+            await query.edit_message_text("🔥 正在获取热门新闻...")
             
-            hot_sources = ['zhihu', 'weibo', 'github', 'ithome']
+            hot_sources = get_balanced_hot_sources()
             results = []
             
             # 并发获取多个源的新闻
             tasks = [get_news(source, 3) for source in hot_sources]
             news_results = await asyncio.gather(*tasks, return_exceptions=True)
             
+            successful_sources = 0
+            failed_sources = []
+            
             for i, (source, news_items) in enumerate(zip(hot_sources, news_results)):
                 if isinstance(news_items, Exception):
+                    failed_sources.append(source)
+                    logger.warning(f"回调热门新闻获取失败 {source}: {news_items}")
                     continue
                     
                 if news_items:
+                    successful_sources += 1
                     source_name = NEWS_SOURCES.get(source, source)
                     results.append(f"📰 **{source_name}** (前3条)")
                     
@@ -597,11 +666,18 @@ async def news_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
                             results.append(f"{j}. {title[:50]}...")
                     
                     results.append("")  # 空行分隔
+                else:
+                    failed_sources.append(source)
+                    logger.warning(f"回调热门新闻源 {source} 返回空数据")
             
             if results:
-                message = "🔥 **今日热门新闻**\n\n" + "\n".join(results)
+                message = f"🔥 **今日热门新闻** (成功获取 {successful_sources} 个源)\n\n" + "\n".join(results)
+                if failed_sources:
+                    message += f"\n⚠️ 部分源不可用: {', '.join(failed_sources)}"
             else:
-                message = "❌ 暂时无法获取热门新闻，请稍后重试"
+                message = f"❌ 暂时无法获取热门新闻，所有源都不可用\n失败源: {', '.join(failed_sources)}\n请稍后重试"
+            
+            logger.info(f"回调热门新闻获取完成：成功 {successful_sources} 个源，失败 {len(failed_sources)} 个源")
             
             # 删除带按钮的消息
             await query.message.delete()
