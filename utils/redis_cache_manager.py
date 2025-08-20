@@ -81,7 +81,7 @@ class RedisCacheManager:
             "disney_plus": self.config.disney_cache_duration,  # 8天，配合周日清理
             "max": self.config.max_cache_duration,  # 8天，配合周日清理
             "movie": self.config.movie_cache_duration,  # 2小时，电影和电视剧缓存
-            "news": self.config.news_cache_duration,  # 1天，新闻缓存
+            "news": self.config.news_cache_duration,  # 5分钟，新闻缓存
             "whois": self.config.whois_cache_duration,  # 6小时，WHOIS查询缓存
             "time": self.config.time_cache_duration,  # 24小时，时区缓存
             "cooking": self.config.cooking_cache_duration,  # 7天，烹饪菜谱缓存
