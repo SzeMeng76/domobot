@@ -194,7 +194,8 @@ async def get_news(source_id: str, count: int = 10) -> List[Dict]:
     
     try:
         logger.info(f"从 NewsNow API 获取 {source_id} 新闻")
-        response = await httpx_client.get(url, timeout=10.0)
+        # Vercel优化：减少超时时间，避免冷启动影响
+        response = await httpx_client.get(url, timeout=8.0)
         response.raise_for_status()
         data = response.json()
         
@@ -493,29 +494,33 @@ async def newslist_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await delete_user_command(context, update.effective_chat.id, update.message.message_id)
 
 
-# 热门新闻源配置（按类别平衡选择）
+# 热门新闻源配置（针对Vercel优化：稳定性优先）
 HOT_NEWS_SOURCES = {
-    'social': ['zhihu', 'weibo', 'bilibili'],  # 社交热点
-    'tech': ['github', 'ithome', 'juejin'],    # 科技资讯  
-    'finance': ['wallstreetcn', 'jin10'],      # 财经快讯
-    'news': ['toutiao', 'baidu']               # 综合新闻
+    # 按稳定性和响应速度排序，不易被反爬的源在前
+    'social': ['weibo', 'bilibili', 'zhihu', 'tieba', 'douyin'],  # 微博最稳定，放第一
+    'tech': ['ithome', 'github', 'juejin', 'sspai'],    # IT之家很稳定
+    'finance': ['jin10', 'wallstreetcn', 'gelonghui'],  # 金十数据稳定
+    'news': ['toutiao', 'baidu', 'thepaper']             # 头条稳定
 }
 
 def get_balanced_hot_sources() -> List[str]:
-    """获取平衡的热门源列表"""
+    """获取平衡的热门源列表（Vercel优化版）"""
     sources = []
-    # 每个类别选择1-2个源
-    social_sources = HOT_NEWS_SOURCES['social'][:2]
-    tech_sources = HOT_NEWS_SOURCES['tech'][:2]
-    finance_sources = HOT_NEWS_SOURCES['finance'][:1]
-    news_sources = HOT_NEWS_SOURCES['news'][:1]
     
-    sources.extend(social_sources)   # 社交类取前2个
-    sources.extend(tech_sources)     # 科技类取前2个  
-    sources.extend(finance_sources)  # 财经类取前1个
-    sources.extend(news_sources)     # 新闻类取前1个
+    # Vercel优化策略：减少并发，优选稳定源
+    # 控制在5个源以内，避免Vercel并发限制
+    social_sources = HOT_NEWS_SOURCES['social'][:2]  # 只取最稳定的2个：weibo, bilibili
+    tech_sources = HOT_NEWS_SOURCES['tech'][:1]      # 只取最稳定的1个：ithome  
+    finance_sources = HOT_NEWS_SOURCES['finance'][:1] # 只取最稳定的1个：jin10
+    news_sources = HOT_NEWS_SOURCES['news'][:1]       # 取1个：toutiao
     
-    logger.info(f"热门新闻源配置: 社交{social_sources} + 科技{tech_sources} + 财经{finance_sources} + 新闻{news_sources} = 总计{sources}")
+    sources.extend(social_sources)   # 2个社交源
+    sources.extend(tech_sources)     # 1个科技源
+    sources.extend(finance_sources)  # 1个财经源  
+    sources.extend(news_sources)     # 1个新闻源
+    
+    # 总共5个源，既保证内容丰富又避免Vercel限制
+    logger.info(f"Vercel优化热门源: 社交{social_sources} + 科技{tech_sources} + 财经{finance_sources} + 新闻{news_sources} = 总计{sources} (共{len(sources)}个源)")
     return sources
 
 @with_error_handling  
