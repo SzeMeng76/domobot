@@ -6,6 +6,7 @@
 
 import asyncio
 import logging
+import feedparser
 from typing import Dict, List, Optional
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
@@ -26,6 +27,19 @@ from utils.message_manager import (
 from utils.permissions import Permission
 
 logger = logging.getLogger(__name__)
+
+# 翻译功能
+try:
+    from googletrans import Translator
+    translator = Translator()
+    TRANSLATION_AVAILABLE = True
+except ImportError:
+    logger.warning("Google Translate not available. English news will not be translated.")
+    translator = None
+    TRANSLATION_AVAILABLE = False
+
+# The Verge RSS URL
+VERGE_RSS_URL = "https://www.theverge.com/rss/index.xml"
 
 # 新闻源配置（使用API实际支持的源名称）
 NEWS_SOURCES = {
@@ -67,6 +81,7 @@ NEWS_SOURCES = {
     'baidu': '百度热搜',
     '36kr-quick': '36氪快讯',
     'cls-telegraph': '财联社电报',
+    'verge': 'The Verge (英文科技)',
     # 兼容性别名（保持原有源名称可用）
     'github': 'GitHub趋势',
     'v2ex': 'V2EX最新',
@@ -98,6 +113,77 @@ def get_actual_source_name(source: str) -> str:
     """获取实际的API源名称"""
     return SOURCE_MAPPING.get(source, source)
 
+async def translate_text(text: str, target_language: str = 'zh') -> str:
+    """翻译文本到目标语言"""
+    if not TRANSLATION_AVAILABLE or not translator:
+        return text
+    
+    # 限制文本长度避免超过API限制
+    if len(text) > 5000:  # 限制长度，避免超过15k字符限制
+        text = text[:5000] + "..."
+    
+    try:
+        # 为了避免阻塞，在线程池中执行翻译
+        import asyncio
+        loop = asyncio.get_event_loop()
+        
+        # 使用正确的语言代码：zh 而不是 zh-cn
+        result = await loop.run_in_executor(
+            None, 
+            lambda: translator.translate(text, dest=target_language, src='auto')
+        )
+        return result.text
+    except Exception as e:
+        logger.warning(f"Translation failed for text '{text[:50]}...': {e}")
+        return text
+
+async def get_verge_news(count: int = 10) -> List[Dict]:
+    """获取The Verge RSS新闻"""
+    try:
+        httpx_client = get_http_client()
+        logger.info("从 The Verge RSS 获取新闻")
+        
+        # 获取RSS数据
+        response = await httpx_client.get(VERGE_RSS_URL, timeout=10.0)
+        response.raise_for_status()
+        
+        # 解析RSS
+        feed = feedparser.parse(response.text)
+        items = []
+        
+        for entry in feed.entries[:count]:
+            # 提取新闻内容
+            title = entry.get('title', '无标题')
+            url = entry.get('link', '')
+            pub_date = entry.get('published', '')
+            summary = entry.get('summary', '')
+            
+            # 如果启用翻译，翻译标题和摘要
+            if TRANSLATION_AVAILABLE:
+                try:
+                    translated_title = await translate_text(title)
+                    translated_summary = await translate_text(summary[:200])  # 限制摘要长度
+                except Exception as e:
+                    logger.warning(f"翻译失败: {e}")
+                    translated_title = f"[英文] {title}"
+                    translated_summary = f"[英文] {summary[:200]}"
+            else:
+                translated_title = f"[英文] {title}"
+                translated_summary = f"[英文] {summary[:200]}"
+            
+            items.append({
+                'title': translated_title,
+                'url': url,
+                'extra': {'info': pub_date}
+            })
+        
+        logger.info(f"成功获取 {len(items)} 条 Verge 新闻")
+        return items
+        
+    except Exception as e:
+        logger.error(f"获取 Verge 新闻失败: {e}")
+        return []
+
 # 全局变量
 _cache_manager = None
 
@@ -113,7 +199,7 @@ def create_news_sources_keyboard() -> InlineKeyboardMarkup:
     
     # 按类别分组显示新闻源（使用兼容名称，便于用户识别）
     categories = [
-        ("🔧 科技类", ['github', 'ithome', 'juejin', 'hackernews', 'solidot', 'sspai', 'ghxi', 'linuxdo', 'chongbuluo']),
+        ("🔧 科技类", ['github', 'ithome', 'juejin', 'hackernews', 'solidot', 'sspai', 'ghxi', 'linuxdo', 'chongbuluo', 'verge']),
         ("💬 社交类", ['zhihu', 'weibo', 'v2ex', 'bilibili', 'douyin', 'tieba', 'kuaishou', 'coolapk', 'hupu']),
         ("💰 财经类", ['jin10', 'wallstreetcn', 'gelonghui', 'xueqiu', '36kr', 'fastbull', 'mktnews', 'cls-telegraph']),
         ("📰 新闻类", ['toutiao', 'thepaper', 'ifeng', 'baidu', 'cankaoxiaoxi', 'zaobao', 'sputniknewscn', 'kaopu']),
@@ -174,6 +260,32 @@ async def get_news(source_id: str, count: int = 10) -> List[Dict]:
     Returns:
         新闻列表
     """
+    # 如果是Verge源，使用RSS解析
+    if source_id.lower() == 'verge':
+        # 检查缓存
+        cache_key = f"verge_{count}"
+        if _cache_manager:
+            try:
+                cached_data = await _cache_manager.load_cache(cache_key, subdirectory="news")
+                if cached_data:
+                    logger.info(f"使用缓存获取 Verge 新闻")
+                    return cached_data
+            except Exception as e:
+                logger.warning(f"缓存读取失败: {e}")
+        
+        # 获取Verge新闻
+        items = await get_verge_news(count)
+        
+        # 缓存结果（5分钟有效期）
+        if _cache_manager and items:
+            try:
+                await _cache_manager.save_cache(cache_key, items, subdirectory="news")
+            except Exception as e:
+                logger.warning(f"缓存写入失败: {e}")
+        
+        return items
+    
+    # 原有的NewsNow API逻辑
     # 映射到实际的API源名称
     actual_source_id = get_actual_source_name(source_id)
     
@@ -382,7 +494,7 @@ async def newslist_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # 按类别分组显示（使用兼容名称）
         categories = [
-            ("🔧 科技类", ['github', 'ithome', 'juejin', 'hackernews', 'solidot', 'sspai', 'ghxi', 'linuxdo', 'chongbuluo']),
+            ("🔧 科技类", ['github', 'ithome', 'juejin', 'hackernews', 'solidot', 'sspai', 'ghxi', 'linuxdo', 'chongbuluo', 'verge']),
             ("💬 社交类", ['zhihu', 'weibo', 'v2ex', 'bilibili', 'douyin', 'tieba', 'kuaishou', 'coolapk', 'hupu']),
             ("💰 财经类", ['jin10', 'wallstreetcn', 'gelonghui', 'xueqiu', '36kr', 'fastbull', 'mktnews', 'cls-telegraph']),
             ("📰 新闻类", ['toutiao', 'thepaper', 'ifeng', 'baidu', 'cankaoxiaoxi', 'zaobao', 'sputniknewscn', 'kaopu']),
