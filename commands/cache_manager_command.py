@@ -26,6 +26,7 @@ CACHE_SERVICES = {
     'steam': 'Steam游戏缓存',
     'weather': '天气缓存',
     'cooking': '烹饪菜谱缓存',
+    'finance': '金融数据缓存',
     'whois': 'WHOIS查询缓存',
     'app_store': 'App Store缓存',
     'netflix': 'Netflix缓存',

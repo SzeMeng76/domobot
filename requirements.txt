@@ -50,3 +50,7 @@ feedparser==6.0.11
 
 # Translation API
 googletrans==4.0.2
+
+# Yahoo Finance API
+yfinance>=0.2.65
+pandas>=2.3.2

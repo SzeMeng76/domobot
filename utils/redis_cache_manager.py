@@ -86,6 +86,7 @@ class RedisCacheManager:
             "time": self.config.time_cache_duration,  # 24小时，时区缓存
             "cooking": self.config.cooking_cache_duration,  # 7天，烹饪菜谱缓存
             "memes": self.config.memes_cache_duration,  # 10分钟，表情包缓存
+            "finance": self.config.finance_cache_duration,  # 5分钟，金融数据缓存
         }
 
         # 对于搜索结果特殊处理
@@ -93,6 +94,11 @@ class RedisCacheManager:
             return self.config.google_play_search_cache_duration
         if subdirectory == "app_store" and key and "search_" in key:
             return self.config.app_store_search_cache_duration
+        if subdirectory == "finance" and key:
+            if "search_" in key:
+                return self.config.finance_search_cache_duration
+            elif "trending_" in key:
+                return self.config.finance_ranking_cache_duration
 
         return ttl_mapping.get(subdirectory, self.config.default_cache_duration)
 

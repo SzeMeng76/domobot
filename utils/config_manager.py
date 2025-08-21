@@ -64,6 +64,9 @@ class BotConfig:
         self.time_cache_duration = 86400  # 24小时，时区缓存
         self.cooking_cache_duration = 86400 * 7  # 7天，烹饪菜谱缓存
         self.memes_cache_duration = 600  # 10分钟，表情包缓存
+        self.finance_cache_duration = 300  # 5分钟，股票信息缓存
+        self.finance_ranking_cache_duration = 180  # 3分钟，股票排行榜缓存
+        self.finance_search_cache_duration = 600  # 10分钟，股票搜索缓存
 
         # 定时清理配置
         self.spotify_weekly_cleanup = True  # 默认启用
@@ -75,6 +78,7 @@ class BotConfig:
         self.time_weekly_cleanup = True  # 默认启用，时区缓存
         self.cooking_weekly_cleanup = True  # 默认启用，烹饪菜谱缓存
         self.memes_weekly_cleanup = True  # 默认启用，表情包缓存
+        self.finance_weekly_cleanup = True  # 默认启用，金融数据缓存
 
         # API配置
         self.exchange_rate_api_keys = []
@@ -225,6 +229,9 @@ class ConfigManager:
         self.config.whois_cache_duration = get_int_env("WHOIS_CACHE_DURATION", str(3600 * 6))
         self.config.time_cache_duration = get_int_env("TIME_CACHE_DURATION", "86400")
         self.config.memes_cache_duration = get_int_env("MEMES_CACHE_DURATION", "600")
+        self.config.finance_cache_duration = get_int_env("FINANCE_CACHE_DURATION", "300")
+        self.config.finance_ranking_cache_duration = get_int_env("FINANCE_RANKING_CACHE_DURATION", "180")
+        self.config.finance_search_cache_duration = get_int_env("FINANCE_SEARCH_CACHE_DURATION", "600")
 
         # 定时清理配置
         self.config.spotify_weekly_cleanup = get_bool_env("SPOTIFY_WEEKLY_CLEANUP")
@@ -233,6 +240,7 @@ class ConfigManager:
         self.config.news_weekly_cleanup = get_bool_env("NEWS_WEEKLY_CLEANUP", "True")
         self.config.whois_weekly_cleanup = get_bool_env("WHOIS_WEEKLY_CLEANUP", "True")
         self.config.time_weekly_cleanup = get_bool_env("TIME_WEEKLY_CLEANUP", "True")
+        self.config.finance_weekly_cleanup = get_bool_env("FINANCE_WEEKLY_CLEANUP", "True")
 
         # API配置
         keys_str = os.getenv("EXCHANGE_RATE_API_KEYS") or os.getenv("EXCHANGE_RATE_API_KEY", "")
