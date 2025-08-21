@@ -113,7 +113,7 @@ def get_actual_source_name(source: str) -> str:
     """获取实际的API源名称"""
     return SOURCE_MAPPING.get(source, source)
 
-async def translate_text(text: str, target_language: str = 'zh') -> str:
+async def translate_text(text: str, target_language: str = 'zh-cn') -> str:
     """翻译文本到目标语言"""
     if not TRANSLATION_AVAILABLE or not translator:
         return text
@@ -127,7 +127,7 @@ async def translate_text(text: str, target_language: str = 'zh') -> str:
         import asyncio
         loop = asyncio.get_event_loop()
         
-        # 使用正确的语言代码：zh 而不是 zh-cn
+        # 使用正确的语言代码：zh-cn 为中文简体
         result = await loop.run_in_executor(
             None, 
             lambda: translator.translate(text, dest=target_language, src='auto')
