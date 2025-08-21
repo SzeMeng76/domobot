@@ -31,7 +31,10 @@ logger = logging.getLogger(__name__)
 # 翻译功能
 try:
     from googletrans import Translator
-    translator = Translator()
+    translator = Translator(
+        service_urls=['translate.google.com', 'translate.google.co.kr'],
+        user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+    )
     TRANSLATION_AVAILABLE = True
 except ImportError:
     logger.warning("Google Translate not available. English news will not be translated.")
