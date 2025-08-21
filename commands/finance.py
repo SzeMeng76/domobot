@@ -17,6 +17,7 @@ from utils.config_manager import get_config, config_manager
 from utils.formatter import foldable_text_v2, foldable_text_with_markdown_v2, format_with_markdown_v2
 from utils.message_manager import delete_user_command, send_error, send_success, send_message_with_auto_delete
 from utils.permissions import Permission
+from utils.country_data import SUPPORTED_COUNTRIES
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,24 @@ httpx_client = None
 # 股票ID映射缓存
 stock_id_mapping = {}
 mapping_counter = 0
+
+def get_currency_symbol(currency_code: str) -> str:
+    """根据货币代码获取货币符号"""
+    # 先从country_data中查找
+    for country_data in SUPPORTED_COUNTRIES.values():
+        if country_data["currency"] == currency_code:
+            return country_data["symbol"]
+    
+    # 常用货币符号映射
+    currency_symbols = {
+        'USD': '$', 'CNY': '¥', 'JPY': '¥', 'EUR': '€', 'GBP': '£',
+        'HKD': 'HK$', 'MYR': 'RM', 'SGD': 'S$', 'TWD': 'NT$',
+        'KRW': '₩', 'THB': '฿', 'CAD': 'C$', 'AUD': 'A$',
+        'CHF': 'CHF', 'SEK': 'kr', 'NOK': 'kr', 'DKK': 'kr',
+        'RUB': '₽', 'INR': '₹', 'BRL': 'R$', 'ZAR': 'R'
+    }
+    
+    return currency_symbols.get(currency_code, currency_code)
 
 def set_dependencies(cm, hc=None):
     """初始化依赖"""
@@ -172,7 +191,8 @@ class FinanceService:
                                 'change': float(quote.get('regularMarketChange', 0)),
                                 'change_percent': float(quote.get('regularMarketChangePercent', 0)),
                                 'volume': int(quote.get('regularMarketVolume', 0)),
-                                'market_cap': quote.get('marketCap', 0)
+                                'market_cap': quote.get('marketCap', 0),
+                                'currency': quote.get('currency', 'USD')
                             }
                             results.append(data)
                     except (ValueError, TypeError) as e:
@@ -304,6 +324,11 @@ class FinanceService:
         try:
             ticker = yf.Ticker(symbol)
             
+            # 获取股票基本信息以获取货币
+            info = ticker.info
+            currency = info.get('currency', 'USD') if info else 'USD'
+            financial_currency = info.get('financialCurrency', currency) if info else currency
+            
             if statement_type == "income":
                 df = ticker.income_stmt
                 title = "损益表"
@@ -353,6 +378,7 @@ class FinanceService:
                     'title': title,
                     'period': latest_year.strftime('%Y-%m-%d') if hasattr(latest_year, 'strftime') else str(latest_year),
                     'data': financial_data,
+                    'currency': financial_currency,
                     'timestamp': datetime.now().isoformat()
                 }
                 
@@ -471,6 +497,8 @@ def format_financial_statement(financial_data: Dict) -> str:
     title = financial_data['title'] 
     period = financial_data['period']
     data = financial_data['data']
+    currency = financial_data.get('currency', 'USD')
+    currency_symbol = get_currency_symbol(currency)
     
     result = f"📋 *{symbol} {title}*\n"
     result += f"📅 报告期: `{period}`\n\n"
@@ -484,43 +512,43 @@ def format_financial_statement(financial_data: Dict) -> str:
     if statement_type == "income":
         # 损益表关键指标
         if 'Total Revenue' in data:
-            result += f"💰 总营收: `${data['Total Revenue']:,.0f}`\n"
+            result += f"💰 总营收: `{currency_symbol}{data['Total Revenue']:,.0f}`\n"
         if 'Gross Profit' in data:
-            result += f"💵 毛利润: `${data['Gross Profit']:,.0f}`\n"  
+            result += f"💵 毛利润: `{currency_symbol}{data['Gross Profit']:,.0f}`\n"  
         if 'Operating Income' in data:
-            result += f"⚙️ 营业利润: `${data['Operating Income']:,.0f}`\n"
+            result += f"⚙️ 营业利润: `{currency_symbol}{data['Operating Income']:,.0f}`\n"
         if 'Net Income' in data:
-            result += f"💎 净利润: `${data['Net Income']:,.0f}`\n"
+            result += f"💎 净利润: `{currency_symbol}{data['Net Income']:,.0f}`\n"
         if 'Basic EPS' in data:
-            result += f"📊 基本EPS: `${data['Basic EPS']:.2f}`\n"
+            result += f"📊 基本EPS: `{currency_symbol}{data['Basic EPS']:.2f}`\n"
         if 'Diluted EPS' in data:
-            result += f"📈 摊薄EPS: `${data['Diluted EPS']:.2f}`\n"
+            result += f"📈 摊薄EPS: `{currency_symbol}{data['Diluted EPS']:.2f}`\n"
             
     elif statement_type == "balance":
         # 资产负债表关键指标
         if 'Total Assets' in data:
-            result += f"🏛️ 总资产: `${data['Total Assets']:,.0f}`\n"
+            result += f"🏛️ 总资产: `{currency_symbol}{data['Total Assets']:,.0f}`\n"
         if 'Total Liabilities Net Minority Interest' in data:
-            result += f"📉 总负债: `${data['Total Liabilities Net Minority Interest']:,.0f}`\n"
+            result += f"📉 总负债: `{currency_symbol}{data['Total Liabilities Net Minority Interest']:,.0f}`\n"
         if 'Stockholders Equity' in data:
-            result += f"🏦 股东权益: `${data['Stockholders Equity']:,.0f}`\n"
+            result += f"🏦 股东权益: `{currency_symbol}{data['Stockholders Equity']:,.0f}`\n"
         if 'Cash And Cash Equivalents' in data:
-            result += f"💰 现金及等价物: `${data['Cash And Cash Equivalents']:,.0f}`\n"
+            result += f"💰 现金及等价物: `{currency_symbol}{data['Cash And Cash Equivalents']:,.0f}`\n"
         if 'Total Debt' in data:
-            result += f"💳 总债务: `${data['Total Debt']:,.0f}`\n"
+            result += f"💳 总债务: `{currency_symbol}{data['Total Debt']:,.0f}`\n"
         if 'Working Capital' in data:
-            result += f"⚡ 营运资金: `${data['Working Capital']:,.0f}`\n"
+            result += f"⚡ 营运资金: `{currency_symbol}{data['Working Capital']:,.0f}`\n"
             
     elif statement_type == "cashflow":
         # 现金流量表关键指标
         if 'Operating Cash Flow' in data:
-            result += f"⚙️ 经营现金流: `${data['Operating Cash Flow']:,.0f}`\n"
+            result += f"⚙️ 经营现金流: `{currency_symbol}{data['Operating Cash Flow']:,.0f}`\n"
         if 'Investing Cash Flow' in data:
-            result += f"📈 投资现金流: `${data['Investing Cash Flow']:,.0f}`\n"
+            result += f"📈 投资现金流: `{currency_symbol}{data['Investing Cash Flow']:,.0f}`\n"
         if 'Financing Cash Flow' in data:
-            result += f"💰 融资现金流: `${data['Financing Cash Flow']:,.0f}`\n"
+            result += f"💰 融资现金流: `{currency_symbol}{data['Financing Cash Flow']:,.0f}`\n"
         if 'Free Cash Flow' in data:
-            result += f"💎 自由现金流: `${data['Free Cash Flow']:,.0f}`\n"
+            result += f"💎 自由现金流: `{currency_symbol}{data['Free Cash Flow']:,.0f}`\n"
     
     result += f"\n_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
     return result
@@ -537,17 +565,15 @@ def format_ranking_list(stocks: List[Dict], title: str) -> str:
         name = stock.get('name', symbol)
         price = stock['current_price']
         change_percent = stock['change_percent']
+        currency = stock.get('currency', 'USD')
+        currency_symbol = get_currency_symbol(currency)
         
         trend_emoji = "📈" if change_percent >= 0 else "📉"
         change_sign = "+" if change_percent >= 0 else ""
         
-        # 截断过长的名称
-        display_name = name
-        if len(name) > 20:
-            display_name = name[:17] + "..."
-        
-        result += f"`{i:2d}.` {trend_emoji} *{symbol}* - {display_name}\n"
-        result += f"     `${price:.2f}` `({change_sign}{change_percent:.2f}%)`\n\n"
+        # 显示完整公司名称
+        result += f"`{i:2d}.` {trend_emoji} *{symbol}* - {name}\n"
+        result += f"     `{currency_symbol}{price:.2f}` `({change_sign}{change_percent:.2f}%)`\n\n"
     
     result += f"_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
     return result
@@ -1278,46 +1304,46 @@ async def finance_clean_cache_command(update: Update, context: ContextTypes.DEFA
 command_factory.register_command(
     "finance",
     finance_command,
-    permission=Permission.USER,
+    permission=Permission.NONE,
     description="金融数据查询 - 股票信息、排行榜等"
 )
 
 # 注册回调处理器
-command_factory.register_callback(r"^finance_main_menu$", finance_main_menu_callback, permission=Permission.USER, description="金融主菜单")
-command_factory.register_callback(r"^finance_search$", finance_search_callback, permission=Permission.USER, description="股票查询说明")
-command_factory.register_callback(r"^finance_search_menu$", finance_search_callback, permission=Permission.USER, description="股票搜索菜单")
-command_factory.register_callback(r"^finance_stock_detail:", finance_stock_detail_callback, permission=Permission.USER, description="股票详情")
+command_factory.register_callback(r"^finance_main_menu$", finance_main_menu_callback, permission=Permission.NONE, description="金融主菜单")
+command_factory.register_callback(r"^finance_search$", finance_search_callback, permission=Permission.NONE, description="股票查询说明")
+command_factory.register_callback(r"^finance_search_menu$", finance_search_callback, permission=Permission.NONE, description="股票搜索菜单")
+command_factory.register_callback(r"^finance_stock_detail:", finance_stock_detail_callback, permission=Permission.NONE, description="股票详情")
 
 # 菜单导航
-command_factory.register_callback(r"^finance_stock_rankings$", finance_stock_rankings_callback, permission=Permission.USER, description="股票排行榜菜单")
-command_factory.register_callback(r"^finance_fund_rankings$", finance_fund_rankings_callback, permission=Permission.USER, description="基金排行榜菜单")
+command_factory.register_callback(r"^finance_stock_rankings$", finance_stock_rankings_callback, permission=Permission.NONE, description="股票排行榜菜单")
+command_factory.register_callback(r"^finance_fund_rankings$", finance_fund_rankings_callback, permission=Permission.NONE, description="基金排行榜菜单")
 
 # 股票排行榜
-command_factory.register_callback(r"^finance_gainers$", finance_gainers_callback, permission=Permission.USER, description="日涨幅榜")
-command_factory.register_callback(r"^finance_losers$", finance_losers_callback, permission=Permission.USER, description="日跌幅榜")
-command_factory.register_callback(r"^finance_actives$", finance_actives_callback, permission=Permission.USER, description="最活跃股票")
-command_factory.register_callback(r"^finance_aggressive_small_caps$", finance_aggressive_small_caps_callback, permission=Permission.USER, description="激进小盘股")
-command_factory.register_callback(r"^finance_small_cap_gainers$", finance_small_cap_gainers_callback, permission=Permission.USER, description="小盘股涨幅榜")
-command_factory.register_callback(r"^finance_most_shorted$", finance_most_shorted_callback, permission=Permission.USER, description="最多做空股票")
-command_factory.register_callback(r"^finance_growth_tech$", finance_growth_tech_callback, permission=Permission.USER, description="成长科技股")
-command_factory.register_callback(r"^finance_undervalued_large$", finance_undervalued_large_callback, permission=Permission.USER, description="低估值大盘股")
-command_factory.register_callback(r"^finance_undervalued_growth$", finance_undervalued_growth_callback, permission=Permission.USER, description="低估值成长股")
+command_factory.register_callback(r"^finance_gainers$", finance_gainers_callback, permission=Permission.NONE, description="日涨幅榜")
+command_factory.register_callback(r"^finance_losers$", finance_losers_callback, permission=Permission.NONE, description="日跌幅榜")
+command_factory.register_callback(r"^finance_actives$", finance_actives_callback, permission=Permission.NONE, description="最活跃股票")
+command_factory.register_callback(r"^finance_aggressive_small_caps$", finance_aggressive_small_caps_callback, permission=Permission.NONE, description="激进小盘股")
+command_factory.register_callback(r"^finance_small_cap_gainers$", finance_small_cap_gainers_callback, permission=Permission.NONE, description="小盘股涨幅榜")
+command_factory.register_callback(r"^finance_most_shorted$", finance_most_shorted_callback, permission=Permission.NONE, description="最多做空股票")
+command_factory.register_callback(r"^finance_growth_tech$", finance_growth_tech_callback, permission=Permission.NONE, description="成长科技股")
+command_factory.register_callback(r"^finance_undervalued_large$", finance_undervalued_large_callback, permission=Permission.NONE, description="低估值大盘股")
+command_factory.register_callback(r"^finance_undervalued_growth$", finance_undervalued_growth_callback, permission=Permission.NONE, description="低估值成长股")
 
 # 基金排行榜
-command_factory.register_callback(r"^finance_conservative_foreign$", finance_conservative_foreign_callback, permission=Permission.USER, description="保守外国基金")
-command_factory.register_callback(r"^finance_high_yield_bond$", finance_high_yield_bond_callback, permission=Permission.USER, description="高收益债券基金")
-command_factory.register_callback(r"^finance_portfolio_anchors$", finance_portfolio_anchors_callback, permission=Permission.USER, description="投资组合核心基金")
-command_factory.register_callback(r"^finance_large_growth_funds$", finance_large_growth_funds_callback, permission=Permission.USER, description="优质大盘成长基金")
-command_factory.register_callback(r"^finance_midcap_growth_funds$", finance_midcap_growth_funds_callback, permission=Permission.USER, description="优质中盘成长基金")
-command_factory.register_callback(r"^finance_top_mutual_funds$", finance_top_mutual_funds_callback, permission=Permission.USER, description="顶级共同基金")
+command_factory.register_callback(r"^finance_conservative_foreign$", finance_conservative_foreign_callback, permission=Permission.NONE, description="保守外国基金")
+command_factory.register_callback(r"^finance_high_yield_bond$", finance_high_yield_bond_callback, permission=Permission.NONE, description="高收益债券基金")
+command_factory.register_callback(r"^finance_portfolio_anchors$", finance_portfolio_anchors_callback, permission=Permission.NONE, description="投资组合核心基金")
+command_factory.register_callback(r"^finance_large_growth_funds$", finance_large_growth_funds_callback, permission=Permission.NONE, description="优质大盘成长基金")
+command_factory.register_callback(r"^finance_midcap_growth_funds$", finance_midcap_growth_funds_callback, permission=Permission.NONE, description="优质中盘成长基金")
+command_factory.register_callback(r"^finance_top_mutual_funds$", finance_top_mutual_funds_callback, permission=Permission.NONE, description="顶级共同基金")
 
 # 分析师评级和财务报表
-command_factory.register_callback(r"^finance_analyst:", finance_analyst_callback, permission=Permission.USER, description="分析师评级")
-command_factory.register_callback(r"^finance_income:", finance_financial_callback, permission=Permission.USER, description="损益表")
-command_factory.register_callback(r"^finance_balance:", finance_financial_callback, permission=Permission.USER, description="资产负债表")
-command_factory.register_callback(r"^finance_cashflow:", finance_financial_callback, permission=Permission.USER, description="现金流量表")
+command_factory.register_callback(r"^finance_analyst:", finance_analyst_callback, permission=Permission.NONE, description="分析师评级")
+command_factory.register_callback(r"^finance_income:", finance_financial_callback, permission=Permission.NONE, description="损益表")
+command_factory.register_callback(r"^finance_balance:", finance_financial_callback, permission=Permission.NONE, description="资产负债表")
+command_factory.register_callback(r"^finance_cashflow:", finance_financial_callback, permission=Permission.NONE, description="现金流量表")
 
-command_factory.register_callback(r"^finance_close$", finance_close_callback, permission=Permission.USER, description="关闭金融消息")
+command_factory.register_callback(r"^finance_close$", finance_close_callback, permission=Permission.NONE, description="关闭金融消息")
 
 # 已迁移到统一缓存管理命令 /cleancache
 # command_factory.register_command("finance_cleancache", finance_clean_cache_command, permission=Permission.ADMIN, description="清理金融模块缓存")

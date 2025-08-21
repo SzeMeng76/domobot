@@ -21,7 +21,8 @@ Read this in other languages: [简体中文](./README.zh-CN.md)
 - 🌐 **WHOIS & DNS Lookup:** Domain, IP, ASN, TLD information with DNS records and Telegraph integration
 - 🍳 **Cooking Assistant:** Recipe search, categorized browsing, intelligent meal planning, and daily menu recommendations
 - 🎭 **Memes & Entertainment:** Random meme fetching with AI-generated descriptions, custom quantities (1-20), smart retry for quality content, auto-deletion, and intelligent caching
-- 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`, `/dns`, `/recipe`, `/recipe_category`, `/recipe_random`, `/what_to_eat`, `/meal_plan`, `/meme`
+- 📊 **Finance & Stocks:** Real-time stock prices, 15 ranking categories (gainers/losers, tech stocks, funds), analyst recommendations, financial statements, multi-market support (US/HK/CN/MY), intelligent search by symbol or company name
+- 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`, `/dns`, `/recipe`, `/recipe_category`, `/recipe_random`, `/what_to_eat`, `/meal_plan`, `/meme`, `/finance`
 - 👥 **Group Friendly:** Works in any Telegram group without requiring whitelist approval
 - 🔧 **Self-Service:** Use `/refresh` if new commands don't appear in your input suggestions
 
@@ -46,6 +47,7 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 -   🌐 **Public WHOIS & DNS Lookup:** Available to all users - comprehensive domain, IP address, ASN, and TLD information lookup with real-time IANA data integration and IP geolocation services. Features intelligent query type detection, support for domains (.com, .io), IP addresses (IPv4/IPv6), ASN numbers (AS15169), and TLD information (.com, .me) with detailed registry, WHOIS server, creation dates, and management organization data. **NEW:** IP queries now include actual server location with country, region, city, coordinates, ISP information, and timezone data via IP-API.com integration, clearly distinguishing between WHOIS registration data and actual geographic location. **ENHANCED:** Domain WHOIS queries now automatically include comprehensive DNS records (A, AAAA, MX, NS, CNAME, TXT, SOA, PTR) with intelligent display formatting. Standalone `/dns` command available for DNS-only queries. Long query results automatically use Telegraph integration for complete information display with summary previews.
 -   🍳 **Public Cooking Assistant:** Available to all users - comprehensive recipe search and meal planning system with 1000+ recipes from HowToCook database. Features include **smart recipe search** with keyword matching, **categorized browsing** (荤菜, 素菜, 主食, 汤羹, 水产, 早餐, 甜品, etc.), **intelligent meal planning** with dietary restrictions and allergy considerations, **daily menu recommendations** with people count selection, **random recipe discovery**, and **Telegraph integration** for long recipes with complete ingredients and step-by-step instructions. All recipes include difficulty ratings, cooking time, serving sizes, and detailed nutritional guidance.
 -   🎭 **Public Memes:** Available to all users - fetch random memes from memes.bupt.site API with **AI-generated descriptions** for enhanced understanding. Features **smart retry mechanism** to ensure quality content when requesting single memes, custom quantities (1-20), intelligent caching system, auto-deletion scheduling (15 minutes), and fallback link display. Includes parameter validation, real-time status updates, and comprehensive error handling for reliable meme delivery. Description priority: manual review > AI description > none.
+-   📊 **Public Finance & Stocks:** Available to all users - comprehensive financial market data powered by Yahoo Finance. Features **real-time stock prices** with market data and technical indicators, **15 ranking categories** including day gainers/losers, most actives, growth tech stocks, undervalued stocks, and mutual fund rankings, **intelligent stock search** supporting ticker symbols and company names across multiple markets (US, HK, CN, MY), **analyst recommendations** with buy/sell/hold ratings, **financial statements** (income, balance sheet, cash flow), categorized inline button interface, intelligent caching with different TTL for various data types, and comprehensive error handling with auto-deletion. Supports flexible search queries like "AAPL", "Apple", "Tesla", "6033.KL", "Maybank" with multilingual matching.
 -   🎬 **Movie & TV Information:** Query movie/TV details with posters, ratings, cast, trailers, reviews, recommendations, viewing platforms, and season/episode info. Features **3-platform data integration** (TMDB + JustWatch + Trakt) with **JustWatch streaming charts**, real-time ranking trends, platform availability, Telegraph integration for long content, trending discovery, people search, and enhanced statistics with watch counts and community data. *(Whitelist required)*
 -   🪙 **Crypto Prices:** Look up real-time cryptocurrency prices with support for custom amounts and currency conversion, including 24h and 7d percentage changes. *(Whitelist required)*
 -   💳 **BIN Lookup:** Query credit card BIN (Bank Identification Number) information including card brand, type, issuing bank, and country details. *(Whitelist required)*
@@ -177,6 +179,14 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /meme 3                  # Get 3 random memes
 /meme 5                  # Get 5 random memes (1-20 range)
 /meme                    # Show help and usage guide
+
+# Finance & Stock Market (Real-time data from Yahoo Finance)
+/finance                 # Show finance main menu with categories
+/finance AAPL            # Search Apple stock by symbol
+/finance Tesla           # Search Tesla by company name
+/finance 6033.KL         # Search Malaysian stock (PETRONAS Gas)
+/finance Maybank         # Search by partial company name
+# Interactive features: Stock rankings (15 categories), analyst recommendations, financial statements
 ```
 
 #### Whitelist-Only Commands
@@ -302,6 +312,7 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /cleancache bin           # Clear BIN query cache
 /cleancache google_play   # Clear Google Play cache
 /cleancache apple_services # Clear Apple services cache
+/cleancache finance       # Clear finance & stock data cache
 
 # Command List Management
 /refresh_all             # Admin: Refresh command lists for all users and groups
@@ -473,7 +484,19 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 
 ### 🆕 Recent Updates
 
-#### Memes Feature Integration (Latest)
+#### Finance & Stock Market Integration (Latest)
+- **New `/finance` Command:** Comprehensive financial market data powered by Yahoo Finance API with real-time stock prices
+- **15 Ranking Categories:** Complete stock and fund rankings including day gainers/losers, most actives, growth tech stocks, undervalued stocks, and 6 mutual fund categories
+- **Multi-Market Support:** US, Hong Kong (HK), China (CN), Malaysia (MY) stocks with flexible ticker format support
+- **Intelligent Stock Search:** Support for ticker symbols (AAPL, 6033.KL) and company names (Apple, Tesla, Maybank) with multilingual matching
+- **Advanced Financial Data:** Analyst recommendations with buy/sell/hold ratings, financial statements (income, balance sheet, cash flow)
+- **Categorized Interface:** Separate stock rankings (9 types) and fund rankings (6 types) with interactive button navigation
+- **Smart Caching System:** Intelligent Redis caching with different TTL for stock info (5min), rankings (3min), and search results (10min)
+- **Auto-deletion Management:** All user commands and bot messages automatically deleted to maintain clean chat interface
+- **Real-time Market Data:** Current prices, daily changes, volume, market cap, P/E ratio, and exchange information
+- **Technical Integration:** yfinance library integration with pandas DataFrame processing and comprehensive error handling
+
+#### Memes Feature Integration
 - **New `/meme` Command:** Fetch random memes from memes.bupt.site API with support for 1-20 memes per request
 - **Parameter Validation:** Smart input validation with clear error messages and usage guidance
 - **Auto-deletion System:** Meme images automatically delete after 15 minutes to keep chats clean
@@ -597,6 +620,7 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 - **HeFeng Weather API:** For weather forecast data
 - **Steam API:** For game pricing information
 - **IP-API.com:** For IP geolocation and actual server location data (free service)
+- **Yahoo Finance API:** For real-time stock prices, market data, rankings, analyst recommendations, and financial statements
 - **Various streaming service APIs:** For subscription pricing
 
 ### 🤝 Contributing

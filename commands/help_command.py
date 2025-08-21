@@ -40,6 +40,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 ⏰ `/time 北京` - 时间查询 | 📰 `/news` - 新闻聚合
 🌐 `/whois google.com` - WHOIS查询 | 🔍 `/dns domain.com` - DNS记录
 🍳 `/recipe 红烧肉` - 菜谱搜索 | 🎭 `/meme 3` - 表情包
+📊 `/finance AAPL` - 股票查询 | 📈 `/finance` - 股市排行榜
 
 💱 *汇率* `/rate [货币] [数额]` - 支持表达式计算
 🪙 *加密货币* `/crypto <币种> [数量] [货币]` - 实时价格
@@ -49,6 +50,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 📰 *新闻* `/news` - 交互式选择 | `/newslist [源] [数量]` - 列表查询
 🌐 *WHOIS&DNS* `/whois <查询>` - 域名/IP/ASN/TLD信息(含DNS) | `/dns <域名>` - 仅DNS记录
 🍳 *烹饪助手* `/recipe <菜名>` - 菜谱搜索 | `/what_to_eat` - 今天吃什么 | `/meal_plan` - 智能膳食
+📊 *股票金融* `/finance <代号/公司名>` - 实时股价查询 | `/finance` - 15类股票&基金排行榜
 
 🎬 *影视查询*
 搜索: `/movie <片名>` `/tv <剧名>` `/person <演员>`
@@ -66,7 +68,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 🌍 *支持地区* US CN TR IN MY JP GB DE 等40+国家
 💡 *特色* 支持中文地名 | 自动CNY转换 | 智能缓存 | 表达式计算
 
-⚡ 快速试用: `/nf` `/crypto btc` `/tq 北京` `/movie_hot` `/news` `/time 北京` `/whois google.com` `/dns github.com` `/recipe 红烧肉` `/what_to_eat` `/meme 3`"""
+⚡ 快速试用: `/nf` `/crypto btc` `/tq 北京` `/movie_hot` `/news` `/time 北京` `/whois google.com` `/dns github.com` `/recipe 红烧肉` `/what_to_eat` `/meme 3` `/finance AAPL`"""
 
     admin_help_text = """
 
@@ -92,6 +94,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 ⏰ *时间查询* `/time <时区>` `/convert_time` `/timezone` - 时区转换
 📰 *新闻聚合* `/news` `/newslist` `/hotnews` - 40+源实时资讯
 🌐 *WHOIS&DNS查询* `/whois <查询>` - 域名/IP/ASN/TLD信息(含DNS) | `/dns <域名>` - 仅DNS记录
+📊 *股票金融* `/finance <代号/公司名>` - 实时股价 | `/finance` - 15类排行榜
 
 🍳 *烹饪助手*
 搜索: `/recipe <菜名>` - 智能菜谱搜索 | `/recipe_category` - 分类浏览
@@ -102,9 +105,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 随机: `/meme <数量>` - 获取1-20个随机表情包 | 自动删除 | 智能缓存
 
 🌍 *支持地区* US CN TR IN MY JP GB DE 等40+国家
-💡 *特色* 支持中文地名 | 自动CNY转换 | 时区智能识别 | 新闻分类 | 1000+中文菜谱
+💡 *特色* 支持中文地名 | 自动CNY转换 | 时区智能识别 | 新闻分类 | 1000+中文菜谱 | 多市场股票
 
-⚡ *快速试用* `/nf` `/ds` `/sp` `/max` `/when` `/id` `/time 北京` `/news` `/recipe 红烧肉` `/what_to_eat` `/meme 3`
+⚡ *快速试用* `/nf` `/ds` `/sp` `/max` `/when` `/id` `/time 北京` `/news` `/recipe 红烧肉` `/what_to_eat` `/meme 3` `/finance AAPL`
 
 🔧 *命令问题?* 如果新功能不显示，请使用 `/refresh` 刷新命令列表
 
@@ -162,6 +165,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 🌐 WHOIS&DNS查询 `/whois` `/dns` - 域名/IP/ASN/TLD+DNS记录
 🍳 烹饪助手 `/recipe` `/what_to_eat` `/meal_plan`
 🎭 表情包娱乐 `/meme` - 随机表情包获取
+📊 股票金融 `/finance` - 实时股价&15类排行榜
 
 🚀 *试试看*
 `/nf` - Netflix全球价格
@@ -177,9 +181,11 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 `/dns github.com` - DNS记录查询
 `/recipe 红烧肉` - 菜谱搜索
 `/what_to_eat` - 今天吃什么
+`/finance AAPL` - 苹果股票查询
+`/finance Tesla` - 特斯拉股票搜索
 `/help` - 查看详细功能
 
-🌟 支持40+国家 | 自动CNY转换 | 中文地名 | 时区智能识别 | 新闻分类 | 1000+中文菜谱 | 随机表情包
+🌟 支持40+国家 | 自动CNY转换 | 中文地名 | 时区智能识别 | 新闻分类 | 1000+中文菜谱 | 随机表情包 | 多市场股票
 
 🔧 命令不显示? 试试 `/refresh` 刷新命令列表"""
     else:
@@ -187,13 +193,13 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         welcome_text = f"""👋 *欢迎 {user.first_name}! 多功能价格查询机器人*
 
 🎯 *全功能版本*
-💱 汇率 🪙 币价 💳 BIN 🌦️ 天气 🎬 影视 🎮 游戏 📺 流媒体 📱 应用 ⏰ 时间 📰 新闻 🍳 烹饪 🎭 表情包
+💱 汇率 🪙 币价 💳 BIN 🌦️ 天气 🎬 影视 🎮 游戏 📺 流媒体 📱 应用 ⏰ 时间 📰 新闻 🍳 烹饪 🎭 表情包 📊 股票金融
 
 🚀 *快速开始*
 `/rate USD 100` `/crypto btc` `/tq 北京` `/movie_hot`
-`/steam 赛博朋克` `/nf` `/time 北京` `/whois google.com` `/dns github.com` `/news` `/recipe 红烧肉` `/meme 3` `/help`
+`/steam 赛博朋克` `/nf` `/time 北京` `/whois google.com` `/dns github.com` `/news` `/recipe 红烧肉` `/meme 3` `/finance AAPL` `/help`
 
-🌟 40+国家 | CNY转换 | 智能缓存 | 表达式计算 | 时区转换 | 新闻聚合 | 1000+中文菜谱"""
+🌟 40+国家 | CNY转换 | 智能缓存 | 表达式计算 | 时区转换 | 新闻聚合 | 1000+中文菜谱 | 股市数据"""
 
     await send_help(context, update.message.chat_id, foldable_text_with_markdown_v2(welcome_text), parse_mode="MarkdownV2")
 
