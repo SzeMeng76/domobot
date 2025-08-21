@@ -14,7 +14,7 @@ from telegram.helpers import escape_markdown
 
 from utils.command_factory import command_factory
 from utils.config_manager import get_config, config_manager
-from utils.formatter import foldable_text_v2, foldable_text_with_markdown_v2
+from utils.formatter import foldable_text_v2, foldable_text_with_markdown_v2, format_with_markdown_v2
 from utils.message_manager import delete_user_command, send_error, send_success, send_message_with_auto_delete
 from utils.permissions import Permission
 
@@ -230,6 +230,142 @@ class FinanceService:
         except Exception as e:
             logger.error(f"搜索股票失败 {query}: {e}")
             return []
+    
+    async def get_analyst_recommendations(self, symbol: str) -> Optional[Dict]:
+        """获取分析师评级"""
+        cache_key = f"analyst_{symbol.upper()}"
+        
+        if cache_manager:
+            config = get_config()
+            cached_data = await cache_manager.load_cache(
+                cache_key, 
+                max_age_seconds=config.finance_cache_duration * 2,  # 分析师数据缓存10分钟
+                subdirectory="finance"
+            )
+            if cached_data:
+                return cached_data
+        
+        try:
+            ticker = yf.Ticker(symbol)
+            
+            # 获取分析师评级汇总
+            recommendations_summary = ticker.recommendations_summary
+            # 获取目标价
+            price_targets = ticker.analyst_price_targets
+            
+            if recommendations_summary is not None and not recommendations_summary.empty:
+                latest_summary = recommendations_summary.iloc[0]  # 最新的评级汇总
+                
+                data = {
+                    'symbol': symbol.upper(),
+                    'strong_buy': int(latest_summary.get('strongBuy', 0)),
+                    'buy': int(latest_summary.get('buy', 0)),
+                    'hold': int(latest_summary.get('hold', 0)),
+                    'sell': int(latest_summary.get('sell', 0)),
+                    'strong_sell': int(latest_summary.get('strongSell', 0)),
+                    'period': latest_summary.name.strftime('%Y-%m-%d') if hasattr(latest_summary.name, 'strftime') else str(latest_summary.name),
+                    'timestamp': datetime.now().isoformat()
+                }
+                
+                # 添加目标价信息
+                if price_targets and len(price_targets) > 0:
+                    data.update({
+                        'target_price_mean': float(price_targets.get('targetMeanPrice', 0)),
+                        'target_price_high': float(price_targets.get('targetHighPrice', 0)),
+                        'target_price_low': float(price_targets.get('targetLowPrice', 0)),
+                        'num_analysts': int(price_targets.get('numberOfAnalystOpinions', 0))
+                    })
+                
+                if cache_manager:
+                    await cache_manager.save_cache(cache_key, data, subdirectory="finance")
+                
+                return data
+                
+        except Exception as e:
+            logger.error(f"获取分析师评级失败 {symbol}: {e}")
+            return None
+        
+        return None
+    
+    async def get_financial_statements(self, symbol: str, statement_type: str = "income") -> Optional[Dict]:
+        """获取财务报表"""
+        cache_key = f"financial_{statement_type}_{symbol.upper()}"
+        
+        if cache_manager:
+            config = get_config()
+            cached_data = await cache_manager.load_cache(
+                cache_key, 
+                max_age_seconds=config.finance_cache_duration * 12,  # 财务数据缓存1小时
+                subdirectory="finance"
+            )
+            if cached_data:
+                return cached_data
+        
+        try:
+            ticker = yf.Ticker(symbol)
+            
+            if statement_type == "income":
+                df = ticker.income_stmt
+                title = "损益表"
+            elif statement_type == "balance":
+                df = ticker.balance_sheet  
+                title = "资产负债表"
+            elif statement_type == "cashflow":
+                df = ticker.cash_flow
+                title = "现金流量表"
+            else:
+                return None
+            
+            if df is not None and not df.empty:
+                # 获取最新年度数据（第一列）
+                latest_year = df.columns[0]
+                latest_data = df.iloc[:, 0]
+                
+                # 选择关键指标进行展示
+                if statement_type == "income":
+                    key_items = [
+                        'Total Revenue', 'Gross Profit', 'Operating Income', 
+                        'Net Income', 'Basic EPS', 'Diluted EPS'
+                    ]
+                elif statement_type == "balance":
+                    key_items = [
+                        'Total Assets', 'Total Liabilities Net Minority Interest',
+                        'Stockholders Equity', 'Cash And Cash Equivalents',
+                        'Total Debt', 'Working Capital'
+                    ]
+                elif statement_type == "cashflow":
+                    key_items = [
+                        'Operating Cash Flow', 'Investing Cash Flow', 
+                        'Financing Cash Flow', 'Free Cash Flow'
+                    ]
+                
+                # 提取关键数据
+                financial_data = {}
+                for item in key_items:
+                    if item in latest_data.index:
+                        value = latest_data[item]
+                        if pd.notna(value):
+                            financial_data[item] = float(value)
+                
+                data = {
+                    'symbol': symbol.upper(),
+                    'statement_type': statement_type,
+                    'title': title,
+                    'period': latest_year.strftime('%Y-%m-%d') if hasattr(latest_year, 'strftime') else str(latest_year),
+                    'data': financial_data,
+                    'timestamp': datetime.now().isoformat()
+                }
+                
+                if cache_manager:
+                    await cache_manager.save_cache(cache_key, data, subdirectory="finance")
+                
+                return data
+                
+        except Exception as e:
+            logger.error(f"获取财务报表失败 {symbol} {statement_type}: {e}")
+            return None
+        
+        return None
 
 # 初始化服务实例
 finance_service = FinanceService()
@@ -249,7 +385,7 @@ def format_stock_info(stock_data: Dict) -> str:
     trend_emoji = "📈" if change >= 0 else "📉"
     change_sign = "+" if change >= 0 else ""
     
-    result = f"""📊 *{escape_markdown(symbol, version=2)} - {escape_markdown(name, version=2)}*
+    result = f"""📊 *{symbol} - {name}*
 
 💰 当前价格: `{price:.2f} {currency}`
 {trend_emoji} 涨跌: `{change_sign}{change:.2f} ({change_percent:+.2f}%)`
@@ -278,12 +414,123 @@ def format_stock_info(stock_data: Dict) -> str:
     
     return result
 
+def format_analyst_recommendations(recommendation_data: Dict) -> str:
+    """格式化分析师评级"""
+    symbol = recommendation_data['symbol']
+    strong_buy = recommendation_data.get('strong_buy', 0)
+    buy = recommendation_data.get('buy', 0) 
+    hold = recommendation_data.get('hold', 0)
+    sell = recommendation_data.get('sell', 0)
+    strong_sell = recommendation_data.get('strong_sell', 0)
+    
+    total = strong_buy + buy + hold + sell + strong_sell
+    
+    result = f"🎯 *{symbol} 分析师评级*\n\n"
+    
+    if total > 0:
+        # 评级分布
+        result += "📊 *评级分布:*\n"
+        result += f"🚀 强烈买入: `{strong_buy}` ({strong_buy/total*100:.1f}%)\n"  
+        result += f"📈 买入: `{buy}` ({buy/total*100:.1f}%)\n"
+        result += f"⚖️ 持有: `{hold}` ({hold/total*100:.1f}%)\n"
+        result += f"📉 卖出: `{sell}` ({sell/total*100:.1f}%)\n"
+        result += f"🔻 强烈卖出: `{strong_sell}` ({strong_sell/total*100:.1f}%)\n\n"
+        
+        # 整体倾向
+        bullish = strong_buy + buy
+        bearish = sell + strong_sell
+        if bullish > bearish:
+            sentiment = "🟢 看涨"
+        elif bearish > bullish:
+            sentiment = "🔴 看跌" 
+        else:
+            sentiment = "🟡 中性"
+        
+        result += f"📊 整体倾向: {sentiment} `({bullish}买 vs {bearish}卖)`\n\n"
+    
+    # 目标价信息
+    if 'target_price_mean' in recommendation_data and recommendation_data['target_price_mean'] > 0:
+        mean_price = recommendation_data['target_price_mean']
+        high_price = recommendation_data.get('target_price_high', 0)
+        low_price = recommendation_data.get('target_price_low', 0)  
+        num_analysts = recommendation_data.get('num_analysts', 0)
+        
+        result += "🎯 *目标价 (基于{num_analysts}位分析师):*\n".format(num_analysts=num_analysts)
+        result += f"📊 平均目标价: `${mean_price:.2f}`\n"
+        if high_price > 0:
+            result += f"📈 最高目标价: `${high_price:.2f}`\n"
+        if low_price > 0:
+            result += f"📉 最低目标价: `${low_price:.2f}`\n"
+    
+    result += f"\n_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
+    return result
+
+def format_financial_statement(financial_data: Dict) -> str:
+    """格式化财务报表"""
+    symbol = financial_data['symbol']
+    title = financial_data['title'] 
+    period = financial_data['period']
+    data = financial_data['data']
+    
+    result = f"📋 *{symbol} {title}*\n"
+    result += f"📅 报告期: `{period}`\n\n"
+    
+    if not data:
+        return result + "❌ 暂无财务数据"
+    
+    # 格式化不同类型的财务数据
+    statement_type = financial_data['statement_type']
+    
+    if statement_type == "income":
+        # 损益表关键指标
+        if 'Total Revenue' in data:
+            result += f"💰 总营收: `${data['Total Revenue']:,.0f}`\n"
+        if 'Gross Profit' in data:
+            result += f"💵 毛利润: `${data['Gross Profit']:,.0f}`\n"  
+        if 'Operating Income' in data:
+            result += f"⚙️ 营业利润: `${data['Operating Income']:,.0f}`\n"
+        if 'Net Income' in data:
+            result += f"💎 净利润: `${data['Net Income']:,.0f}`\n"
+        if 'Basic EPS' in data:
+            result += f"📊 基本EPS: `${data['Basic EPS']:.2f}`\n"
+        if 'Diluted EPS' in data:
+            result += f"📈 摊薄EPS: `${data['Diluted EPS']:.2f}`\n"
+            
+    elif statement_type == "balance":
+        # 资产负债表关键指标
+        if 'Total Assets' in data:
+            result += f"🏛️ 总资产: `${data['Total Assets']:,.0f}`\n"
+        if 'Total Liabilities Net Minority Interest' in data:
+            result += f"📉 总负债: `${data['Total Liabilities Net Minority Interest']:,.0f}`\n"
+        if 'Stockholders Equity' in data:
+            result += f"🏦 股东权益: `${data['Stockholders Equity']:,.0f}`\n"
+        if 'Cash And Cash Equivalents' in data:
+            result += f"💰 现金及等价物: `${data['Cash And Cash Equivalents']:,.0f}`\n"
+        if 'Total Debt' in data:
+            result += f"💳 总债务: `${data['Total Debt']:,.0f}`\n"
+        if 'Working Capital' in data:
+            result += f"⚡ 营运资金: `${data['Working Capital']:,.0f}`\n"
+            
+    elif statement_type == "cashflow":
+        # 现金流量表关键指标
+        if 'Operating Cash Flow' in data:
+            result += f"⚙️ 经营现金流: `${data['Operating Cash Flow']:,.0f}`\n"
+        if 'Investing Cash Flow' in data:
+            result += f"📈 投资现金流: `${data['Investing Cash Flow']:,.0f}`\n"
+        if 'Financing Cash Flow' in data:
+            result += f"💰 融资现金流: `${data['Financing Cash Flow']:,.0f}`\n"
+        if 'Free Cash Flow' in data:
+            result += f"💎 自由现金流: `${data['Free Cash Flow']:,.0f}`\n"
+    
+    result += f"\n_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
+    return result
+
 def format_ranking_list(stocks: List[Dict], title: str) -> str:
     """格式化排行榜"""
     if not stocks:
         return f"❌ {title} 数据获取失败"
     
-    result = f"📋 *{escape_markdown(title, version=2)}*\n\n"
+    result = f"📋 *{title}*\n\n"
     
     for i, stock in enumerate(stocks[:10], 1):
         symbol = stock['symbol']
@@ -295,10 +542,11 @@ def format_ranking_list(stocks: List[Dict], title: str) -> str:
         change_sign = "+" if change_percent >= 0 else ""
         
         # 截断过长的名称
+        display_name = name
         if len(name) > 20:
-            name = name[:17] + "..."
+            display_name = name[:17] + "..."
         
-        result += f"`{i:2d}.` {trend_emoji} *{escape_markdown(symbol, version=2)}* - {escape_markdown(name, version=2)}\n"
+        result += f"`{i:2d}.` {trend_emoji} *{symbol}* - {display_name}\n"
         result += f"     `${price:.2f}` `({change_sign}{change_percent:.2f}%)`\n\n"
     
     result += f"_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
@@ -313,6 +561,8 @@ async def finance_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if context.args:
         query = " ".join(context.args)
         await _execute_stock_search(update, context, query)
+        # 删除用户命令
+        await delete_user_command(context, update.message.chat_id, update.message.message_id)
         return
     
     # 没有参数，显示主菜单
@@ -322,16 +572,8 @@ async def finance_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             InlineKeyboardButton("🔍 搜索股票", callback_data="finance_search_menu")
         ],
         [
-            InlineKeyboardButton("📈 日涨幅榜", callback_data="finance_gainers"),
-            InlineKeyboardButton("📉 日跌幅榜", callback_data="finance_losers")
-        ],
-        [
-            InlineKeyboardButton("🔥 最活跃", callback_data="finance_actives"),
-            InlineKeyboardButton("💎 小盘股涨幅", callback_data="finance_small_cap_gainers")
-        ],
-        [
-            InlineKeyboardButton("🚀 成长科技股", callback_data="finance_growth_tech"),
-            InlineKeyboardButton("💰 低估值大盘股", callback_data="finance_undervalued_large")
+            InlineKeyboardButton("📈 股票排行榜", callback_data="finance_stock_rankings"),
+            InlineKeyboardButton("💰 基金排行榜", callback_data="finance_fund_rankings")
         ],
         [
             InlineKeyboardButton("❌ 关闭", callback_data="finance_close")
@@ -388,8 +630,22 @@ async def _execute_stock_search(update: Update, context: ContextTypes.DEFAULT_TY
             # 找到股票信息，直接显示
             result_text = format_stock_info(stock_data)
             
-            # 添加返回主菜单按钮
-            keyboard = [[InlineKeyboardButton("🔙 返回主菜单", callback_data="finance_main_menu")]]
+            # 添加分析师评级和财务报表按钮
+            symbol = stock_data['symbol']
+            short_id = get_short_stock_id(symbol)
+            keyboard = [
+                [
+                    InlineKeyboardButton("🎯 分析师评级", callback_data=f"finance_analyst:{short_id}"),
+                    InlineKeyboardButton("📋 损益表", callback_data=f"finance_income:{short_id}")
+                ],
+                [
+                    InlineKeyboardButton("🏛️资产负债表", callback_data=f"finance_balance:{short_id}"),
+                    InlineKeyboardButton("💰 现金流量表", callback_data=f"finance_cashflow:{short_id}")
+                ],
+                [
+                    InlineKeyboardButton("🔙 返回主菜单", callback_data="finance_main_menu")
+                ]
+            ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             if callback_query:
@@ -446,6 +702,10 @@ async def _execute_stock_search(update: Update, context: ContextTypes.DEFAULT_TY
                         parse_mode="MarkdownV2",
                         reply_markup=reply_markup
                     )
+                
+                # 搜索结果也安排自动删除
+                config = get_config()
+                await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
             else:
                 # 没有找到任何结果
                 error_text = f"❌ 未找到 '{query}' 相关的股票信息"
@@ -544,6 +804,83 @@ async def _execute_ranking(update: Update, context: ContextTypes.DEFAULT_TYPE, r
 # Callback 处理器
 # =============================================================================
 
+async def finance_stock_rankings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """显示股票排行榜菜单"""
+    query = update.callback_query
+    await query.answer()
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("📈 日涨幅榜", callback_data="finance_gainers"),
+            InlineKeyboardButton("📉 日跌幅榜", callback_data="finance_losers")
+        ],
+        [
+            InlineKeyboardButton("🔥 最活跃", callback_data="finance_actives"),
+            InlineKeyboardButton("⚡ 激进小盘", callback_data="finance_aggressive_small_caps")
+        ],
+        [
+            InlineKeyboardButton("💎 小盘涨幅", callback_data="finance_small_cap_gainers"),
+            InlineKeyboardButton("🩸 最多做空", callback_data="finance_most_shorted")
+        ],
+        [
+            InlineKeyboardButton("🚀 成长科技", callback_data="finance_growth_tech"),
+            InlineKeyboardButton("💰 低估大盘", callback_data="finance_undervalued_large")
+        ],
+        [
+            InlineKeyboardButton("📊 低估成长", callback_data="finance_undervalued_growth")
+        ],
+        [
+            InlineKeyboardButton("🔙 返回主菜单", callback_data="finance_main_menu")
+        ]
+    ]
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    help_text = """📈 股票排行榜
+
+选择你要查看的股票排行榜类型:"""
+    
+    await query.edit_message_text(
+        text=foldable_text_with_markdown_v2(help_text),
+        parse_mode="MarkdownV2",
+        reply_markup=reply_markup
+    )
+
+async def finance_fund_rankings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """显示基金排行榜菜单"""
+    query = update.callback_query
+    await query.answer()
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("🌍 保守外国", callback_data="finance_conservative_foreign"),
+            InlineKeyboardButton("💸 高收益债券", callback_data="finance_high_yield_bond")
+        ],
+        [
+            InlineKeyboardButton("⚓ 核心基金", callback_data="finance_portfolio_anchors"),
+            InlineKeyboardButton("📈 大盘成长", callback_data="finance_large_growth_funds")
+        ],
+        [
+            InlineKeyboardButton("📊 中盘成长", callback_data="finance_midcap_growth_funds"),
+            InlineKeyboardButton("🏆 顶级基金", callback_data="finance_top_mutual_funds")
+        ],
+        [
+            InlineKeyboardButton("🔙 返回主菜单", callback_data="finance_main_menu")
+        ]
+    ]
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    help_text = """💰 基金排行榜
+
+选择你要查看的基金排行榜类型:"""
+    
+    await query.edit_message_text(
+        text=foldable_text_with_markdown_v2(help_text),
+        parse_mode="MarkdownV2",
+        reply_markup=reply_markup
+    )
+
 async def finance_main_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """返回主菜单"""
     query = update.callback_query
@@ -555,16 +892,8 @@ async def finance_main_menu_callback(update: Update, context: ContextTypes.DEFAU
             InlineKeyboardButton("🔍 搜索股票", callback_data="finance_search_menu")
         ],
         [
-            InlineKeyboardButton("📈 日涨幅榜", callback_data="finance_gainers"),
-            InlineKeyboardButton("📉 日跌幅榜", callback_data="finance_losers")
-        ],
-        [
-            InlineKeyboardButton("🔥 最活跃", callback_data="finance_actives"),
-            InlineKeyboardButton("💎 小盘股涨幅", callback_data="finance_small_cap_gainers")
-        ],
-        [
-            InlineKeyboardButton("🚀 成长科技股", callback_data="finance_growth_tech"),
-            InlineKeyboardButton("💰 低估值大盘股", callback_data="finance_undervalued_large")
+            InlineKeyboardButton("📈 股票排行榜", callback_data="finance_stock_rankings"),
+            InlineKeyboardButton("💰 基金排行榜", callback_data="finance_fund_rankings")
         ],
         [
             InlineKeyboardButton("❌ 关闭", callback_data="finance_close")
@@ -658,6 +987,18 @@ async def finance_stock_detail_callback(update: Update, context: ContextTypes.DE
         except:
             pass
 
+async def finance_aggressive_small_caps_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """激进小盘股"""
+    query = update.callback_query
+    await query.answer("正在获取激进小盘股...")
+    await _execute_ranking(update, context, "aggressive_small_caps", "激进小盘股", query)
+
+async def finance_most_shorted_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """最多做空股票"""
+    query = update.callback_query
+    await query.answer("正在获取最多做空股票...")
+    await _execute_ranking(update, context, "most_shorted_stocks", "最多做空股票", query)
+
 # 排行榜回调处理器
 async def finance_gainers_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """日涨幅榜"""
@@ -694,6 +1035,199 @@ async def finance_undervalued_large_callback(update: Update, context: ContextTyp
     query = update.callback_query
     await query.answer("正在获取低估值大盘股...")
     await _execute_ranking(update, context, "undervalued_large_caps", "低估值大盘股", query)
+
+async def finance_undervalued_growth_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """低估值成长股"""
+    query = update.callback_query
+    await query.answer("正在获取低估值成长股...")
+    await _execute_ranking(update, context, "undervalued_growth_stocks", "低估值成长股", query)
+
+# 基金排行榜回调处理器
+async def finance_conservative_foreign_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """保守外国基金"""
+    query = update.callback_query
+    await query.answer("正在获取保守外国基金...")
+    await _execute_ranking(update, context, "conservative_foreign_funds", "保守外国基金", query)
+
+async def finance_high_yield_bond_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """高收益债券基金"""
+    query = update.callback_query
+    await query.answer("正在获取高收益债券基金...")
+    await _execute_ranking(update, context, "high_yield_bond", "高收益债券基金", query)
+
+async def finance_portfolio_anchors_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """投资组合核心基金"""
+    query = update.callback_query
+    await query.answer("正在获取投资组合核心基金...")
+    await _execute_ranking(update, context, "portfolio_anchors", "投资组合核心基金", query)
+
+async def finance_large_growth_funds_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """优质大盘成长基金"""
+    query = update.callback_query
+    await query.answer("正在获取优质大盘成长基金...")
+    await _execute_ranking(update, context, "solid_large_growth_funds", "优质大盘成长基金", query)
+
+async def finance_midcap_growth_funds_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """优质中盘成长基金"""
+    query = update.callback_query
+    await query.answer("正在获取优质中盘成长基金...")
+    await _execute_ranking(update, context, "solid_midcap_growth_funds", "优质中盘成长基金", query)
+
+async def finance_top_mutual_funds_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """顶级共同基金"""
+    query = update.callback_query
+    await query.answer("正在获取顶级共同基金...")
+    await _execute_ranking(update, context, "top_mutual_funds", "顶级共同基金", query)
+
+# 分析师评级和财务报表回调处理器
+async def finance_analyst_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理分析师评级按钮点击"""
+    query = update.callback_query
+    await query.answer("正在获取分析师评级...")
+    
+    if not query or not query.data:
+        return
+        
+    try:
+        callback_data = query.data
+        if callback_data.startswith("finance_analyst:"):
+            short_id = callback_data.replace("finance_analyst:", "")
+            symbol = get_full_stock_id(short_id)
+            if not symbol:
+                await query.edit_message_text(
+                    foldable_text_v2("❌ 股票信息已过期，请重新查询"),
+                    parse_mode="MarkdownV2"
+                )
+                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+                return
+            
+            # 获取分析师评级数据
+            recommendation_data = await finance_service.get_analyst_recommendations(symbol)
+            
+            if recommendation_data:
+                result_text = format_analyst_recommendations(recommendation_data)
+                
+                keyboard = [
+                    [
+                        InlineKeyboardButton("📊 股票信息", callback_data=f"finance_stock_detail:{short_id}"),
+                        InlineKeyboardButton("📋 损益表", callback_data=f"finance_income:{short_id}")
+                    ],
+                    [
+                        InlineKeyboardButton("🔙 返回主菜单", callback_data="finance_main_menu")
+                    ]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await query.edit_message_text(
+                    text=foldable_text_with_markdown_v2(result_text),
+                    parse_mode="MarkdownV2",
+                    reply_markup=reply_markup
+                )
+            else:
+                error_text = f"❌ 暂无 {symbol} 的分析师评级数据"
+                keyboard = [[InlineKeyboardButton("🔙 返回主菜单", callback_data="finance_main_menu")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await query.edit_message_text(
+                    text=foldable_text_v2(error_text),
+                    parse_mode="MarkdownV2", 
+                    reply_markup=reply_markup
+                )
+                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            
+    except Exception as e:
+        logger.error(f"处理分析师评级回调时发生错误: {e}", exc_info=True)
+        try:
+            await query.edit_message_text(
+                foldable_text_v2(f"❌ 处理请求时发生错误: {str(e)}"),
+                parse_mode="MarkdownV2"
+            )
+        except:
+            pass
+
+async def finance_financial_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理财务报表按钮点击"""
+    query = update.callback_query
+    
+    if not query or not query.data:
+        return
+        
+    try:
+        callback_data = query.data
+        
+        # 确定报表类型
+        if callback_data.startswith("finance_income:"):
+            statement_type = "income"
+            short_id = callback_data.replace("finance_income:", "")
+            await query.answer("正在获取损益表...")
+        elif callback_data.startswith("finance_balance:"):
+            statement_type = "balance" 
+            short_id = callback_data.replace("finance_balance:", "")
+            await query.answer("正在获取资产负债表...")
+        elif callback_data.startswith("finance_cashflow:"):
+            statement_type = "cashflow"
+            short_id = callback_data.replace("finance_cashflow:", "") 
+            await query.answer("正在获取现金流量表...")
+        else:
+            return
+            
+        symbol = get_full_stock_id(short_id)
+        if not symbol:
+            await query.edit_message_text(
+                foldable_text_v2("❌ 股票信息已过期，请重新查询"),
+                parse_mode="MarkdownV2"
+            )
+            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            return
+        
+        # 获取财务报表数据
+        financial_data = await finance_service.get_financial_statements(symbol, statement_type)
+        
+        if financial_data:
+            result_text = format_financial_statement(financial_data)
+            
+            keyboard = [
+                [
+                    InlineKeyboardButton("📊 股票信息", callback_data=f"finance_stock_detail:{short_id}"),
+                    InlineKeyboardButton("🎯 分析师评级", callback_data=f"finance_analyst:{short_id}")
+                ],
+                [
+                    InlineKeyboardButton("📋 损益表", callback_data=f"finance_income:{short_id}"),
+                    InlineKeyboardButton("🏛️ 资产负债表", callback_data=f"finance_balance:{short_id}")
+                ],
+                [
+                    InlineKeyboardButton("💰 现金流量表", callback_data=f"finance_cashflow:{short_id}"),
+                    InlineKeyboardButton("🔙 返回主菜单", callback_data="finance_main_menu")
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(
+                text=foldable_text_with_markdown_v2(result_text),
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup
+            )
+        else:
+            error_text = f"❌ 暂无 {symbol} 的{financial_data.get('title', '财务')}数据" if financial_data else f"❌ 暂无 {symbol} 的财务数据"
+            keyboard = [[InlineKeyboardButton("🔙 返回主菜单", callback_data="finance_main_menu")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(
+                text=foldable_text_v2(error_text),
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup
+            )
+            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+        
+    except Exception as e:
+        logger.error(f"处理财务报表回调时发生错误: {e}", exc_info=True)
+        try:
+            await query.edit_message_text(
+                foldable_text_v2(f"❌ 处理请求时发生错误: {str(e)}"),
+                parse_mode="MarkdownV2"
+            )
+        except:
+            pass
 
 async def finance_close_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理关闭按钮点击"""
@@ -751,13 +1285,38 @@ command_factory.register_command(
 # 注册回调处理器
 command_factory.register_callback(r"^finance_main_menu$", finance_main_menu_callback, permission=Permission.USER, description="金融主菜单")
 command_factory.register_callback(r"^finance_search$", finance_search_callback, permission=Permission.USER, description="股票查询说明")
+command_factory.register_callback(r"^finance_search_menu$", finance_search_callback, permission=Permission.USER, description="股票搜索菜单")
 command_factory.register_callback(r"^finance_stock_detail:", finance_stock_detail_callback, permission=Permission.USER, description="股票详情")
+
+# 菜单导航
+command_factory.register_callback(r"^finance_stock_rankings$", finance_stock_rankings_callback, permission=Permission.USER, description="股票排行榜菜单")
+command_factory.register_callback(r"^finance_fund_rankings$", finance_fund_rankings_callback, permission=Permission.USER, description="基金排行榜菜单")
+
+# 股票排行榜
 command_factory.register_callback(r"^finance_gainers$", finance_gainers_callback, permission=Permission.USER, description="日涨幅榜")
 command_factory.register_callback(r"^finance_losers$", finance_losers_callback, permission=Permission.USER, description="日跌幅榜")
 command_factory.register_callback(r"^finance_actives$", finance_actives_callback, permission=Permission.USER, description="最活跃股票")
+command_factory.register_callback(r"^finance_aggressive_small_caps$", finance_aggressive_small_caps_callback, permission=Permission.USER, description="激进小盘股")
 command_factory.register_callback(r"^finance_small_cap_gainers$", finance_small_cap_gainers_callback, permission=Permission.USER, description="小盘股涨幅榜")
+command_factory.register_callback(r"^finance_most_shorted$", finance_most_shorted_callback, permission=Permission.USER, description="最多做空股票")
 command_factory.register_callback(r"^finance_growth_tech$", finance_growth_tech_callback, permission=Permission.USER, description="成长科技股")
 command_factory.register_callback(r"^finance_undervalued_large$", finance_undervalued_large_callback, permission=Permission.USER, description="低估值大盘股")
+command_factory.register_callback(r"^finance_undervalued_growth$", finance_undervalued_growth_callback, permission=Permission.USER, description="低估值成长股")
+
+# 基金排行榜
+command_factory.register_callback(r"^finance_conservative_foreign$", finance_conservative_foreign_callback, permission=Permission.USER, description="保守外国基金")
+command_factory.register_callback(r"^finance_high_yield_bond$", finance_high_yield_bond_callback, permission=Permission.USER, description="高收益债券基金")
+command_factory.register_callback(r"^finance_portfolio_anchors$", finance_portfolio_anchors_callback, permission=Permission.USER, description="投资组合核心基金")
+command_factory.register_callback(r"^finance_large_growth_funds$", finance_large_growth_funds_callback, permission=Permission.USER, description="优质大盘成长基金")
+command_factory.register_callback(r"^finance_midcap_growth_funds$", finance_midcap_growth_funds_callback, permission=Permission.USER, description="优质中盘成长基金")
+command_factory.register_callback(r"^finance_top_mutual_funds$", finance_top_mutual_funds_callback, permission=Permission.USER, description="顶级共同基金")
+
+# 分析师评级和财务报表
+command_factory.register_callback(r"^finance_analyst:", finance_analyst_callback, permission=Permission.USER, description="分析师评级")
+command_factory.register_callback(r"^finance_income:", finance_financial_callback, permission=Permission.USER, description="损益表")
+command_factory.register_callback(r"^finance_balance:", finance_financial_callback, permission=Permission.USER, description="资产负债表")
+command_factory.register_callback(r"^finance_cashflow:", finance_financial_callback, permission=Permission.USER, description="现金流量表")
+
 command_factory.register_callback(r"^finance_close$", finance_close_callback, permission=Permission.USER, description="关闭金融消息")
 
 # 已迁移到统一缓存管理命令 /cleancache
