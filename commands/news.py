@@ -123,15 +123,19 @@ async def translate_text(text: str, target_language: str = 'zh-cn') -> str:
         text = text[:5000] + "..."
     
     try:
-        # 为了避免阻塞，在线程池中执行翻译
+        # 在线程池中执行翻译，避免阻塞事件循环
         import asyncio
         loop = asyncio.get_event_loop()
         
-        # 使用正确的语言代码：zh-cn 为中文简体
-        result = await loop.run_in_executor(
-            None, 
-            lambda: translator.translate(text, dest=target_language, src='auto')
-        )
+        def sync_translate():
+            return translator.translate(text, dest=target_language, src='auto')
+        
+        result = await loop.run_in_executor(None, sync_translate)
+        
+        # 检查结果是否是协程
+        if asyncio.iscoroutine(result):
+            result = await result
+            
         return result.text
     except Exception as e:
         logger.warning(f"Translation failed for text '{text[:50]}...': {e}")
