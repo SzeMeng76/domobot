@@ -121,10 +121,20 @@ class FinanceService:
             info = ticker.info
             history = ticker.history(period="1d")
             
-            if info and not history.empty:
-                # 获取最新价格
-                current_price = history['Close'].iloc[-1] if len(history) > 0 else info.get('currentPrice', 0)
-                previous_close = info.get('previousClose', current_price)
+            if info:
+                # 获取最新价格 - 优先使用历史数据，其次使用info数据
+                if not history.empty:
+                    current_price = history['Close'].iloc[-1]
+                    previous_close = info.get('previousClose', current_price)
+                else:
+                    # 历史数据为空时，从info获取价格信息
+                    current_price = info.get('currentPrice') or info.get('regularMarketPrice', 0)
+                    previous_close = info.get('previousClose') or info.get('regularMarketPreviousClose', current_price)
+                
+                # 如果仍然没有价格信息，跳过这只股票
+                if current_price == 0:
+                    logger.warning(f"股票 {symbol} 没有有效的价格数据 - 可能已退市或暂停交易")
+                    return None
                 
                 data = {
                     'symbol': symbol.upper(),
@@ -734,7 +744,7 @@ async def _execute_stock_search(update: Update, context: ContextTypes.DEFAULT_TY
                 await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
             else:
                 # 没有找到任何结果
-                error_text = f"❌ 未找到 '{query}' 相关的股票信息"
+                error_text = f"❌ 未找到 '{query}' 相关的股票信息\n\n💡 请检查股票代码是否正确，或尝试使用公司名称搜索"
                 keyboard = [[InlineKeyboardButton("🔙 返回主菜单", callback_data="finance_main_menu")]]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 
