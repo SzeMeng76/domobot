@@ -201,7 +201,16 @@ class GoogleMapsService(MapService):
                     'end_address': leg['end_address'],
                     'steps': [step['html_instructions'] for step in leg['steps'][:5]]  # 前5步
                 }
-            return None
+            else:
+                # 处理不同的错误状态
+                status = data.get('status', 'UNKNOWN_ERROR')
+                if status == 'NOT_FOUND':
+                    logger.warning(f"Google路线规划: 无法找到起点或终点 - {origin} → {destination}")
+                elif status == 'ZERO_RESULTS':
+                    logger.warning(f"Google路线规划: 无可用路线 - {origin} → {destination}")
+                else:
+                    logger.warning(f"Google路线规划失败: {status} - {origin} → {destination}")
+                return None
             
         except Exception as e:
             logger.error(f"Google路线规划失败: {e}")

@@ -9,7 +9,7 @@ import asyncio
 import logging
 import re
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from telegram import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes, CallbackQueryHandler
@@ -29,7 +29,7 @@ from utils.message_manager import (
 )
 from utils.permissions import Permission
 from utils.language_detector import detect_user_language
-from utils.map_services import MapServiceManager
+from utils.map_services import MapServiceManager, AmapService
 from utils.session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
@@ -664,7 +664,7 @@ async def _execute_location_search(update: Update, context: ContextTypes.DEFAULT
             map_url = service.get_map_url(lat, lng)
             nav_url = service.get_navigation_url(query)
             
-            # 创建按钮
+            # 创建按钮 - 使用精确坐标而不是原始查询
             keyboard = [
                 [
                     InlineKeyboardButton("🗺️ 查看地图", url=map_url),
@@ -672,7 +672,7 @@ async def _execute_location_search(update: Update, context: ContextTypes.DEFAULT
                 ],
                 [
                     InlineKeyboardButton("📍 附近服务", callback_data=f"map_nearby_here:{lat},{lng}:{language}"),
-                    InlineKeyboardButton("🛣️ 路线规划", callback_data=f"map_route_to:{query}")
+                    InlineKeyboardButton("🛣️ 路线规划", callback_data=f"map_route_to_coords:{lat},{lng}:{location_data['name']}:{language}")
                 ],
                 [
                     InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")
@@ -768,6 +768,14 @@ async def map_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             await _execute_route_planning(update, context, text, destination)
             map_session_manager.remove_session(user_id)
             
+        elif action == "route_planning_coords" and waiting_for == "origin":
+            # 处理使用精确坐标的路线规划
+            destination_name = session_data.get("destination_name")
+            destination_coords = session_data.get("destination_coords")
+            destination_language = session_data.get("destination_language", "en")
+            await _execute_route_planning_with_coords(update, context, text, destination_name, destination_coords, destination_language)
+            map_session_manager.remove_session(user_id)
+            
         elif action == "directions" and waiting_for == "route":
             # 处理直接路线规划 (起点 到 终点格式)
             await _parse_and_execute_directions(update, context, text)
@@ -788,10 +796,130 @@ async def map_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await send_error(context, update.message.chat_id, f"处理失败: {str(e)}")
         map_session_manager.remove_session(user_id)
 
-async def _execute_route_planning(update: Update, context: ContextTypes.DEFAULT_TYPE, origin: str, destination: str) -> None:
-    """执行路线规划"""
+async def _execute_route_planning_with_coords(update: Update, context: ContextTypes.DEFAULT_TYPE, origin: str, destination_name: str, destination_coords: Tuple[float, float], destination_language: str) -> None:
+    """执行使用精确坐标的路线规划"""
+    dest_lat, dest_lng = destination_coords
+    
+    # 检测起点语言
     user_locale = update.effective_user.language_code if update.effective_user else None
-    language = detect_user_language(f"{origin} {destination}", user_locale)
+    origin_language = detect_user_language(origin, user_locale)
+    
+    # 使用目标地点的语言作为主要语言
+    primary_language = destination_language
+    
+    loading_message = f"🛣️ 正在规划路线: {origin} → {destination_name}... ⏳"
+    
+    message = await context.bot.send_message(
+        chat_id=update.message.chat_id,
+        text=foldable_text_v2(loading_message),
+        parse_mode="MarkdownV2"
+    )
+    # 调度自动删除
+    config = get_config()
+    await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
+    
+    try:
+        service = map_service_manager.get_service(primary_language)
+        if not service:
+            error_msg = "❌ 地图服务暂不可用"
+            await message.edit_text(error_msg)
+            await _schedule_auto_delete(context, message.chat_id, message.message_id, 5)
+            return
+        
+        service_type = "amap" if primary_language == "zh" else "google_maps"
+        
+        # 先获取起点的精确坐标
+        origin_data = await map_cache_service.search_location_with_cache(origin, origin_language)
+        if not origin_data:
+            # 如果搜索不到起点，尝试地理编码
+            origin_data = await map_cache_service.geocode_with_cache(origin, origin_language)
+        
+        if not origin_data:
+            error_msg = f"❌ 无法找到起点位置: {origin}"
+            keyboard = [
+                [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await message.edit_text(
+                text=error_msg,
+                reply_markup=reply_markup
+            )
+            await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
+            return
+        
+        # 使用精确坐标进行路线规划
+        # 构建坐标字符串用于缓存服务
+        origin_location_string = f"{origin_data['lat']},{origin_data['lng']}"
+        destination_location_string = f"{dest_lat},{dest_lng}"
+        
+        # 使用缓存服务获取路线，但传递坐标而不是地址
+        directions_data = await map_cache_service.get_directions_with_cache(
+            origin_location_string, 
+            destination_location_string, 
+            "driving", 
+            primary_language
+        )
+        
+        # 如果缓存服务返回的数据为空，手动设置地址信息
+        if directions_data:
+            # 更新起点终点地址为真实地址而不是坐标
+            directions_data['start_address'] = origin_data.get('address', origin)
+            directions_data['end_address'] = destination_name
+        
+        if directions_data:
+            result_text = format_directions(directions_data, service_type)
+            
+            keyboard = [
+                [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await message.edit_text(
+                text=foldable_text_with_markdown_v2(result_text),
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup
+            )
+        else:
+            error_msg = f"""❌ *路线规划失败*
+
+🚩 起点: {origin}
+🏁 终点: {destination_name}
+
+可能原因:
+• 两地之间无可用路线
+• 距离过远超出服务范围
+• 路线计算服务暂时不可用
+
+💡 建议: 尝试分段规划或选择其他交通方式"""
+            
+            keyboard = [
+                [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await message.edit_text(
+                text=error_msg,
+                reply_markup=reply_markup
+            )
+            await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
+            
+    except Exception as e:
+        logger.error(f"坐标路线规划失败: {e}")
+        error_msg = f"❌ 路线规划失败: {str(e)}"
+        keyboard = [
+            [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        config = get_config()
+        await message.edit_text(
+            text=error_msg,
+            reply_markup=reply_markup
+        )
+        await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
+
+async def _execute_route_planning(update: Update, context: ContextTypes.DEFAULT_TYPE, origin: str, destination: str) -> None:
     
     loading_message = f"🛣️ 正在规划路线: {origin} → {destination}... ⏳"
     
@@ -824,7 +952,17 @@ async def _execute_route_planning(update: Update, context: ContextTypes.DEFAULT_
                 reply_markup=reply_markup
             )
         else:
-            error_msg = f"❌ 无法规划路线: {origin} → {destination}"
+            error_msg = f"""❌ *路线规划失败*
+
+🚩 起点: {origin}
+🏁 终点: {destination}
+
+可能原因:
+• 地点名称无法识别
+• 两地之间无可用路线
+• 起点或终点位置不准确
+
+💡 建议: 尝试使用更具体的地址或地标名称"""
             keyboard = [
                 [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
             ]
@@ -1228,6 +1366,32 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         
         await query.edit_message_text(
             text=f"🛣️ 路线规划到: {destination}\n\n请输入起点地址或发送位置信息",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
+            ])
+        )
+    
+    elif data.startswith("map_route_to_coords:"):
+        # 新的处理方式：使用精确坐标和地点名称
+        parts = data.split(":", 3)
+        coords = parts[1]
+        destination_name = parts[2]
+        language = parts[3] if len(parts) > 3 else "en"
+        dest_lat, dest_lng = map(float, coords.split(","))
+        
+        user_id = update.effective_user.id
+        
+        # 设置会话状态，包含目标地点的精确坐标
+        map_session_manager.set_session(user_id, {
+            "action": "route_planning_coords",
+            "destination_name": destination_name,
+            "destination_coords": (dest_lat, dest_lng),
+            "destination_language": language,
+            "waiting_for": "origin"
+        })
+        
+        await query.edit_message_text(
+            text=f"🛣️ 路线规划到: {destination_name}\n\n请输入起点地址或发送位置信息",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
             ])
