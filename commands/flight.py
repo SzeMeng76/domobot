@@ -42,6 +42,9 @@ flight_service_manager = None
 # SerpAPI配置
 SERPAPI_BASE_URL = "https://serpapi.com/search"
 
+# Telegraph相关配置
+TELEGRAPH_API_URL = "https://api.telegra.ph"
+
 # 航班数据ID映射缓存 - 与map.py完全一致的ID管理
 flight_data_mapping = {}
 mapping_counter = 0
@@ -492,6 +495,156 @@ def format_price_insights(price_insights: Dict, departure_id: str, arrival_id: s
     
     return result
 
+async def create_telegraph_page(title: str, content: str) -> Optional[str]:
+    """创建Telegraph页面用于显示长内容"""
+    try:
+        # 创建Telegraph账户
+        account_data = {
+            "short_name": "FlightBot",
+            "author_name": "MengBot Flight Service",
+            "author_url": "https://t.me/mengpricebot"
+        }
+        
+        response = await httpx_client.post(f"{TELEGRAPH_API_URL}/createAccount", data=account_data)
+        if response.status_code != 200:
+            logger.warning(f"创建Telegraph账户失败: {response.status_code}")
+            return None
+            
+        account_info = response.json()
+        if not account_info.get("ok"):
+            logger.warning(f"Telegraph账户创建响应错误: {account_info}")
+            return None
+            
+        access_token = account_info["result"]["access_token"]
+        
+        # 创建页面内容
+        page_content = [
+            {
+                "tag": "p",
+                "children": [content]
+            }
+        ]
+        
+        page_data = {
+            "access_token": access_token,
+            "title": title,
+            "content": json.dumps(page_content),
+            "return_content": "true"
+        }
+        
+        response = await httpx_client.post(f"{TELEGRAPH_API_URL}/createPage", data=page_data)
+        if response.status_code != 200:
+            logger.warning(f"创建Telegraph页面失败: {response.status_code}")
+            return None
+            
+        page_info = response.json()
+        if not page_info.get("ok"):
+            logger.warning(f"Telegraph页面创建响应错误: {page_info}")
+            return None
+            
+        logger.info(f"成功创建Telegraph页面: {page_info['result']['url']}")
+        return page_info["result"]["url"]
+    
+    except Exception as e:
+        logger.error(f"创建Telegraph页面失败: {e}")
+        return None
+
+async def create_booking_telegraph_page(all_flights: List[Dict], search_params: Dict) -> str:
+    """将航班预订选项格式化为Telegraph友好的格式"""
+    departure_id = search_params.get('departure_id', '')
+    arrival_id = search_params.get('arrival_id', '')
+    outbound_date = search_params.get('outbound_date', '')
+    return_date = search_params.get('return_date', '')
+    
+    trip_type = "往返" if return_date else "单程"
+    
+    content = f"""航班预订详情
+
+📍 航线: {departure_id} → {arrival_id}
+📅 出发: {outbound_date}"""
+    
+    if return_date:
+        content += f"\n📅 返回: {return_date}"
+    
+    content += f"\n🎫 类型: {trip_type}\n\n"
+    
+    content += f"💺 可预订航班 (共{len(all_flights)}个选项):\n\n"
+    
+    # 显示所有航班
+    for i, flight in enumerate(all_flights, 1):
+        content += f"{i}. "
+        
+        # 航班基本信息
+        flights_info = flight.get('flights', [])
+        if flights_info:
+            segment = flights_info[0]
+            airline = segment.get('airline', '未知')
+            flight_number = segment.get('flight_number', '')
+            content += f"{airline} {flight_number}\n"
+            
+            departure = segment.get('departure_airport', {})
+            arrival = segment.get('arrival_airport', {})
+            content += f"   出发: {departure.get('time', '')} {departure.get('name', departure.get('id', ''))}\n"
+            content += f"   到达: {arrival.get('time', '')} {arrival.get('name', arrival.get('id', ''))}\n"
+            
+            # 飞行时间
+            if 'duration' in segment:
+                hours = segment['duration'] // 60
+                minutes = segment['duration'] % 60
+                content += f"   飞行时间: {hours}小时{minutes}分钟\n"
+        
+        # 价格信息
+        price = flight.get('price')
+        if price:
+            content += f"   价格: ${price}\n"
+        
+        # 预订信息 - 只显示基本链接，避免过度复杂化
+        booking_token = flight.get('booking_token')
+        if booking_token:
+            booking_url = f"https://www.google.com/flights?booking_token={booking_token}"
+            content += f"   预订链接: {booking_url}\n"
+        
+        # 中转信息
+        layovers = flight.get('layovers', [])
+        if layovers:
+            content += "   中转: "
+            layover_info = []
+            for layover in layovers:
+                layover_hours = layover['duration'] // 60
+                layover_minutes = layover['duration'] % 60
+                layover_info.append(f"{layover['name']} ({layover_hours}h{layover_minutes}m)")
+            content += " → ".join(layover_info)
+            content += "\n"
+        
+        # 环保信息
+        if 'carbon_emissions' in flight:
+            emissions = flight['carbon_emissions']
+            content += f"   碳排放: {emissions.get('this_flight', 0):,}g"
+            if 'difference_percent' in emissions:
+                diff = emissions['difference_percent']
+                if diff > 0:
+                    content += f" (+{diff}%)"
+                elif diff < 0:
+                    content += f" ({diff}%)"
+            content += "\n"
+        
+        content += "\n"
+    
+    content += f"""
+
+预订建议:
+• 比较不同航空公司的价格
+• 灵活选择日期可能有更好价格
+• 提前预订通常价格更优
+• 预订前请确认航班时间和政策
+
+---
+数据来源: Google Flights via SerpAPI
+生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+来源: MengBot 航班服务"""
+    
+    return content
+
 async def flight_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """航班服务主命令 /flight - 与map.py的map_command完全一致的结构"""
     if not update.message:
@@ -930,13 +1083,17 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         })
         
         # 航班搜索指引
+        search_help_text = """🔍 请输入航班搜索信息:
+
+格式: `出发机场 到达机场 出发日期 [返回日期]`
+
+例如:
+• `PEK LAX 2025-09-25` (单程)
+• `PEK LAX 2025-09-25 2025-09-30` (往返)
+• `BJS NYC 2025-09-25` (单程)"""
+
         await query.edit_message_text(
-            text="🔍 请输入航班搜索信息:\n\n"
-                 "格式: `出发机场 到达机场 出发日期 [返回日期]`\n\n"
-                 "例如:\n"
-                 "• `PEK LAX 2024-12-25` (单程)\n"
-                 "• `PEK LAX 2024-12-25 2024-12-30` (往返)\n"
-                 "• `BJS NYC 2024-12-25` (单程)",
+            text=foldable_text_with_markdown_v2(search_help_text),
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
             ]),
@@ -964,11 +1121,15 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
     
     elif data == "flight_booking":
         # 预订信息功能
+        booking_help_text = """🎫 预订信息功能
+
+此功能需要先搜索具体航班后才能使用。
+
+请先使用 **搜索航班** 功能找到合适的航班，
+然后在结果中查看预订选项。"""
+
         await query.edit_message_text(
-            text="🎫 预订信息功能\n\n"
-                 "此功能需要先搜索具体航班后才能使用。\n\n"
-                 "请先使用 **搜索航班** 功能找到合适的航班，\n"
-                 "然后在结果中查看预订选项。",
+            text=foldable_text_with_markdown_v2(booking_help_text),
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔍 搜索航班", callback_data="flight_search")],
                 [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
@@ -1135,8 +1296,11 @@ async def _show_booking_options(query: CallbackQuery, context: ContextTypes.DEFA
             if all_flights:
                 result_text += "💺 *可预订航班:*\n\n"
                 
-                # 显示前3个航班的预订信息
-                for i, flight in enumerate(all_flights[:3], 1):
+                # 显示前5个航班的预订信息  
+                flights_to_show = min(5, len(all_flights))
+                should_use_telegraph = len(all_flights) > 5  # 超过5个使用Telegraph
+                
+                for i, flight in enumerate(all_flights[:flights_to_show], 1):
                     result_text += f"`{i}.` "
                     
                     # 航班基本信息
@@ -1157,28 +1321,72 @@ async def _show_booking_options(query: CallbackQuery, context: ContextTypes.DEFA
                     if price:
                         result_text += f"   💰 价格: *${price}*\n"
                     
-                    # 预订链接（如果有的话）
-                    booking_options = flight.get('booking_options', [])
-                    if booking_options:
-                        result_text += "   🔗 预订选项:\n"
-                        for option in booking_options[:2]:  # 显示前2个预订选项
-                            book_with = option.get('book_with', '预订')
-                            book_link = option.get('link')
-                            if book_link:
-                                result_text += f"   • [{book_with}]({book_link})\n"
+                    # 获取真实预订选项
+                    booking_token = flight.get('booking_token')
+                    if booking_token:
+                        try:
+                            # 使用booking_token获取详细预订选项
+                            booking_options = await flight_cache_service.get_booking_options_with_cache(
+                                booking_token, language=language
+                            )
+                            
+                            if booking_options and booking_options.get('booking_options'):
+                                booking_option = booking_options['booking_options'][0]  # 取第一个选项
+                                together_option = booking_option.get('together', {})
+                                
+                                # 显示预订提供商
+                                book_with = together_option.get('book_with', '')
+                                if book_with:
+                                    result_text += f"   🏢 预订商: *{book_with}*\n"
+                                
+                                # 显示真实预订链接
+                                booking_request = together_option.get('booking_request', {})
+                                if booking_request.get('url'):
+                                    booking_url = booking_request['url']
+                                    result_text += f"   🔗 [立即预订]({booking_url})\n"
+                                elif together_option.get('booking_phone'):
+                                    phone = together_option['booking_phone']
+                                    result_text += f"   📞 预订电话: {phone}\n"
+                                else:
+                                    # 备用方案：使用booking_token直接构建链接
+                                    booking_url = f"https://www.google.com/flights?booking_token={booking_token}"
+                                    result_text += f"   🔗 [查看预订选项]({booking_url})\n"
                             else:
-                                result_text += f"   • {book_with}\n"
+                                # 如果获取详细预订选项失败，使用booking_token构建链接
+                                booking_url = f"https://www.google.com/flights?booking_token={booking_token}"
+                                result_text += f"   🔗 [查看预订选项]({booking_url})\n"
+                                
+                        except Exception as e:
+                            logger.warning(f"获取预订选项失败: {e}")
+                            # 备用方案：使用booking_token构建链接
+                            booking_url = f"https://www.google.com/flights?booking_token={booking_token}"
+                            result_text += f"   🔗 [查看预订选项]({booking_url})\n"
                     else:
-                        # 如果没有直接的预订选项，提供Google Flights链接
-                        google_flights_url = f"https://www.google.com/travel/flights/search?tfs=CBwQAhojagwIAhIIL20vMDFfajQSCjIwMjUtMDgtMjVyDAgCEggvbS8wNV9xdA"
-                        result_text += f"   🔗 [在Google Flights上查看](https://www.google.com/flights)\n"
+                        # 备用方案：使用Google Flights搜索链接
+                        search_url = f"https://www.google.com/travel/flights/search"
+                        params = f"?tfs=CBwQAhokagwIAhIIL20vMDFfajRCAhIDe2departure_id}SgwIAhIIL20vMDVfcXR0"
+                        google_flights_url = search_url + params.replace('{departure_id}', departure_id).replace('{arrival_id}', arrival_id)
+                        result_text += f"   🔗 [在Google Flights查看]({google_flights_url})\n"
                     
                     result_text += "\n"
                 
-                # 添加更多选项提示
-                if len(all_flights) > 3:
-                    result_text += f"📋 *还有 {len(all_flights) - 3} 个其他选项*\n"
-                    result_text += "💡 使用 **搜索航班** 功能查看完整列表\n\n"
+                # Telegraph支持长列表
+                if should_use_telegraph:
+                    # 创建Telegraph页面显示完整预订信息
+                    booking_title = f"预订选项: {departure_id} → {arrival_id}"
+                    telegraph_content = await create_booking_telegraph_page(all_flights, search_params)
+                    telegraph_url = await create_telegraph_page(booking_title, telegraph_content)
+                    
+                    if telegraph_url:
+                        result_text += f"📋 *完整预订列表*: [查看全部 {len(all_flights)} 个选项]({telegraph_url})\n\n"
+                    else:
+                        result_text += f"📋 *还有 {len(all_flights) - flights_to_show} 个其他选项*\n"
+                        result_text += "💡 使用 **搜索航班** 功能查看完整列表\n\n"
+                else:
+                    # 添加更多选项提示
+                    if len(all_flights) > flights_to_show:
+                        result_text += f"📋 *还有 {len(all_flights) - flights_to_show} 个其他选项*\n"
+                        result_text += "💡 使用 **搜索航班** 功能查看完整列表\n\n"
                 
                 # 预订建议
                 result_text += "💡 *预订建议:*\n"
