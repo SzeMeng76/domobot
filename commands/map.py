@@ -508,11 +508,12 @@ async def map_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     
     await delete_user_command(context, update.message.chat_id, update.message.message_id)
 
-async def _execute_nearby_search(update: Update, context: ContextTypes.DEFAULT_TYPE, lat: float, lng: float, place_type: str, callback_query: CallbackQuery = None) -> None:
+async def _execute_nearby_search(update: Update, context: ContextTypes.DEFAULT_TYPE, lat: float, lng: float, place_type: str, callback_query: CallbackQuery = None, language: str = None) -> None:
     """执行附近服务搜索"""
-    # 检测用户语言 (这里可以从上下文推断或使用默认值)
-    user_locale = update.effective_user.language_code if update.effective_user else None
-    language = detect_user_language("", user_locale)  # 用空字符串，主要依赖locale检测
+    # 如果没有传递语言参数，则进行检测
+    if language is None:
+        user_locale = update.effective_user.language_code if update.effective_user else None
+        language = detect_user_language("", user_locale)  # 用空字符串，主要依赖locale检测
     
     type_names = {
         'restaurant': '餐厅',
@@ -539,7 +540,8 @@ async def _execute_nearby_search(update: Update, context: ContextTypes.DEFAULT_T
             parse_mode="MarkdownV2"
         )
         # 调度自动删除
-        await _schedule_auto_delete(context, message.chat_id, message.message_id, 10)
+        config = get_config()
+        await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
     
     try:
         service_type = "amap" if language == "zh" else "google_maps"
@@ -581,13 +583,15 @@ async def _execute_nearby_search(update: Update, context: ContextTypes.DEFAULT_T
                     text=error_msg,
                     reply_markup=reply_markup
                 )
-                await _schedule_auto_delete(context, callback_query.message.chat_id, callback_query.message.message_id, 10)
+                config = get_config()
+                await _schedule_auto_delete(context, callback_query.message.chat_id, callback_query.message.message_id, config.auto_delete_delay)
             else:
                 await message.edit_text(
                     text=error_msg,
                     reply_markup=reply_markup
                 )
-                await _schedule_auto_delete(context, message.chat_id, message.message_id, 10)
+                config = get_config()
+                await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
                 
     except Exception as e:
         logger.error(f"附近搜索失败: {e}")
@@ -597,18 +601,19 @@ async def _execute_nearby_search(update: Update, context: ContextTypes.DEFAULT_T
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
+        config = get_config()
         if callback_query:
             await callback_query.edit_message_text(
                 text=error_msg,
                 reply_markup=reply_markup
             )
-            await _schedule_auto_delete(context, callback_query.message.chat_id, callback_query.message.message_id, 10)
+            await _schedule_auto_delete(context, callback_query.message.chat_id, callback_query.message.message_id, config.auto_delete_delay)
         else:
             await message.edit_text(
                 text=error_msg,
                 reply_markup=reply_markup
             )
-            await _schedule_auto_delete(context, message.chat_id, message.message_id, 10)
+            await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
 
 async def _execute_location_search(update: Update, context: ContextTypes.DEFAULT_TYPE, query: str, callback_query: CallbackQuery = None) -> None:
     """执行位置搜索"""
@@ -631,7 +636,8 @@ async def _execute_location_search(update: Update, context: ContextTypes.DEFAULT
             parse_mode="MarkdownV2"
         )
         # 调度自动删除
-        await _schedule_auto_delete(context, message.chat_id, message.message_id, 10)
+        config = get_config()
+        await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
     
     try:
         # 获取对应的地图服务
@@ -667,7 +673,7 @@ async def _execute_location_search(update: Update, context: ContextTypes.DEFAULT
                     InlineKeyboardButton("🧭 开始导航", url=nav_url)
                 ],
                 [
-                    InlineKeyboardButton("📍 附近服务", callback_data=f"map_nearby_here:{lat},{lng}"),
+                    InlineKeyboardButton("📍 附近服务", callback_data=f"map_nearby_here:{lat},{lng}:{language}"),
                     InlineKeyboardButton("🛣️ 路线规划", callback_data=f"map_route_to:{query}")
                 ],
                 [
@@ -701,13 +707,15 @@ async def _execute_location_search(update: Update, context: ContextTypes.DEFAULT
                     text=error_msg,
                     reply_markup=reply_markup
                 )
-                await _schedule_auto_delete(context, callback_query.message.chat_id, callback_query.message.message_id, 10)
+                config = get_config()
+                await _schedule_auto_delete(context, callback_query.message.chat_id, callback_query.message.message_id, config.auto_delete_delay)
             else:
                 await message.edit_text(
                     text=error_msg,
                     reply_markup=reply_markup
                 )
-                await _schedule_auto_delete(context, message.chat_id, message.message_id, 10)
+                config = get_config()
+                await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
                 
     except Exception as e:
         logger.error(f"位置搜索失败: {e}")
@@ -717,18 +725,19 @@ async def _execute_location_search(update: Update, context: ContextTypes.DEFAULT
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
+        config = get_config()
         if callback_query:
             await callback_query.edit_message_text(
                 text=error_msg,
                 reply_markup=reply_markup
             )
-            await _schedule_auto_delete(context, callback_query.message.chat_id, callback_query.message.message_id, 10)
+            await _schedule_auto_delete(context, callback_query.message.chat_id, callback_query.message.message_id, config.auto_delete_delay)
         else:
             await message.edit_text(
                 text=error_msg,
                 reply_markup=reply_markup
             )
-            await _schedule_auto_delete(context, message.chat_id, message.message_id, 10)
+            await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
 
 async def map_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理地图功能的文本输入"""
@@ -794,7 +803,8 @@ async def _execute_route_planning(update: Update, context: ContextTypes.DEFAULT_
         parse_mode="MarkdownV2"
     )
     # 调度自动删除
-    await _schedule_auto_delete(context, message.chat_id, message.message_id, 10)
+    config = get_config()
+    await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
     
     try:
         service_type = "amap" if language == "zh" else "google_maps"
@@ -826,7 +836,7 @@ async def _execute_route_planning(update: Update, context: ContextTypes.DEFAULT_
                 text=error_msg,
                 reply_markup=reply_markup
             )
-            await _schedule_auto_delete(context, message.chat_id, message.message_id, 10)
+            await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
             
     except Exception as e:
         logger.error(f"路线规划失败: {e}")
@@ -836,11 +846,12 @@ async def _execute_route_planning(update: Update, context: ContextTypes.DEFAULT_
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
+        config = get_config()
         await message.edit_text(
             text=error_msg,
             reply_markup=reply_markup
         )
-        await _schedule_auto_delete(context, message.chat_id, message.message_id, 10)
+        await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
 
 async def _parse_and_execute_directions(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
     """解析并执行路线规划 (起点 到 终点格式)"""
@@ -879,7 +890,8 @@ async def _execute_geocoding(update: Update, context: ContextTypes.DEFAULT_TYPE,
         parse_mode="MarkdownV2"
     )
     # 调度自动删除
-    await _schedule_auto_delete(context, message.chat_id, message.message_id, 10)
+    config = get_config()
+    await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
     
     try:
         service_type = "amap" if language == "zh" else "google_maps"
@@ -911,7 +923,7 @@ async def _execute_geocoding(update: Update, context: ContextTypes.DEFAULT_TYPE,
                 text=error_msg,
                 reply_markup=reply_markup
             )
-            await _schedule_auto_delete(context, message.chat_id, message.message_id, 10)
+            await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
             
     except Exception as e:
         logger.error(f"地理编码失败: {e}")
@@ -921,11 +933,12 @@ async def _execute_geocoding(update: Update, context: ContextTypes.DEFAULT_TYPE,
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
+        config = get_config()
         await message.edit_text(
             text=error_msg,
             reply_markup=reply_markup
         )
-        await _schedule_auto_delete(context, message.chat_id, message.message_id, 10)
+        await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
 
 async def _execute_reverse_geocoding(update: Update, context: ContextTypes.DEFAULT_TYPE, coordinates: str) -> None:
     """执行逆地理编码"""
@@ -949,7 +962,8 @@ async def _execute_reverse_geocoding(update: Update, context: ContextTypes.DEFAU
             parse_mode="MarkdownV2"
         )
         # 调度自动删除
-        await _schedule_auto_delete(context, message.chat_id, message.message_id, 10)
+        config = get_config()
+        await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
         
         service_type = "amap" if language == "zh" else "google_maps"
         
@@ -980,7 +994,7 @@ async def _execute_reverse_geocoding(update: Update, context: ContextTypes.DEFAU
                 text=error_msg,
                 reply_markup=reply_markup
             )
-            await _schedule_auto_delete(context, message.chat_id, message.message_id, 10)
+            await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
             
     except ValueError:
         await send_error(context, update.message.chat_id, "坐标格式错误，请输入有效的数字")
@@ -1167,25 +1181,27 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         )
     
     elif data.startswith("map_nearby_here:"):
-        coords = data.split(":", 1)[1]
+        parts = data.split(":", 2)
+        coords = parts[1]
+        language = parts[2] if len(parts) > 2 else "en"  # 默认英文
         lat, lng = map(float, coords.split(","))
         
         # 显示附近服务类型选择
         keyboard = [
             [
-                InlineKeyboardButton("🍽️ 餐厅", callback_data=f"map_search_nearby:{lat},{lng}:restaurant"),
-                InlineKeyboardButton("🏥 医院", callback_data=f"map_search_nearby:{lat},{lng}:hospital")
+                InlineKeyboardButton("🍽️ 餐厅", callback_data=f"map_search_nearby:{lat},{lng}:restaurant:{language}"),
+                InlineKeyboardButton("🏥 医院", callback_data=f"map_search_nearby:{lat},{lng}:hospital:{language}")
             ],
             [
-                InlineKeyboardButton("🏦 银行", callback_data=f"map_search_nearby:{lat},{lng}:bank"),
-                InlineKeyboardButton("⛽ 加油站", callback_data=f"map_search_nearby:{lat},{lng}:gas_station")
+                InlineKeyboardButton("🏦 银行", callback_data=f"map_search_nearby:{lat},{lng}:bank:{language}"),
+                InlineKeyboardButton("⛽ 加油站", callback_data=f"map_search_nearby:{lat},{lng}:gas_station:{language}")
             ],
             [
-                InlineKeyboardButton("🛒 超市", callback_data=f"map_search_nearby:{lat},{lng}:supermarket"),
-                InlineKeyboardButton("🏫 学校", callback_data=f"map_search_nearby:{lat},{lng}:school")
+                InlineKeyboardButton("🛒 超市", callback_data=f"map_search_nearby:{lat},{lng}:supermarket:{language}"),
+                InlineKeyboardButton("🏫 学校", callback_data=f"map_search_nearby:{lat},{lng}:school:{language}")
             ],
             [
-                InlineKeyboardButton("🏨 酒店", callback_data=f"map_search_nearby:{lat},{lng}:hotel")
+                InlineKeyboardButton("🏨 酒店", callback_data=f"map_search_nearby:{lat},{lng}:hotel:{language}")
             ],
             [
                 InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")
@@ -1198,13 +1214,14 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         )
     
     elif data.startswith("map_search_nearby:"):
-        parts = data.split(":", 2)
+        parts = data.split(":", 3)
         coords = parts[1]
         place_type = parts[2]
+        language = parts[3] if len(parts) > 3 else "en"  # 默认英文
         lat, lng = map(float, coords.split(","))
         
         # 执行附近搜索
-        await _execute_nearby_search(update, context, lat, lng, place_type, query)
+        await _execute_nearby_search(update, context, lat, lng, place_type, query, language)
     
     elif data.startswith("map_route_to:"):
         destination = data.split(":", 1)[1]
