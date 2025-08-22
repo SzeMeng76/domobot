@@ -250,7 +250,10 @@ class FlightCacheService:
     
     async def get_booking_options_with_cache(self, booking_token: str, search_params: Dict, language: str = "en", **kwargs) -> Optional[Dict]:
         """带缓存的预订选项获取 - 需要原始搜索参数"""
-        cache_key = f"flight_booking_{language}_{booking_token[:32]}"  # 使用token前32字符作为键
+        # 使用完整booking_token的哈希值作为缓存键，确保每个航班都有唯一的缓存
+        import hashlib
+        token_hash = hashlib.md5(booking_token.encode()).hexdigest()
+        cache_key = f"flight_booking_{language}_{token_hash}"
         
         if cache_manager:
             config = get_config()
@@ -1364,9 +1367,11 @@ async def _show_booking_options(query: CallbackQuery, context: ContextTypes.DEFA
                                 
                                 # 显示真实预订链接
                                 booking_request = together_option.get('booking_request', {})
-                                if booking_request.get('url'):
-                                    booking_url = booking_request['url']
-                                    result_text += f"   🔗 [立即预订]({booking_url})\n"
+                                if booking_request.get('url') and booking_request.get('post_data'):
+                                    # Google Flights的redirect URL需要POST数据，对用户不友好
+                                    # 改为使用booking_token构建可用的Google Flights链接
+                                    booking_url = f"https://www.google.com/flights?booking_token={booking_token}"
+                                    result_text += f"   🔗 [通过Google预订]({booking_url})\n"
                                 elif together_option.get('booking_phone'):
                                     phone = together_option['booking_phone']
                                     result_text += f"   📞 预订电话: {phone}\n"
