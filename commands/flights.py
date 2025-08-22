@@ -1824,7 +1824,7 @@ async def advanced_flight_callback_handler(update: Update, context: ContextTypes
         })
         
         await query.edit_message_text(
-            text="🤖 **智能航班搜索**\\n\\n请输入你的行程信息，我会智能解析：\\n\\n**支持格式:**\\n• `PEK LAX 2025-12-25` - 单程\\n• `PEK LAX 2025-12-25 2026-01-05` - 往返\\n• `PEK LAX 2025-12-25 2 business` - 2人商务舱\\n• `北京 洛杉矶 2025-12-25` - 中文城市\\n\\n**支持参数:**\\n• 乘客数: 1-9\\n• 舱位: economy, business, first, premium",
+            text=foldable_text_with_markdown_v2("🤖 **智能航班搜索**\n\n请输入你的行程信息，我会智能解析：\n\n**支持格式:**\n• `PEK LAX 2025-12-25` - 单程\n• `PEK LAX 2025-12-25 2026-01-05` - 往返\n• `PEK LAX 2025-12-25 2 business` - 2人商务舱\n• `北京 洛杉矶 2025-12-25` - 中文城市\n\n**支持参数:**\n• 乘客数: 1-9\n• 舱位: economy, business, first, premium"),
             parse_mode="MarkdownV2",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")
@@ -1839,7 +1839,7 @@ async def advanced_flight_callback_handler(update: Update, context: ContextTypes
         })
         
         await query.edit_message_text(
-            text="🔍 **机场查询**\\n\\n请输入机场代码、城市名或机场名称：\\n\\n**示例:**\\n• `PEK` - 机场代码\\n• `北京` - 城市名\\n• `首都机场` - 机场名\\n• `Beijing` - 英文名称",
+            text=foldable_text_with_markdown_v2("🔍 **机场查询**\n\n请输入机场代码、城市名或机场名称：\n\n**示例:**\n• `PEK` - 机场代码\n• `北京` - 城市名\n• `首都机场` - 机场名\n• `Beijing` - 英文名称"),
             parse_mode="MarkdownV2",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")
@@ -1869,8 +1869,7 @@ async def advanced_flight_callback_handler(update: Update, context: ContextTypes
         })
         
         await query.edit_message_text(
-            text="✈️ **单程航班搜索**\\n\\n请输入搜索信息：\\n格式: 出发机场 到达机场 日期\\n\\n例如:\\n• PEK LAX 2025-12-25\\n• 北京 洛杉矶 2025-12-25",
-            parse_mode="MarkdownV2",
+            text="✈️ 单程航班搜索\n\n请输入搜索信息：\n格式: 出发机场 到达机场 日期\n\n例如:\n• PEK LAX 2025-12-25\n• 北京 洛杉矶 2025-12-25",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")
             ]])
@@ -1884,8 +1883,7 @@ async def advanced_flight_callback_handler(update: Update, context: ContextTypes
         })
         
         await query.edit_message_text(
-            text="🔄 **往返航班搜索**\\n\\n请输入搜索信息：\\n格式: 出发机场 到达机场 出发日期 返程日期\\n\\n例如:\\n• PEK LAX 2025-12-25 2026-01-05\\n• 北京 洛杉矶 2025-12-25 2026-01-05",
-            parse_mode="MarkdownV2",
+            text="🔄 往返航班搜索\n\n请输入搜索信息：\n格式: 出发机场 到达机场 出发日期 返程日期\n\n例如:\n• PEK LAX 2025-12-25 2026-01-05\n• 北京 洛杉矶 2025-12-25 2026-01-05",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")
             ]])
