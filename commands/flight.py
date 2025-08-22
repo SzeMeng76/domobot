@@ -489,6 +489,7 @@ def format_flight_results(flight_data: Dict, search_params: Dict) -> str:
     else:
         # 显示前5个航班
         flights_to_show = min(5, len(all_flights))
+        should_use_telegraph = len(all_flights) > 5  # 超过5个使用Telegraph
         
         if best_flights:
             result += "🌟 *推荐航班:*\n\n"
@@ -504,6 +505,14 @@ def format_flight_results(flight_data: Dict, search_params: Dict) -> str:
                 result += f"`{i}.` "
                 result += format_flight_info(flight)
                 result += "\n"
+        
+        # Telegraph支持长列表
+        if should_use_telegraph:
+            result += f"📋 *完整航班列表*: 点击查看全部 {len(all_flights)} 个选项\n"
+            result += "💡 使用下方 **🎫 预订选项** 按钮查看完整列表\n\n"
+        elif len(all_flights) > flights_to_show:
+            result += f"📋 *还有 {len(all_flights) - flights_to_show} 个其他选项*\n"
+            result += "💡 使用下方 **🎫 预订选项** 按钮查看完整列表\n\n"
         
         # 价格洞察
         price_insights = flight_data.get('price_insights', {})
