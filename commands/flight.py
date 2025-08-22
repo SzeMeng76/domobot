@@ -358,6 +358,43 @@ def format_flight_info(flight: Dict) -> str:
         # 舱位等级
         if 'travel_class' in segment:
             result += f"🎫 舱位: {segment['travel_class']}\n"
+        
+        # 座位空间信息
+        legroom = segment.get('legroom')
+        if legroom:
+            result += f"📏 座位空间: {legroom}\n"
+        
+        # 过夜航班警告
+        if segment.get('overnight'):
+            result += f"🌙 过夜航班\n"
+        
+        # 延误警告
+        if segment.get('often_delayed_by_over_30_min'):
+            result += f"⚠️ 经常延误超过30分钟\n"
+        
+        # 航班特性
+        extensions = segment.get('extensions', [])
+        if extensions:
+            # 显示前3个最重要的特性
+            for ext in extensions[:3]:
+                if 'Wi-Fi' in ext:
+                    result += f"📶 {ext}\n"
+                elif 'legroom' in ext:
+                    result += f"💺 {ext}\n"
+                elif 'power' in ext or 'USB' in ext:
+                    result += f"🔌 {ext}\n"
+                elif 'video' in ext or 'entertainment' in ext:
+                    result += f"📺 {ext}\n"
+        
+        # 其他售票方
+        also_sold_by = segment.get('ticket_also_sold_by', [])
+        if also_sold_by:
+            result += f"🎫 也可通过: {', '.join(also_sold_by[:2])}\n"  # 只显示前2个
+        
+        # 机组信息
+        plane_crew = segment.get('plane_and_crew_by')
+        if plane_crew:
+            result += f"👥 运营: {plane_crew}\n"
     
     # 显示总时长
     if 'total_duration' in flight:
@@ -369,15 +406,25 @@ def format_flight_info(flight: Dict) -> str:
     if 'price' in flight:
         result += f"💰 价格: ${flight['price']}\n"
     
-    # 显示中转信息
+    # 改进的中转信息显示
     layovers = flight.get('layovers', [])
     if layovers:
         result += f"\n🔄 中转: "
         layover_info = []
         for layover in layovers:
-            layover_hours = layover['duration'] // 60
-            layover_minutes = layover['duration'] % 60
-            layover_info.append(f"{layover['name']} ({layover_hours}h{layover_minutes}m)")
+            duration_min = layover.get('duration', 0)
+            hours = duration_min // 60
+            minutes = duration_min % 60
+            time_str = f"{hours}h{minutes}m" if minutes else f"{hours}h"
+            
+            airport_name = layover.get('name', layover.get('id', '未知'))
+            layover_display = f"{airport_name} ({time_str})"
+            
+            # 过夜中转标识
+            if layover.get('overnight'):
+                layover_display += " 🌙"
+            
+            layover_info.append(layover_display)
         result += " → ".join(layover_info)
         result += "\n"
     
@@ -508,6 +555,18 @@ def format_price_insights(price_insights: Dict, departure_id: str, arrival_id: s
                 result += "无变化"
             result += "\n"
     
+    # 最佳预订时机
+    if 'best_time_to_book' in price_insights:
+        booking_time = price_insights['best_time_to_book']
+        result += f"⏰ 最佳预订时机: {booking_time}\n"
+    
+    # 价格预测
+    if 'price_forecast' in price_insights:
+        forecast = price_insights['price_forecast']
+        if forecast:
+            result += f"🔮 价格预测: {forecast}\n"
+    
+    # 预订建议
     result += f"\n💡 *建议:*\n"
     if price_insights.get('price_level') == 'low':
         result += "• 🟢 价格较低，建议预订\n"
@@ -516,6 +575,16 @@ def format_price_insights(price_insights: Dict, departure_id: str, arrival_id: s
         result += "• 📅 尝试工作日出行\n"
     else:
         result += "• 🟡 价格合理，可根据需要预订\n"
+    
+    # 价格趋势建议
+    if 'price_history' in price_insights:
+        history = price_insights['price_history']
+        if len(history) >= 3:
+            recent_trend = [h[1] for h in history[-3:]]
+            if recent_trend[-1] < recent_trend[0]:
+                result += "• 📉 近期价格下降，可继续观察\n"
+            elif recent_trend[-1] > recent_trend[0]:
+                result += "• 📈 近期价格上涨，建议尽早预订\n"
     
     result += f"\n_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
     
@@ -1352,6 +1421,57 @@ async def _show_booking_options(query: CallbackQuery, context: ContextTypes.DEFA
                     if price:
                         result_text += f"   💰 价格: *${price}*\n"
                     
+                    # 航班特性信息
+                    if flights_info:
+                        segment = flights_info[0]
+                        
+                        # 座位空间信息
+                        legroom = segment.get('legroom')
+                        if legroom:
+                            result_text += f"   📏 座位空间: {legroom}\n"
+                        
+                        # 过夜航班警告
+                        if segment.get('overnight'):
+                            result_text += f"   🌙 过夜航班\n"
+                        
+                        # 延误警告
+                        if segment.get('often_delayed_by_over_30_min'):
+                            result_text += f"   ⚠️ 经常延误超过30分钟\n"
+                        
+                        # 航班特性
+                        extensions = segment.get('extensions', [])
+                        if extensions:
+                            # 只显示前3个最重要的特性
+                            for ext in extensions[:3]:
+                                if 'Wi-Fi' in ext:
+                                    result_text += f"   📶 {ext}\n"
+                                elif 'legroom' in ext:
+                                    result_text += f"   💺 {ext}\n"
+                                elif 'power' in ext or 'USB' in ext:
+                                    result_text += f"   🔌 {ext}\n"
+                        
+                        # 其他售票方
+                        also_sold_by = segment.get('ticket_also_sold_by', [])
+                        if also_sold_by:
+                            result_text += f"   🎫 也可通过: {', '.join(also_sold_by)}\n"
+                    
+                    # 中转信息改进
+                    layovers = flight.get('layovers', [])
+                    if layovers:
+                        for layover in layovers:
+                            duration_min = layover.get('duration', 0)
+                            hours = duration_min // 60
+                            minutes = duration_min % 60
+                            time_str = f"{hours}h{minutes}m" if minutes else f"{hours}h"
+                            
+                            airport_name = layover.get('name', layover.get('id', '未知'))
+                            result_text += f"   ✈️ 中转: {airport_name} ({time_str})"
+                            
+                            # 过夜中转标识
+                            if layover.get('overnight'):
+                                result_text += " 🌙过夜"
+                            result_text += "\n"
+                    
                     # 获取真实预订选项
                     booking_token = flight.get('booking_token')
                     if booking_token:
@@ -1363,34 +1483,76 @@ async def _show_booking_options(query: CallbackQuery, context: ContextTypes.DEFA
                             
                             if booking_options and booking_options.get('booking_options'):
                                 booking_option = booking_options['booking_options'][0]  # 取第一个选项
-                                together_option = booking_option.get('together', {})
                                 
-                                # 显示预订提供商
-                                book_with = together_option.get('book_with', '')
-                                if book_with:
-                                    result_text += f"   🏢 预订商: *{book_with}*\n"
-                                
-                                # 显示真实预订链接
-                                booking_request = together_option.get('booking_request', {})
-                                booking_url_from_api = booking_request.get('url', '')
-                                
-                                if booking_url_from_api and 'google.com/travel/clk/' in booking_url_from_api:
-                                    # Google Flights的redirect URL需要POST数据，对用户不友好
-                                    # 显示预订商信息并提供搜索建议
+                                # 检查是否为分别预订的机票
+                                separate_tickets = booking_option.get('separate_tickets', False)
+                                if separate_tickets:
+                                    result_text += f"   🎫 *分别预订机票*\n"
+                                    
+                                    # 处理出发段预订
+                                    departing = booking_option.get('departing', {})
+                                    if departing:
+                                        result_text += f"   🛫 *出发段预订:*\n"
+                                        book_with = departing.get('book_with', '')
+                                        if book_with:
+                                            result_text += f"      🏢 预订商: {book_with}\n"
+                                        price = departing.get('price')
+                                        if price:
+                                            result_text += f"      💰 价格: ${price}\n"
+                                    
+                                    # 处理返程段预订
+                                    returning = booking_option.get('returning', {})
+                                    if returning:
+                                        result_text += f"   🛬 *返程段预订:*\n"
+                                        book_with = returning.get('book_with', '')
+                                        if book_with:
+                                            result_text += f"      🏢 预订商: {book_with}\n"
+                                        price = returning.get('price')
+                                        if price:
+                                            result_text += f"      💰 价格: ${price}\n"
+                                else:
+                                    # 一起预订的处理
+                                    together_option = booking_option.get('together', {})
+                                    
+                                    # 显示预订提供商
                                     book_with = together_option.get('book_with', '')
                                     if book_with:
-                                        result_text += f"   💡 建议直接访问 *{book_with}* 官网预订\n"
+                                        result_text += f"   🏢 预订商: *{book_with}*\n"
+                                    
+                                    # 显示本地价格
+                                    local_prices = together_option.get('local_prices', [])
+                                    if local_prices:
+                                        for local_price in local_prices[:2]:  # 显示前2个本地价格
+                                            currency = local_price.get('currency', 'USD')
+                                            price_val = local_price.get('price', 0)
+                                            result_text += f"   💱 本地价格: {currency} {price_val:,}\n"
+                                    
+                                    # 显示电话服务费
+                                    phone_fee = together_option.get('estimated_phone_service_fee')
+                                    if phone_fee:
+                                        result_text += f"   📞 电话服务费: ${phone_fee}\n"
+                                    
+                                    # 显示真实预订链接
+                                    booking_request = together_option.get('booking_request', {})
+                                    booking_url_from_api = booking_request.get('url', '')
+                                    
+                                    if booking_url_from_api and 'google.com/travel/clk/' in booking_url_from_api:
+                                        # Google Flights的redirect URL需要POST数据，对用户不友好
+                                        # 显示预订商信息并提供搜索建议
+                                        book_with = together_option.get('book_with', '')
+                                        if book_with:
+                                            result_text += f"   💡 建议直接访问 *{book_with}* 官网预订\n"
+                                        else:
+                                            result_text += f"   💡 建议访问航空公司官网预订\n"
+                                    elif booking_url_from_api and 'google.com' not in booking_url_from_api:
+                                        # 如果是航空公司官网链接，直接使用
+                                        result_text += f"   🔗 [立即预订]({booking_url_from_api})\n"
+                                    elif together_option.get('booking_phone'):
+                                        phone = together_option['booking_phone']
+                                        result_text += f"   📞 预订电话: {phone}\n"
                                     else:
+                                        # 备用方案：提供建议
                                         result_text += f"   💡 建议访问航空公司官网预订\n"
-                                elif booking_url_from_api and 'google.com' not in booking_url_from_api:
-                                    # 如果是航空公司官网链接，直接使用
-                                    result_text += f"   🔗 [立即预订]({booking_url_from_api})\n"
-                                elif together_option.get('booking_phone'):
-                                    phone = together_option['booking_phone']
-                                    result_text += f"   📞 预订电话: {phone}\n"
-                                else:
-                                    # 备用方案：提供建议
-                                    result_text += f"   💡 建议访问航空公司官网预订\n"
                             else:
                                 # 如果获取详细预订选项失败，提供建议
                                 result_text += f"   💡 建议访问航空公司官网预订\n"
