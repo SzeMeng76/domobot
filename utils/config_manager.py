@@ -21,7 +21,6 @@ class BotConfig:
         self.qweather_api_key: str = ""
         self.cmc_api_key: str = ""
         self.bin_api_key: str = ""
-        self.variflight_api_key: str = ""
         
         # 电影信息API配置
         self.tmdb_api_key: str = ""
@@ -323,7 +322,6 @@ class ConfigManager:
         self.config.qweather_api_key = os.getenv("QWEATHER_API_KEY", "")
         self.config.cmc_api_key = os.getenv("CMC_API_KEY", "")
         self.config.bin_api_key = os.getenv("BIN_API_KEY", "")
-        self.config.variflight_api_key = os.getenv("VARIFLIGHT_API_KEY", "")
         
         # 电影信息 API 配置
         self.config.tmdb_api_key = os.getenv("TMDB_API_KEY", "")
