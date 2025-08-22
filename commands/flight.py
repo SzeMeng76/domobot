@@ -18,7 +18,7 @@ from telegram.helpers import escape_markdown
 
 from utils.command_factory import command_factory
 from utils.config_manager import get_config
-from utils.formatter import foldable_text_v2, foldable_text_with_markdown_v2, format_with_markdown_v2
+from utils.formatter import foldable_text_v2, format_with_markdown_v2
 from utils.message_manager import (
     delete_user_command, 
     send_error, 
@@ -100,7 +100,7 @@ def _is_date(text: str) -> bool:
     return False
 
 def _parse_date(date_str: str) -> str:
-    """解析日期字符串为YYYY-MM-DD格式（MCP API需要）"""
+    """解析日期字符串为YYYYMMDD格式"""
     date_str = date_str.strip()
     
     try:
@@ -109,34 +109,33 @@ def _parse_date(date_str: str) -> str:
         
         # YYYYMMDD格式
         if re.match(r'^\d{8}$', date_str):
-            # 验证日期有效性并转换为YYYY-MM-DD
-            date_obj = datetime.strptime(date_str, '%Y%m%d')
-            return date_obj.strftime('%Y-%m-%d')
+            # 验证日期有效性
+            datetime.strptime(date_str, '%Y%m%d')
+            return date_str
         
         # YYYY-MM-DD格式
         elif re.match(r'^\d{4}-\d{2}-\d{2}$', date_str):
-            # 验证日期有效性
-            datetime.strptime(date_str, '%Y-%m-%d')
-            return date_str
+            date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+            return date_obj.strftime('%Y%m%d')
         
         # YYYY/MM/DD格式
         elif re.match(r'^\d{4}/\d{2}/\d{2}$', date_str):
             date_obj = datetime.strptime(date_str, '%Y/%m/%d')
-            return date_obj.strftime('%Y-%m-%d')
+            return date_obj.strftime('%Y%m%d')
         
         # MM-DD格式 (当年)
         elif re.match(r'^\d{2}-\d{2}$', date_str):
             current_year = datetime.now().year
             full_date = f"{current_year}-{date_str}"
             date_obj = datetime.strptime(full_date, '%Y-%m-%d')
-            return date_obj.strftime('%Y-%m-%d')
+            return date_obj.strftime('%Y%m%d')
         
         # MM/DD格式 (当年)
         elif re.match(r'^\d{2}/\d{2}$', date_str):
             current_year = datetime.now().year
             full_date = f"{current_year}/{date_str}"
             date_obj = datetime.strptime(full_date, '%Y/%m/%d')
-            return date_obj.strftime('%Y-%m-%d')
+            return date_obj.strftime('%Y%m%d')
         
         else:
             return None
@@ -156,21 +155,17 @@ async def _schedule_auto_delete(context: ContextTypes.DEFAULT_TYPE, chat_id: int
         logger.error(f"调度自动删除失败: {e}")
 
 class FlightService:
-    """航班查询服务类 - 使用VariFlight MCP API"""
+    """航班查询服务类"""
     
     def __init__(self):
-        self.base_url = "https://mcp.variflight.com/api/v1/mcp/data"
+        self.base_url = "https://api.variflight.com"
         self.config = get_config()
         
     async def search_flight(self, flight_number: str, date: str = None) -> Optional[Dict]:
-        """查询航班信息 - 使用MCP API"""
+        """查询航班信息"""
         try:
             if not date:
-                date = datetime.now().strftime('%Y-%m-%d')  # MCP API使用YYYY-MM-DD格式
-            else:
-                # 转换日期格式从YYYYMMDD到YYYY-MM-DD
-                if len(date) == 8 and date.isdigit():
-                    date = f"{date[:4]}-{date[4:6]}-{date[6:8]}"
+                date = datetime.now().strftime('%Y%m%d')
             
             # 检查缓存 (使用subdirectory参数)
             cache_key = f"search:{flight_number}:{date}" 
@@ -180,27 +175,21 @@ class FlightService:
                 logger.info(f"从缓存获取航班信息: {flight_number}")
                 return cached_result
             
-            # 构建MCP API请求
+            # 构建API请求
             api_key = getattr(self.config, 'variflight_api_key', '')
             if not api_key:
                 logger.error("VariFlight API密钥未配置")
                 return None
             
-            # 使用MCP API格式
-            request_body = {
-                "endpoint": "flight",
-                "params": {
-                    "fnum": flight_number,
-                    "date": date
-                }
+            # 使用VariFlight API格式
+            url = f"{self.base_url}/v2/fids/flight"
+            params = {
+                'appid': api_key,
+                'flight': flight_number,
+                'date': date
             }
             
-            headers = {
-                'X-VARIFLIGHT-KEY': api_key,
-                'Content-Type': 'application/json'
-            }
-            
-            response = await httpx_client.post(self.base_url, json=request_body, headers=headers, timeout=10)
+            response = await httpx_client.get(url, params=params, timeout=10)
             
             if response.status_code == 200:
                 data = response.json()
@@ -209,7 +198,7 @@ class FlightService:
                 logger.info(f"成功查询航班信息: {flight_number}")
                 return data
             else:
-                logger.error(f"MCP API请求失败: {response.status_code} - {response.text}")
+                logger.error(f"API请求失败: {response.status_code} - {response.text}")
                 return None
                 
         except Exception as e:
@@ -217,14 +206,10 @@ class FlightService:
             return None
     
     async def search_route(self, origin: str, destination: str, date: str = None) -> Optional[Dict]:
-        """查询航线信息 - 使用MCP API"""
+        """查询航线信息"""
         try:
             if not date:
-                date = datetime.now().strftime('%Y-%m-%d')  # MCP API使用YYYY-MM-DD格式
-            else:
-                # 转换日期格式从YYYYMMDD到YYYY-MM-DD
-                if len(date) == 8 and date.isdigit():
-                    date = f"{date[:4]}-{date[4:6]}-{date[6:8]}"
+                date = datetime.now().strftime('%Y%m%d')
             
             cache_key = f"route:{origin}:{destination}:{date}"
             cached_result = await cache_manager.load_cache(cache_key, subdirectory="flight")
@@ -236,22 +221,15 @@ class FlightService:
             if not api_key:
                 return None
             
-            # 使用MCP API格式 - flights端点用于航线查询
-            request_body = {
-                "endpoint": "flights",
-                "params": {
-                    "dep": origin,
-                    "arr": destination,
-                    "date": date
-                }
+            url = f"{self.base_url}/v2/fids/route"
+            params = {
+                'appid': api_key,
+                'origin': origin,
+                'destination': destination,
+                'date': date
             }
             
-            headers = {
-                'X-VARIFLIGHT-KEY': api_key,
-                'Content-Type': 'application/json'
-            }
-            
-            response = await httpx_client.post(self.base_url, json=request_body, headers=headers, timeout=10)
+            response = await httpx_client.get(url, params=params, timeout=10)
             
             if response.status_code == 200:
                 data = response.json()
@@ -259,7 +237,7 @@ class FlightService:
                 await cache_manager.save_cache(cache_key, data, subdirectory="flight")
                 return data
             else:
-                logger.error(f"MCP航线查询失败: {response.status_code}")
+                logger.error(f"航线查询失败: {response.status_code}")
                 return None
                 
         except Exception as e:
@@ -267,7 +245,7 @@ class FlightService:
             return None
 
     async def get_airport_info(self, airport_code: str) -> Optional[Dict]:
-        """获取机场信息 - 使用MCP API天气端点作为替代"""
+        """获取机场信息"""
         try:
             cache_key = f"airport_info:{airport_code}"
             cached_result = await cache_manager.load_cache(cache_key, subdirectory="flight")
@@ -279,21 +257,13 @@ class FlightService:
             if not api_key:
                 return None
             
-            # MCP API没有专门的机场信息端点，使用天气查询作为替代
-            request_body = {
-                "endpoint": "futureAirportWeather",
-                "params": {
-                    "code": airport_code,
-                    "type": "1"
-                }
+            url = f"{self.base_url}/v2/airport/info"
+            params = {
+                'appid': api_key,
+                'airport': airport_code
             }
             
-            headers = {
-                'X-VARIFLIGHT-KEY': api_key,
-                'Content-Type': 'application/json'
-            }
-            
-            response = await httpx_client.post(self.base_url, json=request_body, headers=headers, timeout=10)
+            response = await httpx_client.get(url, params=params, timeout=10)
             
             if response.status_code == 200:
                 data = response.json()
@@ -305,187 +275,6 @@ class FlightService:
                 
         except Exception as e:
             logger.error(f"查询机场失败 {airport_code}: {e}")
-            return None
-
-    async def get_flight_transfer_info(self, origin_city: str, dest_city: str, date: str = None) -> Optional[Dict]:
-        """获取航班中转信息 - MCP API新功能"""
-        try:
-            if not date:
-                date = datetime.now().strftime('%Y-%m-%d')
-            else:
-                # 转换日期格式从YYYYMMDD到YYYY-MM-DD
-                if len(date) == 8 and date.isdigit():
-                    date = f"{date[:4]}-{date[4:6]}-{date[6:8]}"
-            
-            cache_key = f"transfer:{origin_city}:{dest_city}:{date}"
-            cached_result = await cache_manager.load_cache(cache_key, subdirectory="flight")
-            
-            if cached_result:
-                return cached_result
-            
-            api_key = getattr(self.config, 'variflight_api_key', '')
-            if not api_key:
-                return None
-            
-            request_body = {
-                "endpoint": "transfer",
-                "params": {
-                    "depcity": origin_city,
-                    "arrcity": dest_city,
-                    "depdate": date
-                }
-            }
-            
-            headers = {
-                'X-VARIFLIGHT-KEY': api_key,
-                'Content-Type': 'application/json'
-            }
-            
-            response = await httpx_client.post(self.base_url, json=request_body, headers=headers, timeout=10)
-            
-            if response.status_code == 200:
-                data = response.json()
-                await cache_manager.save_cache(cache_key, data, subdirectory="flight")
-                return data
-            else:
-                logger.error(f"MCP中转信息查询失败: {response.status_code}")
-                return None
-                
-        except Exception as e:
-            logger.error(f"查询中转信息失败 {origin_city}-{dest_city}: {e}")
-            return None
-
-    async def get_flight_happiness_index(self, flight_number: str, date: str = None) -> Optional[Dict]:
-        """获取航班幸福指数 - MCP API新功能"""
-        try:
-            if not date:
-                date = datetime.now().strftime('%Y-%m-%d')
-            else:
-                if len(date) == 8 and date.isdigit():
-                    date = f"{date[:4]}-{date[4:6]}-{date[6:8]}"
-            
-            cache_key = f"happiness:{flight_number}:{date}"
-            cached_result = await cache_manager.load_cache(cache_key, subdirectory="flight")
-            
-            if cached_result:
-                return cached_result
-            
-            api_key = getattr(self.config, 'variflight_api_key', '')
-            if not api_key:
-                return None
-            
-            request_body = {
-                "endpoint": "happiness",
-                "params": {
-                    "fnum": flight_number,
-                    "date": date
-                }
-            }
-            
-            headers = {
-                'X-VARIFLIGHT-KEY': api_key,
-                'Content-Type': 'application/json'
-            }
-            
-            response = await httpx_client.post(self.base_url, json=request_body, headers=headers, timeout=10)
-            
-            if response.status_code == 200:
-                data = response.json()
-                await cache_manager.save_cache(cache_key, data, subdirectory="flight")
-                return data
-            else:
-                logger.error(f"MCP幸福指数查询失败: {response.status_code}")
-                return None
-                
-        except Exception as e:
-            logger.error(f"查询幸福指数失败 {flight_number}: {e}")
-            return None
-
-    async def get_airport_weather(self, airport_code: str) -> Optional[Dict]:
-        """获取机场天气预报 - MCP API功能"""
-        try:
-            cache_key = f"weather:{airport_code}"
-            cached_result = await cache_manager.load_cache(cache_key, subdirectory="flight")
-            
-            if cached_result:
-                return cached_result
-            
-            api_key = getattr(self.config, 'variflight_api_key', '')
-            if not api_key:
-                return None
-            
-            request_body = {
-                "endpoint": "futureAirportWeather",
-                "params": {
-                    "code": airport_code,
-                    "type": "1"
-                }
-            }
-            
-            headers = {
-                'X-VARIFLIGHT-KEY': api_key,
-                'Content-Type': 'application/json'
-            }
-            
-            response = await httpx_client.post(self.base_url, json=request_body, headers=headers, timeout=10)
-            
-            if response.status_code == 200:
-                data = response.json()
-                await cache_manager.save_cache(cache_key, data, subdirectory="flight")
-                return data
-            else:
-                logger.error(f"MCP天气查询失败: {response.status_code}")
-                return None
-                
-        except Exception as e:
-            logger.error(f"查询机场天气失败 {airport_code}: {e}")
-            return None
-
-    async def search_flight_itineraries(self, origin_city: str, dest_city: str, date: str = None) -> Optional[Dict]:
-        """搜索机票行程 - MCP API新功能"""
-        try:
-            if not date:
-                date = datetime.now().strftime('%Y-%m-%d')
-            else:
-                if len(date) == 8 and date.isdigit():
-                    date = f"{date[:4]}-{date[4:6]}-{date[6:8]}"
-            
-            cache_key = f"itineraries:{origin_city}:{dest_city}:{date}"
-            cached_result = await cache_manager.load_cache(cache_key, subdirectory="flight")
-            
-            if cached_result:
-                return cached_result
-            
-            api_key = getattr(self.config, 'variflight_api_key', '')
-            if not api_key:
-                return None
-            
-            request_body = {
-                "endpoint": "searchFlightItineraries",
-                "params": {
-                    "depCityCode": origin_city,
-                    "arrCityCode": dest_city,
-                    "depDate": date
-                }
-            }
-            
-            headers = {
-                'X-VARIFLIGHT-KEY': api_key,
-                'Content-Type': 'application/json'
-            }
-            
-            response = await httpx_client.post(self.base_url, json=request_body, headers=headers, timeout=10)
-            
-            if response.status_code == 200:
-                data = response.json()
-                await cache_manager.save_cache(cache_key, data, subdirectory="flight")
-                return data
-            else:
-                logger.error(f"MCP机票搜索失败: {response.status_code}")
-                return None
-                
-        except Exception as e:
-            logger.error(f"搜索机票失败 {origin_city}-{dest_city}: {e}")
             return None
 
 # 创建服务实例
@@ -513,22 +302,21 @@ async def flight_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await delete_user_command(context, update.message.chat_id, update.message.message_id)
         return
     
-    # 没有参数，显示主菜单（基于MCP API功能）
+    # 没有参数，显示主菜单（参考finance菜单结构）
     keyboard = [
         [
             InlineKeyboardButton("✈️ 查询航班", callback_data="flight_search"),
             InlineKeyboardButton("🔍 航线搜索", callback_data="flight_route_search")
         ],
         [
-            InlineKeyboardButton("🔄 中转信息", callback_data="flight_transfer"),
-            InlineKeyboardButton("😊 幸福指数", callback_data="flight_happiness")
+            InlineKeyboardButton("📍 追踪航班", callback_data="flight_track"),
+            InlineKeyboardButton("🏢 机场信息", callback_data="flight_airport")
         ],
         [
-            InlineKeyboardButton("🌤️ 机场天气", callback_data="flight_weather"),
-            InlineKeyboardButton("🎫 机票搜索", callback_data="flight_itineraries")
+            InlineKeyboardButton("📊 航班统计", callback_data="flight_stats"),
+            InlineKeyboardButton("🌤️ 机场天气", callback_data="flight_weather")
         ],
         [
-            InlineKeyboardButton("🏢 智能搜索", callback_data="flight_smart_search"),
             InlineKeyboardButton("❓ 使用帮助", callback_data="flight_help")
         ]
     ]
@@ -536,34 +324,29 @@ async def flight_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     help_text = """
-🛩️ **VariFlight MCP 航班服务**
+🛩️ **航班查询服务**
 
 **快速查询：**
-`/flight CZ3101` - 查询航班状态
-`/flight CZ3101 20241225` - 查询指定日期航班
-`/flight 北京 纽约` - 查询航线
-`/flight Beijing` - 搜索机场
+`/flight CZ3101` \\- 查询航班号
+`/flight 北京 纽约` \\- 查询航线
+`/flight Beijing` \\- 搜索城市机场
+`/flight 中国` \\- 搜索国家机场
+`/flight track CZ3101` \\- 追踪航班
 
 **智能搜索支持：**
-• 🏢 机场代码 (PEK, LAX, NRT)
-• 🌍 城市名称 (北京, New York, Tokyo)  
-• 🏳️ 国家名称 (中国, 美国, Japan)
-• ✈️ 航班号码 (CZ3101, UA123)
+• 🏢 机场代码 \\(PEK, LAX, NRT\\)
+• 🌍 城市名称 \\(北京, New York, Tokyo\\)  
+• 🏳️ 国家名称 \\(中国, 美国, Japan\\)
+• ✈️ 航班号码 \\(CZ3101, UA123\\)
 
-**MCP特色功能：**
-• 🔄 智能中转规划
-• 😊 航班舒适度评分
-• 🌤️ 机场天气预报  
-• 🎫 最优机票搜索
-
-💡 点击按钮体验全球97%航班覆盖
+💡 点击下方按钮或直接输入命令参数
 """
     
     await send_message_with_auto_delete(
         context=context,
         chat_id=update.message.chat_id,
-        text=foldable_text_with_markdown_v2(help_text),
-        parse_mode="MarkdownV2",
+        text=help_text,
+        parse_mode=ParseMode.MARKDOWN_V2,
         reply_markup=reply_markup
     )
     
@@ -614,14 +397,14 @@ async def _parse_flight_args(update: Update, context: ContextTypes.DEFAULT_TYPE,
     
     else:
         await send_error(context, update.message.chat_id, 
-                        "❌ 参数格式错误\n\n"
-                        "**正确格式：**\n"
-                        "`/flight CZ3101` - 查询今日航班\n"
-                        "`/flight CZ3101 20241225` - 查询指定日期航班\n" 
-                        "`/flight 北京 纽约` - 查询今日航线\n"
-                        "`/flight 北京 纽约 20241225` - 查询指定日期航线\n"
-                        "`/flight Beijing` - 搜索城市机场\n"
-                        "`/flight track CZ3101` - 追踪航班")
+                        "❌ 参数格式错误\\n\\n"
+                        "**正确格式：**\\n"
+                        "`/flight CZ3101` \\- 查询今日航班\\n"
+                        "`/flight CZ3101 20241225` \\- 查询指定日期航班\\n" 
+                        "`/flight 北京 纽约` \\- 查询今日航线\\n"
+                        "`/flight 北京 纽约 20241225` \\- 查询指定日期航线\\n"
+                        "`/flight Beijing` \\- 搜索城市机场\\n"
+                        "`/flight track CZ3101` \\- 追踪航班")
 
 async def _execute_flight_search(update: Update, context: ContextTypes.DEFAULT_TYPE, flight_number: str):
     """执行航班号查询"""
@@ -726,8 +509,8 @@ async def _execute_flight_track(update: Update, context: ContextTypes.DEFAULT_TY
         ]
         
         message = await update.message.reply_text(
-            text=foldable_text_with_markdown_v2(text),
-            parse_mode="MarkdownV2",
+            text=text,
+            parse_mode=ParseMode.MARKDOWN_V2,
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         
@@ -746,18 +529,18 @@ async def _execute_flight_search_with_date(update: Update, context: ContextTypes
         parsed_date = _parse_date(date_str)
         if not parsed_date:
             await send_error(context, update.message.chat_id, 
-                           f"❌ 日期格式无效: '{date_str}'\n\n"
-                           "**支持的日期格式:**\n"
-                           "• `20241225` - YYYYMMDD\n"
-                           "• `2024-12-25` - YYYY-MM-DD\n"
-                           "• `2024/12/25` - YYYY/MM/DD\n"
-                           "• `12-25` - MM-DD (当年)\n"
-                           "• `12/25` - MM/DD (当年)")
+                           f"❌ 日期格式无效: '{date_str}'\\n\\n"
+                           "**支持的日期格式:**\\n"
+                           "• `20241225` \\- YYYYMMDD\\n"
+                           "• `2024-12-25` \\- YYYY\\-MM\\-DD\\n"
+                           "• `2024/12/25` \\- YYYY/MM/DD\\n"
+                           "• `12-25` \\- MM\\-DD (当年)\\n"
+                           "• `12/25` \\- MM/DD (当年)")
             return
         
         # 发送查询中消息
         from datetime import datetime
-        date_obj = datetime.strptime(parsed_date, '%Y-%m-%d')
+        date_obj = datetime.strptime(parsed_date, '%Y%m%d')
         date_display = date_obj.strftime('%Y年%m月%d日')
         
         loading_msg = await update.message.reply_text(
@@ -796,11 +579,11 @@ async def _execute_smart_airport_search(update: Update, context: ContextTypes.DE
         
         if not airports:
             await send_error(context, update.message.chat_id, 
-                           f"❌ 未找到与 '{query}' 匹配的机场\n\n"
-                           "请尝试：\n"
-                           "• 机场代码 (如: PEK, LAX)\n"
-                           "• 城市名称 (如: 北京, New York)\n"
-                           "• 国家名称 (如: 中国, 美国)")
+                           f"❌ 未找到与 '{query}' 匹配的机场\\n\\n"
+                           "请尝试：\\n"
+                           "• 机场代码 \\(如: PEK, LAX\\)\\n"
+                           "• 城市名称 \\(如: 北京, New York\\)\\n"
+                           "• 国家名称 \\(如: 中国, 美国\\)")
             return
         
         if len(airports) == 1:
@@ -841,7 +624,7 @@ async def _execute_smart_route_search(update: Update, context: ContextTypes.DEFA
         dest_info = get_airport_info(dest_code)
         
         loading_msg = await update.message.reply_text(
-            f"🔍 正在查询航线: {origin_info['city']} ({origin_code}) → {dest_info['city']} ({dest_code})..."
+            f"🔍 正在查询航线: {origin_info['city']} \\({origin_code}\\) → {dest_info['city']} \\({dest_code}\\)..."
         )
         
         # 执行实际的航线查询
@@ -851,8 +634,8 @@ async def _execute_smart_route_search(update: Update, context: ContextTypes.DEFA
             await loading_msg.edit_text(
                 f"❌ 未找到 {origin_info['city']} → {dest_info['city']} 的航线信息\\n\\n"
                 f"**查询的机场:**\\n"
-                f"• 起始: {origin_code} - {origin_info['name']}\\n"
-                f"• 目的: {dest_code} - {dest_info['name']}")
+                f"• 起始: {origin_code} \\- {origin_info['name']}\\n"
+                f"• 目的: {dest_code} \\- {dest_info['name']}")
             config = get_config()
             await _schedule_auto_delete(context, loading_msg.chat_id, loading_msg.message_id, config.auto_delete_delay)
             return
@@ -875,7 +658,7 @@ async def _show_airport_selection(update: Update, context: ContextTypes.DEFAULT_
             from utils.country_data import get_country_flag
             flag = get_country_flag(info["country"])
             
-            button_text = f"{flag} {airport_code} - {info['city']}"
+            button_text = f"{flag} {airport_code} \\- {info['city']}"
             callback_data = f"airport_select_{get_short_flight_id(airport_code)}"
             
             keyboard.append([InlineKeyboardButton(button_text, callback_data=callback_data)])
@@ -889,7 +672,7 @@ async def _show_airport_selection(update: Update, context: ContextTypes.DEFAULT_
             info = get_airport_info(airport_code)
             from utils.country_data import get_country_flag
             flag = get_country_flag(info["country"])
-            text += f"**{i+1}\\.** {flag} **{airport_code}** - {escape_markdown(info['name'], version=2)}\\n"
+            text += f"**{i+1}\\.** {flag} **{airport_code}** \\- {escape_markdown(info['name'], version=2)}\\n"
         
         if len(airports) > 8:
             text += f"\\n*\\.\\.\\.还有 {len(airports) - 8} 个机场未显示*"
@@ -897,8 +680,8 @@ async def _show_airport_selection(update: Update, context: ContextTypes.DEFAULT_
         text += "\\n\\n💡 **请选择要查询的机场:**"
         
         message = await update.message.reply_text(
-            text=foldable_text_with_markdown_v2(text),
-            parse_mode="MarkdownV2",
+            text=text,
+            parse_mode=ParseMode.MARKDOWN_V2,
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         
@@ -935,8 +718,8 @@ async def _format_flight_info(update: Update, context: ContextTypes.DEFAULT_TYPE
 **{flight_number}** {status_emoji}
 🛫 **航线**: {dept_city} → {arr_city}
 📅 **日期**: {data.get('flight_date', 'N/A')}
-⏰ **计划**: {data.get('plan_dept_time', 'N/A')} - {data.get('plan_arr_time', 'N/A')}
-🔄 **实际**: {data.get('real_dept_time', 'N/A')} - {data.get('real_arr_time', 'N/A')}
+⏰ **计划**: {data.get('plan_dept_time', 'N/A')} \\- {data.get('plan_arr_time', 'N/A')}
+🔄 **实际**: {data.get('real_dept_time', 'N/A')} \\- {data.get('real_arr_time', 'N/A')}
 📊 **状态**: {data.get('status', 'N/A')}
 🏢 **航司**: {airline_name}
 """
@@ -951,7 +734,7 @@ async def _format_flight_info(update: Update, context: ContextTypes.DEFAULT_TYPE
             keyboard = [
                 [
                     InlineKeyboardButton("🔄 刷新", callback_data=f"flight_refresh_{get_short_flight_id(flight_number)}"),
-                    InlineKeyboardButton("😊 幸福指数", callback_data=f"flight_happiness_{get_short_flight_id(flight_number)}")
+                    InlineKeyboardButton("📍 追踪", callback_data=f"flight_track_{get_short_flight_id(flight_number)}")
                 ],
                 [InlineKeyboardButton("🔙 返回菜单", callback_data="flight_main_menu")]
             ]
@@ -1000,8 +783,8 @@ async def _format_flight_info_with_date(update: Update, context: ContextTypes.DE
 **{flight_number}** {status_emoji}
 📅 **查询日期**: {date_display}
 🛫 **航线**: {dept_city} → {arr_city}
-⏰ **计划**: {data.get('plan_dept_time', 'N/A')} - {data.get('plan_arr_time', 'N/A')}
-🔄 **实际**: {data.get('real_dept_time', 'N/A')} - {data.get('real_arr_time', 'N/A')}
+⏰ **计划**: {data.get('plan_dept_time', 'N/A')} \\- {data.get('plan_arr_time', 'N/A')}
+🔄 **实际**: {data.get('real_dept_time', 'N/A')} \\- {data.get('real_arr_time', 'N/A')}
 📊 **状态**: {data.get('status', 'N/A')}
 🏢 **航司**: {airline_name}
 """
@@ -1016,7 +799,7 @@ async def _format_flight_info_with_date(update: Update, context: ContextTypes.DE
             keyboard = [
                 [
                     InlineKeyboardButton("🔄 刷新", callback_data=f"flight_refresh_{get_short_flight_id(flight_number)}"),
-                    InlineKeyboardButton("😊 幸福指数", callback_data=f"flight_happiness_{get_short_flight_id(flight_number)}")
+                    InlineKeyboardButton("📍 追踪", callback_data=f"flight_track_{get_short_flight_id(flight_number)}")
                 ],
                 [InlineKeyboardButton("🔙 返回菜单", callback_data="flight_main_menu")]
             ]
@@ -1048,7 +831,7 @@ async def _format_route_info(update: Update, context: ContextTypes.DEFAULT_TYPE,
             
             text = f"🛩️ **航线查询结果**\\n\\n"
             text += f"📍 **航线**: {origin} → {destination}\\n"
-            text += f"📅 **日期**: {datetime.now().strftime('%Y-%m-%d')}\\n\\n"
+            text += f"📅 **日期**: {datetime.now().strftime('%Y\\-%m\\-%d')}\\n\\n"
             
             for i, flight in enumerate(flights[:5]):  # 最多显示5个航班
                 status_emoji = {
@@ -1061,7 +844,7 @@ async def _format_route_info(update: Update, context: ContextTypes.DEFAULT_TYPE,
                 
                 text += f"**{flight_num}** {status_emoji}\\n"
                 text += f"🏢 {airline}\\n"
-                text += f"⏰ {flight.get('dept_time', 'N/A')} - {flight.get('arr_time', 'N/A')}\\n"
+                text += f"⏰ {flight.get('dept_time', 'N/A')} \\- {flight.get('arr_time', 'N/A')}\\n"
                 
                 if i < len(flights) - 1 and i < 4:
                     text += "\\n"
@@ -1104,7 +887,7 @@ async def _format_airport_info(update: Update, context: ContextTypes.DEFAULT_TYP
             text = f"""
 🏢 **机场信息**
 
-**{airport_code}** - {airport_name}
+**{airport_code}** \\- {airport_name}
 🌍 **位置**: {city_name}, {country}
 🌐 **坐标**: {data.get('latitude', 'N/A')}, {data.get('longitude', 'N/A')}
 ⏰ **时区**: {data.get('timezone', 'N/A')}
@@ -1152,19 +935,10 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
     
     try:
         if callback_data == "flight_search":
+            # 进入航班搜索模式
             await _show_flight_search_menu(update, context)
         elif callback_data == "flight_route_search":
             await _show_route_search_menu(update, context)
-        elif callback_data == "flight_transfer":
-            await _show_transfer_menu(update, context)
-        elif callback_data == "flight_happiness":
-            await _show_happiness_menu(update, context)
-        elif callback_data == "flight_weather":
-            await _show_weather_menu(update, context)
-        elif callback_data == "flight_itineraries":
-            await _show_itineraries_menu(update, context)
-        elif callback_data == "flight_smart_search":
-            await _show_smart_search_menu(update, context)
         elif callback_data == "flight_help":
             await _show_flight_help(update, context)
         elif callback_data == "flight_main_menu":
@@ -1174,21 +948,19 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             full_flight_id = get_full_flight_id(flight_id)
             if full_flight_id:
                 await _refresh_flight_info(update, context, full_flight_id)
+        elif callback_data.startswith("flight_track_"):
+            flight_id = callback_data.split("_", 2)[2]
+            full_flight_id = get_full_flight_id(flight_id)
+            if full_flight_id:
+                await _start_flight_tracking(update, context, full_flight_id)
         elif callback_data.startswith("airport_select_"):
+            # 处理机场选择
             airport_id = callback_data.split("_", 2)[2]
             full_airport_code = get_full_flight_id(airport_id)
             if full_airport_code:
                 await _handle_airport_selection(update, context, full_airport_code)
-        elif callback_data.startswith("airport_weather_"):
-            airport_code = callback_data.split("_", 2)[2]
-            await _show_airport_weather(update, context, airport_code)
-        elif callback_data.startswith("flight_happiness_"):
-            flight_id = callback_data.split("_", 2)[2]
-            full_flight_id = get_full_flight_id(flight_id)
-            if full_flight_id:
-                await _show_flight_happiness(update, context, full_flight_id)
         else:
-            await query.edit_message_text("❌ 未知操作，请返回主菜单重试")
+            await query.edit_message_text("❌ 功能开发中，敬请期待！")
             
     except Exception as e:
         logger.error(f"回调处理失败: {e}")
@@ -1203,8 +975,8 @@ async def _show_flight_search_menu(update: Update, context: ContextTypes.DEFAULT
 例如: CZ3101, CA1234, MU5678
 
 💡 支持的航空公司:
-• 国内: CA(国航), CZ(南航), MU(东航), 3U(川航) 等
-• 国际: BA(英航), UA(美联航), LH(汉莎) 等
+• 国内: CA\\(国航\\), CZ\\(南航\\), MU\\(东航\\), 3U\\(川航\\) 等
+• 国际: BA\\(英航\\), UA\\(美联航\\), LH\\(汉莎\\) 等
 """
     
     keyboard = [
@@ -1212,8 +984,8 @@ async def _show_flight_search_menu(update: Update, context: ContextTypes.DEFAULT
     ]
     
     await update.callback_query.edit_message_text(
-        text=foldable_text_with_markdown_v2(text),
-        parse_mode="MarkdownV2",
+        text=text,
+        parse_mode=ParseMode.MARKDOWN_V2,
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -1227,12 +999,12 @@ async def _show_route_search_menu(update: Update, context: ContextTypes.DEFAULT_
 `/flight 起始机场 目标机场 日期`
 
 **示例:**
-• `/flight PEK LAX` - 北京到洛杉矶
-• `/flight SHA NRT 20241225` - 上海到东京(指定日期)
+• `/flight PEK LAX` \\- 北京到洛杉矶
+• `/flight SHA NRT 20241225` \\- 上海到东京\\(指定日期\\)
 
 **常用机场代码:**
-• PEK(北京首都) SHA(上海虹桥) CAN(广州)
-• LAX(洛杉矶) NRT(东京成田) LHR(伦敦希思罗)
+• PEK\\(北京首都\\) SHA\\(上海虹桥\\) CAN\\(广州\\)
+• LAX\\(洛杉矶\\) NRT\\(东京成田\\) LHR\\(伦敦希思罗\\)
 """
     
     keyboard = [
@@ -1240,8 +1012,8 @@ async def _show_route_search_menu(update: Update, context: ContextTypes.DEFAULT_
     ]
     
     await update.callback_query.edit_message_text(
-        text=foldable_text_with_markdown_v2(text),
-        parse_mode="MarkdownV2",
+        text=text,
+        parse_mode=ParseMode.MARKDOWN_V2,
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -1251,22 +1023,22 @@ async def _show_flight_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ❓ **航班查询帮助**
 
 **基础命令:**
-• `/flight` - 显示主菜单
-• `/flight CZ3101` - 查询航班号
-• `/flight track CZ3101` - 追踪航班
+• `/flight` \\- 显示主菜单
+• `/flight CZ3101` \\- 查询航班号
+• `/flight track CZ3101` \\- 追踪航班
 
 **智能搜索:**
-• `/flight 北京` - 搜索城市机场
-• `/flight Beijing` - 英文城市名
-• `/flight 中国` - 搜索国家机场  
-• `/flight US` - 国家代码
-• `/flight PEK` - 机场代码
+• `/flight 北京` \\- 搜索城市机场
+• `/flight Beijing` \\- 英文城市名
+• `/flight 中国` \\- 搜索国家机场  
+• `/flight US` \\- 国家代码
+• `/flight PEK` \\- 机场代码
 
 **航线查询:**
-• `/flight 北京 纽约` - 中文城市
-• `/flight Beijing New York` - 英文城市
-• `/flight PEK LAX` - 机场代码
-• `/flight 中国 美国` - 国家名称
+• `/flight 北京 纽约` \\- 中文城市
+• `/flight Beijing New York` \\- 英文城市
+• `/flight PEK LAX` \\- 机场代码
+• `/flight 中国 美国` \\- 国家名称
 
 **数据来源:** VariFlight 航班数据
 **覆盖范围:** 全球97%商业航班  
@@ -1278,8 +1050,8 @@ async def _show_flight_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     
     await update.callback_query.edit_message_text(
-        text=foldable_text_with_markdown_v2(text),
-        parse_mode="MarkdownV2",
+        text=text,
+        parse_mode=ParseMode.MARKDOWN_V2,
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -1291,39 +1063,32 @@ async def _show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("🔍 航线搜索", callback_data="flight_route_search")
         ],
         [
-            InlineKeyboardButton("🔄 中转信息", callback_data="flight_transfer"),
-            InlineKeyboardButton("😊 幸福指数", callback_data="flight_happiness")
+            InlineKeyboardButton("📍 追踪航班", callback_data="flight_track"),
+            InlineKeyboardButton("🏢 机场信息", callback_data="flight_airport")
         ],
         [
-            InlineKeyboardButton("🌤️ 机场天气", callback_data="flight_weather"),
-            InlineKeyboardButton("🎫 机票搜索", callback_data="flight_itineraries")
+            InlineKeyboardButton("📊 航班统计", callback_data="flight_stats"),
+            InlineKeyboardButton("🌤️ 机场天气", callback_data="flight_weather")
         ],
         [
-            InlineKeyboardButton("🏢 智能搜索", callback_data="flight_smart_search"),
             InlineKeyboardButton("❓ 使用帮助", callback_data="flight_help")
         ]
     ]
     
     help_text = """
-🛩️ **VariFlight MCP 航班服务**
+🛩️ **航班查询服务**
 
 **快速查询：**
-`/flight CZ3101` - 查询航班状态
-`/flight 北京 纽约` - 查询航线
-`/flight Beijing` - 搜索机场
+`/flight CZ3101` \\- 查询航班号
+`/flight PEK LAX` \\- 查询航线
+`/flight track CZ3101` \\- 追踪航班
 
-**MCP特色功能：**
-• 🔄 智能中转规划
-• 😊 航班舒适度评分
-• 🌤️ 机场天气预报
-• 🎫 最优机票搜索
-
-💡 点击按钮体验全球97%航班覆盖
+💡 点击下方按钮或直接输入命令参数
 """
     
     await update.callback_query.edit_message_text(
-        text=foldable_text_with_markdown_v2(help_text),
-        parse_mode="MarkdownV2",
+        text=help_text,
+        parse_mode=ParseMode.MARKDOWN_V2,
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -1331,7 +1096,7 @@ async def _refresh_flight_info(update: Update, context: ContextTypes.DEFAULT_TYP
     """刷新航班信息"""
     try:
         # 清除缓存强制刷新
-        date = datetime.now().strftime('%Y-%m-%d')
+        date = datetime.now().strftime('%Y%m%d')
         cache_key = f"search:{flight_number}:{date}"
         await cache_manager.clear_cache(cache_key, subdirectory="flight")
         
@@ -1345,8 +1110,8 @@ async def _refresh_flight_info(update: Update, context: ContextTypes.DEFAULT_TYP
             
             # 这里应该调用格式化函数更新消息，但由于callback限制，简化处理
             await update.callback_query.edit_message_text(
-                foldable_text_with_markdown_v2(f"✅ 航班 {flight_number} 信息已刷新！\\n\\n使用 `/flight {flight_number}` 查看最新信息"),
-                parse_mode="MarkdownV2"
+                f"✅ 航班 {flight_number} 信息已刷新！\\n\\n使用 `/flight {flight_number}` 查看最新信息",
+                parse_mode=ParseMode.MARKDOWN_V2
             )
         else:
             await update.callback_query.edit_message_text(
@@ -1378,8 +1143,8 @@ async def _start_flight_tracking(update: Update, context: ContextTypes.DEFAULT_T
     ]
     
     await update.callback_query.edit_message_text(
-        text=foldable_text_with_markdown_v2(text),
-        parse_mode="MarkdownV2",
+        text=text,
+        parse_mode=ParseMode.MARKDOWN_V2,
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -1425,7 +1190,7 @@ async def _format_airport_info_callback(update: Update, context: ContextTypes.DE
             text = f"""
 🏢 **机场信息**
 
-{flag} **{airport_code}** - {airport_name}
+{flag} **{airport_code}** \\- {airport_name}
 🌍 **位置**: {city_name}, {country}
 """
             
@@ -1448,8 +1213,8 @@ async def _format_airport_info_callback(update: Update, context: ContextTypes.DE
             ]
             
             await update.callback_query.edit_message_text(
-                text=foldable_text_with_markdown_v2(text),
-                parse_mode="MarkdownV2",
+                text=text,
+                parse_mode=ParseMode.MARKDOWN_V2,
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
             
@@ -1461,329 +1226,6 @@ async def _format_airport_info_callback(update: Update, context: ContextTypes.DE
     except Exception as e:
         logger.error(f"格式化机场信息失败: {e}")
         await update.callback_query.edit_message_text("❌ 数据格式化失败")
-
-async def _show_transfer_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """显示中转信息菜单"""
-    text = """
-🔄 **智能中转规划**
-
-输入格式：`/flight 北京 洛杉矶 transfer`
-
-**支持城市代码：**
-• BJS (北京), SHA (上海), CAN (广州)
-• LAX (洛杉矶), NYC (纽约), LON (伦敦)
-
-**功能特色：**
-• 🛫 最优中转方案推荐
-• ⏱️ 最短中转时间计算
-• 💰 价格对比分析
-• 🌟 舒适度评估
-
-💡 让AI为您规划最佳中转路线
-"""
-    
-    keyboard = [
-        [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
-    ]
-    
-    await update.callback_query.edit_message_text(
-        text=foldable_text_with_markdown_v2(text),
-        parse_mode="MarkdownV2",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-async def _show_happiness_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """显示航班幸福指数菜单"""
-    text = """
-😊 **航班幸福指数**
-
-输入格式：`/flight CZ3101 happiness`
-
-**评分维度：**
-• ✈️ 准点率表现
-• 🛋️ 座椅舒适度
-• 🍽️ 餐食服务质量
-• 📱 娱乐设施完善度
-• 🧳 行李处理效率
-
-**指数说明：**
-• 🟢 85-100: 优秀体验
-• 🟡 70-84: 良好体验  
-• 🟠 55-69: 一般体验
-• 🔴 <55: 需要改进
-
-💡 选择幸福航班，享受美好旅程
-"""
-    
-    keyboard = [
-        [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
-    ]
-    
-    await update.callback_query.edit_message_text(
-        text=foldable_text_with_markdown_v2(text),
-        parse_mode="MarkdownV2",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-async def _show_weather_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """显示机场天气菜单"""
-    text = """
-🌤️ **机场天气预报**
-
-输入格式：`/flight PEK weather`
-
-**天气信息：**
-• 🌡️ 实时温度与体感
-• 🌧️ 降水概率预测
-• 💨 风向风力状况
-• 👁️ 能见度水平
-• ✈️ 航班影响评估
-
-**预报时长：**
-• 📅 未来3天详细预报
-• ⏰ 每6小时更新
-• 🚨 恶劣天气预警
-
-**常用机场：**
-PEK(北京), SHA(上海), CAN(广州)
-LAX(洛杉矶), NRT(东京), LHR(伦敦)
-
-💡 提前了解天气，合理安排行程
-"""
-    
-    keyboard = [
-        [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
-    ]
-    
-    await update.callback_query.edit_message_text(
-        text=foldable_text_with_markdown_v2(text),
-        parse_mode="MarkdownV2",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-async def _show_itineraries_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """显示机票搜索菜单"""
-    text = """
-🎫 **智能机票搜索**
-
-输入格式：`/flight BJS LAX tickets`
-
-**搜索功能：**
-• 💰 最低价格发现
-• ⚡ 最短飞行时间
-• 🛫 最少中转次数
-• ⭐ 最佳性价比推荐
-
-**价格对比：**
-• 🏢 多航空公司对比
-• 📈 价格趋势分析
-• 🎯 最佳购票时机
-• 💳 支付方式建议
-
-**城市代码：**
-BJS(北京), SHA(上海), CAN(广州)
-LAX(洛杉矶), NYC(纽约), LON(伦敦)
-
-💡 AI智能推荐，找到最优机票
-"""
-    
-    keyboard = [
-        [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
-    ]
-    
-    await update.callback_query.edit_message_text(
-        text=foldable_text_with_markdown_v2(text),
-        parse_mode="MarkdownV2",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-async def _show_smart_search_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """显示智能搜索菜单"""
-    text = """
-🏢 **智能机场搜索**
-
-**支持搜索类型：**
-
-**🏢 机场代码：**
-`/flight PEK` - 直接查询机场
-
-**🌍 城市名称：**
-`/flight 北京` - 中文城市名
-`/flight Beijing` - 英文城市名
-
-**🏳️ 国家名称：**
-`/flight 中国` - 显示主要机场
-`/flight Japan` - 英文国家名
-
-**✨ 智能特色：**
-• 🔍 模糊匹配支持
-• 🌐 多语言识别
-• 📍 地理位置智能
-• 🎯 精准推荐算法
-
-💡 一次搜索，找到所有相关机场
-"""
-    
-    keyboard = [
-        [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
-    ]
-    
-    await update.callback_query.edit_message_text(
-        text=foldable_text_with_markdown_v2(text),
-        parse_mode="MarkdownV2",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-async def _show_airport_weather(update: Update, context: ContextTypes.DEFAULT_TYPE, airport_code: str):
-    """显示机场天气信息"""
-    try:
-        await update.callback_query.edit_message_text("🌤️ 正在获取天气信息...")
-        
-        weather_data = await flight_service.get_airport_weather(airport_code)
-        
-        if not weather_data or not weather_data.get('success'):
-            await update.callback_query.edit_message_text(
-                f"❌ 无法获取机场 {airport_code} 的天气信息\\n\\n"
-                f"可能原因：\\n"
-                f"• 机场代码错误\\n"
-                f"• 暂无天气数据\\n"
-                f"• 网络连接问题"
-            )
-            return
-        
-        # 格式化天气信息显示
-        await _format_weather_info(update, context, weather_data, airport_code)
-        
-    except Exception as e:
-        logger.error(f"显示机场天气失败: {e}")
-        await update.callback_query.edit_message_text("❌ 天气查询失败，请重试")
-
-async def _show_flight_happiness(update: Update, context: ContextTypes.DEFAULT_TYPE, flight_number: str):
-    """显示航班幸福指数"""
-    try:
-        await update.callback_query.edit_message_text("😊 正在分析航班幸福指数...")
-        
-        happiness_data = await flight_service.get_flight_happiness_index(flight_number)
-        
-        if not happiness_data or not happiness_data.get('success'):
-            await update.callback_query.edit_message_text(
-                f"❌ 无法获取航班 {flight_number} 的幸福指数\\n\\n"
-                f"可能原因：\\n"
-                f"• 航班号错误\\n"
-                f"• 暂无评分数据\\n"
-                f"• 航班已取消"
-            )
-            return
-        
-        # 格式化幸福指数显示
-        await _format_happiness_info(update, context, happiness_data, flight_number)
-        
-    except Exception as e:
-        logger.error(f"显示航班幸福指数失败: {e}")
-        await update.callback_query.edit_message_text("❌ 幸福指数查询失败，请重试")
-
-async def _format_weather_info(update: Update, context: ContextTypes.DEFAULT_TYPE, 
-                             weather_data: dict, airport_code: str):
-    """格式化天气信息显示"""
-    try:
-        if weather_data.get('success') and weather_data.get('data'):
-            data = weather_data['data']
-            
-            text = f"""
-🌤️ **{airport_code} 机场天气**
-
-**当前天气：**
-🌡️ **温度**: {data.get('temperature', 'N/A')}°C
-💨 **风力**: {data.get('wind', 'N/A')}
-👁️ **能见度**: {data.get('visibility', 'N/A')}
-☁️ **天气**: {escape_markdown(str(data.get('weather', 'N/A')), version=2)}
-
-**航班影响：**
-✈️ **起降状态**: {data.get('flight_impact', '正常')}
-⚠️ **注意事项**: {escape_markdown(str(data.get('notice', '无特殊注意事项')), version=2)}
-
-**更新时间**: {data.get('update_time', 'N/A')}
-"""
-            
-            keyboard = [
-                [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
-            ]
-            
-            await update.callback_query.edit_message_text(
-                text=foldable_text_with_markdown_v2(text),
-                parse_mode="MarkdownV2",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-            
-        else:
-            await update.callback_query.edit_message_text(
-                f"❌ {airport_code} 机场天气数据格式异常"
-            )
-            
-    except Exception as e:
-        logger.error(f"格式化天气信息失败: {e}")
-        await update.callback_query.edit_message_text("❌ 天气信息显示失败")
-
-async def _format_happiness_info(update: Update, context: ContextTypes.DEFAULT_TYPE, 
-                               happiness_data: dict, flight_number: str):
-    """格式化幸福指数显示"""
-    try:
-        if happiness_data.get('success') and happiness_data.get('data'):
-            data = happiness_data['data']
-            
-            # 获取幸福指数分数
-            score = data.get('happiness_score', 0)
-            
-            # 根据分数确定等级和颜色
-            if score >= 85:
-                level = "🟢 优秀"
-                emoji = "😊"
-            elif score >= 70:
-                level = "🟡 良好" 
-                emoji = "🙂"
-            elif score >= 55:
-                level = "🟠 一般"
-                emoji = "😐"
-            else:
-                level = "🔴 较差"
-                emoji = "😔"
-            
-            text = f"""
-😊 **{flight_number} 幸福指数**
-
-{emoji} **综合评分**: {score}/100 ({level})
-
-**详细评分：**
-✈️ **准点率**: {data.get('punctuality', 'N/A')}/100
-🛋️ **舒适度**: {data.get('comfort', 'N/A')}/100
-🍽️ **服务质量**: {data.get('service', 'N/A')}/100
-📱 **设施完善**: {data.get('facilities', 'N/A')}/100
-
-**乘客评价：**
-👍 **好评率**: {data.get('positive_rate', 'N/A')}%
-💬 **评论数**: {data.get('review_count', 'N/A')} 条
-
-**建议等级**: {level}
-"""
-            
-            keyboard = [
-                [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
-            ]
-            
-            await update.callback_query.edit_message_text(
-                text=foldable_text_with_markdown_v2(text),
-                parse_mode="MarkdownV2",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-            
-        else:
-            await update.callback_query.edit_message_text(
-                f"❌ {flight_number} 幸福指数数据格式异常"
-            )
-            
-    except Exception as e:
-        logger.error(f"格式化幸福指数失败: {e}")
-        await update.callback_query.edit_message_text("❌ 幸福指数显示失败")
 
 # 注册回调处理器（参考finance模式）
 command_factory.register_callback(
