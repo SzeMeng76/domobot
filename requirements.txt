@@ -54,3 +54,7 @@ googletrans==4.0.2
 # Yahoo Finance API
 yfinance>=0.2.65
 pandas>=2.3.2
+
+# Fast Flights - Google Flights Scraper
+fast-flights>=2.2
+selectolax>=0.3.33

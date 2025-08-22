@@ -90,6 +90,7 @@ from commands import (
     crypto,
     disney_plus,
     finance,
+    flights,
     google_play,
     help_command,
     map,
@@ -264,6 +265,11 @@ async def setup_application(application: Application, config) -> None:
     memes.set_dependencies(cache_manager, httpx_client)
     finance.set_dependencies(cache_manager, httpx_client)
     map.set_dependencies(cache_manager, httpx_client)
+    flights.set_dependencies(cache_manager, httpx_client)
+    
+    # 为flights设置rate_converter（参考steam模式）
+    from utils import flight_service
+    flight_service.set_rate_converter(rate_converter)
 
     # 新增：为需要用户缓存的模块注入依赖
     # 这里可以根据实际需要为特定命令模块注入用户缓存管理器
@@ -342,6 +348,11 @@ async def setup_application(application: Application, config) -> None:
     if config.map_weekly_cleanup:
         await task_scheduler.add_weekly_cache_cleanup("map", "map", weekday=6, hour=5, minute=0)
         logger.info(" 已配置 地图服务缓存 每周日UTC 5:00 定时清理")
+        cleanup_tasks_added += 1
+
+    if config.flights_weekly_cleanup:
+        await task_scheduler.add_weekly_cache_cleanup("flights", "flights", weekday=6, hour=5, minute=0)
+        logger.info(" 已配置 机票查询缓存 每周日UTC 5:00 定时清理")
         cleanup_tasks_added += 1
 
     # 启动任务调度器（包含汇率刷新任务）
