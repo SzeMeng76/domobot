@@ -538,6 +538,8 @@ async def _execute_nearby_search(update: Update, context: ContextTypes.DEFAULT_T
             text=foldable_text_v2(loading_message),
             parse_mode="MarkdownV2"
         )
+        # 调度自动删除
+        await _schedule_auto_delete(context, message.chat_id, message.message_id, 10)
     
     try:
         service_type = "amap" if language == "zh" else "google_maps"
@@ -628,6 +630,8 @@ async def _execute_location_search(update: Update, context: ContextTypes.DEFAULT
             text=foldable_text_v2(loading_message),
             parse_mode="MarkdownV2"
         )
+        # 调度自动删除
+        await _schedule_auto_delete(context, message.chat_id, message.message_id, 10)
     
     try:
         # 获取对应的地图服务
@@ -636,8 +640,10 @@ async def _execute_location_search(update: Update, context: ContextTypes.DEFAULT
             error_msg = "❌ 地图服务暂不可用"
             if callback_query:
                 await callback_query.edit_message_text(error_msg)
+                await _schedule_auto_delete(context, callback_query.message.chat_id, callback_query.message.message_id, 5)
             else:
                 await message.edit_text(error_msg)
+                await _schedule_auto_delete(context, message.chat_id, message.message_id, 5)
             return
         
         service_type = "amap" if language == "zh" else "google_maps"
@@ -747,33 +753,33 @@ async def map_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         if action == "location_search" and waiting_for == "location":
             # 处理位置搜索
             await _execute_location_search(update, context, text)
-            map_session_manager.clear_session(user_id)
+            map_session_manager.remove_session(user_id)
             
         elif action == "route_planning" and waiting_for == "origin":
             # 处理路线规划
             destination = session_data.get("destination")
             await _execute_route_planning(update, context, text, destination)
-            map_session_manager.clear_session(user_id)
+            map_session_manager.remove_session(user_id)
             
         elif action == "directions" and waiting_for == "route":
             # 处理直接路线规划 (起点 到 终点格式)
             await _parse_and_execute_directions(update, context, text)
-            map_session_manager.clear_session(user_id)
+            map_session_manager.remove_session(user_id)
             
         elif action == "geocoding" and waiting_for == "address":
             # 处理地理编码
             await _execute_geocoding(update, context, text)
-            map_session_manager.clear_session(user_id)
+            map_session_manager.remove_session(user_id)
             
         elif action == "reverse_geocoding" and waiting_for == "coordinates":
             # 处理逆地理编码
             await _execute_reverse_geocoding(update, context, text)
-            map_session_manager.clear_session(user_id)
+            map_session_manager.remove_session(user_id)
             
     except Exception as e:
         logger.error(f"处理地图文本输入失败: {e}")
         await send_error(context, update.message.chat_id, f"处理失败: {str(e)}")
-        map_session_manager.clear_session(user_id)
+        map_session_manager.remove_session(user_id)
 
 async def _execute_route_planning(update: Update, context: ContextTypes.DEFAULT_TYPE, origin: str, destination: str) -> None:
     """执行路线规划"""
@@ -787,6 +793,8 @@ async def _execute_route_planning(update: Update, context: ContextTypes.DEFAULT_
         text=foldable_text_v2(loading_message),
         parse_mode="MarkdownV2"
     )
+    # 调度自动删除
+    await _schedule_auto_delete(context, message.chat_id, message.message_id, 10)
     
     try:
         service_type = "amap" if language == "zh" else "google_maps"
@@ -870,6 +878,8 @@ async def _execute_geocoding(update: Update, context: ContextTypes.DEFAULT_TYPE,
         text=foldable_text_v2(loading_message),
         parse_mode="MarkdownV2"
     )
+    # 调度自动删除
+    await _schedule_auto_delete(context, message.chat_id, message.message_id, 10)
     
     try:
         service_type = "amap" if language == "zh" else "google_maps"
@@ -938,6 +948,8 @@ async def _execute_reverse_geocoding(update: Update, context: ContextTypes.DEFAU
             text=foldable_text_v2(loading_message),
             parse_mode="MarkdownV2"
         )
+        # 调度自动删除
+        await _schedule_auto_delete(context, message.chat_id, message.message_id, 10)
         
         service_type = "amap" if language == "zh" else "google_maps"
         
@@ -1038,14 +1050,14 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     if data == "map_close":
         # 清理用户会话
         user_id = update.effective_user.id
-        map_session_manager.clear_session(user_id)
+        map_session_manager.remove_session(user_id)
         await query.delete_message()
         return
     
     elif data == "map_main_menu":
         # 清理用户会话并返回主菜单
         user_id = update.effective_user.id
-        map_session_manager.clear_session(user_id)
+        map_session_manager.remove_session(user_id)
         
         # 返回主菜单
         keyboard = [
