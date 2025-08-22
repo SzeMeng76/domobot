@@ -347,56 +347,19 @@ def format_weather_info(weather_data: dict) -> str:
         return "❌ 未找到天气信息"
     
     data = weather_data["data"]
+    if isinstance(data, list):
+        if not data:
+            return "❌ 未找到天气信息"
+        data = data[0]
     
-    # 根据实际API测试结果，data包含current和future字段
-    if not isinstance(data, dict):
-        return "❌ 天气数据格式错误"
+    airport = data.get("airport", "")
+    formatted = f"🌤️ *{airport} 机场天气预报*\n\n"
     
-    current = data.get("current", {})
-    future = data.get("future", {})
+    # 解析天气数据（根据实际API返回格式调整）
+    weather_info = str(data).replace("{", "").replace("}", "").replace("'", "")
+    formatted += f"{weather_info}\n\n"
     
-    # 提取机场信息
-    airport_name = future.get("aptCname", current.get("AirportCity", "未知机场"))
-    city_name = future.get("cityCname", "")
-    
-    formatted = f"🌤️ *{airport_name} 天气预报*\n\n"
-    
-    # 当前天气
-    if current:
-        temp = current.get("Temperature", "")
-        weather_type = current.get("Type", "")
-        wind_info = current.get("WindPower", "")
-        wind_dir = current.get("WindDirection", "")
-        pm25 = current.get("PM2.5", "")
-        quality = current.get("Quality", "")
-        
-        formatted += f"📍 **当前天气** ({city_name})\n"
-        formatted += f"🌡️ 温度: {temp}°C\n"
-        formatted += f"☁️ 天气: {weather_type}\n"
-        if wind_info and wind_dir:
-            formatted += f"💨 风力: {wind_dir} {wind_info}\n"
-        if pm25 and quality:
-            formatted += f"🌫️ PM2.5: {pm25} ({quality})\n"
-        formatted += "\n"
-    
-    # 未来天气预报
-    if future and "detail" in future and future["detail"]:
-        formatted += f"📅 **未来3天预报**:\n\n"
-        
-        for day_info in future["detail"][:3]:  # 显示3天
-            date = day_info.get("date", "")
-            sky_desc = day_info.get("d_skydesc", "").replace("CLEAR_DAY", "晴").replace("CLOUDY", "多云").replace("RAIN", "雨")
-            temp_info = day_info.get("d_temperature", {})
-            
-            if temp_info:
-                max_temp = temp_info.get("max", "")
-                min_temp = temp_info.get("min", "")
-                formatted += f"**{date}**: {sky_desc} {min_temp}°-{max_temp}°C\n"
-            else:
-                formatted += f"**{date}**: {sky_desc}\n"
-    
-    formatted += f"\n_数据来源: Variflight_"
-    formatted += f"\n_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
+    formatted += f"_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
     
     return formatted
 
