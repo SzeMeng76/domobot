@@ -505,7 +505,19 @@ class AdvancedFlightCacheService:
             )
             if cached_data:
                 logger.info(f"使用缓存的机场搜索数据: {query}")
-                return cached_data
+                # 将缓存的字典转换回Airport对象
+                airports = []
+                for airport_dict in cached_data:
+                    airport = Airport(
+                        code=airport_dict.get('code', ''),
+                        name=airport_dict.get('name', ''),
+                        city=airport_dict.get('city', ''),
+                        country=airport_dict.get('country', ''),
+                        country_code=airport_dict.get('country_code', ''),
+                        timezone=airport_dict.get('timezone', '')
+                    )
+                    airports.append(airport)
+                return airports
         
         try:
             config = get_config()
@@ -514,7 +526,20 @@ class AdvancedFlightCacheService:
             airports = await flight_service.search_airports(query, httpx_client, language)
             
             if airports and cache_manager:
-                await cache_manager.save_cache(cache_key, airports, subdirectory="airports")
+                # 将Airport对象转换为可序列化的字典
+                serializable_airports = []
+                for airport in airports:
+                    airport_dict = {
+                        'code': airport.code,
+                        'name': airport.name,
+                        'city': airport.city,
+                        'country': airport.country,
+                        'country_code': airport.country_code,
+                        'timezone': airport.timezone
+                    }
+                    serializable_airports.append(airport_dict)
+                
+                await cache_manager.save_cache(cache_key, serializable_airports, subdirectory="airports")
                 logger.info(f"已缓存机场搜索数据: {query}")
             
             return airports
