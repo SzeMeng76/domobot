@@ -40,6 +40,7 @@ CACHE_SERVICES = {
     'timezone': '时区缓存',
     'dns': 'DNS查询缓存',
     'map': '地图服务缓存',
+    'flights': '航班服务缓存',
 }
 
 async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
@@ -65,6 +66,11 @@ async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
                         # 特殊处理whois的双子目录结构
                         await cache_manager.clear_cache(subdirectory="whois")
                         await cache_manager.clear_cache(subdirectory="dns")
+                    elif svc == 'flights':
+                        # 特殊处理flights的多子目录结构
+                        await cache_manager.clear_cache(subdirectory="flights")
+                        await cache_manager.clear_cache(subdirectory="airports")
+                        await cache_manager.clear_cache(subdirectory="price_insights")
                     else:
                         await cache_manager.clear_cache(subdirectory=svc)
             return True, "✅ 所有缓存已清理完成"
@@ -82,6 +88,11 @@ async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
                 # 特殊处理whois的双子目录结构
                 await cache_manager.clear_cache(subdirectory="whois")
                 await cache_manager.clear_cache(subdirectory="dns")
+            elif service == 'flights':
+                # 特殊处理flights的多子目录结构
+                await cache_manager.clear_cache(subdirectory="flights")
+                await cache_manager.clear_cache(subdirectory="airports")
+                await cache_manager.clear_cache(subdirectory="price_insights")
             else:
                 await cache_manager.clear_cache(subdirectory=service)
             
