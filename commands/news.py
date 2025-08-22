@@ -167,19 +167,26 @@ async def get_verge_news(count: int = 10) -> List[Dict]:
             if TRANSLATION_AVAILABLE:
                 try:
                     translated_title = await translate_text(title)
-                    translated_summary = await translate_text(summary[:300])  # 增加摘要长度限制以匹配显示长度
+                    # 翻译摘要，限制长度避免API超限，但比之前更合理
+                    translation_text = summary[:500] if len(summary) > 500 else summary
+                    translated_summary = await translate_text(translation_text)
                 except Exception as e:
                     logger.warning(f"翻译失败: {e}")
                     translated_title = f"[英文] {title}"
-                    translated_summary = f"[英文] {summary[:300]}"
+                    # 翻译失败时也应用相同的长度限制
+                    limited_summary = summary[:500] if len(summary) > 500 else summary
+                    translated_summary = f"[英文] {limited_summary}"
             else:
                 translated_title = f"[英文] {title}"
-                translated_summary = f"[英文] {summary[:300]}"
+                # 没有翻译功能时也应用长度限制
+                limited_summary = summary[:500] if len(summary) > 500 else summary
+                translated_summary = f"[英文] {limited_summary}"
             
             items.append({
                 'title': translated_title,
                 'url': url,
                 'summary': translated_summary,
+                'original_summary_length': len(summary),  # 保存原始摘要长度用于判断
                 'extra': {'info': pub_date}
             })
         
@@ -396,7 +403,7 @@ def format_time_for_display(time_str: str, source: str = '') -> str:
 
 def smart_truncate_summary(text: str, max_length: int = 200) -> str:
     """
-    智能截断摘要，优先在句号、感叹号、问号处截断
+    智能截断摘要，优先在自然断点处截断
     
     Args:
         text: 原始文本
@@ -408,45 +415,56 @@ def smart_truncate_summary(text: str, max_length: int = 200) -> str:
     if not text or len(text) <= max_length:
         return text
     
-    # 如果文本长度超过限制，尝试在句子结束处截断
+    # 如果文本长度超过限制，寻找最佳截断点
     truncated = text[:max_length]
     
-    # 寻找最后的句子结束标点（扩大搜索范围）
-    sentence_ends = ['。', '！', '？', '.', '!', '?']
+    # 定义断点优先级：句号 > 其他标点 > 空格
+    breakpoints = [
+        (['。', '！', '？'], 1),  # 中文句号优先级最高
+        (['.', '!', '?'], 1),     # 英文句号优先级最高
+        (['，', '；', '：'], 2),   # 中文标点
+        ([',', ';', ':'], 2),     # 英文标点
+        ([' '], 3)                # 空格
+    ]
+    
     best_cut = -1
+    best_priority = 999
     
-    # 从最大长度向前搜索，找到合适的句子结束点
-    for i in range(len(truncated) - 1, max(0, len(truncated) - 100), -1):
-        if truncated[i] in sentence_ends:
-            # 确保不是省略号或网址的一部分
-            if i < len(truncated) - 1 and truncated[i + 1] not in ['.', '。'] and i > 0:
-                # 检查前面不是数字（避免截断版本号等）
-                if not (truncated[i-1].isdigit() and truncated[i] == '.'):
-                    best_cut = i + 1
+    # 从后向前搜索，找到最好的截断点
+    search_start = max(0, max_length - 80)  # 确保不会出现负数
+    for i in range(len(truncated) - 1, search_start, -1):
+        char = truncated[i]
+        
+        for chars, priority in breakpoints:
+            if char in chars:
+                # 对于句号，确保不是数字后的小数点
+                if char in ['.'] and i > 0 and truncated[i-1].isdigit():
+                    continue
+                
+                # 找到更好的断点
+                if priority < best_priority:
+                    best_cut = i + 1 if char in ['。', '！', '？', '.', '!', '?'] else i
+                    best_priority = priority
                     break
+        
+        # 如果找到句号级别的断点就不用继续找了
+        if best_priority == 1:
+            break
     
-    # 如果找到了合适的截断点且不会截断太多内容
-    if best_cut > 0 and best_cut > max_length * 0.6:
-        return truncated[:best_cut]
-    
-    # 否则尝试在空格、逗号、中文标点处截断
-    space_cuts = [' ', '，', ',', '、', '；', ';', '：', ':']
-    for i in range(len(truncated) - 1, max(0, len(truncated) - 50), -1):
-        if truncated[i] in space_cuts:
-            # 确保截断后不会太短
-            if i > max_length * 0.7:
-                best_cut = i
-                break
-    
+    # 如果找到了合适的截断点
     if best_cut > 0:
-        return truncated[:best_cut] + "..."
+        result = truncated[:best_cut].rstrip()
+        # 如果截断点不是句号结尾，添加省略号
+        if not result.endswith(('。', '！', '？', '.', '!', '?')):
+            result += "..."
+        return result
     
-    # 最后尝试在中文字符边界截断（避免截断英文单词）
-    for i in range(len(truncated) - 1, max(0, len(truncated) - 20), -1):
-        if truncated[i] == ' ' and i > max_length * 0.85:
-            return truncated[:i] + "..."
+    # 没找到合适断点，在最后一个空格处截断
+    last_space = truncated.rfind(' ')
+    if last_space > max_length * 0.8:
+        return truncated[:last_space] + "..."
     
-    # 最后只能硬截断，但添加省略号
+    # 实在找不到，只能硬截断
     return truncated.rstrip() + "..."
 
 
@@ -485,12 +503,14 @@ def format_news_message(source: str, news_items: List[Dict], max_length: int = 4
             
         # 如果有摘要且是 Verge 源，添加摘要显示
         if summary and source.lower() == 'verge':
+            # 获取原始摘要长度
+            original_length = item.get('original_summary_length', len(summary))
             # 使用智能截断，限制到200字符以保持可读性
             display_summary = smart_truncate_summary(summary, 200)
             news_line += f"\n   📝 {display_summary}"
             
-            # 如果摘要被截断了（通过检查是否以...结尾或原文比显示的长），添加"点击查看原文"提示
-            if len(summary) > 200 or display_summary.endswith('...'):
+            # 如果原始摘要长度超过200字符，或显示的摘要比翻译后的短，则显示提示
+            if original_length > 200 or len(display_summary) < len(summary):
                 news_line += f"\n   💡 点击标题链接查看完整内容"
             
         if extra_info:
