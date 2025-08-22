@@ -80,10 +80,25 @@ def set_dependencies(cm, hc=None):
 
 def get_short_map_id(data_id: str) -> str:
     """生成短ID用于callback_data"""
-    global mapping_counter
+    global mapping_counter, map_data_mapping
+    
+    # 查找是否已存在映射
+    for short_id, full_id in map_data_mapping.items():
+        if full_id == data_id:
+            return short_id
+    
+    # 创建新的短ID
     mapping_counter += 1
     short_id = str(mapping_counter)
     map_data_mapping[short_id] = data_id
+    
+    # 清理过多的映射（保持最近500个）
+    if len(map_data_mapping) > 500:
+        # 删除前50个旧映射
+        old_keys = list(map_data_mapping.keys())[:50]
+        for key in old_keys:
+            del map_data_mapping[key]
+    
     return short_id
 
 def get_full_map_id(short_id: str) -> Optional[str]:
@@ -767,14 +782,22 @@ async def _execute_location_search(update: Update, context: ContextTypes.DEFAULT
             nav_url = service.get_navigation_url(query)
             
             # 创建按钮 - 使用精确坐标而不是原始查询
+            lat, lng = location_data['lat'], location_data['lng']
+            
+            # 生成短ID用于callback_data
+            nearby_data = f"{lat},{lng}:{language}"
+            route_data = f"{lat},{lng}:{location_data['name']}:{language}"
+            nearby_short_id = get_short_map_id(f"nearby_here:{nearby_data}")
+            route_short_id = get_short_map_id(f"route_to_coords:{route_data}")
+            
             keyboard = [
                 [
                     InlineKeyboardButton("🗺️ 查看地图", url=map_url),
                     InlineKeyboardButton("🧭 开始导航", url=nav_url)
                 ],
                 [
-                    InlineKeyboardButton("📍 附近服务", callback_data=f"map_nearby_here:{lat},{lng}:{language}"),
-                    InlineKeyboardButton("🛣️ 路线规划", callback_data=f"map_route_to_coords:{lat},{lng}:{location_data['name']}:{language}")
+                    InlineKeyboardButton("📍 附近服务", callback_data=f"map_short:{nearby_short_id}"),
+                    InlineKeyboardButton("🛣️ 路线规划", callback_data=f"map_short:{route_short_id}")
                 ],
                 [
                     InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")
@@ -1510,6 +1533,78 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         
         # 执行附近搜索
         await _execute_nearby_search(update, context, lat, lng, place_type, query, language)
+    
+    elif data.startswith("map_short:"):
+        # 处理短ID映射的callback
+        short_id = data.split(":", 1)[1]
+        full_data = get_full_map_id(short_id)
+        
+        if not full_data:
+            await query.edit_message_text("❌ 链接已过期，请重新搜索")
+            config = get_config()
+            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            return
+        
+        # 解析完整数据并转发到相应处理器
+        if full_data.startswith("nearby_here:"):
+            nearby_data = full_data.replace("nearby_here:", "")
+            parts = nearby_data.split(":")
+            coords = parts[0]
+            language = parts[1] if len(parts) > 1 else "en"
+            lat, lng = map(float, coords.split(","))
+            
+            # 显示附近服务类型选择
+            keyboard = [
+                [
+                    InlineKeyboardButton("🍽️ 餐厅", callback_data=f"map_search_nearby:{lat},{lng}:restaurant:{language}"),
+                    InlineKeyboardButton("🏥 医院", callback_data=f"map_search_nearby:{lat},{lng}:hospital:{language}")
+                ],
+                [
+                    InlineKeyboardButton("🏦 银行", callback_data=f"map_search_nearby:{lat},{lng}:bank:{language}"),
+                    InlineKeyboardButton("⛽ 加油站", callback_data=f"map_search_nearby:{lat},{lng}:gas_station:{language}")
+                ],
+                [
+                    InlineKeyboardButton("🛒 超市", callback_data=f"map_search_nearby:{lat},{lng}:supermarket:{language}"),
+                    InlineKeyboardButton("🏫 学校", callback_data=f"map_search_nearby:{lat},{lng}:school:{language}")
+                ],
+                [
+                    InlineKeyboardButton("🏨 酒店", callback_data=f"map_search_nearby:{lat},{lng}:hotel:{language}")
+                ],
+                [
+                    InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")
+                ]
+            ]
+            
+            await query.edit_message_text(
+                text=f"📍 请选择要搜索的服务类型:\n\n位置: {lat:.6f}, {lng:.6f}",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            
+        elif full_data.startswith("route_to_coords:"):
+            route_data = full_data.replace("route_to_coords:", "")
+            parts = route_data.split(":", 2)
+            coords = parts[0]
+            destination_name = parts[1]
+            language = parts[2] if len(parts) > 2 else "en"
+            dest_lat, dest_lng = map(float, coords.split(","))
+            
+            user_id = update.effective_user.id
+            
+            # 设置会话状态，包含目标地点的精确坐标
+            map_session_manager.set_session(user_id, {
+                "action": "route_planning_coords",
+                "destination_name": destination_name,
+                "destination_coords": (dest_lat, dest_lng),
+                "destination_language": language,
+                "waiting_for": "origin"
+            })
+            
+            await query.edit_message_text(
+                text=f"🛣️ 路线规划到: {destination_name}\n\n请输入起点地址或发送位置信息",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
+                ])
+            )
     
     elif data.startswith("map_route_to:"):
         destination = data.split(":", 1)[1]

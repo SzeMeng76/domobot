@@ -199,7 +199,7 @@ class GoogleMapsService(MapService):
                     'duration': leg['duration']['text'],
                     'start_address': leg['start_address'],
                     'end_address': leg['end_address'],
-                    'steps': [step['html_instructions'] for step in leg['steps'][:5]]  # 前5步
+                    'steps': [step['html_instructions'] for step in leg['steps']]  # 返回所有步骤
                 }
             else:
                 # 处理不同的错误状态
@@ -410,7 +410,7 @@ class AmapService(MapService):
                         'duration': f"{int(path['duration'])//60}分钟",
                         'start_address': origin,
                         'end_address': destination,
-                        'steps': [step['instruction'] for step in path['steps'][:5]]
+                        'steps': [step['instruction'] for step in path['steps']]  # 返回所有步骤
                     }
                 elif mode != "walking" and data['route']['paths']:
                     path = data['route']['paths'][0]
@@ -419,7 +419,7 @@ class AmapService(MapService):
                         'duration': f"{int(path['duration'])//60}分钟",
                         'start_address': origin,
                         'end_address': destination,
-                        'steps': [step['instruction'] for step in path['steps'][:5]]
+                        'steps': [step['instruction'] for step in path['steps']]  # 返回所有步骤
                     }
             return None
             
