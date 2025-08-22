@@ -322,12 +322,12 @@ def format_location_info(location_data: Dict, service_type: str) -> str:
     lat = location_data.get('lat')
     lng = location_data.get('lng')
     
-    # 安全转义特殊字符
-    name_escaped = escape_markdown(name, version=2)
-    address_escaped = escape_markdown(address, version=2)
+    # 基本信息 - 移除手动转义，让foldable_text_with_markdown_v2统一处理
+    name = location_data.get('name', 'Unknown')
+    address = location_data.get('address', '')
     
-    result = f"📍 *{name_escaped}*\n\n"
-    result += f"📮 地址: {address_escaped}\n"
+    result = f"📍 *{name}*\n\n"
+    result += f"📮 地址: {address}\n"
     result += f"🌐 坐标: `{lat:.6f}, {lng:.6f}`\n"
     
     # 添加评分信息 (Google Maps)
@@ -344,18 +344,15 @@ def format_location_info(location_data: Dict, service_type: str) -> str:
             formatted_type = format_place_type(t)
             types_list.append(formatted_type)
         types_str = ', '.join(types_list)
-        types_escaped = escape_markdown(types_str, version=2)
-        result += f"🏷️ 类型: {types_escaped}\n"
+        result += f"🏷️ 类型: {types_str}\n"
     elif 'type' in location_data:
         # 处理单个类型
         formatted_type = format_place_type(str(location_data['type']))
-        type_escaped = escape_markdown(formatted_type, version=2)
-        result += f"🏷️ 类型: {type_escaped}\n"
+        result += f"🏷️ 类型: {formatted_type}\n"
     
     # 添加城市信息 (高德地图)
     if 'cityname' in location_data:
-        city_escaped = escape_markdown(location_data['cityname'], version=2)
-        result += f"🏙️ 城市: {city_escaped}\n"
+        result += f"🏙️ 城市: {location_data['cityname']}\n"
     
     service_name = "Google Maps" if service_type == "google_maps" else "高德地图"
     result += f"\n_数据来源: {service_name}_"
@@ -382,8 +379,8 @@ def format_nearby_results(places: List[Dict], service_type: str, place_type: str
     result = f"📍 *附近的{type_name}*\n\n"
     
     for i, place in enumerate(places[:8], 1):  # 显示前8个结果
-        name = escape_markdown(place['name'], version=2)
-        address = escape_markdown(place.get('address', ''), version=2)
+        name = place['name']
+        address = place.get('address', '')
         
         result += f"`{i:2d}.` *{name}*\n"
         if address:
@@ -415,8 +412,8 @@ def format_directions(directions: Dict, service_type: str) -> str:
     """格式化路线规划结果"""
     distance = directions.get('distance', '未知')
     duration = directions.get('duration', '未知') 
-    start = escape_markdown(directions.get('start_address', ''), version=2)
-    end = escape_markdown(directions.get('end_address', ''), version=2)
+    start = directions.get('start_address', '')
+    end = directions.get('end_address', '')
     
     result = f"🛣️ *路线规划*\n\n"
     result += f"🚩 起点: {start}\n"
@@ -430,8 +427,7 @@ def format_directions(directions: Dict, service_type: str) -> str:
         for i, step in enumerate(directions['steps'][:5], 1):
             # 清理HTML标签
             step_clean = re.sub(r'<[^>]+>', '', step)
-            step_escaped = escape_markdown(step_clean, version=2)
-            result += f"`{i}.` {step_escaped}\n"
+            result += f"`{i}.` {step_clean}\n"
     
     service_name = "Google Maps" if service_type == "google_maps" else "高德地图"
     result += f"\n_数据来源: {service_name}_"
@@ -1004,7 +1000,7 @@ async def _execute_reverse_geocoding(update: Update, context: ContextTypes.DEFAU
 
 def format_geocoding_result(geocode_data: Dict, service_type: str) -> str:
     """格式化地理编码结果"""
-    address = escape_markdown(geocode_data.get('address', ''), version=2)
+    address = geocode_data.get('address', '')
     lat = geocode_data.get('lat')
     lng = geocode_data.get('lng')
     
@@ -1014,14 +1010,11 @@ def format_geocoding_result(geocode_data: Dict, service_type: str) -> str:
     
     # 添加地区信息
     if 'province' in geocode_data:
-        province = escape_markdown(str(geocode_data['province']), version=2)
-        result += f"🏛️ 省份: {province}\n"
+        result += f"🏛️ 省份: {geocode_data['province']}\n"
     if 'city' in geocode_data:
-        city = escape_markdown(str(geocode_data['city']), version=2)
-        result += f"🏙️ 城市: {city}\n"
+        result += f"🏙️ 城市: {geocode_data['city']}\n"
     if 'district' in geocode_data:
-        district = escape_markdown(str(geocode_data['district']), version=2)
-        result += f"🏙️ 区县: {district}\n"
+        result += f"🏙️ 区县: {geocode_data['district']}\n"
     
     service_name = "Google Maps" if service_type == "google_maps" else "高德地图"
     result += f"\n_数据来源: {service_name}_"
@@ -1031,7 +1024,7 @@ def format_geocoding_result(geocode_data: Dict, service_type: str) -> str:
 
 def format_reverse_geocoding_result(reverse_data: Dict, service_type: str, lat: float, lng: float) -> str:
     """格式化逆地理编码结果"""
-    address = escape_markdown(reverse_data.get('address', ''), version=2)
+    address = reverse_data.get('address', '')
     
     result = f"🌐 *逆地理编码结果*\n\n"
     result += f"📍 坐标: `{lat:.6f}, {lng:.6f}`\n"
@@ -1039,14 +1032,11 @@ def format_reverse_geocoding_result(reverse_data: Dict, service_type: str, lat: 
     
     # 添加地区信息
     if 'province' in reverse_data:
-        province = escape_markdown(str(reverse_data['province']), version=2)
-        result += f"🏛️ 省份: {province}\n"
+        result += f"🏛️ 省份: {reverse_data['province']}\n"
     if 'city' in reverse_data:
-        city = escape_markdown(str(reverse_data['city']), version=2)
-        result += f"🏙️ 城市: {city}\n"
+        result += f"🏙️ 城市: {reverse_data['city']}\n"
     if 'district' in reverse_data:
-        district = escape_markdown(str(reverse_data['district']), version=2)
-        result += f"🏙️ 区县: {district}\n"
+        result += f"🏙️ 区县: {reverse_data['district']}\n"
     
     service_name = "Google Maps" if service_type == "google_maps" else "高德地图"
     result += f"\n_数据来源: {service_name}_"
