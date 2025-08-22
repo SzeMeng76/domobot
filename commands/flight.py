@@ -923,6 +923,8 @@ async def _format_airport_info(update: Update, context: ContextTypes.DEFAULT_TYP
         logger.error(f"格式化机场信息失败: {e}")
         await send_error(context, update.message.chat_id, "❌ 数据格式化失败")
 
+# 注册回调处理器（参考finance模式）
+@command_factory.register_callback(r"^flight_")
 async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理航班相关的回调"""
     query = update.callback_query
@@ -1226,14 +1228,6 @@ async def _format_airport_info_callback(update: Update, context: ContextTypes.DE
     except Exception as e:
         logger.error(f"格式化机场信息失败: {e}")
         await update.callback_query.edit_message_text("❌ 数据格式化失败")
-
-# 注册回调处理器（参考finance模式）
-command_factory.register_callback(
-    r"^flight_",
-    flight_callback_handler, 
-    permission=Permission.USER,
-    description="航班查询回调处理"
-)
 
 # 注册主命令
 command_factory.register_command(
