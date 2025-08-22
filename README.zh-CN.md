@@ -619,6 +619,18 @@ docker-compose down
 - **Yahoo Finance API:** 用于实时股票价格、市场数据、排行榜、分析师评级和财务报表
 - **各种流媒体服务API:** 用于订阅价格查询
 
+### 📊 数据来源
+
+本项目利用以下开源项目进行数据收集和处理：
+
+- **新闻源:** [newsnow](https://github.com/SzeMeng76/newsnow) - 新闻聚合和热门内容
+- **TLD信息:** [iana_tld_list](https://github.com/SzeMeng76/iana_tld_list) - IANA顶级域名数据
+- **烹饪菜谱:** [HowToCook](https://github.com/SzeMeng76/HowToCook) - 菜谱数据库和膳食规划
+- **Netflix价格:** [netflix-pricing-scraper](https://github.com/SzeMeng76/netflix-pricing-scraper) - 全球Netflix订阅价格
+- **Disney+价格:** [disneyplus-prices](https://github.com/SzeMeng76/disneyplus-prices) - Disney+订阅价格数据
+- **Spotify价格:** [spotify-prices](https://github.com/SzeMeng76/spotify-prices) - Spotify订阅价格信息
+- **HBO Max价格:** [hbo-max-global-prices](https://github.com/SzeMeng76/hbo-max-global-prices) - HBO Max全球价格数据
+
 ### 🤝 贡献
 
 欢迎提交贡献、问题和功能请求。请随时查看 [问题页面](https://github.com/SzeMeng76/domobot/issues)。

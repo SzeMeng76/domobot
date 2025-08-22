@@ -623,6 +623,18 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 - **Yahoo Finance API:** For real-time stock prices, market data, rankings, analyst recommendations, and financial statements
 - **Various streaming service APIs:** For subscription pricing
 
+### 📊 Data Sources
+
+This project leverages several open source projects for data collection and processing:
+
+- **News Sources:** [newsnow](https://github.com/SzeMeng76/newsnow) - News aggregation and trending content
+- **TLD Information:** [iana_tld_list](https://github.com/SzeMeng76/iana_tld_list) - IANA top-level domain data
+- **Cooking Recipes:** [HowToCook](https://github.com/SzeMeng76/HowToCook) - Recipe database and meal planning
+- **Netflix Pricing:** [netflix-pricing-scraper](https://github.com/SzeMeng76/netflix-pricing-scraper) - Global Netflix subscription prices
+- **Disney+ Pricing:** [disneyplus-prices](https://github.com/SzeMeng76/disneyplus-prices) - Disney+ subscription pricing data
+- **Spotify Pricing:** [spotify-prices](https://github.com/SzeMeng76/spotify-prices) - Spotify subscription pricing information
+- **HBO Max Pricing:** [hbo-max-global-prices](https://github.com/SzeMeng76/hbo-max-global-prices) - HBO Max global pricing data
+
 ### 🤝 Contributing
 
 Contributions, issues, and feature requests are welcome. Feel free to check the [issues page](https://github.com/SzeMeng76/domobot/issues).
