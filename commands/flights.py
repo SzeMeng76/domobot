@@ -45,6 +45,7 @@ from utils.message_manager import (
 from utils.permissions import Permission
 from utils.language_detector import detect_user_language
 from utils.session_manager import SessionManager
+from utils.airport_data import search_airports, get_airport_by_code, Airport
 
 logger = logging.getLogger(__name__)
 
@@ -108,16 +109,6 @@ class FlightSearchParams:
     sort_by: SortOption = SortOption.BEST
     
 @dataclass
-class Airport:
-    """机场信息"""
-    code: str
-    name: str
-    city: str
-    country: str
-    country_code: str = ""
-    timezone: str = ""
-    
-@dataclass
 class FlightSegment:
     """航班段信息"""
     airline: str
@@ -173,105 +164,48 @@ class AdvancedFlightService:
         self.session_cache = {}
     
     async def search_airports(self, query: str, client, language: str = "en") -> List[Airport]:
-        """智能机场搜索"""
+        """智能机场搜索 - 支持城市名、国家名、机场代码"""
         try:
             # 先检查缓存
             cache_key = f"airport_search_{language}_{query.lower()}"
             if cache_key in airport_data_cache:
                 return airport_data_cache[cache_key]
             
-            # 如果是3位代码，直接查询
-            if len(query) == 3 and query.isalpha():
-                airport_info = await self._get_airport_info(query.upper(), client)
-                if airport_info:
-                    result = [airport_info]
-                    airport_data_cache[cache_key] = result
-                    return result
+            # 使用机场数据库进行智能搜索
+            from utils.airport_data import search_airports as search_airport_db
+            airports = search_airport_db(query)
             
-            # 智能搜索
-            search_params = {
-                "engine": "google_flights",
-                "api_key": self.api_key,
-                "departure_id": query,
-                "arrival_id": query,
-                "type": "2",
-                "hl": language
-            }
-            
-            response = await client.get(SERPAPI_BASE_URL, params=search_params)
-            
-            if response.status_code == 200:
-                data = response.json()
-                airports = []
-                
-                # 提取机场信息
-                if "airports" in data:
-                    for airport_data in data["airports"]:
-                        airport = Airport(
-                            code=airport_data.get("id", ""),
-                            name=airport_data.get("name", ""),
-                            city=airport_data.get("city", ""),
-                            country=airport_data.get("country", ""),
-                            country_code=airport_data.get("country_code", ""),
-                            timezone=airport_data.get("timezone", "")
-                        )
-                        airports.append(airport)
-                
-                # 缓存结果
-                airport_data_cache[cache_key] = airports
-                return airports
-            
-            return []
+            # 缓存结果
+            airport_data_cache[cache_key] = airports
+            return airports
             
         except Exception as e:
             logger.error(f"机场搜索失败: {e}")
             return []
     
-    async def _get_airport_info(self, code: str, client) -> Optional[Airport]:
-        """获取单个机场信息"""
-        # 预定义的常用机场数据
-        predefined_airports = {
-            "PEK": Airport("PEK", "北京首都国际机场", "北京", "中国", "CN", "Asia/Shanghai"),
-            "PVG": Airport("PVG", "上海浦东国际机场", "上海", "中国", "CN", "Asia/Shanghai"),
-            "CAN": Airport("CAN", "广州白云国际机场", "广州", "中国", "CN", "Asia/Shanghai"),
-            "SZX": Airport("SZX", "深圳宝安国际机场", "深圳", "中国", "CN", "Asia/Shanghai"),
-            "LAX": Airport("LAX", "Los Angeles International Airport", "Los Angeles", "United States", "US", "America/Los_Angeles"),
-            "JFK": Airport("JFK", "John F. Kennedy International Airport", "New York", "United States", "US", "America/New_York"),
-            "LHR": Airport("LHR", "London Heathrow Airport", "London", "United Kingdom", "GB", "Europe/London"),
-            "NRT": Airport("NRT", "Narita International Airport", "Tokyo", "Japan", "JP", "Asia/Tokyo"),
-            "ICN": Airport("ICN", "Incheon International Airport", "Seoul", "South Korea", "KR", "Asia/Seoul"),
-            "SIN": Airport("SIN", "Singapore Changi Airport", "Singapore", "Singapore", "SG", "Asia/Singapore"),
-            "DXB": Airport("DXB", "Dubai International Airport", "Dubai", "United Arab Emirates", "AE", "Asia/Dubai"),
-            "CDG": Airport("CDG", "Charles de Gaulle Airport", "Paris", "France", "FR", "Europe/Paris"),
-            "FRA": Airport("FRA", "Frankfurt Airport", "Frankfurt", "Germany", "DE", "Europe/Berlin"),
-            "AMS": Airport("AMS", "Amsterdam Airport Schiphol", "Amsterdam", "Netherlands", "NL", "Europe/Amsterdam"),
-            "SFO": Airport("SFO", "San Francisco International Airport", "San Francisco", "United States", "US", "America/Los_Angeles"),
-            "ORD": Airport("ORD", "O'Hare International Airport", "Chicago", "United States", "US", "America/Chicago"),
-            "DEN": Airport("DEN", "Denver International Airport", "Denver", "United States", "US", "America/Denver"),
-            "ATL": Airport("ATL", "Hartsfield-Jackson Atlanta International Airport", "Atlanta", "United States", "US", "America/New_York"),
-            "MIA": Airport("MIA", "Miami International Airport", "Miami", "United States", "US", "America/New_York"),
-            "YVR": Airport("YVR", "Vancouver International Airport", "Vancouver", "Canada", "CA", "America/Vancouver"),
-            "YYZ": Airport("YYZ", "Toronto Pearson International Airport", "Toronto", "Canada", "CA", "America/Toronto"),
-            "SYD": Airport("SYD", "Sydney Kingsford Smith Airport", "Sydney", "Australia", "AU", "Australia/Sydney"),
-            "MEL": Airport("MEL", "Melbourne Airport", "Melbourne", "Australia", "AU", "Australia/Melbourne"),
-            "HND": Airport("HND", "Tokyo Haneda Airport", "Tokyo", "Japan", "JP", "Asia/Tokyo"),
-            "KIX": Airport("KIX", "Kansai International Airport", "Osaka", "Japan", "JP", "Asia/Tokyo"),
-            "BKK": Airport("BKK", "Suvarnabhumi Airport", "Bangkok", "Thailand", "TH", "Asia/Bangkok"),
-            "KUL": Airport("KUL", "Kuala Lumpur International Airport", "Kuala Lumpur", "Malaysia", "MY", "Asia/Kuala_Lumpur"),
-            "MNL": Airport("MNL", "Ninoy Aquino International Airport", "Manila", "Philippines", "PH", "Asia/Manila"),
-            "CGK": Airport("CGK", "Soekarno-Hatta International Airport", "Jakarta", "Indonesia", "ID", "Asia/Jakarta"),
-            "DEL": Airport("DEL", "Indira Gandhi International Airport", "Delhi", "India", "IN", "Asia/Kolkata"),
-            "BOM": Airport("BOM", "Chhatrapati Shivaji Maharaj International Airport", "Mumbai", "India", "IN", "Asia/Kolkata"),
-        }
-        
-        if code in predefined_airports:
-            return predefined_airports[code]
-        
-        return None
-    
     async def search_flights(self, params: FlightSearchParams, client, language: str = "en") -> Optional[Dict]:
         """高级航班搜索"""
         try:
+            # 验证日期不能是过去的日期
+            from datetime import datetime, date
+            try:
+                outbound_date_obj = datetime.strptime(params.outbound_date, "%Y-%m-%d").date()
+                if outbound_date_obj < date.today():
+                    logger.error(f"出发日期不能是过去的日期: {params.outbound_date}")
+                    return {"error": "出发日期不能是过去的日期，请选择未来的日期"}
+                
+                if params.return_date:
+                    return_date_obj = datetime.strptime(params.return_date, "%Y-%m-%d").date()
+                    if return_date_obj < date.today():
+                        logger.error(f"返程日期不能是过去的日期: {params.return_date}")
+                        return {"error": "返程日期不能是过去的日期，请选择未来的日期"}
+                    if return_date_obj <= outbound_date_obj:
+                        logger.error(f"返程日期必须晚于出发日期")
+                        return {"error": "返程日期必须晚于出发日期"}
+            except ValueError as e:
+                logger.error(f"日期格式错误: {e}")
+                return {"error": "日期格式错误，请使用 YYYY-MM-DD 格式"}
+            
             search_params = {
                 "engine": "google_flights",
                 "api_key": self.api_key,
@@ -279,26 +213,25 @@ class AdvancedFlightService:
                 "arrival_id": params.arrival_id,
                 "outbound_date": params.outbound_date,
                 "type": str(params.trip_type.value),
-                "adults": params.adults,
+                "adults": str(params.adults),
                 "travel_class": str(params.travel_class.value),
-                "hl": language,
-                "gl": "us",  # 默认美国地区
-                "currency": "USD" if language == "en" else "CNY"
+                "hl": "en",  # 统一使用英文，避免中文导致400错误
+                "currency": "CNY" if language == "zh" else "USD"
             }
             
             # 添加可选参数
             if params.return_date:
                 search_params["return_date"] = params.return_date
             if params.children > 0:
-                search_params["children"] = params.children
+                search_params["children"] = str(params.children)
             if params.infants_in_seat > 0:
-                search_params["infants_in_seat"] = params.infants_in_seat
+                search_params["infants_in_seat"] = str(params.infants_in_seat)
             if params.infants_on_lap > 0:
-                search_params["infants_on_lap"] = params.infants_on_lap
+                search_params["infants_on_lap"] = str(params.infants_on_lap)
             if params.max_price:
-                search_params["max_price"] = params.max_price
+                search_params["max_price"] = str(params.max_price)
             if params.stops is not None:
-                search_params["stops"] = params.stops
+                search_params["stops"] = str(params.stops)
             if params.exclude_airlines:
                 search_params["exclude_airlines"] = ",".join(params.exclude_airlines)
             if params.include_airlines:
@@ -308,25 +241,46 @@ class AdvancedFlightService:
             if params.return_times:
                 search_params["return_times"] = params.return_times
             if params.bags:
-                search_params["bags"] = params.bags
+                search_params["bags"] = str(params.bags)
             if params.sort_by != SortOption.BEST:
-                search_params["sort"] = params.sort_by.value
+                # 根据文档，sort_by 应该是数字
+                sort_mapping = {
+                    SortOption.BEST: "1",
+                    SortOption.PRICE: "2", 
+                    SortOption.DURATION: "3",
+                    SortOption.DEPARTURE_TIME: "4",
+                    SortOption.ARRIVAL_TIME: "5"
+                }
+                search_params["sort_by"] = sort_mapping.get(params.sort_by, "1")
+            
+            logger.info(f"发送SerpAPI请求: {search_params}")
             
             response = await client.get(SERPAPI_BASE_URL, params=search_params)
+            
+            logger.info(f"SerpAPI响应状态: {response.status_code}")
             
             if response.status_code == 200:
                 data = response.json()
                 if "error" in data:
                     logger.error(f"SerpAPI错误: {data['error']}")
-                    return None
+                    return {"error": f"SerpAPI错误: {data['error']}"}
                 return data
             else:
-                logger.error(f"SerpAPI请求失败: {response.status_code}")
-                return None
+                error_text = response.text if hasattr(response, 'text') else 'Unknown error'
+                logger.error(f"SerpAPI请求失败: {response.status_code}, 响应: {error_text}")
+                
+                if response.status_code == 400:
+                    return {"error": "请求参数错误，请检查机场代码和日期格式"}
+                elif response.status_code == 401:
+                    return {"error": "API密钥无效，请联系管理员"}
+                elif response.status_code == 429:
+                    return {"error": "API请求过于频繁，请稍后再试"}
+                else:
+                    return {"error": f"SerpAPI服务暂时不可用 (状态码: {response.status_code})"}
                 
         except Exception as e:
             logger.error(f"航班搜索失败: {e}")
-            return None
+            return {"error": f"搜索失败: {str(e)}"}
     
     async def get_price_insights(self, departure_id: str, arrival_id: str, client) -> Optional[Dict]:
         """获取价格洞察"""
@@ -379,9 +333,8 @@ class AdvancedFlightService:
                 "engine": "google_flights",
                 "api_key": self.api_key,
                 "type": "3",  # 多城市
-                "hl": language,
-                "gl": "us",
-                "currency": "USD" if language == "en" else "CNY"
+                "hl": "en",  # 统一使用英文
+                "currency": "CNY" if language == "zh" else "USD"
             }
             
             # 添加多城市段信息
@@ -808,13 +761,53 @@ async def advanced_flight_command(update: Update, context: ContextTypes.DEFAULT_
     
     # 如果有参数，尝试快速搜索
     if context.args and len(context.args) >= 3:
-        # 快速搜索格式: /flight PEK LAX 2024-01-15 [2024-01-25] [2] [business]
+        # 快速搜索格式: /flight PEK LAX 2025-09-25 [2025-10-05] [2] [business]
         departure = context.args[0].upper()
         arrival = context.args[1].upper()
         outbound_date = context.args[2]
         return_date = context.args[3] if len(context.args) > 3 and context.args[3] != "-" else None
         adults = int(context.args[4]) if len(context.args) > 4 and context.args[4].isdigit() else 1
         travel_class_str = context.args[5] if len(context.args) > 5 else "economy"
+        
+        # 验证日期格式
+        try:
+            from datetime import datetime, date
+            outbound_date_obj = datetime.strptime(outbound_date, "%Y-%m-%d").date()
+            if outbound_date_obj < date.today():
+                await send_error(
+                    context, 
+                    update.message.chat_id,
+                    "❌ 出发日期不能是过去的日期，请选择未来的日期\n💡 例如: /flight PEK LAX 2025-12-25"
+                )
+                await delete_user_command(context, update.message.chat_id, update.message.message_id)
+                return
+                
+            if return_date:
+                return_date_obj = datetime.strptime(return_date, "%Y-%m-%d").date()
+                if return_date_obj < date.today():
+                    await send_error(
+                        context, 
+                        update.message.chat_id,
+                        "❌ 返程日期不能是过去的日期，请选择未来的日期"
+                    )
+                    await delete_user_command(context, update.message.chat_id, update.message.message_id)
+                    return
+                if return_date_obj <= outbound_date_obj:
+                    await send_error(
+                        context, 
+                        update.message.chat_id,
+                        "❌ 返程日期必须晚于出发日期"
+                    )
+                    await delete_user_command(context, update.message.chat_id, update.message.message_id)
+                    return
+        except ValueError:
+            await send_error(
+                context, 
+                update.message.chat_id,
+                "❌ 日期格式错误，请使用 YYYY-MM-DD 格式\n💡 例如: /flight PEK LAX 2025-12-25"
+            )
+            await delete_user_command(context, update.message.chat_id, update.message.message_id)
+            return
         
         # 转换舱位类型
         travel_class_map = {
@@ -890,9 +883,9 @@ async def advanced_flight_command(update: Update, context: ContextTypes.DEFAULT_
 • **实时库存**: 显示剩余座位
 
 💡 **快速使用:**
-`/flight PEK LAX 2024-12-25` - 北京到洛杉矶单程
-`/flight PEK LAX 2024-12-25 2025-01-05` - 往返航班
-`/flight PEK LAX 2024-12-25 - 2 business` - 2人商务舱
+`/flight PEK LAX 2025-12-25` - 北京到洛杉矶单程
+`/flight PEK LAX 2025-12-25 2026-01-05` - 往返航班
+`/flight PEK LAX 2025-12-25 - 2 business` - 2人商务舱
 
 请选择功能:"""
     
@@ -939,6 +932,33 @@ async def _execute_advanced_flight_search(update: Update, context: ContextTypes.
         flights_data = await advanced_flight_cache_service.search_flights_with_cache(params, language)
         
         if flights_data:
+            # 检查是否有错误
+            if "error" in flights_data:
+                error_msg = f"❌ {flights_data['error']}"
+                keyboard = [
+                    [
+                        InlineKeyboardButton("🔍 机场查询", callback_data="flight_airport_search"),
+                        InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")
+                    ]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                if callback_query:
+                    await callback_query.edit_message_text(
+                        text=error_msg,
+                        reply_markup=reply_markup
+                    )
+                    config = get_config()
+                    await _schedule_auto_delete(context, callback_query.message.chat_id, callback_query.message.message_id, config.auto_delete_delay)
+                else:
+                    await message.edit_text(
+                        text=error_msg,
+                        reply_markup=reply_markup
+                    )
+                    config = get_config()
+                    await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
+                return
+            
             # 找到航班信息
             result_text = format_flight_results_advanced(flights_data, params)
             
@@ -1158,9 +1178,9 @@ async def advanced_flight_text_handler(update: Update, context: ContextTypes.DEF
 async def _parse_smart_search(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
     """解析智能搜索输入"""
     # 智能解析多种格式
-    # 格式1: PEK LAX 2024-12-25
-    # 格式2: 北京 洛杉矶 2024-12-25 2025-01-05
-    # 格式3: PEK to LAX on 2024-12-25 return 2025-01-05 2 passengers business class
+    # 格式1: PEK LAX 2025-12-25
+    # 格式2: 北京 洛杉矶 2025-12-25 2026-01-05
+    # 格式3: PEK to LAX on 2025-12-25 return 2026-01-05 2 passengers business class
     
     parts = text.strip().split()
     if len(parts) < 3:
@@ -1213,7 +1233,7 @@ async def _parse_and_execute_oneway_search(update: Update, context: ContextTypes
     """解析并执行单程搜索"""
     parts = text.strip().split()
     if len(parts) < 3:
-        await send_error(context, update.message.chat_id, "格式错误，请使用: 出发机场 到达机场 日期\n例如: PEK LAX 2024-12-25")
+        await send_error(context, update.message.chat_id, "格式错误，请使用: 出发机场 到达机场 日期\n例如: PEK LAX 2025-12-25")
         return
     
     departure, arrival, date = parts[0].upper(), parts[1].upper(), parts[2]
@@ -1231,7 +1251,7 @@ async def _parse_and_execute_roundtrip_search(update: Update, context: ContextTy
     """解析并执行往返搜索"""
     parts = text.strip().split()
     if len(parts) < 4:
-        await send_error(context, update.message.chat_id, "格式错误，请使用: 出发机场 到达机场 出发日期 返程日期\n例如: PEK LAX 2024-12-25 2025-01-05")
+        await send_error(context, update.message.chat_id, "格式错误，请使用: 出发机场 到达机场 出发日期 返程日期\n例如: PEK LAX 2025-12-25 2026-01-05")
         return
     
     departure, arrival, outbound_date, return_date = parts[0].upper(), parts[1].upper(), parts[2], parts[3]
@@ -1248,7 +1268,7 @@ async def _parse_and_execute_roundtrip_search(update: Update, context: ContextTy
 
 async def _parse_and_execute_multicity_search(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
     """解析并执行多城市搜索"""
-    # 格式: PEK-LAX-2024-12-25,LAX-SFO-2024-12-28,SFO-PEK-2025-01-05
+    # 格式: PEK-LAX-2025-12-25,LAX-SFO-2025-12-28,SFO-PEK-2026-01-05
     try:
         segments = []
         for segment_str in text.split(','):
@@ -1365,8 +1385,8 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
 • 价格趋势分析
 
 💡 快速使用:
-`/flight PEK LAX 2024-12-25` - 北京到洛杉矶单程
-`/flight PEK LAX 2024-12-25 2025-01-05` - 往返航班
+`/flight PEK LAX 2025-12-25` - 北京到洛杉矶单程
+`/flight PEK LAX 2025-12-25 2026-01-05` - 往返航班
 
 请选择功能:"""
         
@@ -1386,7 +1406,7 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         })
         
         await query.edit_message_text(
-            text="✈️ 单程航班搜索\n\n请输入搜索信息:\n格式: 出发机场 到达机场 日期\n\n例如:\n• PEK LAX 2024-12-25\n• 北京 洛杉矶 2024-12-25",
+            text="✈️ 单程航班搜索\n\n请输入搜索信息:\n格式: 出发机场 到达机场 日期\n\n例如:\n• PEK LAX 2025-12-25\n• 北京 洛杉矶 2025-12-25",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
             ])
@@ -1402,7 +1422,7 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         })
         
         await query.edit_message_text(
-            text="🔄 往返航班搜索\n\n请输入搜索信息:\n格式: 出发机场 到达机场 出发日期 返程日期\n\n例如:\n• PEK LAX 2024-12-25 2025-01-05\n• 北京 洛杉矶 2024-12-25 2025-01-05",
+            text="🔄 往返航班搜索\n\n请输入搜索信息:\n格式: 出发机场 到达机场 出发日期 返程日期\n\n例如:\n• PEK LAX 2025-12-25 2026-01-05\n• 北京 洛杉矶 2025-12-25 2026-01-05",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
             ])
@@ -1481,8 +1501,9 @@ async def advanced_flight_callback_handler(update: Update, context: ContextTypes
 • **最佳时机**: 价格预测和建议
 
 💡 **快速使用:**
-`/flight PEK LAX 2024-12-25` - 北京到洛杉矶单程
-`/flight PEK LAX 2024-12-25 2025-01-05` - 往返航班
+`/flight PEK LAX 2025-12-25` - 北京到洛杉矶单程
+`/flight PEK LAX 2025-12-25 2026-01-05` - 往返航班
+`/flight PEK LAX 2025-12-25 - 2 business` - 2人商务舱
 
 请选择功能:"""
         
@@ -1500,7 +1521,7 @@ async def advanced_flight_callback_handler(update: Update, context: ContextTypes
         })
         
         await query.edit_message_text(
-            text="🤖 **智能航班搜索**\\n\\n请输入你的行程信息，我会智能解析：\\n\\n**支持格式:**\\n• `PEK LAX 2024-12-25` - 单程\\n• `PEK LAX 2024-12-25 2025-01-05` - 往返\\n• `PEK LAX 2024-12-25 2 business` - 2人商务舱\\n• `北京 洛杉矶 2024-12-25` - 中文城市\\n\\n**支持参数:**\\n• 乘客数: 1-9\\n• 舱位: economy, business, first, premium",
+            text="🤖 **智能航班搜索**\\n\\n请输入你的行程信息，我会智能解析：\\n\\n**支持格式:**\\n• `PEK LAX 2025-12-25` - 单程\\n• `PEK LAX 2025-12-25 2026-01-05` - 往返\\n• `PEK LAX 2025-12-25 2 business` - 2人商务舱\\n• `北京 洛杉矶 2025-12-25` - 中文城市\\n\\n**支持参数:**\\n• 乘客数: 1-9\\n• 舱位: economy, business, first, premium",
             parse_mode="MarkdownV2",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")
@@ -1530,7 +1551,7 @@ async def advanced_flight_callback_handler(update: Update, context: ContextTypes
         })
         
         await query.edit_message_text(
-            text="✈️ **单程航班搜索**\\n\\n请输入搜索信息：\\n格式: 出发机场 到达机场 日期\\n\\n例如:\\n• PEK LAX 2024-12-25\\n• 北京 洛杉矶 2024-12-25",
+            text="✈️ **单程航班搜索**\\n\\n请输入搜索信息：\\n格式: 出发机场 到达机场 日期\\n\\n例如:\\n• PEK LAX 2025-12-25\\n• 北京 洛杉矶 2025-12-25",
             parse_mode="MarkdownV2",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")
@@ -1545,7 +1566,7 @@ async def advanced_flight_callback_handler(update: Update, context: ContextTypes
         })
         
         await query.edit_message_text(
-            text="🔄 **往返航班搜索**\\n\\n请输入搜索信息：\\n格式: 出发机场 到达机场 出发日期 返程日期\\n\\n例如:\\n• PEK LAX 2024-12-25 2025-01-05\\n• 北京 洛杉矶 2024-12-25 2025-01-05",
+            text="🔄 **往返航班搜索**\\n\\n请输入搜索信息：\\n格式: 出发机场 到达机场 出发日期 返程日期\\n\\n例如:\\n• PEK LAX 2025-12-25 2026-01-05\\n• 北京 洛杉矶 2025-12-25 2026-01-05",
             parse_mode="MarkdownV2",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")
@@ -1560,7 +1581,7 @@ async def advanced_flight_callback_handler(update: Update, context: ContextTypes
         })
         
         await query.edit_message_text(
-            text="🌍 **多城市航班搜索**\\n\\n请输入多段行程：\\n格式: 出发-到达-日期,出发-到达-日期\\n\\n例如:\\n`PEK-LAX-2024-12-25,LAX-SFO-2024-12-28,SFO-PEK-2025-01-05`\\n\\n**注意:** 至少需要2段行程",
+            text="🌍 **多城市航班搜索**\\n\\n请输入多段行程：\\n格式: 出发-到达-日期,出发-到达-日期\\n\\n例如:\\n`PEK-LAX-2025-12-25,LAX-SFO-2025-12-28,SFO-PEK-2026-01-05`\\n\\n**注意:** 至少需要2段行程",
             parse_mode="MarkdownV2",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")
