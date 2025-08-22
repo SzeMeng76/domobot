@@ -461,30 +461,18 @@ class AdvancedFlightCacheService:
     """高级航班缓存服务类"""
     
     async def search_flights_with_cache(self, params: FlightSearchParams, language: str) -> Optional[Dict]:
-        """带缓存的航班搜索"""
-        import hashlib
-        cache_key = f"flight_search_{language}_{hashlib.md5(f'{params.departure_id}_{params.arrival_id}_{params.outbound_date}_{params.return_date}_{params.adults}_{params.travel_class.value}'.encode()).hexdigest()}"
-        
-        if cache_manager:
-            config = get_config()
-            cached_data = await cache_manager.load_cache(
-                cache_key,
-                max_age_seconds=config.flight_cache_duration,
-                subdirectory="flights"
-            )
-            if cached_data:
-                logger.info(f"使用缓存的航班搜索数据")
-                return cached_data
-        
+        """带缓存的航班搜索 - 暂时禁用缓存用于测试"""
+        # 暂时禁用缓存，直接调用API
         try:
             config = get_config()
             flight_service = AdvancedFlightService(config.serpapi_key)
             
             flight_data = await flight_service.search_flights(params, httpx_client, language)
             
-            if flight_data and cache_manager and "error" not in flight_data:
-                await cache_manager.save_cache(cache_key, flight_data, subdirectory="flights")
-                logger.info(f"已缓存航班搜索数据")
+            # 暂时不缓存，用于测试
+            # if flight_data and cache_manager:
+            #     await cache_manager.save_cache(cache_key, flight_data, subdirectory="flights")
+            #     logger.info(f"已缓存航班搜索数据")
             
             return flight_data
             
@@ -493,30 +481,15 @@ class AdvancedFlightCacheService:
             return None
     
     async def search_airports_with_cache(self, query: str, language: str) -> List[Airport]:
-        """带缓存的机场搜索"""
-        cache_key = f"airport_search_{language}_{query.lower()}"
-        
-        if cache_manager:
-            config = get_config()
-            cached_data = await cache_manager.load_cache(
-                cache_key,
-                max_age_seconds=config.flight_cache_duration,
-                subdirectory="airports"
-            )
-            if cached_data:
-                logger.info(f"使用缓存的机场搜索数据: {query}")
-                return cached_data
-        
+        """带缓存的机场搜索 - 暂时禁用缓存用于测试"""
+        # 暂时禁用缓存，直接调用API
         try:
             config = get_config()
             flight_service = AdvancedFlightService(config.serpapi_key)
             
             airports = await flight_service.search_airports(query, httpx_client, language)
             
-            if airports and cache_manager:
-                await cache_manager.save_cache(cache_key, airports, subdirectory="airports")
-                logger.info(f"已缓存机场搜索数据: {query}")
-            
+            # 暂时不缓存，用于测试
             return airports
             
         except Exception as e:
@@ -524,30 +497,15 @@ class AdvancedFlightCacheService:
             return []
     
     async def get_price_insights_with_cache(self, departure_id: str, arrival_id: str, language: str) -> Optional[Dict]:
-        """带缓存的价格洞察"""
-        cache_key = f"price_insights_{language}_{departure_id}_{arrival_id}"
-        
-        if cache_manager:
-            config = get_config()
-            cached_data = await cache_manager.load_cache(
-                cache_key,
-                max_age_seconds=3600,  # 价格数据1小时更新
-                subdirectory="price_insights"
-            )
-            if cached_data:
-                logger.info(f"使用缓存的价格洞察数据")
-                return cached_data
-        
+        """带缓存的价格洞察 - 暂时禁用缓存用于测试"""
+        # 暂时禁用缓存，直接调用API
         try:
             config = get_config()
             flight_service = AdvancedFlightService(config.serpapi_key)
             
             insights = await flight_service.get_price_insights(departure_id, arrival_id, httpx_client)
             
-            if insights and cache_manager:
-                await cache_manager.save_cache(cache_key, insights, subdirectory="price_insights")
-                logger.info(f"已缓存价格洞察数据")
-            
+            # 暂时不缓存，用于测试
             return insights
             
         except Exception as e:
@@ -555,56 +513,15 @@ class AdvancedFlightCacheService:
             return None
 
     async def get_airports_results_with_cache(self, departure_id: str, arrival_id: str, outbound_date: str, language: str) -> Optional[AirportsResponse]:
-        """带缓存的机场API结果"""
-        cache_key = f"airports_results_{language}_{departure_id}_{arrival_id}_{outbound_date}"
-        
-        if cache_manager:
-            config = get_config()
-            cached_data = await cache_manager.load_cache(
-                cache_key,
-                max_age_seconds=config.flight_cache_duration,
-                subdirectory="flights"
-            )
-            if cached_data and isinstance(cached_data, dict):
-                logger.info(f"使用缓存的机场API数据")
-                # 重构为AirportsResponse对象
-                departure_airports = [AirportResult(**airport) for airport in cached_data.get("departure_airports", [])]
-                arrival_airports = [AirportResult(**airport) for airport in cached_data.get("arrival_airports", [])]
-                return AirportsResponse(departure_airports=departure_airports, arrival_airports=arrival_airports)
-        
+        """带缓存的机场API结果 - 暂时禁用缓存用于测试"""
+        # 暂时禁用缓存，直接调用API
         try:
             config = get_config()
             flight_service = AdvancedFlightService(config.serpapi_key)
             
             airports_data = await flight_service.get_airports_results(departure_id, arrival_id, outbound_date, httpx_client, language)
             
-            if airports_data and cache_manager:
-                # 转换为可序列化的字典格式
-                cache_data = {
-                    "departure_airports": [
-                        {
-                            "id": airport.id,
-                            "name": airport.name,
-                            "city": airport.city,
-                            "country": airport.country,
-                            "country_code": airport.country_code,
-                            "image": airport.image
-                        } for airport in airports_data.departure_airports
-                    ],
-                    "arrival_airports": [
-                        {
-                            "id": airport.id,
-                            "name": airport.name,
-                            "city": airport.city,
-                            "country": airport.country,
-                            "country_code": airport.country_code,
-                            "image": airport.image
-                        } for airport in airports_data.arrival_airports
-                    ]
-                }
-                await cache_manager.save_cache(cache_key, cache_data, subdirectory="flights")
-                logger.info(f"已缓存机场API数据")
-            
+            # 暂时不缓存，用于测试
             return airports_data
             
         except Exception as e:
