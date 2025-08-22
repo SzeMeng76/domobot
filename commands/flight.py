@@ -326,7 +326,7 @@ class FlightCacheService:
 flight_cache_service = FlightCacheService()
 
 def format_flight_info(flight: Dict) -> str:
-    """格式化单个航班信息"""
+    """格式化单个航班信息 - 最完整版本"""
     flights = flight.get('flights', [])
     if not flights:
         return "❌ 航班信息不完整"
@@ -422,7 +422,7 @@ def format_flight_info(flight: Dict) -> str:
             
             # 过夜中转标识
             if layover.get('overnight'):
-                layover_display += " 🌙"
+                layover_display += " 🌙过夜"
             
             layover_info.append(layover_display)
         result += " → ".join(layover_info)
@@ -439,6 +439,18 @@ def format_flight_info(flight: Dict) -> str:
             elif diff < 0:
                 result += f" ({diff}%)"
         result += "\n"
+    
+    # 航班类型信息
+    flight_type = flight.get('type')
+    if flight_type:
+        result += f"🎫 航班类型: {flight_type}\n"
+    
+    # 预订建议（从Telegraph版本整合）
+    flights_info = flight.get('flights', [])
+    if flights_info:
+        airline = flights_info[0].get('airline', '')
+        if airline:
+            result += f"💡 预订建议: 访问 {airline} 官网预订\n"
     
     return result
 
@@ -645,7 +657,7 @@ async def create_telegraph_page(title: str, content: str) -> Optional[str]:
         return None
 
 async def create_booking_telegraph_page(all_flights: List[Dict], search_params: Dict) -> str:
-    """将航班预订选项格式化为Telegraph友好的格式"""
+    """将航班预订选项格式化为Telegraph友好的格式 - 与主消息完全一致"""
     departure_id = search_params.get('departure_id', '')
     arrival_id = search_params.get('arrival_id', '')
     outbound_date = search_params.get('outbound_date', '')
@@ -665,7 +677,7 @@ async def create_booking_telegraph_page(all_flights: List[Dict], search_params: 
     
     content += f"💺 可预订航班 (共{len(all_flights)}个选项):\n\n"
     
-    # 显示所有航班
+    # 显示所有航班 - 完全复制_show_booking_options的逻辑
     for i, flight in enumerate(all_flights, 1):
         content += f"{i}. "
         
@@ -679,54 +691,74 @@ async def create_booking_telegraph_page(all_flights: List[Dict], search_params: 
             
             departure = segment.get('departure_airport', {})
             arrival = segment.get('arrival_airport', {})
-            content += f"   出发: {departure.get('time', '')} {departure.get('name', departure.get('id', ''))}\n"
-            content += f"   到达: {arrival.get('time', '')} {arrival.get('name', arrival.get('id', ''))}\n"
-            
-            # 飞行时间
-            if 'duration' in segment:
-                hours = segment['duration'] // 60
-                minutes = segment['duration'] % 60
-                content += f"   飞行时间: {hours}小时{minutes}分钟\n"
+            content += f"   🛫 {departure.get('time', '')}\n"
+            content += f"   🛬 {arrival.get('time', '')}\n"
         
         # 价格信息
         price = flight.get('price')
         if price:
-            content += f"   价格: ${price}\n"
+            content += f"   💰 价格: ${price}\n"
         
-        # 预订信息 - 提供实用的预订建议
-        flights_info = flight.get('flights', [])
+        # 航班特性信息 - 复制主消息的逻辑
+        if flights_info:
+            segment = flights_info[0]
+            
+            # 座位空间信息
+            legroom = segment.get('legroom')
+            if legroom:
+                content += f"   📏 座位空间: {legroom}\n"
+            
+            # 过夜航班警告
+            if segment.get('overnight'):
+                content += f"   🌙 过夜航班\n"
+            
+            # 延误警告
+            if segment.get('often_delayed_by_over_30_min'):
+                content += f"   ⚠️ 经常延误超过30分钟\n"
+            
+            # 航班特性
+            extensions = segment.get('extensions', [])
+            if extensions:
+                # 只显示前3个最重要的特性
+                for ext in extensions[:3]:
+                    if 'Wi-Fi' in ext:
+                        content += f"   📶 {ext}\n"
+                    elif 'legroom' in ext:
+                        content += f"   💺 {ext}\n"
+                    elif 'power' in ext or 'USB' in ext:
+                        content += f"   🔌 {ext}\n"
+            
+            # 其他售票方
+            also_sold_by = segment.get('ticket_also_sold_by', [])
+            if also_sold_by:
+                content += f"   🎫 也可通过: {', '.join(also_sold_by)}\n"
+        
+        # 中转信息改进 - 复制主消息的逻辑
+        layovers = flight.get('layovers', [])
+        if layovers:
+            for layover in layovers:
+                duration_min = layover.get('duration', 0)
+                hours = duration_min // 60
+                minutes = duration_min % 60
+                time_str = f"{hours}h{minutes}m" if minutes else f"{hours}h"
+                
+                airport_name = layover.get('name', layover.get('id', '未知'))
+                content += f"   ✈️ 中转: {airport_name} ({time_str})"
+                
+                # 过夜中转标识
+                if layover.get('overnight'):
+                    content += " 🌙过夜"
+                content += "\n"
+        
+        # 预订信息处理 - 这里需要模拟主消息的booking_token处理
+        # 由于Telegraph是静态内容，我们只能显示基本的预订建议
         if flights_info:
             airline = flights_info[0].get('airline', '')
             if airline:
-                content += f"   预订建议: 访问 {airline} 官网预订\n"
+                content += f"   🏢 预订商: {airline}\n"
+                content += f"   💡 建议直接访问 {airline} 官网预订\n"
             else:
-                content += f"   预订建议: 访问航空公司官网预订\n"
-        else:
-            content += f"   预订建议: 访问航空公司官网预订\n"
-        
-        # 中转信息
-        layovers = flight.get('layovers', [])
-        if layovers:
-            content += "   中转: "
-            layover_info = []
-            for layover in layovers:
-                layover_hours = layover['duration'] // 60
-                layover_minutes = layover['duration'] % 60
-                layover_info.append(f"{layover['name']} ({layover_hours}h{layover_minutes}m)")
-            content += " → ".join(layover_info)
-            content += "\n"
-        
-        # 环保信息
-        if 'carbon_emissions' in flight:
-            emissions = flight['carbon_emissions']
-            content += f"   碳排放: {emissions.get('this_flight', 0):,}g"
-            if 'difference_percent' in emissions:
-                diff = emissions['difference_percent']
-                if diff > 0:
-                    content += f" (+{diff}%)"
-                elif diff < 0:
-                    content += f" ({diff}%)"
-            content += "\n"
+                content += f"   💡 建议访问航空公司官网预订\n"
         
         content += "\n"
     
