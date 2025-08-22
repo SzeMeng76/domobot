@@ -74,11 +74,6 @@ class BotConfig:
         self.map_cache_duration = 1800  # 30分钟，地图搜索缓存
         self.map_geocode_cache_duration = 3600  # 1小时，地理编码缓存
         self.map_directions_cache_duration = 600  # 10分钟，路线规划缓存
-        
-        # 机票查询缓存配置
-        self.flights_cache_duration = 1800  # 30分钟，航班查询缓存
-        self.flights_airport_cache_duration = 86400  # 24小时，机场搜索缓存
-        self.flights_price_cache_duration = 1800  # 30分钟，价格查询缓存
 
         # 定时清理配置
         self.spotify_weekly_cleanup = True  # 默认启用
@@ -92,7 +87,6 @@ class BotConfig:
         self.memes_weekly_cleanup = True  # 默认启用，表情包缓存
         self.finance_weekly_cleanup = True  # 默认启用，金融数据缓存
         self.map_weekly_cleanup = True  # 默认启用，地图服务缓存
-        self.flights_weekly_cleanup = True  # 默认启用，机票查询缓存
 
         # API配置
         self.exchange_rate_api_keys = []
@@ -249,9 +243,6 @@ class ConfigManager:
         self.config.map_cache_duration = get_int_env("MAP_CACHE_DURATION", "1800")
         self.config.map_geocode_cache_duration = get_int_env("MAP_GEOCODE_CACHE_DURATION", "3600")
         self.config.map_directions_cache_duration = get_int_env("MAP_DIRECTIONS_CACHE_DURATION", "600")
-        self.config.flights_cache_duration = get_int_env("FLIGHTS_CACHE_DURATION", "1800")
-        self.config.flights_airport_cache_duration = get_int_env("FLIGHTS_AIRPORT_CACHE_DURATION", "86400")
-        self.config.flights_price_cache_duration = get_int_env("FLIGHTS_PRICE_CACHE_DURATION", "1800")
 
         # 定时清理配置
         self.config.spotify_weekly_cleanup = get_bool_env("SPOTIFY_WEEKLY_CLEANUP")
@@ -262,7 +253,6 @@ class ConfigManager:
         self.config.time_weekly_cleanup = get_bool_env("TIME_WEEKLY_CLEANUP", "True")
         self.config.finance_weekly_cleanup = get_bool_env("FINANCE_WEEKLY_CLEANUP", "True")
         self.config.map_weekly_cleanup = get_bool_env("MAP_WEEKLY_CLEANUP", "True")
-        self.config.flights_weekly_cleanup = get_bool_env("FLIGHTS_WEEKLY_CLEANUP", "True")
 
         # API配置
         keys_str = os.getenv("EXCHANGE_RATE_API_KEYS") or os.getenv("EXCHANGE_RATE_API_KEY", "")

@@ -40,7 +40,6 @@ CACHE_SERVICES = {
     'timezone': '时区缓存',
     'dns': 'DNS查询缓存',
     'map': '地图服务缓存',
-    'flights': '机票查询缓存',
 }
 
 async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
