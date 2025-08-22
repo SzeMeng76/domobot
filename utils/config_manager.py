@@ -29,9 +29,6 @@ class BotConfig:
         # 地图服务API配置
         self.google_maps_api_key: str = ""
         self.amap_api_key: str = ""
-        
-        # SerpAPI配置 
-        self.serpapi_key: str = ""
     
         # Webhook 配置
         self.webhook_url = ""
@@ -77,7 +74,6 @@ class BotConfig:
         self.map_cache_duration = 1800  # 30分钟，地图搜索缓存
         self.map_geocode_cache_duration = 3600  # 1小时，地理编码缓存
         self.map_directions_cache_duration = 600  # 10分钟，路线规划缓存
-        self.flight_cache_duration = 3600  # 1小时，航班搜索缓存
 
         # 定时清理配置
         self.spotify_weekly_cleanup = True  # 默认启用
@@ -91,7 +87,6 @@ class BotConfig:
         self.memes_weekly_cleanup = True  # 默认启用，表情包缓存
         self.finance_weekly_cleanup = True  # 默认启用，金融数据缓存
         self.map_weekly_cleanup = True  # 默认启用，地图服务缓存
-        self.flight_weekly_cleanup = True  # 默认启用，航班搜索缓存
 
         # API配置
         self.exchange_rate_api_keys = []
@@ -248,7 +243,6 @@ class ConfigManager:
         self.config.map_cache_duration = get_int_env("MAP_CACHE_DURATION", "1800")
         self.config.map_geocode_cache_duration = get_int_env("MAP_GEOCODE_CACHE_DURATION", "3600")
         self.config.map_directions_cache_duration = get_int_env("MAP_DIRECTIONS_CACHE_DURATION", "600")
-        self.config.flight_cache_duration = get_int_env("FLIGHT_CACHE_DURATION", "3600")
 
         # 定时清理配置
         self.config.spotify_weekly_cleanup = get_bool_env("SPOTIFY_WEEKLY_CLEANUP")
@@ -259,7 +253,6 @@ class ConfigManager:
         self.config.time_weekly_cleanup = get_bool_env("TIME_WEEKLY_CLEANUP", "True")
         self.config.finance_weekly_cleanup = get_bool_env("FINANCE_WEEKLY_CLEANUP", "True")
         self.config.map_weekly_cleanup = get_bool_env("MAP_WEEKLY_CLEANUP", "True")
-        self.config.flight_weekly_cleanup = get_bool_env("FLIGHT_WEEKLY_CLEANUP", "True")
 
         # API配置
         keys_str = os.getenv("EXCHANGE_RATE_API_KEYS") or os.getenv("EXCHANGE_RATE_API_KEY", "")
@@ -337,9 +330,6 @@ class ConfigManager:
         # 地图服务 API 配置
         self.config.google_maps_api_key = os.getenv("GOOGLE_MAPS_API_KEY", "")
         self.config.amap_api_key = os.getenv("AMAP_API_KEY", "")
-        
-        # SerpAPI 配置
-        self.config.serpapi_key = os.getenv("SERPAPI_KEY", "")
 
         # MySQL 配置
         self.config.db_host = os.getenv("DB_HOST", "localhost")
