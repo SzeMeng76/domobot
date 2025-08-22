@@ -826,27 +826,70 @@ def format_flight_results_advanced(flights_data: Dict, search_params: FlightSear
         result += f" - {search_params.return_date}"
     result += f" | 👥 {search_params.adults}人 | {format_travel_class(search_params.travel_class)}\n\n"
     
-    # 最佳航班
+    # 最佳航班 - 直接格式化航班信息，不使用format_complete_flight
     if best_flights:
         result += "🌟 **推荐航班:**\n\n"
         for i, flight in enumerate(best_flights[:2], 1):
-            # 检查flight是否是字典类型
             if isinstance(flight, dict):
-                result += f"`{i}.` {format_complete_flight(flight, False)}\n"
+                # 直接提取和显示关键信息
+                price = flight.get('price', 0)
+                currency = flight.get('currency', 'USD')
+                total_duration = flight.get('total_duration', 0)
+                
+                result += f"`{i}.` "
+                result += f"💰 ${price:,} | ⏱️ {format_duration(total_duration)}\n"
+                
+                # 显示航班段信息
+                flights_segments = flight.get('flights', [])
+                for j, segment in enumerate(flights_segments):
+                    if isinstance(segment, dict):
+                        airline = segment.get('airline', '未知航空')
+                        flight_number = segment.get('flight_number', '')
+                        dep_airport = segment.get('departure_airport', {})
+                        arr_airport = segment.get('arrival_airport', {})
+                        
+                        dep_code = dep_airport.get('id', '') if isinstance(dep_airport, dict) else ''
+                        dep_time = dep_airport.get('time', '') if isinstance(dep_airport, dict) else ''
+                        arr_code = arr_airport.get('id', '') if isinstance(arr_airport, dict) else ''
+                        arr_time = arr_airport.get('time', '') if isinstance(arr_airport, dict) else ''
+                        
+                        result += f"   ✈️ {airline} {flight_number} | {dep_code} {dep_time} → {arr_code} {arr_time}\n"
+                
+                result += "\n"
             else:
-                logger.warning(f"意外的航班数据类型: {type(flight)}")
                 result += f"`{i}.` 航班数据格式错误\n"
     
-    # 其他选项
+    # 其他选项 - 同样直接格式化
     if other_flights and len(best_flights) < 3:
         result += "🔍 **其他选项:**\n\n"
         remaining_slots = 3 - len(best_flights)
         for i, flight in enumerate(other_flights[:remaining_slots], len(best_flights) + 1):
-            # 检查flight是否是字典类型
             if isinstance(flight, dict):
-                result += f"`{i}.` {format_complete_flight(flight, False)}\n"
+                price = flight.get('price', 0)
+                currency = flight.get('currency', 'USD')
+                total_duration = flight.get('total_duration', 0)
+                
+                result += f"`{i}.` "
+                result += f"💰 ${price:,} | ⏱️ {format_duration(total_duration)}\n"
+                
+                # 显示航班段信息  
+                flights_segments = flight.get('flights', [])
+                for j, segment in enumerate(flights_segments):
+                    if isinstance(segment, dict):
+                        airline = segment.get('airline', '未知航空')
+                        flight_number = segment.get('flight_number', '')
+                        dep_airport = segment.get('departure_airport', {})
+                        arr_airport = segment.get('arrival_airport', {})
+                        
+                        dep_code = dep_airport.get('id', '') if isinstance(dep_airport, dict) else ''
+                        dep_time = dep_airport.get('time', '') if isinstance(dep_airport, dict) else ''
+                        arr_code = arr_airport.get('id', '') if isinstance(arr_airport, dict) else ''
+                        arr_time = arr_airport.get('time', '') if isinstance(arr_airport, dict) else ''
+                        
+                        result += f"   ✈️ {airline} {flight_number} | {dep_code} {dep_time} → {arr_code} {arr_time}\n"
+                
+                result += "\n"
             else:
-                logger.warning(f"意外的航班数据类型: {type(flight)}")
                 result += f"`{i}.` 航班数据格式错误\n"
     
     # 价格洞察
