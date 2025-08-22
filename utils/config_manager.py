@@ -29,9 +29,6 @@ class BotConfig:
         # 地图服务API配置
         self.google_maps_api_key: str = ""
         self.amap_api_key: str = ""
-        
-        # 航班信息API配置
-        self.variflight_api_key: str = ""
     
         # Webhook 配置
         self.webhook_url = ""
@@ -77,9 +74,6 @@ class BotConfig:
         self.map_cache_duration = 1800  # 30分钟，地图搜索缓存
         self.map_geocode_cache_duration = 3600  # 1小时，地理编码缓存
         self.map_directions_cache_duration = 600  # 10分钟，路线规划缓存
-        self.flight_cache_duration = 300  # 5分钟，航班状态缓存
-        self.flight_route_cache_duration = 600  # 10分钟，航线查询缓存
-        self.flight_airport_cache_duration = 3600  # 1小时，机场信息缓存
 
         # 定时清理配置
         self.spotify_weekly_cleanup = True  # 默认启用
@@ -93,7 +87,6 @@ class BotConfig:
         self.memes_weekly_cleanup = True  # 默认启用，表情包缓存
         self.finance_weekly_cleanup = True  # 默认启用，金融数据缓存
         self.map_weekly_cleanup = True  # 默认启用，地图服务缓存
-        self.flight_weekly_cleanup = True  # 默认启用，航班数据缓存
 
         # API配置
         self.exchange_rate_api_keys = []
@@ -337,9 +330,6 @@ class ConfigManager:
         # 地图服务 API 配置
         self.config.google_maps_api_key = os.getenv("GOOGLE_MAPS_API_KEY", "")
         self.config.amap_api_key = os.getenv("AMAP_API_KEY", "")
-        
-        # 航班信息 API 配置
-        self.config.variflight_api_key = os.getenv("VARIFLIGHT_API_KEY", "")
 
         # MySQL 配置
         self.config.db_host = os.getenv("DB_HOST", "localhost")

@@ -88,7 +88,6 @@ class RedisCacheManager:
             "memes": self.config.memes_cache_duration,  # 10分钟，表情包缓存
             "finance": self.config.finance_cache_duration,  # 5分钟，金融数据缓存
             "map": self.config.map_cache_duration,  # 30分钟，地图服务缓存
-            "flight": self.config.flight_cache_duration,  # 5分钟，航班状态缓存
         }
 
         # 对于搜索结果特殊处理
@@ -108,13 +107,6 @@ class RedisCacheManager:
             elif "directions_" in key:
                 return self.config.map_directions_cache_duration
             # 默认使用map_cache_duration (搜索和附近服务)
-        
-        if subdirectory == "flight" and key:
-            if "route_" in key:
-                return self.config.flight_route_cache_duration
-            elif "airport_" in key:
-                return self.config.flight_airport_cache_duration
-            # 默认使用flight_cache_duration (航班状态)
 
         return ttl_mapping.get(subdirectory, self.config.default_cache_duration)
 
