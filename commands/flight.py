@@ -334,10 +334,10 @@ async def flight_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 `/flight track CZ3101` \\- 追踪航班
 
 **智能搜索支持：**
-• 🏢 机场代码 \\(PEK, LAX, NRT\\)
-• 🌍 城市名称 \\(北京, New York, Tokyo\\)  
-• 🏳️ 国家名称 \\(中国, 美国, Japan\\)
-• ✈️ 航班号码 \\(CZ3101, UA123\\)
+• 🏢 机场代码 (PEK, LAX, NRT)
+• 🌍 城市名称 (北京, New York, Tokyo)  
+• 🏳️ 国家名称 (中国, 美国, Japan)
+• ✈️ 航班号码 (CZ3101, UA123)
 
 💡 点击下方按钮或直接输入命令参数
 """
@@ -581,9 +581,9 @@ async def _execute_smart_airport_search(update: Update, context: ContextTypes.DE
             await send_error(context, update.message.chat_id, 
                            f"❌ 未找到与 '{query}' 匹配的机场\\n\\n"
                            "请尝试：\\n"
-                           "• 机场代码 \\(如: PEK, LAX\\)\\n"
-                           "• 城市名称 \\(如: 北京, New York\\)\\n"
-                           "• 国家名称 \\(如: 中国, 美国\\)")
+                           "• 机场代码 (如: PEK, LAX)\\n"
+                           "• 城市名称 (如: 北京, New York)\\n"
+                           "• 国家名称 (如: 中国, 美国)")
             return
         
         if len(airports) == 1:
@@ -624,7 +624,7 @@ async def _execute_smart_route_search(update: Update, context: ContextTypes.DEFA
         dest_info = get_airport_info(dest_code)
         
         loading_msg = await update.message.reply_text(
-            f"🔍 正在查询航线: {origin_info['city']} \\({origin_code}\\) → {dest_info['city']} \\({dest_code}\\)..."
+            f"🔍 正在查询航线: {origin_info['city']} ({origin_code}) → {dest_info['city']} ({dest_code})..."
         )
         
         # 执行实际的航线查询
@@ -634,8 +634,8 @@ async def _execute_smart_route_search(update: Update, context: ContextTypes.DEFA
             await loading_msg.edit_text(
                 f"❌ 未找到 {origin_info['city']} → {dest_info['city']} 的航线信息\\n\\n"
                 f"**查询的机场:**\\n"
-                f"• 起始: {origin_code} \\- {origin_info['name']}\\n"
-                f"• 目的: {dest_code} \\- {dest_info['name']}")
+                f"• 起始: {origin_code} - {origin_info['name']}\\n"
+                f"• 目的: {dest_code} - {dest_info['name']}")
             config = get_config()
             await _schedule_auto_delete(context, loading_msg.chat_id, loading_msg.message_id, config.auto_delete_delay)
             return
@@ -658,7 +658,7 @@ async def _show_airport_selection(update: Update, context: ContextTypes.DEFAULT_
             from utils.country_data import get_country_flag
             flag = get_country_flag(info["country"])
             
-            button_text = f"{flag} {airport_code} \\- {info['city']}"
+            button_text = f"{flag} {airport_code} - {info['city']}"
             callback_data = f"airport_select_{get_short_flight_id(airport_code)}"
             
             keyboard.append([InlineKeyboardButton(button_text, callback_data=callback_data)])
@@ -975,8 +975,8 @@ async def _show_flight_search_menu(update: Update, context: ContextTypes.DEFAULT
 例如: CZ3101, CA1234, MU5678
 
 💡 支持的航空公司:
-• 国内: CA\\(国航\\), CZ\\(南航\\), MU\\(东航\\), 3U\\(川航\\) 等
-• 国际: BA\\(英航\\), UA\\(美联航\\), LH\\(汉莎\\) 等
+• 国内: CA(国航), CZ(南航), MU(东航), 3U(川航) 等
+• 国际: BA(英航), UA(美联航), LH(汉莎) 等
 """
     
     keyboard = [
@@ -1000,11 +1000,11 @@ async def _show_route_search_menu(update: Update, context: ContextTypes.DEFAULT_
 
 **示例:**
 • `/flight PEK LAX` \\- 北京到洛杉矶
-• `/flight SHA NRT 20241225` \\- 上海到东京\\(指定日期\\)
+• `/flight SHA NRT 20241225` \\- 上海到东京(指定日期)
 
 **常用机场代码:**
-• PEK\\(北京首都\\) SHA\\(上海虹桥\\) CAN\\(广州\\)
-• LAX\\(洛杉矶\\) NRT\\(东京成田\\) LHR\\(伦敦希思罗\\)
+• PEK(北京首都) SHA(上海虹桥) CAN(广州)
+• LAX(洛杉矶) NRT(东京成田) LHR(伦敦希思罗)
 """
     
     keyboard = [
