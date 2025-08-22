@@ -88,9 +88,6 @@ class RedisCacheManager:
             "memes": self.config.memes_cache_duration,  # 10分钟，表情包缓存
             "finance": self.config.finance_cache_duration,  # 5分钟，金融数据缓存
             "map": self.config.map_cache_duration,  # 30分钟，地图服务缓存
-            "flights": self.config.flight_cache_duration,  # 1小时，航班搜索缓存
-            "airports": 86400 * 7,  # 7天，机场数据缓存（相对稳定）
-            "price_insights": 3600,  # 1小时，价格洞察缓存
         }
 
         # 对于搜索结果特殊处理
@@ -110,21 +107,6 @@ class RedisCacheManager:
             elif "directions_" in key:
                 return self.config.map_directions_cache_duration
             # 默认使用map_cache_duration (搜索和附近服务)
-        
-        # 航班相关特殊处理
-        if subdirectory == "flights" and key:
-            if "search_" in key:
-                return self.config.flight_cache_duration  # 1小时，航班搜索
-            elif "price_track_" in key:
-                return 86400 * 30  # 30天，价格追踪数据
-            elif "booking_" in key:
-                return 1800  # 30分钟，预订选项（变化较快）
-        
-        if subdirectory == "airports":
-            return 86400 * 7  # 7天，机场数据相对稳定
-        
-        if subdirectory == "price_insights":
-            return 3600  # 1小时，价格洞察
 
         return ttl_mapping.get(subdirectory, self.config.default_cache_duration)
 
