@@ -425,13 +425,15 @@ def format_directions(directions: Dict, service_type: str) -> str:
     if 'steps' in directions and directions['steps']:
         result += "📋 *路线指引:*\n"
         for i, step in enumerate(directions['steps'][:5], 1):
-            # 清理HTML标签
-            step_clean = re.sub(r'<[^>]+>', '', step)
+            # 清理HTML标签并添加适当的分隔
+            step_clean = re.sub(r'<[^>]+>', ' ', step)  # 用空格替换HTML标签
+            step_clean = re.sub(r'\s+', ' ', step_clean)  # 合并多个空格
+            step_clean = step_clean.strip()  # 去除首尾空格
             result += f"`{i}.` {step_clean}\n"
     
     service_name = "Google Maps" if service_type == "google_maps" else "高德地图"
-    result += f"\n_数据来源: {service_name}_"
-    result += f"_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
+    result += f"\n📊 数据来源: {service_name}"
+    result += f"\n🕐 更新时间: {datetime.now().strftime('%H:%M:%S')}"
     
     return result
 
