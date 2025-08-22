@@ -175,7 +175,7 @@ class RedisCacheManager:
                 return cache_data["data"]
             return cache_data
 
-        except (json.JSONDecodeError, RedisError) as e:
+        except (ValueError, RedisError) as e:
             logger.error(f"加载缓存失败 {cache_key}: {e}")
             return None
 
@@ -204,7 +204,7 @@ class RedisCacheManager:
 
             logger.debug(f"缓存已保存 {cache_key}，TTL: {ttl}秒")
 
-        except (RedisError, json.JSONEncodeError) as e:
+        except (RedisError, ValueError) as e:
             logger.error(f"保存缓存失败 {cache_key}: {e}")
 
     async def clear_cache(self, key: str | None = None, key_prefix: str | None = None, subdirectory: str | None = None):
@@ -279,7 +279,7 @@ class RedisCacheManager:
                 cache_data = json.loads(data)
                 return cache_data.get("timestamp")
             return None
-        except (json.JSONDecodeError, RedisError) as e:
+        except (ValueError, RedisError) as e:
             logger.error(f"获取时间戳失败 {cache_key}: {e}")
             return None
 
