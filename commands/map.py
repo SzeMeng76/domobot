@@ -30,6 +30,7 @@ from utils.message_manager import (
 from utils.permissions import Permission
 from utils.language_detector import detect_user_language
 from utils.map_services import MapServiceManager
+from utils.session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,9 @@ map_service_manager = None
 # 地图数据ID映射缓存
 map_data_mapping = {}
 mapping_counter = 0
+
+# 创建地图会话管理器
+map_session_manager = SessionManager("MapService", max_age=1800, max_sessions=200)  # 30分钟会话
 
 async def _schedule_auto_delete(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, delay: int):
     """调度自动删除消息"""
@@ -248,6 +252,69 @@ class MapCacheService:
 # 创建全局地图缓存服务实例
 map_cache_service = MapCacheService()
 
+def format_place_type(place_type: str) -> str:
+    """格式化地点类型名称，使其更易读"""
+    # 常见类型的中英文映射
+    type_mapping = {
+        'shopping_mall': '购物中心',
+        'point_of_interest': '兴趣点',
+        'establishment': '商业场所',
+        'restaurant': '餐厅',
+        'food': '美食',
+        'tourist_attraction': '旅游景点',
+        'lodging': '住宿',
+        'gas_station': '加油站',
+        'hospital': '医院',
+        'bank': '银行',
+        'school': '学校',
+        'university': '大学',
+        'local_government_office': '政府机构',
+        'subway_station': '地铁站',
+        'bus_station': '汽车站',
+        'airport': '机场',
+        'train_station': '火车站',
+        'parking': '停车场',
+        'atm': 'ATM',
+        'pharmacy': '药店',
+        'supermarket': '超市',
+        'convenience_store': '便利店',
+        'clothing_store': '服装店',
+        'electronics_store': '电子产品店',
+        'book_store': '书店',
+        'gym': '健身房',
+        'beauty_salon': '美容院',
+        'hair_care': '理发店',
+        'movie_theater': '电影院',
+        'night_club': '夜店',
+        'bar': '酒吧',
+        'cafe': '咖啡厅',
+        'church': '教堂',
+        'mosque': '清真寺',
+        'hindu_temple': '印度教寺庙',
+        'park': '公园',
+        'zoo': '动物园',
+        'museum': '博物馆',
+        'library': '图书馆',
+        'post_office': '邮局',
+        'police': '警察局',
+        'fire_station': '消防局',
+        'car_dealer': '汽车经销商',
+        'car_rental': '租车',
+        'car_repair': '汽车维修',
+        'furniture_store': '家具店',
+        'home_goods_store': '家居用品店',
+        'jewelry_store': '珠宝店',
+        'shoe_store': '鞋店',
+        'sports_goods_store': '体育用品店'
+    }
+    
+    # 如果有中文映射，使用中文
+    if place_type in type_mapping:
+        return type_mapping[place_type]
+    
+    # 否则将下划线替换为空格，首字母大写
+    return place_type.replace('_', ' ').title()
+
 def format_location_info(location_data: Dict, service_type: str) -> str:
     """格式化位置信息"""
     name = location_data.get('name', 'Unknown')
@@ -271,11 +338,18 @@ def format_location_info(location_data: Dict, service_type: str) -> str:
     
     # 添加类型信息
     if 'types' in location_data and location_data['types']:
-        types_str = ', '.join(location_data['types'][:3])  # 前3个类型
+        # 格式化类型名称
+        types_list = []
+        for t in location_data['types'][:3]:
+            formatted_type = format_place_type(t)
+            types_list.append(formatted_type)
+        types_str = ', '.join(types_list)
         types_escaped = escape_markdown(types_str, version=2)
         result += f"🏷️ 类型: {types_escaped}\n"
     elif 'type' in location_data:
-        type_escaped = escape_markdown(str(location_data['type']), version=2)
+        # 处理单个类型
+        formatted_type = format_place_type(str(location_data['type']))
+        type_escaped = escape_markdown(formatted_type, version=2)
         result += f"🏷️ 类型: {type_escaped}\n"
     
     # 添加城市信息 (高德地图)
@@ -650,6 +724,310 @@ async def _execute_location_search(update: Update, context: ContextTypes.DEFAULT
             )
             await _schedule_auto_delete(context, message.chat_id, message.message_id, 10)
 
+async def map_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理地图功能的文本输入"""
+    if not update.message or not update.message.text:
+        return
+    
+    user_id = update.effective_user.id
+    text = update.message.text.strip()
+    
+    # 获取用户会话
+    session_data = map_session_manager.get_session(user_id)
+    if not session_data:
+        return  # 没有活动会话，忽略
+    
+    action = session_data.get("action")
+    waiting_for = session_data.get("waiting_for")
+    
+    try:
+        # 删除用户输入的命令
+        await delete_user_command(context, update.message.chat_id, update.message.message_id)
+        
+        if action == "location_search" and waiting_for == "location":
+            # 处理位置搜索
+            await _execute_location_search(update, context, text)
+            map_session_manager.clear_session(user_id)
+            
+        elif action == "route_planning" and waiting_for == "origin":
+            # 处理路线规划
+            destination = session_data.get("destination")
+            await _execute_route_planning(update, context, text, destination)
+            map_session_manager.clear_session(user_id)
+            
+        elif action == "directions" and waiting_for == "route":
+            # 处理直接路线规划 (起点 到 终点格式)
+            await _parse_and_execute_directions(update, context, text)
+            map_session_manager.clear_session(user_id)
+            
+        elif action == "geocoding" and waiting_for == "address":
+            # 处理地理编码
+            await _execute_geocoding(update, context, text)
+            map_session_manager.clear_session(user_id)
+            
+        elif action == "reverse_geocoding" and waiting_for == "coordinates":
+            # 处理逆地理编码
+            await _execute_reverse_geocoding(update, context, text)
+            map_session_manager.clear_session(user_id)
+            
+    except Exception as e:
+        logger.error(f"处理地图文本输入失败: {e}")
+        await send_error(context, update.message.chat_id, f"处理失败: {str(e)}")
+        map_session_manager.clear_session(user_id)
+
+async def _execute_route_planning(update: Update, context: ContextTypes.DEFAULT_TYPE, origin: str, destination: str) -> None:
+    """执行路线规划"""
+    user_locale = update.effective_user.language_code if update.effective_user else None
+    language = detect_user_language(f"{origin} {destination}", user_locale)
+    
+    loading_message = f"🛣️ 正在规划路线: {origin} → {destination}... ⏳"
+    
+    message = await context.bot.send_message(
+        chat_id=update.message.chat_id,
+        text=foldable_text_v2(loading_message),
+        parse_mode="MarkdownV2"
+    )
+    
+    try:
+        service_type = "amap" if language == "zh" else "google_maps"
+        
+        # 使用缓存服务获取路线
+        directions_data = await map_cache_service.get_directions_with_cache(origin, destination, "driving", language)
+        
+        if directions_data:
+            result_text = format_directions(directions_data, service_type)
+            
+            keyboard = [
+                [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await message.edit_text(
+                text=foldable_text_with_markdown_v2(result_text),
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup
+            )
+        else:
+            error_msg = f"❌ 无法规划路线: {origin} → {destination}"
+            keyboard = [
+                [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await message.edit_text(
+                text=error_msg,
+                reply_markup=reply_markup
+            )
+            await _schedule_auto_delete(context, message.chat_id, message.message_id, 10)
+            
+    except Exception as e:
+        logger.error(f"路线规划失败: {e}")
+        error_msg = f"❌ 路线规划失败: {str(e)}"
+        keyboard = [
+            [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await message.edit_text(
+            text=error_msg,
+            reply_markup=reply_markup
+        )
+        await _schedule_auto_delete(context, message.chat_id, message.message_id, 10)
+
+async def _parse_and_execute_directions(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
+    """解析并执行路线规划 (起点 到 终点格式)"""
+    # 解析 "起点 到 终点" 格式
+    if " 到 " in text:
+        parts = text.split(" 到 ", 1)
+    elif " to " in text.lower():
+        parts = text.lower().split(" to ", 1)
+    else:
+        await send_error(context, update.message.chat_id, "格式错误，请使用: 起点 到 终点")
+        return
+    
+    if len(parts) != 2:
+        await send_error(context, update.message.chat_id, "格式错误，请使用: 起点 到 终点")
+        return
+    
+    origin = parts[0].strip()
+    destination = parts[1].strip()
+    
+    if not origin or not destination:
+        await send_error(context, update.message.chat_id, "起点和终点不能为空")
+        return
+    
+    await _execute_route_planning(update, context, origin, destination)
+
+async def _execute_geocoding(update: Update, context: ContextTypes.DEFAULT_TYPE, address: str) -> None:
+    """执行地理编码"""
+    user_locale = update.effective_user.language_code if update.effective_user else None
+    language = detect_user_language(address, user_locale)
+    
+    loading_message = f"🗺️ 正在转换地址: {address}... ⏳"
+    
+    message = await context.bot.send_message(
+        chat_id=update.message.chat_id,
+        text=foldable_text_v2(loading_message),
+        parse_mode="MarkdownV2"
+    )
+    
+    try:
+        service_type = "amap" if language == "zh" else "google_maps"
+        
+        # 使用缓存服务地理编码
+        geocode_data = await map_cache_service.geocode_with_cache(address, language)
+        
+        if geocode_data:
+            result_text = format_geocoding_result(geocode_data, service_type)
+            
+            keyboard = [
+                [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await message.edit_text(
+                text=foldable_text_with_markdown_v2(result_text),
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup
+            )
+        else:
+            error_msg = f"❌ 无法找到地址: {address}"
+            keyboard = [
+                [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await message.edit_text(
+                text=error_msg,
+                reply_markup=reply_markup
+            )
+            await _schedule_auto_delete(context, message.chat_id, message.message_id, 10)
+            
+    except Exception as e:
+        logger.error(f"地理编码失败: {e}")
+        error_msg = f"❌ 地理编码失败: {str(e)}"
+        keyboard = [
+            [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await message.edit_text(
+            text=error_msg,
+            reply_markup=reply_markup
+        )
+        await _schedule_auto_delete(context, message.chat_id, message.message_id, 10)
+
+async def _execute_reverse_geocoding(update: Update, context: ContextTypes.DEFAULT_TYPE, coordinates: str) -> None:
+    """执行逆地理编码"""
+    try:
+        # 解析坐标
+        coords = coordinates.replace(" ", "").split(",")
+        if len(coords) != 2:
+            await send_error(context, update.message.chat_id, "坐标格式错误，请使用: 纬度,经度")
+            return
+        
+        lat, lng = float(coords[0]), float(coords[1])
+        
+        user_locale = update.effective_user.language_code if update.effective_user else None
+        language = detect_user_language("", user_locale)
+        
+        loading_message = f"🌐 正在转换坐标: {lat}, {lng}... ⏳"
+        
+        message = await context.bot.send_message(
+            chat_id=update.message.chat_id,
+            text=foldable_text_v2(loading_message),
+            parse_mode="MarkdownV2"
+        )
+        
+        service_type = "amap" if language == "zh" else "google_maps"
+        
+        # 使用缓存服务逆地理编码
+        reverse_data = await map_cache_service.reverse_geocode_with_cache(lat, lng, language)
+        
+        if reverse_data:
+            result_text = format_reverse_geocoding_result(reverse_data, service_type, lat, lng)
+            
+            keyboard = [
+                [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await message.edit_text(
+                text=foldable_text_with_markdown_v2(result_text),
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup
+            )
+        else:
+            error_msg = f"❌ 无法转换坐标: {lat}, {lng}"
+            keyboard = [
+                [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await message.edit_text(
+                text=error_msg,
+                reply_markup=reply_markup
+            )
+            await _schedule_auto_delete(context, message.chat_id, message.message_id, 10)
+            
+    except ValueError:
+        await send_error(context, update.message.chat_id, "坐标格式错误，请输入有效的数字")
+    except Exception as e:
+        logger.error(f"逆地理编码失败: {e}")
+        await send_error(context, update.message.chat_id, f"逆地理编码失败: {str(e)}")
+
+def format_geocoding_result(geocode_data: Dict, service_type: str) -> str:
+    """格式化地理编码结果"""
+    address = escape_markdown(geocode_data.get('address', ''), version=2)
+    lat = geocode_data.get('lat')
+    lng = geocode_data.get('lng')
+    
+    result = f"🗺️ *地理编码结果*\n\n"
+    result += f"📮 地址: {address}\n"
+    result += f"🌐 坐标: `{lat:.6f}, {lng:.6f}`\n"
+    
+    # 添加地区信息
+    if 'province' in geocode_data:
+        province = escape_markdown(str(geocode_data['province']), version=2)
+        result += f"🏛️ 省份: {province}\n"
+    if 'city' in geocode_data:
+        city = escape_markdown(str(geocode_data['city']), version=2)
+        result += f"🏙️ 城市: {city}\n"
+    if 'district' in geocode_data:
+        district = escape_markdown(str(geocode_data['district']), version=2)
+        result += f"🏙️ 区县: {district}\n"
+    
+    service_name = "Google Maps" if service_type == "google_maps" else "高德地图"
+    result += f"\n_数据来源: {service_name}_"
+    result += f"\n_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
+    
+    return result
+
+def format_reverse_geocoding_result(reverse_data: Dict, service_type: str, lat: float, lng: float) -> str:
+    """格式化逆地理编码结果"""
+    address = escape_markdown(reverse_data.get('address', ''), version=2)
+    
+    result = f"🌐 *逆地理编码结果*\n\n"
+    result += f"📍 坐标: `{lat:.6f}, {lng:.6f}`\n"
+    result += f"📮 地址: {address}\n"
+    
+    # 添加地区信息
+    if 'province' in reverse_data:
+        province = escape_markdown(str(reverse_data['province']), version=2)
+        result += f"🏛️ 省份: {province}\n"
+    if 'city' in reverse_data:
+        city = escape_markdown(str(reverse_data['city']), version=2)
+        result += f"🏙️ 城市: {city}\n"
+    if 'district' in reverse_data:
+        district = escape_markdown(str(reverse_data['district']), version=2)
+        result += f"🏙️ 区县: {district}\n"
+    
+    service_name = "Google Maps" if service_type == "google_maps" else "高德地图"
+    result += f"\n_数据来源: {service_name}_"
+    result += f"\n_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
+    
+    return result
+
 async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理地图功能的回调查询"""
     query = update.callback_query
@@ -658,10 +1036,17 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     data = query.data
     
     if data == "map_close":
+        # 清理用户会话
+        user_id = update.effective_user.id
+        map_session_manager.clear_session(user_id)
         await query.delete_message()
         return
     
     elif data == "map_main_menu":
+        # 清理用户会话并返回主菜单
+        user_id = update.effective_user.id
+        map_session_manager.clear_session(user_id)
+        
         # 返回主菜单
         keyboard = [
             [
@@ -705,6 +1090,14 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         )
     
     elif data == "map_search":
+        user_id = update.effective_user.id
+        
+        # 设置会话状态
+        map_session_manager.set_session(user_id, {
+            "action": "location_search",
+            "waiting_for": "location"
+        })
+        
         # 位置搜索指引
         await query.edit_message_text(
             text="🔍 请输入要搜索的位置名称:\n\n例如:\n• 北京天安门\n• Eiffel Tower\n• 上海外滩\n• Times Square",
@@ -803,6 +1196,15 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     
     elif data.startswith("map_route_to:"):
         destination = data.split(":", 1)[1]
+        user_id = update.effective_user.id
+        
+        # 设置会话状态
+        map_session_manager.set_session(user_id, {
+            "action": "route_planning",
+            "destination": destination,
+            "waiting_for": "origin"
+        })
+        
         await query.edit_message_text(
             text=f"🛣️ 路线规划到: {destination}\n\n请输入起点地址或发送位置信息",
             reply_markup=InlineKeyboardMarkup([
@@ -829,6 +1231,14 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         )
     
     elif data == "map_geo_forward":
+        user_id = update.effective_user.id
+        
+        # 设置会话状态
+        map_session_manager.set_session(user_id, {
+            "action": "geocoding",
+            "waiting_for": "address"
+        })
+        
         await query.edit_message_text(
             text="📮 请输入要转换的地址:\n\n例如: 北京市天安门广场",
             reply_markup=InlineKeyboardMarkup([
@@ -837,6 +1247,14 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         )
     
     elif data == "map_geo_reverse":
+        user_id = update.effective_user.id
+        
+        # 设置会话状态
+        map_session_manager.set_session(user_id, {
+            "action": "reverse_geocoding",
+            "waiting_for": "coordinates"
+        })
+        
         await query.edit_message_text(
             text="🌐 请输入坐标 (格式: 纬度,经度):\n\n例如: 39.9042,116.4074",
             reply_markup=InlineKeyboardMarkup([
@@ -845,6 +1263,14 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         )
     
     elif data == "map_directions":
+        user_id = update.effective_user.id
+        
+        # 设置会话状态
+        map_session_manager.set_session(user_id, {
+            "action": "directions",
+            "waiting_for": "route"
+        })
+        
         await query.edit_message_text(
             text="🛣️ 路线规划:\n\n请提供起点和终点信息\n格式: 起点 到 终点\n\n例如: 北京西站 到 天安门",
             reply_markup=InlineKeyboardMarkup([
@@ -866,3 +1292,6 @@ command_factory.register_command(
 
 # 注册回调处理器
 command_factory.register_callback(r"^map_", map_callback_handler, permission=Permission.USER, description="地图服务回调")
+
+# 注册文本消息处理器
+command_factory.register_text_handler(map_text_handler, permission=Permission.USER, description="地图服务文本输入处理")
