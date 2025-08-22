@@ -622,6 +622,8 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 - **JustWatch API:** For streaming platform rankings, charts, and platform availability data
 - **HeFeng Weather API:** For weather forecast data
 - **Steam API:** For game pricing information
+- **Google Maps API:** For location search, nearby places, route planning, and geocoding services (English users)
+- **Amap (高德地图) API:** For location search, nearby places, route planning, and geocoding services (Chinese users)
 - **IP-API.com:** For IP geolocation and actual server location data (free service)
 - **Yahoo Finance API:** For real-time stock prices, market data, rankings, analyst recommendations, and financial statements
 - **Various streaming service APIs:** For subscription pricing
