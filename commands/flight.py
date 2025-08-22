@@ -624,11 +624,16 @@ async def create_booking_telegraph_page(all_flights: List[Dict], search_params: 
         if price:
             content += f"   价格: ${price}\n"
         
-        # 预订信息 - 只显示基本链接，避免过度复杂化
-        booking_token = flight.get('booking_token')
-        if booking_token:
-            booking_url = f"https://www.google.com/flights?booking_token={booking_token}"
-            content += f"   预订链接: {booking_url}\n"
+        # 预订信息 - 提供实用的预订建议
+        flights_info = flight.get('flights', [])
+        if flights_info:
+            airline = flights_info[0].get('airline', '')
+            if airline:
+                content += f"   预订建议: 访问 {airline} 官网预订\n"
+            else:
+                content += f"   预订建议: 访问航空公司官网预订\n"
+        else:
+            content += f"   预订建议: 访问航空公司官网预订\n"
         
         # 中转信息
         layovers = flight.get('layovers', [])
@@ -1371,9 +1376,12 @@ async def _show_booking_options(query: CallbackQuery, context: ContextTypes.DEFA
                                 
                                 if booking_url_from_api and 'google.com/travel/clk/' in booking_url_from_api:
                                     # Google Flights的redirect URL需要POST数据，对用户不友好
-                                    # 改为使用booking_token构建可用的Google Flights链接
-                                    booking_url = f"https://www.google.com/flights?booking_token={booking_token}"
-                                    result_text += f"   🔗 [通过Google预订]({booking_url})\n"
+                                    # 显示预订商信息并提供搜索建议
+                                    book_with = together_option.get('book_with', '')
+                                    if book_with:
+                                        result_text += f"   💡 建议直接访问 *{book_with}* 官网预订\n"
+                                    else:
+                                        result_text += f"   💡 建议访问航空公司官网预订\n"
                                 elif booking_url_from_api and 'google.com' not in booking_url_from_api:
                                     # 如果是航空公司官网链接，直接使用
                                     result_text += f"   🔗 [立即预订]({booking_url_from_api})\n"
@@ -1381,19 +1389,16 @@ async def _show_booking_options(query: CallbackQuery, context: ContextTypes.DEFA
                                     phone = together_option['booking_phone']
                                     result_text += f"   📞 预订电话: {phone}\n"
                                 else:
-                                    # 备用方案：使用booking_token直接构建链接
-                                    booking_url = f"https://www.google.com/flights?booking_token={booking_token}"
-                                    result_text += f"   🔗 [查看预订选项]({booking_url})\n"
+                                    # 备用方案：提供建议
+                                    result_text += f"   💡 建议访问航空公司官网预订\n"
                             else:
-                                # 如果获取详细预订选项失败，使用booking_token构建链接
-                                booking_url = f"https://www.google.com/flights?booking_token={booking_token}"
-                                result_text += f"   🔗 [查看预订选项]({booking_url})\n"
+                                # 如果获取详细预订选项失败，提供建议
+                                result_text += f"   💡 建议访问航空公司官网预订\n"
                                 
                         except Exception as e:
                             logger.warning(f"获取预订选项失败: {e}")
-                            # 备用方案：使用booking_token构建链接
-                            booking_url = f"https://www.google.com/flights?booking_token={booking_token}"
-                            result_text += f"   🔗 [查看预订选项]({booking_url})\n"
+                            # 备用方案：提供建议
+                            result_text += f"   💡 建议访问航空公司官网预订\n"
                     else:
                         # 备用方案：使用Google Flights通用搜索链接
                         google_flights_url = f"https://www.google.com/travel/flights?q=flights%20from%20{departure_id}%20to%20{arrival_id}"
