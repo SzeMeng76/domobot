@@ -665,6 +665,59 @@ async def create_telegraph_page(title: str, content: str) -> Optional[str]:
         logger.error(f"创建Telegraph页面失败: {e}")
         return None
 
+async def create_flight_search_telegraph_page(all_flights: List[Dict], search_params: Dict) -> str:
+    """将航班搜索结果格式化为Telegraph友好的格式 - 只显示航班信息，不含预订信息"""
+    departure_id = search_params.get('departure_id', '')
+    arrival_id = search_params.get('arrival_id', '')
+    outbound_date = search_params.get('outbound_date', '')
+    return_date = search_params.get('return_date', '')
+    
+    trip_type = "往返" if return_date else "单程"
+    
+    content = f"""航班搜索结果
+
+📍 航线: {departure_id} → {arrival_id}
+📅 出发: {outbound_date}"""
+    
+    if return_date:
+        content += f"\n📅 返回: {return_date}"
+    
+    content += f"\n🎫 类型: {trip_type}\n\n"
+    
+    content += f"✈️ 找到 {len(all_flights)} 个航班选项:\n\n"
+    
+    # 显示所有航班 - 使用format_flight_info的完整逻辑，纯文本格式
+    for i, flight in enumerate(all_flights, 1):
+        content += f"{i}. "
+        
+        # 使用format_flight_info的完整逻辑，但转换为纯文本格式
+        flight_info = format_flight_info(flight)
+        # 移除markdown格式并添加适当的缩进
+        flight_lines = flight_info.split('\n')
+        for j, line in enumerate(flight_lines):
+            if j == 0:  # 第一行不需要额外缩进
+                content += line + "\n"
+            elif line.strip():  # 非空行添加缩进
+                content += f"   {line}\n"
+            else:
+                content += "\n"
+        
+        content += "\n"
+    
+    content += f"""
+
+查看选项:
+• 使用 📊 价格分析 按钮查看价格趋势
+• 使用 🎫 预订选项 按钮获取预订信息
+• 比较不同航班的特性和价格
+
+---
+数据来源: Google Flights via SerpAPI
+生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+来源: MengBot 航班服务"""
+    
+    return content
+
 async def create_booking_telegraph_page(all_flights: List[Dict], search_params: Dict) -> str:
     """将航班预订选项格式化为Telegraph友好的格式 - 与主消息完全一致，包含所有预订信息"""
     departure_id = search_params.get('departure_id', '')
@@ -1030,7 +1083,7 @@ async def _execute_flight_search(update: Update, context: ContextTypes.DEFAULT_T
             if len(all_flights) > 5:
                 # 创建Telegraph页面显示完整航班列表
                 search_title = f"航班搜索: {departure_id} → {arrival_id}"
-                telegraph_content = await create_booking_telegraph_page(all_flights, search_params)
+                telegraph_content = await create_flight_search_telegraph_page(all_flights, search_params)
                 telegraph_url = await create_telegraph_page(search_title, telegraph_content)
                 
                 if telegraph_url:
