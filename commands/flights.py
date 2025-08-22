@@ -135,22 +135,6 @@ class FlightOption:
     booking_options: List[Dict]
     departure_token: Optional[str] = None
 
-@dataclass
-class AirportResult:
-    """机场API结果"""
-    id: str
-    name: str
-    city: str
-    country: str
-    country_code: str
-    image: str = ""
-    
-@dataclass
-class AirportsResponse:
-    """机场API响应"""
-    departure_airports: List[AirportResult]
-    arrival_airports: List[AirportResult]
-
 async def _schedule_auto_delete(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, delay: int):
     """调度自动删除消息"""
     try:
@@ -342,89 +326,6 @@ class AdvancedFlightService:
             logger.error(f"预订选项获取失败: {e}")
             return None
     
-    async def get_airports_results(self, departure_id: str, arrival_id: str, outbound_date: str, client, language: str = "en") -> Optional[AirportsResponse]:
-        """获取机场API结果"""
-        try:
-            search_params = {
-                "engine": "google_flights",
-                "api_key": self.api_key,
-                "departure_id": departure_id,
-                "arrival_id": arrival_id,
-                "outbound_date": outbound_date,
-                "type": "2",  # 单程
-                "hl": "en",  # 统一使用英文
-                "currency": "CNY" if language == "zh" else "USD"
-            }
-            
-            logger.info(f"发送机场API请求: {search_params}")
-            
-            response = await client.get(SERPAPI_BASE_URL, params=search_params)
-            
-            logger.info(f"机场API响应状态: {response.status_code}")
-            
-            if response.status_code == 200:
-                data = response.json()
-                if "error" in data:
-                    logger.error(f"机场API错误: {data['error']}")
-                    return None
-                
-                # 解析机场数据
-                airports_response = self._parse_airports_response(data)
-                return airports_response
-            else:
-                error_text = response.text if hasattr(response, 'text') else 'Unknown error'
-                logger.error(f"机场API请求失败: {response.status_code}, 响应: {error_text}")
-                return None
-                
-        except Exception as e:
-            logger.error(f"机场API请求失败: {e}")
-            return None
-    
-    def _parse_airports_response(self, data: Dict) -> Optional[AirportsResponse]:
-        """解析机场API响应"""
-        try:
-            departure_airports = []
-            arrival_airports = []
-            
-            # 根据实际API响应结构解析机场数据
-            if "airports" in data and data["airports"]:
-                airports_data = data["airports"][0]  # 取第一个元素
-                
-                # 解析出发机场
-                if "departure" in airports_data:
-                    for airport_info in airports_data["departure"]:
-                        airport = AirportResult(
-                            id=airport_info.get("airport", {}).get("id", ""),
-                            name=airport_info.get("airport", {}).get("name", ""),
-                            city=airport_info.get("city", ""),
-                            country=airport_info.get("country", ""),
-                            country_code=airport_info.get("country_code", ""),
-                            image=airport_info.get("image", "")
-                        )
-                        departure_airports.append(airport)
-                
-                # 解析到达机场
-                if "arrival" in airports_data:
-                    for airport_info in airports_data["arrival"]:
-                        airport = AirportResult(
-                            id=airport_info.get("airport", {}).get("id", ""),
-                            name=airport_info.get("airport", {}).get("name", ""),
-                            city=airport_info.get("city", ""),
-                            country=airport_info.get("country", ""),
-                            country_code=airport_info.get("country_code", ""),
-                            image=airport_info.get("image", "")
-                        )
-                        arrival_airports.append(airport)
-            
-            return AirportsResponse(
-                departure_airports=departure_airports,
-                arrival_airports=arrival_airports
-            )
-            
-        except Exception as e:
-            logger.error(f"解析机场响应失败: {e}")
-            return None
-    
     async def search_multi_city(self, segments: List[Dict], client, language: str = "en") -> Optional[Dict]:
         """多城市航班搜索"""
         try:
@@ -461,18 +362,44 @@ class AdvancedFlightCacheService:
     """高级航班缓存服务类"""
     
     async def search_flights_with_cache(self, params: FlightSearchParams, language: str) -> Optional[Dict]:
-        """带缓存的航班搜索 - 暂时禁用缓存用于测试"""
-        # 暂时禁用缓存，直接调用API
+        """带缓存的航班搜索"""
+        # 创建复杂缓存键
+        params_dict = {
+            "departure_id": params.departure_id,
+            "arrival_id": params.arrival_id,
+            "outbound_date": params.outbound_date,
+            "return_date": params.return_date,
+            "trip_type": params.trip_type.value,
+            "adults": params.adults,
+            "children": params.children,
+            "travel_class": params.travel_class.value,
+            "max_price": params.max_price,
+            "stops": params.stops,
+            "sort_by": params.sort_by.value
+        }
+        
+        cache_key = f"flight_search_{language}_{hashlib.md5(str(sorted(params_dict.items())).encode()).hexdigest()}"
+        
+        if cache_manager:
+            config = get_config()
+            cached_data = await cache_manager.load_cache(
+                cache_key,
+                max_age_seconds=config.flight_cache_duration,
+                subdirectory="flights"
+            )
+            if cached_data:
+                logger.info(f"使用缓存的航班搜索数据")
+                return cached_data
+        
         try:
             config = get_config()
             flight_service = AdvancedFlightService(config.serpapi_key)
             
             flight_data = await flight_service.search_flights(params, httpx_client, language)
             
-            # 暂时不缓存，用于测试
-            # if flight_data and cache_manager:
-            #     await cache_manager.save_cache(cache_key, flight_data, subdirectory="flights")
-            #     logger.info(f"已缓存航班搜索数据")
+            if flight_data and cache_manager:
+                await cache_manager.save_cache(cache_key, flight_data, subdirectory="flights")
+                logger.info(f"已缓存航班搜索数据")
             
             return flight_data
             
@@ -481,15 +408,39 @@ class AdvancedFlightCacheService:
             return None
     
     async def search_airports_with_cache(self, query: str, language: str) -> List[Airport]:
-        """带缓存的机场搜索 - 暂时禁用缓存用于测试"""
-        # 暂时禁用缓存，直接调用API
+        """带缓存的机场搜索"""
+        cache_key = f"airport_search_{language}_{query.lower()}"
+        
+        if cache_manager:
+            config = get_config()
+            cached_data = await cache_manager.load_cache(
+                cache_key,
+                max_age_seconds=86400 * 7,  # 机场数据相对稳定，缓存7天
+                subdirectory="airports"
+            )
+            if cached_data:
+                logger.info(f"使用缓存的机场数据")
+                return [Airport(**airport) for airport in cached_data]
+        
         try:
             config = get_config()
             flight_service = AdvancedFlightService(config.serpapi_key)
             
             airports = await flight_service.search_airports(query, httpx_client, language)
             
-            # 暂时不缓存，用于测试
+            if airports and cache_manager:
+                # 将Airport对象转为字典以便缓存
+                airports_dict = [{
+                    "code": airport.code,
+                    "name": airport.name,
+                    "city": airport.city,
+                    "country": airport.country,
+                    "country_code": airport.country_code,
+                    "timezone": airport.timezone
+                } for airport in airports]
+                await cache_manager.save_cache(cache_key, airports_dict, subdirectory="airports")
+                logger.info(f"已缓存机场数据")
+            
             return airports
             
         except Exception as e:
@@ -497,71 +448,38 @@ class AdvancedFlightCacheService:
             return []
     
     async def get_price_insights_with_cache(self, departure_id: str, arrival_id: str, language: str) -> Optional[Dict]:
-        """带缓存的价格洞察 - 暂时禁用缓存用于测试"""
-        # 暂时禁用缓存，直接调用API
+        """带缓存的价格洞察"""
+        cache_key = f"price_insights_{language}_{departure_id}_{arrival_id}"
+        
+        if cache_manager:
+            config = get_config()
+            cached_data = await cache_manager.load_cache(
+                cache_key,
+                max_age_seconds=3600,  # 价格数据1小时更新
+                subdirectory="price_insights"
+            )
+            if cached_data:
+                logger.info(f"使用缓存的价格洞察数据")
+                return cached_data
+        
         try:
             config = get_config()
             flight_service = AdvancedFlightService(config.serpapi_key)
             
             insights = await flight_service.get_price_insights(departure_id, arrival_id, httpx_client)
             
-            # 暂时不缓存，用于测试
+            if insights and cache_manager:
+                await cache_manager.save_cache(cache_key, insights, subdirectory="price_insights")
+                logger.info(f"已缓存价格洞察数据")
+            
             return insights
             
         except Exception as e:
             logger.error(f"价格洞察获取失败: {e}")
             return None
 
-    async def get_airports_results_with_cache(self, departure_id: str, arrival_id: str, outbound_date: str, language: str) -> Optional[AirportsResponse]:
-        """带缓存的机场API结果 - 暂时禁用缓存用于测试"""
-        # 暂时禁用缓存，直接调用API
-        try:
-            config = get_config()
-            flight_service = AdvancedFlightService(config.serpapi_key)
-            
-            airports_data = await flight_service.get_airports_results(departure_id, arrival_id, outbound_date, httpx_client, language)
-            
-            # 暂时不缓存，用于测试
-            return airports_data
-            
-        except Exception as e:
-            logger.error(f"机场API请求失败: {e}")
-            return None
-
 # 创建全局高级航班缓存服务实例
 advanced_flight_cache_service = AdvancedFlightCacheService()
-
-def format_airports_results(airports_response: AirportsResponse, departure_query: str, arrival_query: str) -> str:
-    """格式化机场API结果"""
-    if not airports_response:
-        return "❌ 未找到机场信息"
-    
-    result = f"✈️ **机场搜索结果**\\n\\n"
-    result += f"🔍 搜索: {departure_query} → {arrival_query}\\n\\n"
-    
-    # 出发机场
-    if airports_response.departure_airports:
-        result += "🛫 **出发机场:**\\n"
-        for i, airport in enumerate(airports_response.departure_airports[:5], 1):
-            result += f"`{i}.` **{airport.name}** ({airport.id})\\n"
-            result += f"     📍 {airport.city}, {airport.country}\\n"
-            if airport.country_code:
-                result += f"     🌍 {airport.country_code}\\n"
-            result += "\\n"
-    
-    # 到达机场
-    if airports_response.arrival_airports:
-        result += "🛬 **到达机场:**\\n"
-        for i, airport in enumerate(airports_response.arrival_airports[:5], 1):
-            result += f"`{i}.` **{airport.name}** ({airport.id})\\n"
-            result += f"     📍 {airport.city}, {airport.country}\\n"
-            if airport.country_code:
-                result += f"     🌍 {airport.country_code}\\n"
-            result += "\\n"
-    
-    result += f"_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
-    
-    return result
 
 def format_travel_class(travel_class: TravelClass) -> str:
     """格式化舱位类型"""
@@ -745,24 +663,14 @@ def format_flight_results_advanced(flights_data: Dict, search_params: FlightSear
     if best_flights:
         result += "🌟 **推荐航班:**\n\n"
         for i, flight in enumerate(best_flights[:2], 1):
-            # 检查flight是否是字典类型
-            if isinstance(flight, dict):
-                result += f"`{i}.` {format_complete_flight(flight, False)}\n"
-            else:
-                logger.warning(f"意外的航班数据类型: {type(flight)}")
-                result += f"`{i}.` 航班数据格式错误\n"
+            result += f"`{i}.` {format_complete_flight(flight, False)}\n"
     
     # 其他选项
     if other_flights and len(best_flights) < 3:
         result += "🔍 **其他选项:**\n\n"
         remaining_slots = 3 - len(best_flights)
         for i, flight in enumerate(other_flights[:remaining_slots], len(best_flights) + 1):
-            # 检查flight是否是字典类型
-            if isinstance(flight, dict):
-                result += f"`{i}.` {format_complete_flight(flight, False)}\n"
-            else:
-                logger.warning(f"意外的航班数据类型: {type(flight)}")
-                result += f"`{i}.` 航班数据格式错误\n"
+            result += f"`{i}.` {format_complete_flight(flight, False)}\n"
     
     # 价格洞察
     if price_insights:
@@ -937,7 +845,7 @@ async def advanced_flight_command(update: Update, context: ContextTypes.DEFAULT_
         ],
         [
             InlineKeyboardButton("🌍 多城市", callback_data="flight_multicity"),
-            InlineKeyboardButton("🏢 机场API", callback_data="flight_airports_results")
+            InlineKeyboardButton("⚙️ 高级过滤", callback_data="flight_advanced_filter")
         ],
         [
             InlineKeyboardButton("📊 价格洞察", callback_data="flight_price_insights"),
@@ -957,9 +865,9 @@ async def advanced_flight_command(update: Update, context: ContextTypes.DEFAULT_
 • **机场查询**: 全球机场代码和信息
 • **单程/往返**: 灵活的行程选择
 • **多城市**: 复杂行程规划
-• **机场API**: 详细机场信息和图片
+• **高级过滤**: 价格/舱位/航空公司筛选
 
-📊 **价格智能:**
+📊 **价格晾能:**
 • **实时价格**: 多平台价格比较
 • **价格洞察**: 历史价格趋势分析
 • **价格追踪**: 自动监控和提醒
@@ -1262,11 +1170,6 @@ async def advanced_flight_text_handler(update: Update, context: ContextTypes.DEF
             await _parse_and_execute_multicity_search(update, context, text)
             flight_session_manager.remove_session(user_id)
             
-        elif action == "airports_results" and waiting_for == "route_date":
-            # 处理机场API结果查询
-            await _parse_and_execute_airports_results(update, context, text)
-            flight_session_manager.remove_session(user_id)
-            
     except Exception as e:
         logger.error(f"处理航班文本输入失败: {e}")
         await send_error(context, update.message.chat_id, f"处理失败: {str(e)}")
@@ -1285,28 +1188,9 @@ async def _parse_smart_search(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
     
     # 基本解析
-    departure_input = parts[0]
-    arrival_input = parts[1]
+    departure = parts[0].upper()
+    arrival = parts[1].upper() 
     outbound_date = parts[2]
-    
-    # 智能转换为机场代码
-    departure = departure_input.upper()
-    arrival = arrival_input.upper()
-    
-    # 如果不是3位代码，尝试从机场数据库搜索
-    if len(departure_input) != 3:
-        from utils.airport_data import search_airports
-        dep_airports = search_airports(departure_input)
-        if dep_airports:
-            departure = dep_airports[0].code
-            logger.info(f"智能转换: {departure_input} -> {departure}")
-    
-    if len(arrival_input) != 3:
-        from utils.airport_data import search_airports
-        arr_airports = search_airports(arrival_input)
-        if arr_airports:
-            arrival = arr_airports[0].code
-            logger.info(f"智能转换: {arrival_input} -> {arrival}")
     
     # 高级解析
     return_date = None
@@ -1450,110 +1334,6 @@ async def _parse_and_execute_multicity_search(update: Update, context: ContextTy
         logger.error(f"多城市搜索失败: {e}")
         await send_error(context, update.message.chat_id, f"多城市搜索失败: {str(e)}")
 
-async def _parse_and_execute_airports_results(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
-    """解析并执行机场API结果查询"""
-    parts = text.strip().split()
-    if len(parts) < 3:
-        await send_error(context, update.message.chat_id, "格式错误，请使用: 出发机场 到达机场 日期\n例如: PEK LAX 2025-12-25")
-        return
-    
-    departure_input = parts[0]
-    arrival_input = parts[1]
-    outbound_date = parts[2]
-    
-    # 检测用户语言
-    user_locale = update.effective_user.language_code if update.effective_user else None
-    language = detect_user_language(text, user_locale)
-    
-    loading_message = f"🏢 正在查询机场API结果: {departure_input} → {arrival_input} ({outbound_date})... ⏳"
-    
-    message = await context.bot.send_message(
-        chat_id=update.message.chat_id,
-        text=foldable_text_v2(loading_message),
-        parse_mode="MarkdownV2"
-    )
-    
-    # 调度自动删除
-    config = get_config()
-    await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
-    
-    try:
-        # 智能转换输入为机场代码
-        departure_id = departure_input.upper()
-        arrival_id = arrival_input.upper()
-        
-        # 如果不是3位代码，尝试从机场数据库搜索
-        if len(departure_input) != 3:
-            from utils.airport_data import search_airports
-            dep_airports = search_airports(departure_input)
-            if dep_airports:
-                departure_id = dep_airports[0].code
-        
-        if len(arrival_input) != 3:
-            from utils.airport_data import search_airports
-            arr_airports = search_airports(arrival_input)
-            if arr_airports:
-                arrival_id = arr_airports[0].code
-        
-        # 验证日期格式和有效性
-        from datetime import datetime, date
-        try:
-            outbound_date_obj = datetime.strptime(outbound_date, "%Y-%m-%d").date()
-            if outbound_date_obj < date.today():
-                await message.edit_text("❌ 日期不能是过去的日期，请选择未来的日期")
-                await _schedule_auto_delete(context, message.chat_id, message.message_id, 10)
-                return
-        except ValueError:
-            await message.edit_text("❌ 日期格式错误，请使用 YYYY-MM-DD 格式")
-            await _schedule_auto_delete(context, message.chat_id, message.message_id, 10)
-            return
-        
-        # 使用缓存服务获取机场API结果
-        airports_results = await advanced_flight_cache_service.get_airports_results_with_cache(
-            departure_id, arrival_id, outbound_date, language
-        )
-        
-        if airports_results:
-            # 格式化并显示结果
-            result_text = format_airports_results(airports_results, departure_input, arrival_input)
-            
-            keyboard = [
-                [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await message.edit_text(
-                text=foldable_text_with_markdown_v2(result_text),
-                parse_mode="MarkdownV2",
-                reply_markup=reply_markup
-            )
-        else:
-            error_msg = f"❌ 未找到机场API结果: {departure_input} → {arrival_input} ({outbound_date})"
-            keyboard = [
-                [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await message.edit_text(
-                text=error_msg,
-                reply_markup=reply_markup
-            )
-            await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
-            
-    except Exception as e:
-        logger.error(f"机场API结果查询失败: {e}")
-        error_msg = f"❌ 查询失败: {str(e)}"
-        keyboard = [
-            [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await message.edit_text(
-            text=error_msg,
-            reply_markup=reply_markup
-        )
-        await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
-
 async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理航班功能的回调查询"""
     query = update.callback_query
@@ -1692,7 +1472,7 @@ async def advanced_flight_callback_handler(update: Update, context: ContextTypes
             ],
             [
                 InlineKeyboardButton("🌍 多城市", callback_data="flight_multicity"),
-                InlineKeyboardButton("🏢 机场API", callback_data="flight_airports_results")
+                InlineKeyboardButton("⚙️ 高级过滤", callback_data="flight_advanced_filter")
             ],
             [
                 InlineKeyboardButton("📊 价格洞察", callback_data="flight_price_insights"),
@@ -1712,7 +1492,7 @@ async def advanced_flight_callback_handler(update: Update, context: ContextTypes
 • **机场查询**: 全球机场代码和信息
 • **单程/往返**: 灵活的行程选择
 • **多城市**: 复杂行程规划
-• **机场API**: 详细机场信息和图片
+• **高级过滤**: 价格/舱位/航空公司筛选
 
 📊 **价格智能:**
 • **实时价格**: 多平台价格比较
@@ -1757,21 +1537,6 @@ async def advanced_flight_callback_handler(update: Update, context: ContextTypes
         
         await query.edit_message_text(
             text="🔍 **机场查询**\\n\\n请输入机场代码、城市名或机场名称：\\n\\n**示例:**\\n• `PEK` - 机场代码\\n• `北京` - 城市名\\n• `首都机场` - 机场名\\n• `Beijing` - 英文名称",
-            parse_mode="MarkdownV2",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")
-            ]])
-        )
-    
-    elif data == "flight_airports_results":
-        user_id = update.effective_user.id
-        flight_session_manager.set_session(user_id, {
-            "action": "airports_results",
-            "waiting_for": "route_date"
-        })
-        
-        await query.edit_message_text(
-            text="🏢 **机场API结果查询**\\n\\n请输入路线和日期信息：\\n格式: 出发机场 到达机场 日期\\n\\n例如:\\n• `PEK LAX 2025-12-25`\\n• `北京 洛杉矶 2025-12-25`\\n\\n将显示该路线的详细机场信息",
             parse_mode="MarkdownV2",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")
