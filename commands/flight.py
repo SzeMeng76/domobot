@@ -1022,6 +1022,24 @@ async def _execute_flight_search(update: Update, context: ContextTypes.DEFAULT_T
             # 找到航班信息
             result_text = format_flight_results(flight_data, search_params)
             
+            # 检查是否需要Telegraph支持
+            best_flights = flight_data.get('best_flights', [])
+            other_flights = flight_data.get('other_flights', [])
+            all_flights = best_flights + other_flights
+            
+            if len(all_flights) > 5:
+                # 创建Telegraph页面显示完整航班列表
+                search_title = f"航班搜索: {departure_id} → {arrival_id}"
+                telegraph_content = await create_booking_telegraph_page(all_flights, search_params)
+                telegraph_url = await create_telegraph_page(search_title, telegraph_content)
+                
+                if telegraph_url:
+                    # 替换结果文本中的提示为Telegraph链接
+                    result_text = result_text.replace(
+                        f"📋 *完整航班列表*: 点击查看全部 {len(all_flights)} 个选项\n💡 使用下方 **🎫 预订选项** 按钮查看完整列表",
+                        f"📋 *完整航班列表*: [查看全部 {len(all_flights)} 个选项]({telegraph_url})"
+                    )
+            
             # 创建操作按钮 - 与map.py相同的按钮生成模式
             search_data = f"{departure_id}:{arrival_id}:{outbound_date}:{return_date or ''}:{language}"
             prices_short_id = get_short_flight_id(f"price_insights:{search_data}")
