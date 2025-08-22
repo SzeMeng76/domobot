@@ -761,6 +761,8 @@ def format_flight_segment(segment: Dict, is_detailed: bool = False) -> str:
 
 def format_complete_flight(flight_data: Dict, include_booking: bool = True) -> str:
     """格式化完整航班信息"""
+    # SerpAPI 返回的航班数据结构：flight_data 本身就包含航班信息
+    # flights 字段包含具体的航段信息
     flights = flight_data.get('flights', [])
     if not flights:
         return "无航班信息"
@@ -774,11 +776,11 @@ def format_complete_flight(flight_data: Dict, include_booking: bool = True) -> s
     
     result = ""
     
-    # 航班段信息
-    for i, flight in enumerate(flights):
+    # 航班段信息 - 每个flight都是一个航段字典
+    for i, flight_segment in enumerate(flights):
         if i > 0:
             result += "\n┌" + "─" * 20 + "┐\n"
-        result += format_flight_segment(flight, True) + "\n"
+        result += format_flight_segment(flight_segment, True) + "\n"
     
     result += "\n" + "─" * 25 + "\n"
     
