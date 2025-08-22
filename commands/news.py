@@ -411,33 +411,43 @@ def smart_truncate_summary(text: str, max_length: int = 200) -> str:
     # 如果文本长度超过限制，尝试在句子结束处截断
     truncated = text[:max_length]
     
-    # 寻找最后的句子结束标点
+    # 寻找最后的句子结束标点（扩大搜索范围）
     sentence_ends = ['。', '！', '？', '.', '!', '?']
     best_cut = -1
     
-    for i in range(len(truncated) - 1, max(0, len(truncated) - 50), -1):
+    # 从最大长度向前搜索，找到合适的句子结束点
+    for i in range(len(truncated) - 1, max(0, len(truncated) - 100), -1):
         if truncated[i] in sentence_ends:
-            # 确保不是省略号的一部分
-            if i < len(truncated) - 1 and truncated[i + 1] not in ['.', '。']:
-                best_cut = i + 1
-                break
+            # 确保不是省略号或网址的一部分
+            if i < len(truncated) - 1 and truncated[i + 1] not in ['.', '。'] and i > 0:
+                # 检查前面不是数字（避免截断版本号等）
+                if not (truncated[i-1].isdigit() and truncated[i] == '.'):
+                    best_cut = i + 1
+                    break
     
-    # 如果找到了合适的截断点
-    if best_cut > max_length * 0.7:  # 确保截断点不要太前
+    # 如果找到了合适的截断点且不会截断太多内容
+    if best_cut > 0 and best_cut > max_length * 0.6:
         return truncated[:best_cut]
     
-    # 否则尝试在空格或逗号处截断
-    space_cuts = [' ', '，', ',', '、']
-    for i in range(len(truncated) - 1, max(0, len(truncated) - 30), -1):
+    # 否则尝试在空格、逗号、中文标点处截断
+    space_cuts = [' ', '，', ',', '、', '；', ';', '：', ':']
+    for i in range(len(truncated) - 1, max(0, len(truncated) - 50), -1):
         if truncated[i] in space_cuts:
-            best_cut = i
-            break
+            # 确保截断后不会太短
+            if i > max_length * 0.7:
+                best_cut = i
+                break
     
-    if best_cut > max_length * 0.8:
+    if best_cut > 0:
         return truncated[:best_cut] + "..."
     
-    # 最后只能硬截断
-    return truncated + "..."
+    # 最后尝试在中文字符边界截断（避免截断英文单词）
+    for i in range(len(truncated) - 1, max(0, len(truncated) - 20), -1):
+        if truncated[i] == ' ' and i > max_length * 0.85:
+            return truncated[:i] + "..."
+    
+    # 最后只能硬截断，但添加省略号
+    return truncated.rstrip() + "..."
 
 
 def format_news_message(source: str, news_items: List[Dict], max_length: int = 4000) -> str:
@@ -475,13 +485,13 @@ def format_news_message(source: str, news_items: List[Dict], max_length: int = 4
             
         # 如果有摘要且是 Verge 源，添加摘要显示
         if summary and source.lower() == 'verge':
-            # 使用智能截断，增加长度限制到250字符以显示更多内容
-            display_summary = smart_truncate_summary(summary, 250)
-            # 如果摘要被截断了，添加"点击查看原文"提示
-            if len(summary) > 250:
-                news_line += f"\n   📝 {display_summary}\n   💡 点击标题链接查看完整内容"
-            else:
-                news_line += f"\n   📝 {display_summary}"
+            # 使用智能截断，限制到200字符以保持可读性
+            display_summary = smart_truncate_summary(summary, 200)
+            news_line += f"\n   📝 {display_summary}"
+            
+            # 如果摘要被截断了（通过检查是否以...结尾或原文比显示的长），添加"点击查看原文"提示
+            if len(summary) > 200 or display_summary.endswith('...'):
+                news_line += f"\n   💡 点击标题链接查看完整内容"
             
         if extra_info:
             # 格式化时间显示
