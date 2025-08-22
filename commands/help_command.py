@@ -189,17 +189,22 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 🌟 支持40+国家 | 自动CNY转换 | 中文地名 | 时区智能识别 | 新闻分类 | 1000+中文菜谱 | 随机表情包 | 多市场股票
 
-🔧 命令不显示? 试试 `/refresh` 刷新命令列表"""
+🔧 命令不显示? 试试 `/refresh` 刷新命令列表
+
+🔒 *白名单专享功能*
+💱 汇率换算 | 🪙 加密货币 | 💳 BIN查询 | 🌦️ 天气预报 | 🎬 影视信息 | 🎮 Steam游戏 | 📱 应用&内购价格 | 🗺️ 地图服务
+
+📞 白名单功能暂不开放申请，敬请期待付费服务"""
     else:
         # 白名单用户 - 显示完整功能
         welcome_text = f"""👋 *欢迎 {user.first_name}! 多功能价格查询机器人*
 
 🎯 *全功能版本*
-💱 汇率 🪙 币价 💳 BIN 🌦️ 天气 🎬 影视 🎮 游戏 📺 流媒体 📱 应用 ⏰ 时间 📰 新闻 🍳 烹饪 🎭 表情包 📊 股票金融
+💱 汇率 🪙 币价 💳 BIN 🌦️ 天气 🎬 影视 🎮 游戏 📺 流媒体 📱 应用 ⏰ 时间 📰 新闻 🍳 烹饪 🎭 表情包 📊 股票金融 🗺️ 地图服务
 
 🚀 *快速开始*
 `/rate USD 100` `/crypto btc` `/tq 北京` `/movie_hot`
-`/steam 赛博朋克` `/nf` `/time 北京` `/whois google.com` `/dns github.com` `/news` `/recipe 红烧肉` `/meme 3` `/finance AAPL` `/help`
+`/steam 赛博朋克` `/nf` `/time 北京` `/whois google.com` `/dns github.com` `/news` `/recipe 红烧肉` `/meme 3` `/finance AAPL` `/map 天安门` `/help`
 
 🌟 40+国家 | CNY转换 | 智能缓存 | 表达式计算 | 时区转换 | 新闻聚合 | 1000+中文菜谱 | 股市数据"""
 
