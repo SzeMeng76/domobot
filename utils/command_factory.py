@@ -8,7 +8,7 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from telegram.ext import Application, CallbackQueryHandler, CommandHandler
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, filters
 
 from utils.error_handling import RetryConfig, with_error_handling, with_rate_limit, with_retry
 from utils.permissions import Permission, require_permission
@@ -23,6 +23,7 @@ class CommandFactory:
     def __init__(self):
         self.commands: dict[str, dict[str, Any]] = {}
         self.callbacks: dict[str, dict[str, Any]] = {}
+        self.text_handlers: list[dict[str, Any]] = []
 
     def register_command(
         self,
@@ -97,6 +98,52 @@ class CommandFactory:
 
         logger.info(f"注册回调: {pattern} (权限: {permission.name})")
 
+    def register_text_handler(
+        self,
+        handler: Callable,
+        permission: Permission = Permission.USER,
+        description: str = "",
+        use_retry: bool = True,
+        use_rate_limit: bool = True,
+        rate_limit_key: str | None = None,
+    ):
+        """
+        注册文本消息处理器
+
+        Args:
+            handler: 文本处理函数
+            permission: 所需权限等级
+            description: 描述
+            use_retry: 是否使用重试装饰器
+            use_rate_limit: 是否使用速率限制
+            rate_limit_key: 速率限制键名
+        """
+        decorated_handler = handler
+        if handler is not None:
+            # 应用错误处理装饰器
+            decorated_handler = with_error_handling(decorated_handler)
+
+            # 应用重试装饰器
+            if use_retry:
+                decorated_handler = with_retry(config=RetryConfig(max_retries=3))(decorated_handler)
+
+            # 应用速率限制装饰器
+            if use_rate_limit:
+                key = rate_limit_key or "text_handler"
+                decorated_handler = with_rate_limit(name=key)(decorated_handler)
+
+            # 应用权限检查装饰器
+            decorated_handler = require_permission(permission)(decorated_handler)
+
+        self.text_handlers.append({
+            "handler": decorated_handler,
+            "permission": permission,
+            "description": description,
+            "original_handler": handler,
+        })
+
+        logger.info(f"注册文本处理器: {description} (权限: {permission.name})")
+
     def setup_handlers(self, application: Application):
         """设置命令处理器到应用"""
         # 注册命令处理器
@@ -111,7 +158,13 @@ class CommandFactory:
                 application.add_handler(CallbackQueryHandler(info["handler"], pattern=pattern))
                 logger.debug(f"添加回调处理器: {pattern}")
 
-        logger.info(f"已注册 {len(self.commands)} 个命令和 {len(self.callbacks)} 个回调处理器")
+        # 注册文本消息处理器
+        for info in self.text_handlers:
+            if info["handler"] is not None:
+                application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, info["handler"]))
+                logger.debug(f"添加文本处理器: {info['description']}")
+
+        logger.info(f"已注册 {len(self.commands)} 个命令, {len(self.callbacks)} 个回调处理器和 {len(self.text_handlers)} 个文本处理器")
 
     def get_command_list(self, user_permission: Permission = Permission.USER) -> dict[str, str]:
         """
