@@ -87,6 +87,7 @@ class RedisCacheManager:
             "cooking": self.config.cooking_cache_duration,  # 7天，烹饪菜谱缓存
             "memes": self.config.memes_cache_duration,  # 10分钟，表情包缓存
             "finance": self.config.finance_cache_duration,  # 5分钟，金融数据缓存
+            "map": self.config.map_cache_duration,  # 30分钟，地图服务缓存
         }
 
         # 对于搜索结果特殊处理
@@ -99,6 +100,13 @@ class RedisCacheManager:
                 return self.config.finance_search_cache_duration
             elif "trending_" in key:
                 return self.config.finance_ranking_cache_duration
+        
+        if subdirectory == "map" and key:
+            if "geocode_" in key or "reverse_" in key:
+                return self.config.map_geocode_cache_duration
+            elif "directions_" in key:
+                return self.config.map_directions_cache_duration
+            # 默认使用map_cache_duration (搜索和附近服务)
 
         return ttl_mapping.get(subdirectory, self.config.default_cache_duration)
 
