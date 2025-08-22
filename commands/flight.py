@@ -160,24 +160,46 @@ class FlightServiceManager:
             logger.error(f"Flight search failed: {e}")
             return None
     
-    async def get_booking_options(self, booking_token: str, **kwargs) -> Optional[Dict]:
-        """获取预订选项"""
+    async def get_booking_options(self, booking_token: str, search_params: Dict, **kwargs) -> Optional[Dict]:
+        """获取预订选项 - 需要原始搜索参数"""
         if not self.is_available():
             return None
         
+        # 构建完整的参数，包括原始搜索参数
         params = {
             "engine": "google_flights",
             "booking_token": booking_token,
+            "departure_id": search_params.get('departure_id'),
+            "arrival_id": search_params.get('arrival_id'),
+            "outbound_date": search_params.get('outbound_date'),
             "api_key": self.serpapi_key,
             "hl": kwargs.get("language", "en"),
             "currency": kwargs.get("currency", "USD")
         }
         
+        # 添加返程日期和类型
+        if search_params.get('return_date'):
+            params["return_date"] = search_params['return_date']
+            params["type"] = "1"  # Round trip
+        else:
+            params["type"] = "2"  # One way
+        
+        # 添加其他可选参数
+        if "travel_class" in kwargs:
+            params["travel_class"] = kwargs["travel_class"]
+        if "adults" in kwargs:
+            params["adults"] = kwargs["adults"]
+        if "children" in kwargs:
+            params["children"] = kwargs["children"]
+        
         try:
             response = await httpx_client.get(SERPAPI_BASE_URL, params=params)
             if response.status_code == 200:
                 return response.json()
-            return None
+            else:
+                logger.error(f"SerpAPI booking request failed: {response.status_code}")
+                logger.error(f"Response: {response.text}")
+                return None
         except Exception as e:
             logger.error(f"Booking options request failed: {e}")
             return None
@@ -226,8 +248,8 @@ class FlightCacheService:
             logger.error(f"航班搜索失败: {e}")
             return None
     
-    async def get_booking_options_with_cache(self, booking_token: str, language: str = "en", **kwargs) -> Optional[Dict]:
-        """带缓存的预订选项获取"""
+    async def get_booking_options_with_cache(self, booking_token: str, search_params: Dict, language: str = "en", **kwargs) -> Optional[Dict]:
+        """带缓存的预订选项获取 - 需要原始搜索参数"""
         cache_key = f"flight_booking_{language}_{booking_token[:32]}"  # 使用token前32字符作为键
         
         if cache_manager:
@@ -245,8 +267,9 @@ class FlightCacheService:
             if not flight_service_manager:
                 return None
             
+            # 使用原始搜索参数+booking_token获取预订选项
             booking_data = await flight_service_manager.get_booking_options(
-                booking_token, language=language, **kwargs
+                booking_token, search_params=search_params, language=language, **kwargs
             )
             
             if booking_data and cache_manager:
@@ -1327,7 +1350,7 @@ async def _show_booking_options(query: CallbackQuery, context: ContextTypes.DEFA
                         try:
                             # 使用booking_token获取详细预订选项
                             booking_options = await flight_cache_service.get_booking_options_with_cache(
-                                booking_token, language=language
+                                booking_token, search_params, language=language
                             )
                             
                             if booking_options and booking_options.get('booking_options'):
