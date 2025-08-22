@@ -1015,15 +1015,21 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 
         elif full_data.startswith("booking_info:"):
             search_data = full_data.replace("booking_info:", "")
-            # 这里可以实现预订信息显示逻辑
-            await query.edit_message_text(
-                text="🎫 预订信息功能开发中...\n\n"
-                     "当前版本提供航班搜索和价格分析功能。\n"
-                     "预订功能将在后续版本中提供。",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
-                ])
-            )
+            parts = search_data.split(":")
+            if len(parts) >= 4:
+                departure_id, arrival_id, outbound_date = parts[0], parts[1], parts[2]
+                return_date = parts[3] if parts[3] else None
+                language = parts[4] if len(parts) > 4 else "en"
+                
+                # 显示预订信息
+                await _show_booking_options(query, context, departure_id, arrival_id, outbound_date, return_date, language)
+            else:
+                await query.edit_message_text(
+                    text="❌ 预订信息数据错误",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
+                    ])
+                )
 
 async def _show_price_insights(query: CallbackQuery, context: ContextTypes.DEFAULT_TYPE, 
                              departure_id: str, arrival_id: str, outbound_date: str, language: str) -> None:
@@ -1071,6 +1077,159 @@ async def _show_price_insights(query: CallbackQuery, context: ContextTypes.DEFAU
     except Exception as e:
         logger.error(f"显示价格洞察失败: {e}")
         error_msg = f"❌ 价格分析失败: {str(e)}"
+        keyboard = [
+            [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            text=error_msg,
+            reply_markup=reply_markup
+        )
+        config = get_config()
+        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+                                  getattr(config, 'auto_delete_delay', 600))
+
+async def _show_booking_options(query: CallbackQuery, context: ContextTypes.DEFAULT_TYPE, 
+                              departure_id: str, arrival_id: str, outbound_date: str, 
+                              return_date: str = None, language: str = "en") -> None:
+    """显示航班预订选项"""
+    trip_type = "往返" if return_date else "单程"
+    loading_message = f"🎫 正在获取预订选项 {departure_id} → {arrival_id} ({trip_type})... ⏳"
+    
+    await query.edit_message_text(
+        text=foldable_text_v2(loading_message),
+        parse_mode="MarkdownV2"
+    )
+    
+    try:
+        # 先获取航班搜索结果
+        search_params = {
+            'departure_id': departure_id,
+            'arrival_id': arrival_id,
+            'outbound_date': outbound_date,
+            'return_date': return_date
+        }
+        
+        flight_data = await flight_cache_service.search_flights_with_cache(
+            departure_id=departure_id,
+            arrival_id=arrival_id,
+            outbound_date=outbound_date,
+            return_date=return_date,
+            language=language,
+            currency="USD"
+        )
+        
+        if flight_data and (flight_data.get('best_flights') or flight_data.get('other_flights')):
+            result_text = f"🎫 *预订选项* ({departure_id} → {arrival_id})\n\n"
+            result_text += f"📅 出发: {outbound_date}"
+            if return_date:
+                result_text += f" | 返回: {return_date}"
+            result_text += f" ({trip_type})\n\n"
+            
+            # 获取可预订的航班选项
+            best_flights = flight_data.get('best_flights', [])
+            other_flights = flight_data.get('other_flights', [])
+            all_flights = best_flights + other_flights
+            
+            if all_flights:
+                result_text += "💺 *可预订航班:*\n\n"
+                
+                # 显示前3个航班的预订信息
+                for i, flight in enumerate(all_flights[:3], 1):
+                    result_text += f"`{i}.` "
+                    
+                    # 航班基本信息
+                    flights_info = flight.get('flights', [])
+                    if flights_info:
+                        segment = flights_info[0]
+                        airline = segment.get('airline', '未知')
+                        flight_number = segment.get('flight_number', '')
+                        result_text += f"*{airline} {flight_number}*\n"
+                        
+                        departure = segment.get('departure_airport', {})
+                        arrival = segment.get('arrival_airport', {})
+                        result_text += f"   🛫 {departure.get('time', '')}\n"
+                        result_text += f"   🛬 {arrival.get('time', '')}\n"
+                    
+                    # 价格信息
+                    price = flight.get('price')
+                    if price:
+                        result_text += f"   💰 价格: *${price}*\n"
+                    
+                    # 预订链接（如果有的话）
+                    booking_options = flight.get('booking_options', [])
+                    if booking_options:
+                        result_text += "   🔗 预订选项:\n"
+                        for option in booking_options[:2]:  # 显示前2个预订选项
+                            book_with = option.get('book_with', '预订')
+                            book_link = option.get('link')
+                            if book_link:
+                                result_text += f"   • [{book_with}]({book_link})\n"
+                            else:
+                                result_text += f"   • {book_with}\n"
+                    else:
+                        # 如果没有直接的预订选项，提供Google Flights链接
+                        google_flights_url = f"https://www.google.com/travel/flights/search?tfs=CBwQAhojagwIAhIIL20vMDFfajQSCjIwMjUtMDgtMjVyDAgCEggvbS8wNV9xdA"
+                        result_text += f"   🔗 [在Google Flights上查看](https://www.google.com/flights)\n"
+                    
+                    result_text += "\n"
+                
+                # 添加更多选项提示
+                if len(all_flights) > 3:
+                    result_text += f"📋 *还有 {len(all_flights) - 3} 个其他选项*\n"
+                    result_text += "💡 使用 **搜索航班** 功能查看完整列表\n\n"
+                
+                # 预订建议
+                result_text += "💡 *预订建议:*\n"
+                result_text += "• 🔍 比较不同航空公司的价格\n"
+                result_text += "• 📅 灵活选择日期可能有更好价格\n"
+                result_text += "• 🎫 提前预订通常价格更优\n"
+                result_text += "• ⚠️ 预订前请确认航班时间和政策\n\n"
+                
+            else:
+                result_text += "❌ 暂无可预订的航班选项\n\n"
+                result_text += "💡 建议:\n"
+                result_text += "• 尝试其他日期\n"
+                result_text += "• 检查机场代码\n"
+                result_text += "• 考虑附近的其他机场\n\n"
+            
+            result_text += f"_数据来源: Google Flights via SerpAPI_\n"
+            result_text += f"_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
+            
+            keyboard = [
+                [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(
+                text=foldable_text_with_markdown_v2(result_text),
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup
+            )
+        else:
+            error_msg = f"❌ 无法获取 {departure_id} → {arrival_id} 的预订信息\n\n"
+            error_msg += "可能原因:\n"
+            error_msg += "• 该航线暂无可预订航班\n"
+            error_msg += "• 选择的日期没有航班服务\n"
+            error_msg += "• 航班数据暂时不可用"
+            
+            keyboard = [
+                [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(
+                text=error_msg,
+                reply_markup=reply_markup
+            )
+            config = get_config()
+            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+                                      getattr(config, 'auto_delete_delay', 600))
+            
+    except Exception as e:
+        logger.error(f"显示预订选项失败: {e}")
+        error_msg = f"❌ 获取预订信息失败: {str(e)}"
         keyboard = [
             [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
         ]
