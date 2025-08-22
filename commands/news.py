@@ -167,14 +167,14 @@ async def get_verge_news(count: int = 10) -> List[Dict]:
             if TRANSLATION_AVAILABLE:
                 try:
                     translated_title = await translate_text(title)
-                    translated_summary = await translate_text(summary[:200])  # 限制摘要长度
+                    translated_summary = await translate_text(summary[:300])  # 增加摘要长度限制以匹配显示长度
                 except Exception as e:
                     logger.warning(f"翻译失败: {e}")
                     translated_title = f"[英文] {title}"
-                    translated_summary = f"[英文] {summary[:200]}"
+                    translated_summary = f"[英文] {summary[:300]}"
             else:
                 translated_title = f"[英文] {title}"
-                translated_summary = f"[英文] {summary[:200]}"
+                translated_summary = f"[英文] {summary[:300]}"
             
             items.append({
                 'title': translated_title,
@@ -394,6 +394,52 @@ def format_time_for_display(time_str: str, source: str = '') -> str:
         return time_str
 
 
+def smart_truncate_summary(text: str, max_length: int = 200) -> str:
+    """
+    智能截断摘要，优先在句号、感叹号、问号处截断
+    
+    Args:
+        text: 原始文本
+        max_length: 最大长度
+        
+    Returns:
+        智能截断后的文本
+    """
+    if not text or len(text) <= max_length:
+        return text
+    
+    # 如果文本长度超过限制，尝试在句子结束处截断
+    truncated = text[:max_length]
+    
+    # 寻找最后的句子结束标点
+    sentence_ends = ['。', '！', '？', '.', '!', '?']
+    best_cut = -1
+    
+    for i in range(len(truncated) - 1, max(0, len(truncated) - 50), -1):
+        if truncated[i] in sentence_ends:
+            # 确保不是省略号的一部分
+            if i < len(truncated) - 1 and truncated[i + 1] not in ['.', '。']:
+                best_cut = i + 1
+                break
+    
+    # 如果找到了合适的截断点
+    if best_cut > max_length * 0.7:  # 确保截断点不要太前
+        return truncated[:best_cut]
+    
+    # 否则尝试在空格或逗号处截断
+    space_cuts = [' ', '，', ',', '、']
+    for i in range(len(truncated) - 1, max(0, len(truncated) - 30), -1):
+        if truncated[i] in space_cuts:
+            best_cut = i
+            break
+    
+    if best_cut > max_length * 0.8:
+        return truncated[:best_cut] + "..."
+    
+    # 最后只能硬截断
+    return truncated + "..."
+
+
 def format_news_message(source: str, news_items: List[Dict], max_length: int = 4000) -> str:
     """
     格式化新闻消息
@@ -429,9 +475,13 @@ def format_news_message(source: str, news_items: List[Dict], max_length: int = 4
             
         # 如果有摘要且是 Verge 源，添加摘要显示
         if summary and source.lower() == 'verge':
-            # 截取摘要长度，避免过长
-            display_summary = summary[:150] + "..." if len(summary) > 150 else summary
-            news_line += f"\n   📝 {display_summary}"
+            # 使用智能截断，增加长度限制到250字符以显示更多内容
+            display_summary = smart_truncate_summary(summary, 250)
+            # 如果摘要被截断了，添加"点击查看原文"提示
+            if len(summary) > 250:
+                news_line += f"\n   📝 {display_summary}\n   💡 点击标题链接查看完整内容"
+            else:
+                news_line += f"\n   📝 {display_summary}"
             
         if extra_info:
             # 格式化时间显示
