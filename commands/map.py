@@ -6,6 +6,7 @@
 """
 
 import asyncio
+import json
 import logging
 import re
 from datetime import datetime
@@ -38,6 +39,9 @@ logger = logging.getLogger(__name__)
 cache_manager = None
 httpx_client = None
 map_service_manager = None
+
+# Telegraph 相关配置
+TELEGRAPH_API_URL = "https://api.telegra.ph"
 
 # 地图数据ID映射缓存
 map_data_mapping = {}
@@ -421,21 +425,119 @@ def format_directions(directions: Dict, service_type: str) -> str:
     result += f"📏 距离: `{distance}`\n"
     result += f"⏱️ 时间: `{duration}`\n\n"
     
-    # 添加路线步骤
+    # 添加路线步骤 - 显示前8步，如果超过则提示使用Telegraph
     if 'steps' in directions and directions['steps']:
         result += "📋 *路线指引:*\n"
-        for i, step in enumerate(directions['steps'][:5], 1):
+        steps_to_show = min(8, len(directions['steps']))
+        for i, step in enumerate(directions['steps'][:steps_to_show], 1):
             # 清理HTML标签并添加适当的分隔
             step_clean = re.sub(r'<[^>]+>', ' ', step)  # 用空格替换HTML标签
             step_clean = re.sub(r'\s+', ' ', step_clean)  # 合并多个空格
             step_clean = step_clean.strip()  # 去除首尾空格
             result += f"`{i}.` {step_clean}\n"
+        
+        # 如果步骤超过8个，添加提示
+        if len(directions['steps']) > 8:
+            result += f"\n_...还有 {len(directions['steps']) - 8} 个步骤，完整路线将通过Telegraph显示_\n"
     
     service_name = "Google Maps" if service_type == "google_maps" else "高德地图"
     result += f"\n📊 数据来源: {service_name}"
     result += f"\n🕐 更新时间: {datetime.now().strftime('%H:%M:%S')}"
     
     return result
+
+async def create_telegraph_page(title: str, content: str) -> Optional[str]:
+    """创建Telegraph页面用于显示长内容"""
+    try:
+        # 创建Telegraph账户
+        account_data = {
+            "short_name": "MapBot",
+            "author_name": "MengBot Map Service",
+            "author_url": "https://t.me/mengpricebot"
+        }
+        
+        response = await httpx_client.post(f"{TELEGRAPH_API_URL}/createAccount", data=account_data)
+        if response.status_code != 200:
+            logger.warning(f"创建Telegraph账户失败: {response.status_code}")
+            return None
+            
+        account_info = response.json()
+        if not account_info.get("ok"):
+            logger.warning(f"Telegraph账户创建响应错误: {account_info}")
+            return None
+            
+        access_token = account_info["result"]["access_token"]
+        
+        # 创建页面内容
+        page_content = [
+            {
+                "tag": "p",
+                "children": [content]
+            }
+        ]
+        
+        page_data = {
+            "access_token": access_token,
+            "title": title,
+            "content": json.dumps(page_content),
+            "return_content": "true"
+        }
+        
+        response = await httpx_client.post(f"{TELEGRAPH_API_URL}/createPage", data=page_data)
+        if response.status_code != 200:
+            logger.warning(f"创建Telegraph页面失败: {response.status_code}")
+            return None
+            
+        page_info = response.json()
+        if not page_info.get("ok"):
+            logger.warning(f"Telegraph页面创建响应错误: {page_info}")
+            return None
+            
+        logger.info(f"成功创建Telegraph页面: {page_info['result']['url']}")
+        return page_info["result"]["url"]
+    
+    except Exception as e:
+        logger.error(f"创建Telegraph页面失败: {e}")
+        return None
+
+def format_directions_for_telegraph(directions: Dict, service_type: str) -> str:
+    """将路线规划格式化为Telegraph友好的格式"""
+    distance = directions.get('distance', '未知')
+    duration = directions.get('duration', '未知') 
+    start = directions.get('start_address', '')
+    end = directions.get('end_address', '')
+    
+    content = f"""路线规划详情
+
+📍 起点: {start}
+📍 终点: {end}
+
+📊 路线信息:
+• 距离: {distance}
+• 预计时间: {duration}
+
+🛣️ 详细指引:
+"""
+    
+    # 添加所有步骤
+    if 'steps' in directions and directions['steps']:
+        for i, step in enumerate(directions['steps'], 1):
+            # 清理HTML标签
+            step_clean = re.sub(r'<[^>]+>', ' ', step)
+            step_clean = re.sub(r'\s+', ' ', step_clean)
+            step_clean = step_clean.strip()
+            content += f"{i}. {step_clean}\n\n"
+    else:
+        content += "暂无详细指引信息\n\n"
+    
+    service_name = "Google Maps" if service_type == "google_maps" else "高德地图"
+    content += f"""
+---
+数据来源: {service_name}
+生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+来源: MengBot 地图服务"""
+    
+    return content
 
 async def map_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """地图服务主命令 /map"""
@@ -868,18 +970,46 @@ async def _execute_route_planning_with_coords(update: Update, context: ContextTy
             directions_data['end_address'] = destination_name
         
         if directions_data:
-            result_text = format_directions(directions_data, service_type)
+            # 检查是否需要使用Telegraph（步骤超过8个）
+            steps = directions_data.get('steps', [])
+            should_use_telegraph = len(steps) > 8
             
-            keyboard = [
-                [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await message.edit_text(
-                text=foldable_text_with_markdown_v2(result_text),
-                parse_mode="MarkdownV2",
-                reply_markup=reply_markup
-            )
+            if should_use_telegraph:
+                # 创建Telegraph页面显示完整路线
+                route_title = f"路线规划: {origin_data.get('address', origin)} → {destination_name}"
+                telegraph_content = format_directions_for_telegraph(directions_data, service_type)
+                telegraph_url = await create_telegraph_page(route_title, telegraph_content)
+                
+                # 生成带Telegraph链接的简短结果
+                result_text = format_directions(directions_data, service_type)
+                
+                if telegraph_url:
+                    result_text += f"\n\n🔗 **完整路线指引**: [查看详细步骤]({telegraph_url})"
+                
+                keyboard = [
+                    [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await message.edit_text(
+                    text=foldable_text_with_markdown_v2(result_text),
+                    parse_mode="MarkdownV2",
+                    reply_markup=reply_markup
+                )
+            else:
+                # 步骤不多，直接显示
+                result_text = format_directions(directions_data, service_type)
+                
+                keyboard = [
+                    [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await message.edit_text(
+                    text=foldable_text_with_markdown_v2(result_text),
+                    parse_mode="MarkdownV2",
+                    reply_markup=reply_markup
+                )
         else:
             error_msg = f"""❌ *路线规划失败*
 
@@ -939,18 +1069,46 @@ async def _execute_route_planning(update: Update, context: ContextTypes.DEFAULT_
         directions_data = await map_cache_service.get_directions_with_cache(origin, destination, "driving", language)
         
         if directions_data:
-            result_text = format_directions(directions_data, service_type)
+            # 检查是否需要使用Telegraph（步骤超过8个）
+            steps = directions_data.get('steps', [])
+            should_use_telegraph = len(steps) > 8
             
-            keyboard = [
-                [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await message.edit_text(
-                text=foldable_text_with_markdown_v2(result_text),
-                parse_mode="MarkdownV2",
-                reply_markup=reply_markup
-            )
+            if should_use_telegraph:
+                # 创建Telegraph页面显示完整路线
+                route_title = f"路线规划: {origin} → {destination}"
+                telegraph_content = format_directions_for_telegraph(directions_data, service_type)
+                telegraph_url = await create_telegraph_page(route_title, telegraph_content)
+                
+                # 生成带Telegraph链接的简短结果
+                result_text = format_directions(directions_data, service_type)
+                
+                if telegraph_url:
+                    result_text += f"\n\n🔗 **完整路线指引**: [查看详细步骤]({telegraph_url})"
+                
+                keyboard = [
+                    [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await message.edit_text(
+                    text=foldable_text_with_markdown_v2(result_text),
+                    parse_mode="MarkdownV2",
+                    reply_markup=reply_markup
+                )
+            else:
+                # 步骤不多，直接显示
+                result_text = format_directions(directions_data, service_type)
+                
+                keyboard = [
+                    [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await message.edit_text(
+                    text=foldable_text_with_markdown_v2(result_text),
+                    parse_mode="MarkdownV2",
+                    reply_markup=reply_markup
+                )
         else:
             error_msg = f"""❌ *路线规划失败*
 
