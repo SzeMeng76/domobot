@@ -75,8 +75,19 @@ class VariflightService:
             elif response.status_code != 200:
                 raise ValueError(f"API请求失败: {response.status_code}")
                 
-            return response.json()
+            # 根据MCP API代码，返回格式是包装过的，需要解包
+            result = response.json()
             
+            # 直接返回JSON结果
+            if isinstance(result, dict):
+                return result
+            else:
+                # 如果是字符串格式的JSON，尝试解析
+                import json
+                if isinstance(result, str):
+                    return json.loads(result)
+                return result
+                
         except Exception as e:
             logger.error(f"Variflight API调用失败: {e}")
             raise ValueError(f"航班信息服务暂时不可用: {str(e)}")
@@ -224,22 +235,31 @@ def format_flight_info(flight_data: dict) -> str:
             return "❌ 未找到航班信息"
         data = data[0]  # 取第一个结果
     
-    # 提取基本信息
-    flight_num = data.get("fnum", "未知")
-    dep_airport = data.get("dep", "")
-    arr_airport = data.get("arr", "")
-    dep_city = data.get("dep_city_cn", data.get("dep_city", ""))
-    arr_city = data.get("arr_city_cn", data.get("arr_city", ""))
+    # 根据实际API返回格式提取信息
+    flight_num = data.get("FlightNo", "未知")
+    dep_airport = data.get("FlightDepcode", "")
+    arr_airport = data.get("FlightArrcode", "")
+    dep_city = data.get("FlightDep", "")
+    arr_city = data.get("FlightArr", "")
     
-    # 时间信息
-    std = data.get("std", "")  # 计划起飞
-    sta = data.get("sta", "")  # 计划到达
-    etd = data.get("etd", "")  # 预计起飞
-    eta = data.get("eta", "")  # 预计到达
+    # 时间信息 - 格式化为 HH:MM
+    def format_time(time_str):
+        if not time_str:
+            return ""
+        try:
+            # 从 "2025-08-22 12:00:00" 提取 "12:00"
+            return time_str.split(" ")[1][:5]
+        except:
+            return time_str
+    
+    std = format_time(data.get("FlightDeptimePlanDate", ""))  # 计划起飞
+    sta = format_time(data.get("FlightArrtimePlanDate", ""))  # 计划到达
+    etd = format_time(data.get("FlightDeptimeDate", ""))      # 实际起飞
+    eta = format_time(data.get("FlightArrtimeDate", ""))      # 实际到达
     
     # 状态信息
-    status = data.get("status", "")
-    delay = data.get("delay", 0)
+    status = data.get("FlightState", "")
+    airline = data.get("FlightCompany", "")
     
     formatted = f"""✈️ *{flight_num} 航班信息*
 
@@ -250,19 +270,15 @@ def format_flight_info(flight_data: dict) -> str:
 🛬 计划到达: `{sta}`"""
 
     if etd and etd != std:
-        formatted += f"\n🕐 预计起飞: `{etd}`"
+        formatted += f"\n🕐 实际起飞: `{etd}`"
     if eta and eta != sta:
-        formatted += f"\n🕐 预计到达: `{eta}`"
+        formatted += f"\n🕐 实际到达: `{eta}`"
     
     if status:
         formatted += f"\n\n📊 *状态*: {status}"
     
-    if delay and delay > 0:
-        formatted += f"\n⏱️ *延误*: {delay} 分钟"
-    
-    # 添加航空公司信息
-    if data.get("airline"):
-        formatted += f"\n🏢 *航空公司*: {data['airline']}"
+    if airline:
+        formatted += f"\n🏢 *航空公司*: {airline}"
     
     formatted += f"\n\n_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
     
@@ -285,19 +301,35 @@ def format_route_flights(flights_data: dict, dep_city: str = "", arr_city: str =
     formatted = f"✈️ *{route_display} - 找到 {len(data)} 个航班*\n\n"
     
     for i, flight in enumerate(flights, 1):
-        flight_num = flight.get("fnum", "未知")
-        std = flight.get("std", "")
-        sta = flight.get("sta", "")
-        status = flight.get("status", "")
-        delay = flight.get("delay", 0)
+        # 使用正确的字段名
+        flight_num = flight.get("FlightNo", "未知")
+        airline = flight.get("FlightCompany", "")
         
-        formatted += f"*{i}\\. {flight_num}*\n"
+        # 格式化时间
+        def format_time(time_str):
+            if not time_str:
+                return ""
+            try:
+                return time_str.split(" ")[1][:5]
+            except:
+                return time_str
+        
+        std = format_time(flight.get("FlightDeptimePlanDate", ""))
+        sta = format_time(flight.get("FlightArrtimePlanDate", ""))
+        status = flight.get("FlightState", "")
+        
+        # 显示航空公司和航班号
+        display_name = f"{airline} {flight_num}" if airline else flight_num
+        # 简化航空公司名称显示
+        if "有限公司" in airline:
+            airline_short = airline.replace("有限公司", "").replace("股份", "")
+            display_name = f"{airline_short} {flight_num}"
+        
+        formatted += f"*{i}\\. {display_name}*\n"
         formatted += f"🕐 `{std}` \\- `{sta}`"
         
-        if status:
+        if status and status != "正常":
             formatted += f" | {status}"
-        if delay and delay > 0:
-            formatted += f" | 延误{delay}分钟"
         
         formatted += "\n\n"
     

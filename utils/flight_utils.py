@@ -174,6 +174,22 @@ class FlightSearchHelper:
     }
     
     @classmethod
+    def convert_to_airport_code(cls, input_str: str) -> str:
+        """
+        智能转换输入为机场代码 (简化版)
+        
+        Args:
+            input_str: 用户输入（可能是城市名、机场代码、国家名等）
+            
+        Returns:
+            str: 机场代码，如果无法识别返回 None
+        """
+        code, _ = cls.smart_convert_to_airport_code(input_str)
+        if _ == "unknown":
+            return None
+        return code
+    
+    @classmethod
     def smart_convert_to_airport_code(cls, input_str: str) -> Tuple[str, str]:
         """
         智能转换输入为机场代码
@@ -398,45 +414,56 @@ def format_price_info(price_data: dict) -> str:
         return "❌ 未找到价格信息"
     
     data = price_data["data"]
+    
+    # 根据实际API测试，data可能是字符串
+    if isinstance(data, str):
+        return f"💰 **机票价格查询结果**\n\n{data}\n\n_数据来源: Variflight_\n_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
+    
+    # 如果是列表，取第一个
     if isinstance(data, list):
         if not data:
             return "❌ 未找到价格信息"
-        data = data[0]  # 取第一个结果
+        data = data[0]
     
-    # 提取价格信息
-    dep_city = data.get("depCityName", "")
-    arr_city = data.get("arrCityName", "")
-    dep_date = data.get("depDate", "")
-    
-    formatted = f"💰 **{dep_city} → {arr_city} 机票价格**\n\n"
-    formatted += f"📅 **出发日期**: {dep_date}\n\n"
-    
-    # 解析航班选项
-    if "flights" in data and data["flights"]:
-        flights = data["flights"][:5]  # 显示前5个最便宜的选项
+    # 如果是字典格式，按原计划处理
+    if isinstance(data, dict):
+        # 提取价格信息
+        dep_city = data.get("depCityName", "")
+        arr_city = data.get("arrCityName", "")
+        dep_date = data.get("depDate", "")
         
-        formatted += "✈️ **可选航班** (按价格排序):\n\n"
+        formatted = f"💰 **{dep_city} → {arr_city} 机票价格**\n\n"
+        formatted += f"📅 **出发日期**: {dep_date}\n\n"
         
-        for i, flight in enumerate(flights, 1):
-            airline = flight.get("airline", "")
-            flight_num = flight.get("flightNum", "")
-            dep_time = flight.get("depTime", "")
-            arr_time = flight.get("arrTime", "")
-            price = flight.get("price", "")
+        # 解析航班选项
+        if "flights" in data and data["flights"]:
+            flights = data["flights"][:5]  # 显示前5个最便宜的选项
             
-            formatted += f"**{i}\\. {airline} {flight_num}**\n"
-            formatted += f"🕐 `{dep_time}` \\- `{arr_time}`\n"
-            formatted += f"💰 价格: **¥{price}**\n\n"
+            formatted += "✈️ **可选航班** (按价格排序):\n\n"
+            
+            for i, flight in enumerate(flights, 1):
+                airline = flight.get("airline", "")
+                flight_num = flight.get("flightNum", "")
+                dep_time = flight.get("depTime", "")
+                arr_time = flight.get("arrTime", "")
+                price = flight.get("price", "")
+                
+                formatted += f"**{i}\\. {airline} {flight_num}**\n"
+                formatted += f"🕐 `{dep_time}` \\- `{arr_time}`\n"
+                formatted += f"💰 价格: **¥{price}**\n\n"
+            
+            # 如果有更多选项，显示提示
+            if len(data["flights"]) > 5:
+                formatted += f"\\.\\.\\. 还有 {len(data['flights']) - 5} 个选项\n"
         
-        # 如果有更多选项，显示提示
-        if len(data["flights"]) > 5:
-            formatted += f"\\.\\.\\. 还有 {len(data['flights']) - 5} 个选项\n"
+        # 显示最低价格
+        if "minPrice" in data:
+            formatted += f"🎯 **最低价格**: ¥{data['minPrice']}\n"
+        
+        formatted += f"\n_数据来源: Variflight_"
+        formatted += f"\n_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
+        
+        return formatted
     
-    # 显示最低价格
-    if "minPrice" in data:
-        formatted += f"🎯 **最低价格**: ¥{data['minPrice']}\n"
-    
-    formatted += f"\n_数据来源: Variflight_"
-    formatted += f"\n_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
-    
-    return formatted
+    # 其他情况，直接显示
+    return f"💰 **机票价格查询结果**\n\n{str(data)}\n\n_数据来源: Variflight_\n_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
