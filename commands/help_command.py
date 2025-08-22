@@ -40,7 +40,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 ⏰ `/time 北京` - 时间查询 | 📰 `/news` - 新闻聚合
 🌐 `/whois google.com` - WHOIS查询 | 🔍 `/dns domain.com` - DNS记录
 🍳 `/recipe 红烧肉` - 菜谱搜索 | 🎭 `/meme 3` - 表情包
-📊 `/finance AAPL` - 股票查询 | 📈 `/finance` - 股市排行榜
+📊 `/finance AAPL` - 股票查询 | 🗺️ `/map 天安门` - 地图服务
 
 💱 *汇率* `/rate [货币] [数额]` - 支持表达式计算
 🪙 *加密货币* `/crypto <币种> [数量] [货币]` - 实时价格
@@ -51,6 +51,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 🌐 *WHOIS&DNS* `/whois <查询>` - 域名/IP/ASN/TLD信息(含DNS) | `/dns <域名>` - 仅DNS记录
 🍳 *烹饪助手* `/recipe <菜名>` - 菜谱搜索 | `/what_to_eat` - 今天吃什么 | `/meal_plan` - 智能膳食
 📊 *股票金融* `/finance <代号/公司名>` - 实时股价查询 | `/finance` - 15类股票&基金排行榜
+🗺️ *地图服务* `/map <地点/坐标>` - 智能语言检测(中文用高德,英文用谷歌) | 位置搜索 | 附近推荐 | 路线规划
 
 🎬 *影视查询*
 搜索: `/movie <片名>` `/tv <剧名>` `/person <演员>`
@@ -68,7 +69,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 🌍 *支持地区* US CN TR IN MY JP GB DE 等40+国家
 💡 *特色* 支持中文地名 | 自动CNY转换 | 智能缓存 | 表达式计算
 
-⚡ 快速试用: `/nf` `/crypto btc` `/tq 北京` `/movie_hot` `/news` `/time 北京` `/whois google.com` `/dns github.com` `/recipe 红烧肉` `/what_to_eat` `/meme 3` `/finance AAPL`"""
+⚡ 快速试用: `/nf` `/crypto btc` `/tq 北京` `/movie_hot` `/news` `/time 北京` `/whois google.com` `/dns github.com` `/recipe 红烧肉` `/what_to_eat` `/meme 3` `/finance AAPL` `/map 天安门`"""
 
     admin_help_text = """
 
@@ -114,6 +115,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 🔒 *白名单专享*
 💱 汇率换算 | 🪙 加密货币 | 💳 BIN查询 | 🌦️ 天气预报
 🎬 影视信息 | 🎮 Steam游戏 | 📱 应用&内购价格 | 🍎 Apple服务
+🗺️ 地图服务 - 智能语言检测(中文用高德,英文用谷歌) | 位置搜索 | 附近推荐 | 路线规划
 
 📞 白名单功能暂不开放申请，敬请期待付费服务"""
     else:
