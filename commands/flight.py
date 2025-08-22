@@ -1362,10 +1362,8 @@ async def _show_booking_options(query: CallbackQuery, context: ContextTypes.DEFA
                             booking_url = f"https://www.google.com/flights?booking_token={booking_token}"
                             result_text += f"   🔗 [查看预订选项]({booking_url})\n"
                     else:
-                        # 备用方案：使用Google Flights搜索链接
-                        search_url = f"https://www.google.com/travel/flights/search"
-                        params = "?tfs=CBwQAhokagwIAhIIL20vMDFfajRCAhIDe{departure_id}SgwIAhIIL20vMDVfcXR0"
-                        google_flights_url = search_url + params.replace('{departure_id}', departure_id).replace('{arrival_id}', arrival_id)
+                        # 备用方案：使用Google Flights通用搜索链接
+                        google_flights_url = f"https://www.google.com/travel/flights?q=flights%20from%20{departure_id}%20to%20{arrival_id}"
                         result_text += f"   🔗 [在Google Flights查看]({google_flights_url})\n"
                     
                     result_text += "\n"
