@@ -1367,11 +1367,16 @@ async def _show_booking_options(query: CallbackQuery, context: ContextTypes.DEFA
                                 
                                 # 显示真实预订链接
                                 booking_request = together_option.get('booking_request', {})
-                                if booking_request.get('url') and booking_request.get('post_data'):
+                                booking_url_from_api = booking_request.get('url', '')
+                                
+                                if booking_url_from_api and 'google.com/travel/clk/' in booking_url_from_api:
                                     # Google Flights的redirect URL需要POST数据，对用户不友好
                                     # 改为使用booking_token构建可用的Google Flights链接
                                     booking_url = f"https://www.google.com/flights?booking_token={booking_token}"
                                     result_text += f"   🔗 [通过Google预订]({booking_url})\n"
+                                elif booking_url_from_api and 'google.com' not in booking_url_from_api:
+                                    # 如果是航空公司官网链接，直接使用
+                                    result_text += f"   🔗 [立即预订]({booking_url_from_api})\n"
                                 elif together_option.get('booking_phone'):
                                     phone = together_option['booking_phone']
                                     result_text += f"   📞 预订电话: {phone}\n"
