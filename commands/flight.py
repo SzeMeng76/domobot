@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 航班查询命令模块 - 参考finance/map设计模式
-使用VariFlight HTTP API提供航班信息查询
+使用VariFlight MCP API提供航班信息查询
 """
 
 import asyncio
@@ -27,7 +27,7 @@ from utils.message_manager import (
     send_info
 )
 from utils.permissions import Permission
-from utils.airport_data import find_airports_by_query, get_airport_info, format_airport_suggestions
+from utils.airport_data import find_airports_by_query, get_airport_info as get_local_airport_info, format_airport_suggestions
 
 logger = logging.getLogger(__name__)
 
@@ -237,11 +237,36 @@ class FlightService:
                 return None
             
             # 使用MCP API格式 - flights端点用于航线查询
+            # 从机场代码获取城市代码 (基于MCP API要求)
+            airport_to_city = {
+                'PEK': 'BJS', 'PKX': 'BJS',  # 北京
+                'SHA': 'SHA', 'PVG': 'SHA',  # 上海
+                'CAN': 'CAN',                # 广州
+                'SZX': 'SZX',                # 深圳
+                'CTU': 'CTU',                # 成都
+                'XMN': 'XMN',                # 厦门
+                'HGH': 'HGH',                # 杭州
+                'NKG': 'NKG',                # 南京
+                'TSN': 'TSN',                # 天津
+                'LAX': 'LAX',                # 洛杉矶
+                'JFK': 'NYC', 'LGA': 'NYC', 'EWR': 'NYC',  # 纽约
+                'NRT': 'TYO', 'HND': 'TYO',  # 东京
+                'LHR': 'LON', 'LGW': 'LON', 'STN': 'LON',  # 伦敦
+                'CDG': 'PAR', 'ORY': 'PAR',  # 巴黎
+                'ICN': 'SEL',                # 首尔
+                'SIN': 'SIN',                # 新加坡
+            }
+            
+            origin_city = airport_to_city.get(origin.upper(), origin.upper())
+            dest_city = airport_to_city.get(destination.upper(), destination.upper())
+            
             request_body = {
                 "endpoint": "flights",
                 "params": {
                     "dep": origin,
+                    "depcity": origin_city,
                     "arr": destination,
+                    "arrcity": dest_city,
                     "date": date
                 }
             }
@@ -913,7 +938,7 @@ async def _format_flight_info(update: Update, context: ContextTypes.DEFAULT_TYPE
                              flight_data: dict, flight_number: str):
     """格式化航班信息显示"""
     try:
-        # 解析API返回数据（需要根据实际VariFlight API格式调整）
+        # 解析MCP API返回数据
         if flight_data.get('success') and flight_data.get('data'):
             data = flight_data['data'][0] if isinstance(flight_data['data'], list) and flight_data['data'] else flight_data.get('data', {})
             
@@ -978,7 +1003,7 @@ async def _format_flight_info_with_date(update: Update, context: ContextTypes.DE
                                       flight_data: dict, flight_number: str, date_display: str):
     """格式化航班信息显示 (带日期版本)"""
     try:
-        # 解析API返回数据（需要根据实际VariFlight API格式调整）
+        # 解析MCP API返回数据
         if flight_data.get('success') and flight_data.get('data'):
             data = flight_data['data'][0] if isinstance(flight_data['data'], list) and flight_data['data'] else flight_data.get('data', {})
             
