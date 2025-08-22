@@ -7,6 +7,7 @@
 import asyncio
 import logging
 import feedparser
+from datetime import datetime
 from typing import Dict, List, Optional
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
@@ -178,6 +179,7 @@ async def get_verge_news(count: int = 10) -> List[Dict]:
             items.append({
                 'title': translated_title,
                 'url': url,
+                'summary': translated_summary,
                 'extra': {'info': pub_date}
             })
         
@@ -335,6 +337,63 @@ async def get_news(source_id: str, count: int = 10) -> List[Dict]:
         return []
 
 
+def format_time_for_display(time_str: str, source: str = '') -> str:
+    """
+    格式化时间显示
+    
+    Args:
+        time_str: 原始时间字符串
+        source: 新闻源，用于确定时间格式处理方式
+        
+    Returns:
+        格式化后的时间字符串
+    """
+    if not time_str:
+        return time_str
+        
+    try:
+        # 针对 Verge 等英文源的 ISO 时间格式进行优化
+        if source.lower() == 'verge' and 'T' in time_str:
+            # 解析 ISO 格式时间: 2025-08-21T20:00:00-04:00
+            timezone_info = ""
+            
+            # 提取时区信息
+            if '-04:00' in time_str:
+                timezone_info = " (EDT)"  # Eastern Daylight Time
+            elif '-05:00' in time_str:
+                timezone_info = " (EST)"  # Eastern Standard Time
+            elif '+' in time_str:
+                # 处理正时区
+                tz_part = time_str.split('+')[1]
+                if tz_part.startswith('00:00'):
+                    timezone_info = " (UTC)"
+                else:
+                    timezone_info = f" (+{tz_part.split(':')[0]})"
+            elif time_str.count('-') > 2:
+                # 处理负时区
+                parts = time_str.split('-')
+                if len(parts) >= 4 and ':' in parts[-1]:
+                    tz_offset = parts[-1].split(':')[0]
+                    timezone_info = f" (-{tz_offset})"
+            
+            # 解析时间部分
+            time_part = time_str.split('+')[0].split('-04:')[0].split('-05:')[0]
+            if 'T' in time_part:
+                date_part, time_part = time_part.split('T')
+                year, month, day = date_part.split('-')
+                hour, minute = time_part.split(':')[:2]
+                
+                # 转换为更友好的中文格式，包含时区
+                return f"{month}-{day} {hour}:{minute}{timezone_info}"
+            
+        # 对于其他格式，直接返回原始时间
+        return time_str
+        
+    except Exception as e:
+        # 如果解析失败，返回原始时间
+        return time_str
+
+
 def format_news_message(source: str, news_items: List[Dict], max_length: int = 4000) -> str:
     """
     格式化新闻消息
@@ -359,6 +418,7 @@ def format_news_message(source: str, news_items: List[Dict], max_length: int = 4
     for i, item in enumerate(news_items, 1):
         title = item.get('title', '无标题').strip()
         url = item.get('url', '')
+        summary = item.get('summary', '').strip()
         extra_info = item.get('extra', {}).get('info', '')
         
         # 构建单条新闻
@@ -367,8 +427,16 @@ def format_news_message(source: str, news_items: List[Dict], max_length: int = 4
         else:
             news_line = f"{i}. {title}"
             
+        # 如果有摘要且是 Verge 源，添加摘要显示
+        if summary and source.lower() == 'verge':
+            # 截取摘要长度，避免过长
+            display_summary = summary[:150] + "..." if len(summary) > 150 else summary
+            news_line += f"\n   📝 {display_summary}"
+            
         if extra_info:
-            news_line += f"\n   📊 {extra_info}"
+            # 格式化时间显示
+            formatted_time = format_time_for_display(extra_info, source)
+            news_line += f"\n   📊 {formatted_time}"
         
         news_line += "\n"
         
