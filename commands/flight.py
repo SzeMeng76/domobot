@@ -657,11 +657,12 @@ async def create_telegraph_page(title: str, content: str) -> Optional[str]:
         return None
 
 async def create_booking_telegraph_page(all_flights: List[Dict], search_params: Dict) -> str:
-    """将航班预订选项格式化为Telegraph友好的格式 - 与主消息完全一致"""
+    """将航班预订选项格式化为Telegraph友好的格式 - 与主消息完全一致，包含所有预订信息"""
     departure_id = search_params.get('departure_id', '')
     arrival_id = search_params.get('arrival_id', '')
     outbound_date = search_params.get('outbound_date', '')
     return_date = search_params.get('return_date', '')
+    language = "en"  # 默认语言
     
     trip_type = "往返" if return_date else "单程"
     
@@ -677,7 +678,7 @@ async def create_booking_telegraph_page(all_flights: List[Dict], search_params: 
     
     content += f"💺 可预订航班 (共{len(all_flights)}个选项):\n\n"
     
-    # 显示所有航班 - 完全复制_show_booking_options的逻辑
+    # 显示所有航班 - 完全复制_show_booking_options的逻辑，包括API调用
     for i, flight in enumerate(all_flights, 1):
         content += f"{i}. "
         
@@ -750,15 +751,106 @@ async def create_booking_telegraph_page(all_flights: List[Dict], search_params: 
                     content += " 🌙过夜"
                 content += "\n"
         
-        # 预订信息处理 - 这里需要模拟主消息的booking_token处理
-        # 由于Telegraph是静态内容，我们只能显示基本的预订建议
-        if flights_info:
-            airline = flights_info[0].get('airline', '')
-            if airline:
-                content += f"   🏢 预订商: {airline}\n"
-                content += f"   💡 建议直接访问 {airline} 官网预订\n"
-            else:
+        # 环保信息
+        if 'carbon_emissions' in flight:
+            emissions = flight['carbon_emissions']
+            content += f"   🌱 碳排放: {emissions.get('this_flight', 0):,}g"
+            if 'difference_percent' in emissions:
+                diff = emissions['difference_percent']
+                if diff > 0:
+                    content += f" (+{diff}%)"
+                elif diff < 0:
+                    content += f" ({diff}%)"
+            content += "\n"
+        
+        # 获取真实预订选项 - 完全复制主消息的逻辑
+        booking_token = flight.get('booking_token')
+        if booking_token:
+            try:
+                # 使用booking_token获取详细预订选项
+                booking_options = await flight_cache_service.get_booking_options_with_cache(
+                    booking_token, search_params, language=language
+                )
+                
+                if booking_options and booking_options.get('booking_options'):
+                    booking_option = booking_options['booking_options'][0]
+                    
+                    # 检查是否为分别预订的机票
+                    separate_tickets = booking_option.get('separate_tickets', False)
+                    if separate_tickets:
+                        content += f"   🎫 分别预订机票\n"
+                        
+                        # 处理出发段预订
+                        departing = booking_option.get('departing', {})
+                        if departing:
+                            content += f"   🛫 出发段预订:\n"
+                            book_with = departing.get('book_with', '')
+                            if book_with:
+                                content += f"      🏢 预订商: {book_with}\n"
+                            price = departing.get('price')
+                            if price:
+                                content += f"      💰 价格: ${price}\n"
+                        
+                        # 处理返程段预订
+                        returning = booking_option.get('returning', {})
+                        if returning:
+                            content += f"   🛬 返程段预订:\n"
+                            book_with = returning.get('book_with', '')
+                            if book_with:
+                                content += f"      🏢 预订商: {book_with}\n"
+                            price = returning.get('price')
+                            if price:
+                                content += f"      💰 价格: ${price}\n"
+                    else:
+                        # 一起预订的处理
+                        together_option = booking_option.get('together', {})
+                        
+                        # 显示预订提供商
+                        book_with = together_option.get('book_with', '')
+                        if book_with:
+                            content += f"   🏢 预订商: {book_with}\n"
+                        
+                        # 显示本地价格
+                        local_prices = together_option.get('local_prices', [])
+                        if local_prices:
+                            for local_price in local_prices[:2]:
+                                currency = local_price.get('currency', 'USD')
+                                price_val = local_price.get('price', 0)
+                                content += f"   💱 本地价格: {currency} {price_val:,}\n"
+                        
+                        # 显示电话服务费
+                        phone_fee = together_option.get('estimated_phone_service_fee')
+                        if phone_fee:
+                            content += f"   📞 电话服务费: ${phone_fee}\n"
+                        
+                        # 显示预订建议
+                        booking_request = together_option.get('booking_request', {})
+                        booking_url_from_api = booking_request.get('url', '')
+                        
+                        if booking_url_from_api and 'google.com/travel/clk/' in booking_url_from_api:
+                            book_with = together_option.get('book_with', '')
+                            if book_with:
+                                content += f"   💡 建议直接访问 {book_with} 官网预订\n"
+                            else:
+                                content += f"   💡 建议访问航空公司官网预订\n"
+                        elif booking_url_from_api and 'google.com' not in booking_url_from_api:
+                            content += f"   🔗 立即预订: {booking_url_from_api}\n"
+                        elif together_option.get('booking_phone'):
+                            phone = together_option['booking_phone']
+                            content += f"   📞 预订电话: {phone}\n"
+                        else:
+                            content += f"   💡 建议访问航空公司官网预订\n"
+                else:
+                    # 如果获取详细预订选项失败，提供建议
+                    content += f"   💡 建议访问航空公司官网预订\n"
+                    
+            except Exception as e:
+                # 备用方案：提供建议
                 content += f"   💡 建议访问航空公司官网预订\n"
+        else:
+            # 备用方案：使用Google Flights通用搜索链接
+            google_flights_url = f"https://www.google.com/travel/flights?q=flights%20from%20{departure_id}%20to%20{arrival_id}"
+            content += f"   🔗 在Google Flights查看: {google_flights_url}\n"
         
         content += "\n"
     
@@ -1503,6 +1595,18 @@ async def _show_booking_options(query: CallbackQuery, context: ContextTypes.DEFA
                             if layover.get('overnight'):
                                 result_text += " 🌙过夜"
                             result_text += "\n"
+                    
+                    # 环保信息
+                    if 'carbon_emissions' in flight:
+                        emissions = flight['carbon_emissions']
+                        result_text += f"   🌱 碳排放: {emissions.get('this_flight', 0):,}g"
+                        if 'difference_percent' in emissions:
+                            diff = emissions['difference_percent']
+                            if diff > 0:
+                                result_text += f" (+{diff}%)"
+                            elif diff < 0:
+                                result_text += f" ({diff}%)"
+                        result_text += "\n"
                     
                     # 获取真实预订选项
                     booking_token = flight.get('booking_token')
