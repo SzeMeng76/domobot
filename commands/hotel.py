@@ -20,7 +20,7 @@ from telegram.helpers import escape_markdown
 from utils.command_factory import command_factory
 from utils.config_manager import get_config
 from utils.error_handling import with_error_handling
-from utils.formatter import foldable_text_v2, foldable_text_with_markdown_v2, format_with_markdown_v2
+from utils.formatter import foldable_text_v2, foldable_text_with_markdown_v2
 from utils.message_manager import (
     delete_user_command, 
     send_error, 
@@ -56,6 +56,42 @@ TELEGRAPH_API_URL = "https://api.telegra.ph"
 # 酒店数据ID映射缓存 - 与 flight.py 完全一致的ID管理
 hotel_data_mapping = {}
 mapping_counter = 0
+
+def safe_hotel_markdown_v2(text: str) -> str:
+    """
+    专为酒店信息设计的安全MarkdownV2格式化函数
+    只对真正必要的字符进行转义，保留*加粗*格式
+    """
+    if not text:
+        return ""
+    
+    # 保存*加粗*格式
+    import re
+    bold_parts = []
+    bold_pattern = r'\*([^*]+)\*'
+    
+    # 找到所有*加粗*部分
+    matches = list(re.finditer(bold_pattern, text))
+    result = text
+    
+    # 从后向前替换，保存加粗内容
+    for i, match in enumerate(reversed(matches)):
+        placeholder = f"__BOLD_{i}__"
+        bold_content = match.group(1)
+        bold_parts.append((placeholder, f"*{bold_content}*"))
+        result = result[:match.start()] + placeholder + result[match.end():]
+    
+    # 只转义真正必要的字符（但不转义常见的数字、日期、小数点等）
+    # 只转义特别危险的字符
+    dangerous_chars = ['_', '~', '|', '`', '>', '#', '+', '=', '{', '}', '!', '\\']
+    for char in dangerous_chars:
+        result = result.replace(char, f'\\{char}')
+    
+    # 恢复*加粗*部分
+    for placeholder, bold_text in bold_parts:
+        result = result.replace(placeholder, bold_text)
+    
+    return result
 
 # 创建酒店会话管理器 - 与 flight.py 相同的配置
 hotel_session_manager = SessionManager("HotelService", max_age=1800, max_sessions=200)  # 30分钟会话
@@ -1139,7 +1175,7 @@ async def hotel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     search_msg = await send_info(
         context, 
         chat_id, 
-        foldable_text_v2(f"🔍 正在搜索酒店...\n📍 位置: {location_query}\n📅 日期: {check_in_date} - {check_out_date}")
+        foldable_text_v2("🔍 正在搜索酒店...")
     )
     
     try:
@@ -1247,7 +1283,7 @@ async def hotel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         result_msg = await send_message_with_auto_delete(
             context=context,
             chat_id=chat_id,
-            text=format_with_markdown_v2(full_message),
+            text=safe_hotel_markdown_v2(full_message),
             parse_mode="MarkdownV2",
             reply_markup=reply_markup
         )
@@ -1520,7 +1556,8 @@ async def hotel_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         ]
         
         await query.edit_message_text(
-            text=format_with_markdown_v2(full_message),
+            text=safe_hotel_markdown_v2(full_message),
+            parse_mode="MarkdownV2",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     
@@ -1576,7 +1613,7 @@ async def _process_hotel_search_with_location(query: CallbackQuery, location_que
     
     # 更新消息为搜索中
     await query.edit_message_text(
-        foldable_text_v2(f"🔍 正在搜索酒店...\n📍 位置: {location_query}\n📅 日期: {check_in_date} - {check_out_date}")
+        foldable_text_v2("🔍 正在搜索酒店...")
     )
     
     try:
@@ -1655,7 +1692,8 @@ async def _process_hotel_search_with_location(query: CallbackQuery, location_que
         
         # 更新消息
         await query.edit_message_text(
-            text=format_with_markdown_v2(full_message),
+            text=safe_hotel_markdown_v2(full_message),
+            parse_mode="MarkdownV2",
             reply_markup=reply_markup
         )
         
@@ -1752,7 +1790,8 @@ async def _sort_hotels_by_price(query: CallbackQuery, session_data: Dict, contex
     ]
     
     await query.edit_message_text(
-        text=format_with_markdown_v2(full_message),
+        text=safe_hotel_markdown_v2(full_message),
+        parse_mode="MarkdownV2",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -1801,7 +1840,8 @@ async def _sort_hotels_by_rating(query: CallbackQuery, session_data: Dict, conte
     ]
     
     await query.edit_message_text(
-        text=format_with_markdown_v2(full_message),
+        text=safe_hotel_markdown_v2(full_message),
+        parse_mode="MarkdownV2",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -2314,7 +2354,7 @@ async def _apply_filter_and_research(query: CallbackQuery, session_data: Dict, c
     # 显示搜索中消息
     filter_display = _get_filter_display_name(filter_type)
     await query.edit_message_text(
-        foldable_text_v2(f"🔍 正在应用筛选条件: {filter_display}\n\n请稍候...")
+        foldable_text_v2("🔍 正在应用筛选条件...")
     )
     
     try:
@@ -2368,7 +2408,8 @@ async def _apply_filter_and_research(query: CallbackQuery, session_data: Dict, c
         ]
         
         await query.edit_message_text(
-            text=format_with_markdown_v2(full_message),
+            text=safe_hotel_markdown_v2(full_message),
+            parse_mode="MarkdownV2",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         
