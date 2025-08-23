@@ -52,6 +52,7 @@ SUPPORTED_COUNTRIES = {
     "FM": {"name": "密克罗尼西亚", "currency": "USD", "symbol": "$", "locale": "en_FM"},
     "FR": {"name": "法国", "currency": "EUR", "symbol": "€", "locale": "fr_FR"},
     "GB": {"name": "英国", "currency": "GBP", "symbol": "£", "locale": "en_GB"},
+    "UK": {"name": "英国", "currency": "GBP", "symbol": "£", "locale": "en_GB"},
     "GD": {"name": "格林纳达", "currency": "XCD", "symbol": "$", "locale": "en_GD"},
     "GH": {"name": "加纳", "currency": "GHS", "symbol": "₵", "locale": "en_GH"},
     "GM": {"name": "冈比亚", "currency": "GMD", "symbol": "D", "locale": "en_GM"},
