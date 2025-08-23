@@ -35,7 +35,8 @@ from utils.airport_mapper import (
     resolve_flight_airports,
     format_airport_selection_message,
     get_recommended_airport_pair,
-    format_airport_info
+    format_airport_info,
+    MAJOR_CITIES_AIRPORTS
 )
 
 logger = logging.getLogger(__name__)
@@ -111,6 +112,301 @@ def get_short_flight_id(data_id: str) -> str:
 def get_full_flight_id(short_id: str) -> Optional[str]:
     """根据短ID获取完整数据ID - 与map.py完全一致"""
     return flight_data_mapping.get(short_id)
+
+def get_airport_info_from_code(airport_code: str) -> Dict:
+    """从机场代码获取详细信息"""
+    for city, city_info in MAJOR_CITIES_AIRPORTS.items():
+        for airport in city_info["airports"]:
+            if airport["code"] == airport_code:
+                return {
+                    "code": airport_code,
+                    "name": airport["name"], 
+                    "name_en": airport["name_en"],
+                    "city": city,
+                    "note": airport.get("note", ""),
+                    "primary": airport_code == city_info["primary"]
+                }
+    return {"code": airport_code, "name": f"{airport_code}机场", "city": "未知城市"}
+
+def calculate_time_difference(departure_code: str, arrival_code: str) -> Dict:
+    """计算两个机场之间的时差信息"""
+    # 简化的时区映射 - 基于主要机场
+    airport_timezones = {
+        # 中国
+        "PEK": {"timezone": "Asia/Shanghai", "offset": 8, "name": "北京时间"},
+        "PKX": {"timezone": "Asia/Shanghai", "offset": 8, "name": "北京时间"},
+        "PVG": {"timezone": "Asia/Shanghai", "offset": 8, "name": "上海时间"},
+        "SHA": {"timezone": "Asia/Shanghai", "offset": 8, "name": "上海时间"},
+        "CAN": {"timezone": "Asia/Shanghai", "offset": 8, "name": "北京时间"},
+        
+        # 日本
+        "NRT": {"timezone": "Asia/Tokyo", "offset": 9, "name": "日本时间"},
+        "HND": {"timezone": "Asia/Tokyo", "offset": 9, "name": "日本时间"},
+        
+        # 韩国
+        "ICN": {"timezone": "Asia/Seoul", "offset": 9, "name": "韩国时间"},
+        
+        # 东南亚
+        "SIN": {"timezone": "Asia/Singapore", "offset": 8, "name": "新加坡时间"},
+        "BKK": {"timezone": "Asia/Bangkok", "offset": 7, "name": "泰国时间"},
+        
+        # 美国
+        "LAX": {"timezone": "America/Los_Angeles", "offset": -8, "name": "太平洋时间"},
+        "SFO": {"timezone": "America/Los_Angeles", "offset": -8, "name": "太平洋时间"},
+        "JFK": {"timezone": "America/New_York", "offset": -5, "name": "东部时间"},
+        "LGA": {"timezone": "America/New_York", "offset": -5, "name": "东部时间"},
+        "EWR": {"timezone": "America/New_York", "offset": -5, "name": "东部时间"},
+        "ORD": {"timezone": "America/Chicago", "offset": -6, "name": "中部时间"},
+        "SEA": {"timezone": "America/Los_Angeles", "offset": -8, "name": "太平洋时间"},
+        
+        # 加拿大
+        "YYZ": {"timezone": "America/Toronto", "offset": -5, "name": "东部时间"},
+        "YVR": {"timezone": "America/Vancouver", "offset": -8, "name": "太平洋时间"},
+        
+        # 欧洲
+        "LHR": {"timezone": "Europe/London", "offset": 0, "name": "格林威治时间"},
+        "CDG": {"timezone": "Europe/Paris", "offset": 1, "name": "中欧时间"},
+        "FRA": {"timezone": "Europe/Berlin", "offset": 1, "name": "中欧时间"},
+        "AMS": {"timezone": "Europe/Amsterdam", "offset": 1, "name": "中欧时间"},
+        
+        # 澳洲
+        "SYD": {"timezone": "Australia/Sydney", "offset": 11, "name": "澳东时间"},
+        "MEL": {"timezone": "Australia/Melbourne", "offset": 11, "name": "澳东时间"},
+        
+        # 中东
+        "DXB": {"timezone": "Asia/Dubai", "offset": 4, "name": "阿联酋时间"},
+        "DOH": {"timezone": "Asia/Qatar", "offset": 3, "name": "卡塔尔时间"},
+    }
+    
+    dep_tz = airport_timezones.get(departure_code, {"offset": 0, "name": "未知时区"})
+    arr_tz = airport_timezones.get(arrival_code, {"offset": 0, "name": "未知时区"})
+    
+    time_diff = arr_tz["offset"] - dep_tz["offset"]
+    
+    return {
+        "departure_tz": dep_tz,
+        "arrival_tz": arr_tz,
+        "time_difference": time_diff,
+        "time_diff_str": f"{time_diff:+d}小时" if time_diff != 0 else "无时差"
+    }
+
+def get_flight_distance_info(departure_code: str, arrival_code: str) -> Dict:
+    """获取航班距离和飞行时间信息"""
+    # 主要航线距离数据库 (公里)
+    flight_distances = {
+        # 中美航线
+        ("PEK", "LAX"): {"distance": 11129, "flight_time": "13小时30分", "type": "跨太平洋"},
+        ("PEK", "SFO"): {"distance": 11141, "flight_time": "12小时45分", "type": "跨太平洋"},
+        ("PEK", "JFK"): {"distance": 11013, "flight_time": "14小时30分", "type": "跨极地"},
+        ("PVG", "LAX"): {"distance": 11666, "flight_time": "13小时15分", "type": "跨太平洋"},
+        ("PVG", "SFO"): {"distance": 11577, "flight_time": "12小时30分", "type": "跨太平洋"},
+        ("PVG", "JFK"): {"distance": 11836, "flight_time": "15小时", "type": "跨极地"},
+        
+        # 中欧航线  
+        ("PEK", "LHR"): {"distance": 8147, "flight_time": "11小时30分", "type": "欧亚大陆"},
+        ("PEK", "CDG"): {"distance": 8214, "flight_time": "11小时45分", "type": "欧亚大陆"},
+        ("PEK", "FRA"): {"distance": 7766, "flight_time": "11小时15分", "type": "欧亚大陆"},
+        ("PVG", "LHR"): {"distance": 9217, "flight_time": "12小时45分", "type": "欧亚大陆"},
+        
+        # 中日韩
+        ("PEK", "NRT"): {"distance": 2097, "flight_time": "3小时20分", "type": "东北亚"},
+        ("PEK", "ICN"): {"distance": 954, "flight_time": "2小时", "type": "东北亚"},
+        ("PVG", "NRT"): {"distance": 1771, "flight_time": "3小时", "type": "东北亚"},
+        ("PVG", "ICN"): {"distance": 891, "flight_time": "2小时", "type": "东北亚"},
+        
+        # 东南亚
+        ("PEK", "SIN"): {"distance": 4473, "flight_time": "6小时30分", "type": "东南亚"},
+        ("PEK", "BKK"): {"distance": 2865, "flight_time": "5小时15分", "type": "东南亚"},
+        ("PVG", "SIN"): {"distance": 4128, "flight_time": "6小时", "type": "东南亚"},
+        
+        # 跨大西洋
+        ("JFK", "LHR"): {"distance": 5585, "flight_time": "7小时", "type": "跨大西洋"},
+        ("JFK", "CDG"): {"distance": 5851, "flight_time": "7小时30分", "type": "跨大西洋"},
+        
+        # 澳洲
+        ("PEK", "SYD"): {"distance": 8998, "flight_time": "11小时30分", "type": "跨赤道"},
+        ("PVG", "SYD"): {"distance": 8333, "flight_time": "10小时45分", "type": "跨赤道"},
+        
+        # 中东
+        ("PEK", "DXB"): {"distance": 5951, "flight_time": "8小时15分", "type": "丝绸之路"},
+    }
+    
+    # 查找距离信息（支持双向）
+    distance_info = flight_distances.get((departure_code, arrival_code)) or flight_distances.get((arrival_code, departure_code))
+    
+    if distance_info:
+        return distance_info
+    
+    # 默认估算（基于航线类型）
+    return {"distance": 0, "flight_time": "未知", "type": "国际航线"}
+
+def enhance_flight_route_display(api_search_data: Dict, search_params: Dict) -> str:
+    """
+    增强航线显示，结合API数据和本地机场信息
+    """
+    departure_id = search_params.get('departure_id', '')
+    arrival_id = search_params.get('arrival_id', '')
+    outbound_date = search_params.get('outbound_date', '')
+    return_date = search_params.get('return_date', '')
+    
+    # 从API数据获取机场信息
+    api_departure_info = {}
+    api_arrival_info = {}
+    
+    if api_search_data:
+        search_metadata = api_search_data.get('search_metadata', {})
+        if search_metadata:
+            api_departure_info = search_metadata.get('departure', [{}])[0] if search_metadata.get('departure') else {}
+            api_arrival_info = search_metadata.get('arrival', [{}])[0] if search_metadata.get('arrival') else {}
+    
+    # 获取本地机场信息
+    dep_local_info = get_airport_info_from_code(departure_id)
+    arr_local_info = get_airport_info_from_code(arrival_id)
+    
+    # 合并信息 - API优先，本地补充
+    dep_info = {
+        "code": departure_id,
+        "name": api_departure_info.get('airport', {}).get('name', dep_local_info['name']),
+        "city": api_departure_info.get('city', dep_local_info['city']),
+        "country": api_departure_info.get('country', ''),
+        "country_code": api_departure_info.get('country_code', ''),
+        "local_info": dep_local_info
+    }
+    
+    arr_info = {
+        "code": arrival_id,
+        "name": api_arrival_info.get('airport', {}).get('name', arr_local_info['name']),
+        "city": api_arrival_info.get('city', arr_local_info['city']),
+        "country": api_arrival_info.get('country', ''),
+        "country_code": api_arrival_info.get('country_code', ''),
+        "local_info": arr_local_info
+    }
+    
+    # 获取时差信息
+    time_info = calculate_time_difference(departure_id, arrival_id)
+    
+    # 获取距离信息
+    distance_info = get_flight_distance_info(departure_id, arrival_id)
+    
+    # 获取国家标志
+    from utils.country_data import get_country_flag
+    dep_flag = get_country_flag(dep_info['country_code']) if dep_info['country_code'] else ''
+    arr_flag = get_country_flag(arr_info['country_code']) if arr_info['country_code'] else ''
+    
+    # 构建增强显示
+    from telegram.helpers import escape_markdown
+    
+    # 安全转义所有字段
+    safe_dep_city = escape_markdown(dep_info['city'], version=2)
+    safe_arr_city = escape_markdown(arr_info['city'], version=2)
+    safe_dep_name = escape_markdown(dep_info['name'], version=2)
+    safe_arr_name = escape_markdown(arr_info['name'], version=2)
+    safe_dep_country = escape_markdown(dep_info['country'], version=2)
+    safe_arr_country = escape_markdown(arr_info['country'], version=2)
+    safe_outbound_date = escape_markdown(outbound_date, version=2)
+    
+    trip_type = "往返" if return_date else "单程"
+    
+    result_parts = [
+        f"🛫 *{safe_dep_city} → {safe_arr_city}* 航班搜索"
+    ]
+    
+    if return_date:
+        safe_return_date = escape_markdown(return_date, version=2)
+        result_parts[0] += f" ({safe_outbound_date} - {safe_return_date})"
+    else:
+        result_parts[0] += f" ({safe_outbound_date})"
+    
+    result_parts.extend([
+        "",
+        f"📍 *出发*: {safe_dep_name} ({departure_id})",
+        f"{dep_flag} {safe_dep_country}{safe_dep_city} | 🕐 {time_info['departure_tz']['name']} (UTC{time_info['departure_tz']['offset']:+d})",
+        "",
+        f"📍 *到达*: {safe_arr_name} ({arrival_id})",  
+        f"{arr_flag} {safe_arr_country}{safe_arr_city} | 🕐 {time_info['arrival_tz']['name']} (UTC{time_info['arrival_tz']['offset']:+d})"
+    ])
+    
+    # 添加航线信息
+    if time_info['time_difference'] != 0:
+        time_diff_str = escape_markdown(time_info['time_diff_str'], version=2)
+        if time_info['time_difference'] > 0:
+            result_parts.append(f"⏰ *时差*: 到达地比出发地快{time_diff_str}")
+        else:
+            result_parts.append(f"⏰ *时差*: 到达地比出发地慢{abs(time_info['time_difference'])}小时")
+    
+    # 添加距离和飞行信息
+    if distance_info['distance'] > 0:
+        safe_flight_time = escape_markdown(distance_info['flight_time'], version=2)
+        safe_route_type = escape_markdown(distance_info['type'], version=2)
+        result_parts.extend([
+            f"✈️ *航线信息*:",
+            f"• 飞行距离: {distance_info['distance']:,}公里",
+            f"• 预计飞行: {safe_flight_time}",
+            f"• 航线类型: {safe_route_type}"
+        ])
+    
+    # 添加特殊提醒
+    if distance_info['type'] in ['跨太平洋', '跨极地'] and abs(time_info['time_difference']) >= 10:
+        result_parts.extend([
+            "",
+            "💡 *长途飞行提醒*:",
+            "• 建议提前调整作息时间",
+            "• 到达后可能需要1-3天适应时差",
+            "• 选择合适的座位和餐食"
+        ])
+    elif distance_info['type'] in ['东北亚', '东南亚'] and distance_info['distance'] < 3000:
+        result_parts.extend([
+            "",
+            "💡 *短途航线*:",
+            "• 适合商务出行",
+            "• 当日往返可行",
+            "• 通常有多个航班选择"
+        ])
+    
+    result_parts.append("")
+    
+    return "\n".join(result_parts)
+
+def add_flight_time_context(flight_data: Dict, search_params: Dict) -> str:
+    """添加具体航班时间上下文信息"""
+    departure_id = search_params.get('departure_id', '')
+    arrival_id = search_params.get('arrival_id', '')
+    outbound_date = search_params.get('outbound_date', '')
+    
+    # 获取时差信息
+    time_info = calculate_time_difference(departure_id, arrival_id)
+    
+    # 如果有具体的航班数据，显示时间提醒
+    best_flights = flight_data.get('best_flights', [])
+    if best_flights and len(best_flights) > 0:
+        first_flight = best_flights[0]
+        flights = first_flight.get('flights', [])
+        
+        if flights and len(flights) > 0:
+            departure_flight = flights[0]
+            departure_time = departure_flight.get('departure_time', '')
+            
+            if departure_time and time_info['time_difference'] != 0:
+                from telegram.helpers import escape_markdown
+                safe_date = escape_markdown(outbound_date, version=2)
+                safe_dep_time = escape_markdown(departure_time, version=2)
+                
+                result_parts = [
+                    "",
+                    f"🕐 *航班时间提醒* \\({safe_date}\\):",
+                    f"🌅 出发: {safe_dep_time} {time_info['departure_tz']['name']}"
+                ]
+                
+                # 计算到达当地时间提醒
+                if abs(time_info['time_difference']) >= 8:
+                    if time_info['time_difference'] > 0:
+                        result_parts.append("🌍 跨越多个时区，到达时请注意调整时间")
+                    else:
+                        result_parts.append("🌍 向西飞行，白天时间会延长")
+                        
+                return "\n".join(result_parts)
+    
+    return ""
 
 class FlightServiceManager:
     """航班服务管理器 - 对应map.py的MapServiceManager"""
@@ -461,24 +757,19 @@ def format_flight_info(flight: Dict) -> str:
     return result
 
 def format_flight_results(flight_data: Dict, search_params: Dict) -> str:
-    """格式化航班搜索结果 - 与map.py的格式化函数相同模式"""
+    """格式化航班搜索结果 - 增强版显示"""
     if not flight_data:
         return "❌ 未找到航班信息"
     
-    # 获取搜索参数
-    departure_id = search_params.get('departure_id', '')
-    arrival_id = search_params.get('arrival_id', '')
-    outbound_date = search_params.get('outbound_date', '')
-    return_date = search_params.get('return_date', '')
+    # 使用增强显示功能替换原有标题
+    enhanced_header = enhance_flight_route_display(flight_data, search_params)
     
-    trip_type = "往返" if return_date else "单程"
+    result = enhanced_header
     
-    result = f"✈️ *航班搜索结果*\n\n"
-    result += f"🛫 {departure_id} → {arrival_id}\n"
-    result += f"📅 出发: {outbound_date}"
-    if return_date:
-        result += f" | 返回: {return_date}"
-    result += f" ({trip_type})\n\n"
+    # 添加具体航班时间上下文
+    time_context = add_flight_time_context(flight_data, search_params)
+    if time_context:
+        result += time_context
     
     # 显示最佳航班
     best_flights = flight_data.get('best_flights', [])
@@ -1454,7 +1745,7 @@ async def _execute_airport_query(update: Update, context: ContextTypes.DEFAULT_T
                 safe_name = escape_markdown(name, version=2)
                 safe_note = escape_markdown(note, version=2)
                 
-                response_parts.append(f"{i}\\. *{code}* \\- {safe_name}")
+                response_parts.append(f"{i}. *{code}* - {safe_name}")
                 if note:
                     response_parts.append(f"   💡 {safe_note}")
                 response_parts.append("")
@@ -1499,7 +1790,7 @@ async def _execute_airport_query(update: Update, context: ContextTypes.DEFAULT_T
                 safe_transport = escape_markdown(transport, version=2)
                 
                 note_icon = "⭐" if note == "推荐" else "🚄"
-                response_parts.append(f"{note_icon} *{airport}* \\- {safe_airport_city}")
+                response_parts.append(f"{note_icon} *{airport}* - {safe_airport_city}")
                 response_parts.append(f"   🚅 {safe_transport}")
             
             keyboard = [
@@ -1758,9 +2049,9 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
 • 英文城市: `Beijing`, `New York`, `Tokyo`
 
 💡 *示例*:
-• `PVG` \\- 查询浦东机场详细信息
-• `上海` \\- 查询上海的所有机场
-• `New York` \\- 查询纽约地区机场"""
+• `PVG` - 查询浦东机场详细信息
+• `上海` - 查询上海的所有机场
+• `New York` - 查询纽约地区机场"""
 
         await query.edit_message_text(
             text=foldable_text_with_markdown_v2(airport_help_text),

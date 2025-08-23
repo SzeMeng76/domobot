@@ -618,7 +618,7 @@ def format_airport_selection_message(departure_result: Dict, arrival_result: Dic
             safe_note = escape_markdown(note, version=2)
             
             icon = "🔸" if i == 0 else "🔹"  # 主要机场用实心，次要用空心
-            message_parts.append(f"{icon} *{code}* \\- {safe_name}")
+            message_parts.append(f"{icon} *{code}* - {safe_name}")
             if note:
                 message_parts.append(f"   💡 {safe_note}")
         message_parts.append("")
@@ -639,7 +639,7 @@ def format_airport_selection_message(departure_result: Dict, arrival_result: Dic
             safe_transport = escape_markdown(transport, version=2)
             
             note_icon = "⭐" if note == "推荐" else "🚄"
-            message_parts.append(f"{note_icon} *{airport}* \\- {safe_airport_city}")
+            message_parts.append(f"{note_icon} *{airport}* - {safe_airport_city}")
             message_parts.append(f"   🚅 {safe_transport}")
         message_parts.append("")
     
@@ -659,7 +659,7 @@ def format_airport_selection_message(departure_result: Dict, arrival_result: Dic
             safe_note = escape_markdown(note, version=2)
             
             icon = "🔸" if i == 0 else "🔹"
-            message_parts.append(f"{icon} *{code}* \\- {safe_name}")
+            message_parts.append(f"{icon} *{code}* - {safe_name}")
             if note:
                 message_parts.append(f"   💡 {safe_note}")
         message_parts.append("")
@@ -680,7 +680,7 @@ def format_airport_selection_message(departure_result: Dict, arrival_result: Dic
             safe_transport = escape_markdown(transport, version=2)
             
             note_icon = "⭐" if note == "推荐" else "🚄"
-            message_parts.append(f"{note_icon} *{airport}* \\- {safe_airport_city}")
+            message_parts.append(f"{note_icon} *{airport}* - {safe_airport_city}")
             message_parts.append(f"   🚅 {safe_transport}")
         message_parts.append("")
     
@@ -709,7 +709,7 @@ def format_airport_info(airport_code: str) -> str:
                 safe_note = escape_markdown(note, version=2)
                 safe_city = escape_markdown(city, version=2)
                 
-                result = f"✈️ *{safe_name}* \\({airport_code}\\)\n"
+                result = f"✈️ *{safe_name}* ({airport_code})\n"
                 result += f"📍 {safe_city}\n"
                 if name_en and name_en != name:
                     result += f"🔤 {safe_name_en}\n"
