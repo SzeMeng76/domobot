@@ -1877,7 +1877,7 @@ async def flight_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 `/flight 吉隆坡 普吉 2024-12-25 2024-12-30` - 自动选择KUL→HKT  
 `/flight Shanghai Tokyo 2024-12-25` - 混合语言输入
 
-🔗 完整国际机场列表: https://en\\.wikipedia\\.org/wiki/List\\_of\\_international\\_airports\\_by\\_country
+🔗 [完整国际机场列表](https://en.wikipedia.org/wiki/List_of_international_airports_by_country)
 
 请选择功能:"""
     
@@ -3019,7 +3019,7 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
 `/flight 吉隆坡 普吉 2024-12-25 2024-12-30` - 智能识别KUL→HKT往返
 `/flight Shanghai Tokyo 2024-12-25` - 混合语言输入PVG→NRT
 
-🔗 完整国际机场列表: https://en\\.wikipedia\\.org/wiki/List\\_of\\_international\\_airports\\_by\\_country
+🔗 [完整国际机场列表](https://en.wikipedia.org/wiki/List_of_international_airports_by_country)
 
 请选择功能:"""
         
@@ -3060,7 +3060,7 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
 • 支持城市别名和简称
 • 多机场城市自动推荐主要机场
 
-🔗 完整国际机场列表: https://en\\.wikipedia\\.org/wiki/List\\_of\\_international\\_airports\\_by\\_country"""
+🔗 [完整国际机场列表](https://en.wikipedia.org/wiki/List_of_international_airports_by_country)"""
 
         await query.edit_message_text(
             text=foldable_text_with_markdown_v2(search_help_text),
