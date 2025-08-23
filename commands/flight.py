@@ -129,65 +129,145 @@ def get_airport_info_from_code(airport_code: str) -> Dict:
     return {"code": airport_code, "name": f"{airport_code}机场", "city": "未知城市"}
 
 def calculate_time_difference(departure_code: str, arrival_code: str) -> Dict:
-    """计算两个机场之间的时差信息"""
-    # 简化的时区映射 - 基于主要机场
-    airport_timezones = {
+    """计算两个机场之间的时差信息 - 使用time_command的动态时区计算"""
+    from datetime import datetime, timedelta
+    import zoneinfo
+    from utils.timezone_mapper import COUNTRY_TO_TIMEZONE, resolve_timezone_with_country_data
+    
+    # 机场代码到国家代码的映射 
+    airport_to_country = {
         # 中国
-        "PEK": {"timezone": "Asia/Shanghai", "offset": 8, "name": "北京时间"},
-        "PKX": {"timezone": "Asia/Shanghai", "offset": 8, "name": "北京时间"},
-        "PVG": {"timezone": "Asia/Shanghai", "offset": 8, "name": "上海时间"},
-        "SHA": {"timezone": "Asia/Shanghai", "offset": 8, "name": "上海时间"},
-        "CAN": {"timezone": "Asia/Shanghai", "offset": 8, "name": "北京时间"},
-        
+        "PEK": "CN", "PKX": "CN", "PVG": "CN", "SHA": "CN", "CAN": "CN",
         # 日本
-        "NRT": {"timezone": "Asia/Tokyo", "offset": 9, "name": "日本时间"},
-        "HND": {"timezone": "Asia/Tokyo", "offset": 9, "name": "日本时间"},
-        
-        # 韩国
-        "ICN": {"timezone": "Asia/Seoul", "offset": 9, "name": "韩国时间"},
-        
+        "NRT": "JP", "HND": "JP",
+        # 韩国  
+        "ICN": "KR",
         # 东南亚
-        "SIN": {"timezone": "Asia/Singapore", "offset": 8, "name": "新加坡时间"},
-        "BKK": {"timezone": "Asia/Bangkok", "offset": 7, "name": "泰国时间"},
-        
+        "SIN": "SG", "BKK": "TH", "DMK": "TH", "KUL": "MY",
+        "CGK": "ID", "MNL": "PH", "HKG": "HK", "TPE": "TW",
         # 美国
-        "LAX": {"timezone": "America/Los_Angeles", "offset": -8, "name": "太平洋时间"},
-        "SFO": {"timezone": "America/Los_Angeles", "offset": -8, "name": "太平洋时间"},
-        "JFK": {"timezone": "America/New_York", "offset": -5, "name": "东部时间"},
-        "LGA": {"timezone": "America/New_York", "offset": -5, "name": "东部时间"},
-        "EWR": {"timezone": "America/New_York", "offset": -5, "name": "东部时间"},
-        "ORD": {"timezone": "America/Chicago", "offset": -6, "name": "中部时间"},
-        "SEA": {"timezone": "America/Los_Angeles", "offset": -8, "name": "太平洋时间"},
-        
+        "LAX": "US", "SFO": "US", "JFK": "US", "LGA": "US", "EWR": "US", 
+        "ORD": "US", "SEA": "US", "DFW": "US", "ATL": "US",
         # 加拿大
-        "YYZ": {"timezone": "America/Toronto", "offset": -5, "name": "东部时间"},
-        "YVR": {"timezone": "America/Vancouver", "offset": -8, "name": "太平洋时间"},
-        
+        "YYZ": "CA", "YVR": "CA", 
         # 欧洲
-        "LHR": {"timezone": "Europe/London", "offset": 0, "name": "格林威治时间"},
-        "CDG": {"timezone": "Europe/Paris", "offset": 1, "name": "中欧时间"},
-        "FRA": {"timezone": "Europe/Berlin", "offset": 1, "name": "中欧时间"},
-        "AMS": {"timezone": "Europe/Amsterdam", "offset": 1, "name": "中欧时间"},
-        
+        "LHR": "GB", "CDG": "FR", "FRA": "DE", "AMS": "NL", "FCO": "IT", "MAD": "ES",
         # 澳洲
-        "SYD": {"timezone": "Australia/Sydney", "offset": 11, "name": "澳东时间"},
-        "MEL": {"timezone": "Australia/Melbourne", "offset": 11, "name": "澳东时间"},
-        
+        "SYD": "AU", "MEL": "AU",
         # 中东
-        "DXB": {"timezone": "Asia/Dubai", "offset": 4, "name": "阿联酋时间"},
-        "DOH": {"timezone": "Asia/Qatar", "offset": 3, "name": "卡塔尔时间"},
+        "DXB": "AE", "DOH": "QA", "JED": "SA", "RUH": "SA",
+        # 印度
+        "DEL": "IN", "BOM": "IN",
+        # 其他
+        "LHE": "PK", "KHI": "PK"
     }
+
+    def get_timezone_name(airport_code: str) -> str:
+        """获取机场对应的时区名称"""
+        country_code = airport_to_country.get(airport_code)
+        if not country_code:
+            return "UTC"
+        return COUNTRY_TO_TIMEZONE.get(country_code, "UTC")
     
-    dep_tz = airport_timezones.get(departure_code, {"offset": 0, "name": "未知时区"})
-    arr_tz = airport_timezones.get(arrival_code, {"offset": 0, "name": "未知时区"})
+    def get_timezone_info(airport_code: str, timezone_name: str) -> Dict:
+        """获取机场时区信息 - 使用time_command的动态计算逻辑"""
+        try:
+            # 使用zoneinfo获取时区（与time_command一致）
+            tz = zoneinfo.ZoneInfo(timezone_name)
+            now = datetime.now(tz)
+            
+            # 动态计算UTC偏移（考虑夏令时）
+            offset_seconds = now.utcoffset().total_seconds() if now.utcoffset() else 0
+            offset_hours = int(offset_seconds / 3600)
+            
+            # 检查是否是夏令时
+            is_dst = bool(now.dst()) if now.dst() is not None else False
+            
+            # 生成友好的时区名称
+            timezone_display_names = {
+                "Asia/Shanghai": "北京时间",
+                "Asia/Tokyo": "日本时间", 
+                "Asia/Seoul": "韩国时间",
+                "Asia/Singapore": "新加坡时间",
+                "Asia/Bangkok": "泰国时间",
+                "Asia/Kuala_Lumpur": "马来西亚时间",
+                "Asia/Jakarta": "印度尼西亚时间",
+                "Asia/Manila": "菲律宾时间",
+                "Asia/Hong_Kong": "香港时间",
+                "Asia/Taipei": "台北时间",
+                "America/Los_Angeles": "太平洋时间",
+                "America/New_York": "东部时间", 
+                "America/Chicago": "中部时间",
+                "America/Toronto": "东部时间",
+                "America/Vancouver": "太平洋时间",
+                "Europe/London": "格林威治时间",
+                "Europe/Paris": "中欧时间",
+                "Europe/Berlin": "中欧时间",
+                "Europe/Amsterdam": "中欧时间",
+                "Australia/Sydney": "澳东时间",
+                "Australia/Melbourne": "澳东时间",
+                "Asia/Dubai": "阿联酋时间",
+                "Asia/Qatar": "卡塔尔时间",
+                "Asia/Kolkata": "印度时间"
+            }
+            
+            display_name = timezone_display_names.get(timezone_name, timezone_name.split("/")[-1] + "时间")
+            
+            return {
+                "offset": offset_hours,
+                "name": display_name,
+                "timezone": timezone_name,
+                "is_dst": is_dst
+            }
+            
+        except Exception as e:
+            return {"offset": 0, "name": "未知时区", "timezone": "UTC", "is_dst": False}
+
+    # 获取两个机场的时区名称
+    dep_timezone_name = get_timezone_name(departure_code)
+    arr_timezone_name = get_timezone_name(arrival_code)
     
-    time_diff = arr_tz["offset"] - dep_tz["offset"]
+    # 获取时区信息
+    dep_tz = get_timezone_info(departure_code, dep_timezone_name)
+    arr_tz = get_timezone_info(arrival_code, arr_timezone_name)
+    
+    # 使用time_command的精确时差计算逻辑
+    try:
+        # 创建两个时区的datetime对象
+        dep_timezone = zoneinfo.ZoneInfo(dep_timezone_name)
+        arr_timezone = zoneinfo.ZoneInfo(arr_timezone_name)
+        
+        # 使用当前时间计算精确的UTC偏移差异
+        now_dep = datetime.now(dep_timezone)
+        now_arr = datetime.now(arr_timezone)
+        
+        dep_offset = now_dep.utcoffset() or timedelta()
+        arr_offset = now_arr.utcoffset() or timedelta()
+        
+        # 计算时差（与time_command完全一致的算法）
+        hours_difference = (arr_offset - dep_offset).total_seconds() / 3600
+        
+        # 格式化时差字符串（与time_command一致）
+        if hours_difference.is_integer():
+            time_diff_str = f"{hours_difference:+.0f}小时"
+        else:
+            time_diff_str = f"{hours_difference:+.1f}小时"
+        
+        time_diff = hours_difference
+        
+    except Exception:
+        # 降级到简单计算
+        time_diff = arr_tz["offset"] - dep_tz["offset"]
+        if time_diff != 0:
+            time_diff_str = f"{time_diff:+.0f}小时"
+        else:
+            time_diff_str = "0小时"
     
     return {
         "departure_tz": dep_tz,
         "arrival_tz": arr_tz,
         "time_difference": time_diff,
-        "time_diff_str": f"{time_diff:+d}小时" if time_diff != 0 else "无时差"
+        "time_diff_str": time_diff_str if 'time_diff_str' in locals() else (f"{time_diff:+.0f}小时" if time_diff != 0 else "无时差")
     }
 
 def get_flight_distance_info(departure_code: str, arrival_code: str) -> Dict:
@@ -393,7 +473,7 @@ def add_flight_time_context(flight_data: Dict, search_params: Dict) -> str:
                 
                 result_parts = [
                     "",
-                    f"🕐 *航班时间提醒* \\({safe_date}\\):",
+                    f"🕐 *航班时间提醒* ({safe_date}):",
                     f"🌅 出发: {safe_dep_time} {time_info['departure_tz']['name']}"
                 ]
                 
