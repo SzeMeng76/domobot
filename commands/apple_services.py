@@ -351,6 +351,21 @@ async def get_service_info(url: str, country_code: str, service: str, context: C
             if not prices:
                 prices = get_icloud_prices_from_html(content)
             
+            # If still no prices and we're not already using Apple Support, try fallback
+            if not prices and "support.apple.com" not in url:
+                logger.info(f"No prices found, attempting Apple Support fallback for {country_code}")
+                try:
+                    support_url = "https://support.apple.com/zh-cn/108047"
+                    support_response = await client.get(support_url, timeout=15)
+                    if support_response.status_code == 200:
+                        support_content = support_response.text
+                        logger.info(f"Successfully fetched Apple Support fallback page")
+                        prices = get_icloud_prices_from_html(support_content)
+                        if prices:
+                            logger.info(f"Successfully parsed {len(prices)} countries from Apple Support page")
+                except Exception as support_error:
+                    logger.error(f"Apple Support fallback failed: {support_error}")
+            
             country_name = country_info["name"]
             
             # Find matching country data
