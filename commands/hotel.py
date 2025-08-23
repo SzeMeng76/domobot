@@ -666,7 +666,7 @@ async def hotel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     
     # 删除用户命令消息
-    await delete_user_command(update, context)
+    await delete_user_command(context, update.message.chat_id, update.message.message_id)
     
     # 检查服务可用性
     if not hotel_service_manager or not hotel_service_manager.is_available():
