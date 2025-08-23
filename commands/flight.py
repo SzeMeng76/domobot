@@ -2680,9 +2680,50 @@ async def _execute_price_monitoring(update: Update, context: ContextTypes.DEFAUL
                         "❌ 格式错误\n\n请使用: `出发机场 到达机场 出发日期`")
         return
     
-    departure_id = parts[0].upper()
-    arrival_id = parts[1].upper()
+    departure_input = parts[0]
+    arrival_input = parts[1]
     outbound_date = parts[2]
+    
+    # 使用智能机场解析 - 与主搜索功能一致
+    airport_resolution = resolve_flight_airports(departure_input, arrival_input)
+    resolution_status = airport_resolution.get("status")
+    
+    if resolution_status == "ready":
+        # 直接获取机场代码
+        dep_primary, arr_primary = get_recommended_airport_pair(
+            airport_resolution["departure"], 
+            airport_resolution["arrival"]
+        )
+        departure_id = dep_primary
+        arrival_id = arr_primary
+        
+    elif resolution_status in ["multiple_choice", "suggestion_needed"]:
+        # 自动选择推荐机场
+        dep_result = airport_resolution["departure"]
+        arr_result = airport_resolution["arrival"]
+        
+        if (dep_result.get("status") in ["success", "multiple"] and 
+            arr_result.get("status") in ["success", "multiple"]):
+            dep_primary, arr_primary = get_recommended_airport_pair(dep_result, arr_result)
+            departure_id = dep_primary
+            arrival_id = arr_primary
+        else:
+            await send_error(context, update.message.chat_id, 
+                            f"❌ 无法识别机场: {departure_input}, {arrival_input}\n\n"
+                            "请使用:\n"
+                            "• 标准IATA代码: `KUL KBV`\n"  
+                            "• 中文城市名: `吉隆坡 甲米`\n"
+                            "• 英文城市名: `Kuala Lumpur Krabi`")
+            return
+    else:
+        # 无法识别
+        await send_error(context, update.message.chat_id, 
+                        f"❌ 无法识别机场: {departure_input}, {arrival_input}\n\n"
+                        "请使用:\n"
+                        "• 标准IATA代码: `KUL KBV`\n"  
+                        "• 中文城市名: `吉隆坡 甲米`\n"
+                        "• 英文城市名: `Kuala Lumpur Krabi`")
+        return
     
     loading_message = f"📊 正在获取价格信息 {departure_id} → {arrival_id}... ⏳"
     
@@ -2849,7 +2890,10 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             text="📊 价格监控设置:\n\n"
                  "请输入要监控的航线信息:\n"
                  "格式: `出发机场 到达机场 出发日期`\n\n"
-                 "例如: `PEK LAX 2024-12-25`",
+                 "🌟 智能输入支持:\n"
+                 "• 中文城市: `吉隆坡 甲米 2024-12-25`\n"
+                 "• 机场代码: `KUL KBV 2024-12-25`\n"
+                 "• 英文城市: `Kuala Lumpur Krabi 2024-12-25`",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
             ])

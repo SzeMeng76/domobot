@@ -438,9 +438,10 @@ MAJOR_CITIES_AIRPORTS = {
     },
     "吉隆坡": {
         "primary": "KUL", 
-        "secondary": [], 
+        "secondary": ["SZB"], 
         "airports": [
-            {"code": "KUL", "name": "吉隆坡国际机场", "name_en": "Kuala Lumpur International Airport", "note": "马来西亚主要国际机场"}
+            {"code": "KUL", "name": "吉隆坡国际机场", "name_en": "Kuala Lumpur International Airport", "note": "马来西亚主要国际机场"},
+            {"code": "SZB", "name": "苏丹阿卜杜勒·阿齐兹·沙阿机场", "name_en": "Sultan Abdul Aziz Shah Airport", "note": "雪兰莪州梳邦机场"}
         ]
     },
     "曼谷": {
@@ -720,6 +721,13 @@ MAJOR_CITIES_AIRPORTS = {
             {"code": "MDL", "name": "曼德勒国际机场", "name_en": "Mandalay International Airport", "note": "缅甸第二大机场"}
         ]
     },
+    "内比都": {
+        "primary": "NYT", 
+        "secondary": [], 
+        "airports": [
+            {"code": "NYT", "name": "内比都国际机场", "name_en": "Naypyidaw International Airport", "note": "缅甸首都机场"}
+        ]
+    },
     "金边": {
         "primary": "PNH", 
         "secondary": [], 
@@ -788,6 +796,55 @@ MAJOR_CITIES_AIRPORTS = {
         "secondary": [], 
         "airports": [
             {"code": "LGK", "name": "兰卡威国际机场", "name_en": "Langkawi International Airport", "note": "马来西亚度假岛机场"}
+        ]
+    },
+    "新山": {
+        "primary": "JHB", 
+        "secondary": [], 
+        "airports": [
+            {"code": "JHB", "name": "士乃国际机场", "name_en": "Senai International Airport", "note": "柔佛州主要机场，近新加坡"}
+        ]
+    },
+    "怡保": {
+        "primary": "IPH", 
+        "secondary": [], 
+        "airports": [
+            {"code": "IPH", "name": "苏丹阿兹兰沙阿机场", "name_en": "Sultan Azlan Shah Airport", "note": "霹雳州主要机场"}
+        ]
+    },
+    "哥打巴鲁": {
+        "primary": "KBR", 
+        "secondary": [], 
+        "airports": [
+            {"code": "KBR", "name": "苏丹依斯迈布特拉机场", "name_en": "Sultan Ismail Petra Airport", "note": "吉兰丹州主要机场"}
+        ]
+    },
+    "瓜拉丁加奴": {
+        "primary": "TGG", 
+        "secondary": [], 
+        "airports": [
+            {"code": "TGG", "name": "苏丹马哈茂德机场", "name_en": "Sultan Mahmud Airport", "note": "丁加奴州主要机场"}
+        ]
+    },
+    "关丹": {
+        "primary": "KUA", 
+        "secondary": [], 
+        "airports": [
+            {"code": "KUA", "name": "苏丹哈芝阿末沙阿机场", "name_en": "Sultan Haji Ahmad Shah Airport", "note": "彭亨州主要机场"}
+        ]
+    },
+    "纳闽": {
+        "primary": "LBU", 
+        "secondary": [], 
+        "airports": [
+            {"code": "LBU", "name": "纳闽国际机场", "name_en": "Labuan International Airport", "note": "纳闽联邦直辖区机场"}
+        ]
+    },
+    "亚罗士打": {
+        "primary": "AOR", 
+        "secondary": [], 
+        "airports": [
+            {"code": "AOR", "name": "苏丹阿卜杜勒·哈利姆机场", "name_en": "Sultan Abdul Halim Airport", "note": "吉打州主要机场"}
         ]
     },
     
@@ -1307,6 +1364,8 @@ ENGLISH_CITIES_AIRPORTS = {
     "davao": "达沃",
     "yangon": "仰光",
     "mandalay": "曼德勒",
+    "nay pyi taw": "内比都",
+    "naypyidaw": "内比都",  # 别名
     "phnom penh": "金边",
     "siem reap": "暹粒",
     "sihanoukville": "西哈努克城",
@@ -1317,6 +1376,18 @@ ENGLISH_CITIES_AIRPORTS = {
     "kuching": "古晋",
     "penang": "槟城",
     "langkawi": "兰卡威",
+    # 新增马来西亚城市
+    "johor bahru": "新山",
+    "johor": "新山",  # 别名
+    "ipoh": "怡保",
+    "kota bharu": "哥打巴鲁",
+    "kota baru": "哥打巴鲁",  # 别名
+    "kuala terengganu": "瓜拉丁加奴",
+    "terengganu": "瓜拉丁加奴",  # 简称
+    "kuantan": "关丹",
+    "labuan": "纳闽",
+    "alor setar": "亚罗士打",
+    "alor star": "亚罗士打",  # 别名
     
     # 南亚
     "new delhi": "新德里",
@@ -1422,6 +1493,7 @@ CITY_ALIASES = {
     "万象市": "万象",
     "仰光市": "仰光",
     "曼德勒市": "曼德勒",
+    "内比都市": "内比都",
     "暹粒市": "暹粒",
     "琅勃拉邦市": "琅勃拉邦",
     "新德里市": "新德里",
@@ -1605,11 +1677,11 @@ def get_country_airports(country_name: str) -> List[Dict]:
         # 东南亚
         "泰国": ["曼谷", "清迈", "普吉", "芭提雅", "合艾", "苏梅岛", "甲米", "素可泰", "乌隆他尼", "乌汶"],
         "新加坡": ["新加坡"],
-        "马来西亚": ["吉隆坡", "槟城", "兰卡威", "亚庇", "古晋"],
+        "马来西亚": ["吉隆坡", "槟城", "兰卡威", "亚庇", "古晋", "新山", "怡保", "哥打巴鲁", "瓜拉丁加奴", "关丹", "纳闽", "亚罗士打"],
         "印度尼西亚": ["雅加达", "巴厘岛", "泗水", "日惹", "棉兰", "巴厘巴板", "万鸦老", "望加锡", "巨港", "巴淡", "北干巴鲁", "坤甸", "班达亚齐", "马塔兰", "三宝垄", "班查马辛", "巴东", "万隆", "查雅普拉", "拉布安巴焦", "丹戎槟榔"],
         "菲律宾": ["马尼拉", "宿务", "达沃", "卡加延德奥罗"],
         "越南": ["胡志明市", "河内"],
-        "缅甸": ["仰光", "曼德勒"],
+        "缅甸": ["仰光", "曼德勒", "内比都"],
         "柬埔寨": ["金边", "暹粒", "西哈努克城"],
         "老挝": ["万象", "琅勃拉邦"],
         "文莱": ["斯里巴加湾市"],
