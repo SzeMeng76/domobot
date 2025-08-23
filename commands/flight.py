@@ -1951,18 +1951,82 @@ async def _execute_flight_search(update: Update, context: ContextTypes.DEFAULT_T
             
             # 检查消息长度限制（Telegram限制为4096字符）
             formatted_text = foldable_text_with_markdown_v2(result_text)
-            if len(formatted_text) > 4000:  # 留一些安全边距
-                # 如果消息过长，创建简化版本
-                simplified_text = result_text.split("📋 *其他选择*:")[0]  # 只保留推荐航班部分
-                if "📋 *完整航班列表*:" in simplified_text:
-                    # 保留Telegraph链接
-                    parts = simplified_text.split("📋 *完整航班列表*:")
-                    if len(parts) > 1:
-                        simplified_text = parts[0] + "📋 *完整航班列表*:" + parts[1]
-                else:
-                    simplified_text += f"\n\n📋 *查看更多选项*: 使用下方按钮查看完整航班列表"
+            if len(formatted_text) > 3800:  # 更保守的限制，留更多安全边距
+                logger.info(f"消息过长 ({len(formatted_text)} 字符)，开始压缩")
                 
-                formatted_text = foldable_text_with_markdown_v2(simplified_text)
+                # 激进压缩策略：只保留前3个推荐航班
+                lines = result_text.split('\n')
+                compressed_lines = []
+                flight_count = 0
+                in_other_section = False
+                
+                for line in lines:
+                    if '📋 *其他选择*:' in line:
+                        in_other_section = True
+                        break  # 完全跳过其他选择部分
+                    
+                    if line.strip().startswith('`') and ('.' in line):
+                        flight_count += 1
+                        if flight_count > 3:  # 只保留前3个航班
+                            break
+                    
+                    compressed_lines.append(line)
+                
+                # 添加Telegraph链接
+                compressed_lines.extend([
+                    "",
+                    f"📋 *完整航班列表*: [查看全部 {best_flights_count + other_flights_count} 个选项]({telegraph_url})",
+                    "",
+                    "📊 *价格分析*:",
+                    f"💰 最低价格: ${price_info.get('lowest', 'N/A')}",
+                    price_level_line,
+                    f"📈 典型价格区间: ${price_info.get('low', 'N/A')} - ${price_info.get('high', 'N/A')}",
+                    "",
+                    f"_数据来源: Google Flights via SerpAPI_",
+                    f"_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
+                ])
+                
+                compressed_text = '\n'.join(compressed_lines)
+                formatted_text = foldable_text_with_markdown_v2(compressed_text)
+                
+                logger.info(f"压缩后消息长度: {len(formatted_text)} 字符")
+                
+                # 如果仍然太长，进一步压缩
+                if len(formatted_text) > 3800:
+                    # 最终压缩：只保留前2个航班的基本信息
+                    basic_lines = []
+                    flight_count = 0
+                    skip_details = False
+                    
+                    for line in result_text.split('\n'):
+                        if line.strip().startswith('`') and ('.' in line):
+                            flight_count += 1
+                            if flight_count > 2:
+                                break
+                            basic_lines.append(line)
+                            skip_details = False
+                        elif flight_count > 0 and not skip_details:
+                            # 只保留关键信息，跳过详细描述
+                            if any(key in line for key in ['🛫', '🛬', '💰', '⏰', '🔄', '🌱', '🎫 航班类型']):
+                                basic_lines.append(line)
+                            elif '💡 预订建议' in line:
+                                basic_lines.append(line)
+                                skip_details = True
+                        else:
+                            basic_lines.append(line)
+                            if '🌟 *推荐航班*:' in line:
+                                flight_count = 0  # 重置计数开始处理航班
+                    
+                    basic_lines.extend([
+                        "",
+                        f"📋 *查看完整信息*: [全部 {best_flights_count + other_flights_count} 个航班选项]({telegraph_url})",
+                        "",
+                        f"💰 最低价格: ${price_info.get('lowest', 'N/A')} | {price_level_line.replace('🔴 ', '').replace('🟡 ', '').replace('🟢 ', '')}",
+                        f"_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
+                    ])
+                    
+                    formatted_text = foldable_text_with_markdown_v2('\n'.join(basic_lines))
+                    logger.info(f"最终压缩后消息长度: {len(formatted_text)} 字符")
             
             if callback_query:
                 await callback_query.edit_message_text(
@@ -3081,6 +3145,8 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         })
         
         # 获取出发机场信息
+        from telegram.helpers import escape_markdown
+        
         dep_airport_info = get_airport_info_from_code(departure_code)
         safe_dep_name = escape_markdown(dep_airport_info.get('name', departure_code), version=2)
         safe_dep_city = escape_markdown(dep_airport_info.get('city', ''), version=2)
