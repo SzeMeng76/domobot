@@ -17,6 +17,32 @@ from utils.permissions import Permission
 from utils.price_parser import extract_price_value_from_country_info
 
 
+def normalize_free_pricing(price_text: str) -> str:
+    """Normalize free pricing text to Chinese '免费' for consistent display."""
+    # Common free pricing terms in different languages
+    free_terms = [
+        "ücretsiz",    # Turkish
+        "free",        # English
+        "gratis",      # Spanish/Portuguese
+        "gratuit",     # French
+        "kostenlos",   # German
+        "無料",        # Japanese
+        "무료",        # Korean
+        "免费",        # Chinese Simplified
+        "免費",        # Chinese Traditional
+        "مجاني",       # Arabic
+        "gratuito",    # Italian
+        "бесплатно",   # Russian
+    ]
+    
+    price_lower = price_text.lower().strip()
+    for term in free_terms:
+        if term.lower() in price_lower:
+            return "免费"
+    
+    return price_text
+
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -236,7 +262,23 @@ async def get_service_info(url: str, country_code: str, service: str, context: C
 
         if response.status_code == 404:
             logger.info(f"{service} not available in {country_code} (404).")
-            return f"📍 国家/地区: {flag_emoji} {country_info['name']}\n{service_display_name} 服务在该国家/地区不可用。"
+            # For iCloud, try fallback to Apple Support page
+            if service == "icloud":
+                logger.info(f"Attempting iCloud fallback to Apple Support page for {country_code}")
+                support_url = "https://support.apple.com/zh-cn/108047"
+                try:
+                    fallback_response = await client.get(support_url, timeout=15)
+                    if fallback_response.status_code == 200:
+                        content = fallback_response.text
+                        logger.info(f"Successfully fetched fallback URL: {support_url}")
+                        # Continue with parsing using the support page content
+                    else:
+                        return f"📍 国家/地区: {flag_emoji} {country_info['name']}\n{service_display_name} 服务在该国家/地区不可用。"
+                except Exception as fallback_error:
+                    logger.error(f"Fallback request failed: {fallback_error}")
+                    return f"📍 国家/地区: {flag_emoji} {country_info['name']}\n{service_display_name} 服务在该国家/地区不可用。"
+            else:
+                return f"📍 国家/地区: {flag_emoji} {country_info['name']}\n{service_display_name} 服务在该国家/地区不可用。"
 
         response.raise_for_status()
         content = response.text
@@ -245,9 +287,23 @@ async def get_service_info(url: str, country_code: str, service: str, context: C
     except httpx.HTTPStatusError as e:
         logger.error(f"Network error for {url}: {e}")
         if e.response.status_code == 404:
-            return (
-                f"📍 国家/地区: {flag_emoji} {country_info['name']}\n{service_display_name} 服务在该国家/地区不可用。"
-            )
+            # For iCloud, try fallback to Apple Support page
+            if service == "icloud":
+                logger.info(f"Attempting iCloud fallback to Apple Support page for {country_code} (HTTPStatusError)")
+                support_url = "https://support.apple.com/zh-cn/108047"
+                try:
+                    fallback_response = await client.get(support_url, timeout=15)
+                    if fallback_response.status_code == 200:
+                        content = fallback_response.text
+                        logger.info(f"Successfully fetched fallback URL: {support_url}")
+                        # Continue with parsing using the support page content
+                    else:
+                        return f"📍 国家/地区: {flag_emoji} {country_info['name']}\n{service_display_name} 服务在该国家/地区不可用。"
+                except Exception as fallback_error:
+                    logger.error(f"Fallback request failed: {fallback_error}")
+                    return f"📍 国家/地区: {flag_emoji} {country_info['name']}\n{service_display_name} 服务在该国家/地区不可用。"
+            else:
+                return f"📍 国家/地区: {flag_emoji} {country_info['name']}\n{service_display_name} 服务在该国家/地区不可用。"
         return f"📍 国家/地区: {flag_emoji} {country_info['name']}\n获取价格信息失败: 网络错误或请求超时 (HTTP {e.response.status_code})。"
     except httpx.RequestError as e:
         logger.error(f"Unexpected error fetching {url}: {e}")
@@ -280,16 +336,40 @@ async def get_service_info(url: str, country_code: str, service: str, context: C
                     break
             
             if not matched_country:
-                result_lines.append(f"{service_display_name} 服务在该国家/地区不可用。")
+                # Final fallback: try Apple Support page if we haven't already
+                if "support.apple.com" not in url:
+                    logger.info(f"Final fallback attempt: fetching Apple Support page for {country_code}")
+                    try:
+                        support_url = "https://support.apple.com/zh-cn/108047"
+                        support_response = await client.get(support_url, timeout=15)
+                        if support_response.status_code == 200:
+                            support_content = support_response.text
+                            support_prices = get_icloud_prices_from_html(support_content)
+                            if support_prices:
+                                logger.info(f"Successfully got fallback data from Apple Support page")
+                                prices = support_prices
+                                # Re-check for matching country
+                                for name in prices.keys():
+                                    if country_name in name or name in country_name or name == country_name:
+                                        matched_country = name
+                                        break
+                    except Exception as support_error:
+                        logger.error(f"Final fallback failed: {support_error}")
+                
+                if not matched_country:
+                    result_lines.append(f"{service_display_name} 服务在该国家/地区不可用。")
             else:
                 size_order = ["5GB", "50GB", "200GB", "2TB", "6TB", "12TB"]
                 country_prices = prices[matched_country]["prices"]
                 for size in size_order:
                     if size in country_prices:
                         price = country_prices[size]
-                        line = f"{size}: {price}"
+                        # Normalize free pricing to Chinese for consistent display
+                        normalized_price = normalize_free_pricing(price)
+                        line = f"{size}: {normalized_price}"
+                        
                         # Don't convert free plans or CNY prices
-                        if country_code != "CN" and "Ücretsiz" not in price and "Free" not in price and "免费" not in price:
+                        if country_code != "CN" and normalized_price != "免费":
                             cny_price_str = await convert_price_to_cny(price, country_code, context)
                             line += cny_price_str
                         result_lines.append(line)
