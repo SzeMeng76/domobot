@@ -136,42 +136,36 @@ def get_icloud_prices_from_apple_website(content: str, country_code: str) -> dic
     country_name = country_info.get("name", country_code)
     currency = country_info.get("currency", "")
     
+    logger.info(f"Parsing iCloud prices for {country_name} ({country_code}), currency: {currency}")
+    
     size_price_dict = {}
     
-    # Try to find pricing information in various possible structures
+    # Method 1: Comparison table pricing (most comprehensive - includes all plans)
+    plan_items = soup.find_all("div", class_="plan-list-item")
+    logger.info(f"Found {len(plan_items)} plan items in comparison table")
     
-    # Method 1: Hero section pricing (typography-hero-compare-price)
-    price_elements = soup.find_all("p", class_="typography-hero-compare-price")
-    plan_elements = soup.find_all("h3", class_="typography-hero-compare-plan")
-    
-    if price_elements and plan_elements and len(price_elements) == len(plan_elements):
-        for price_elem, plan_elem in zip(price_elements, plan_elements):
-            price_text = price_elem.get_text(strip=True)
-            plan_text = plan_elem.get_text(strip=True)
+    for item in plan_items:
+        cost_elem = item.find("p", class_="typography-compare-body plan-type cost")
+        if cost_elem:
+            aria_label = cost_elem.get("aria-label", "")
+            price_text = cost_elem.get_text(strip=True)
             
-            if price_text and plan_text:
-                size_price_dict[plan_text] = price_text
-    
-    # Method 2: Comparison table pricing (typography-compare-body plan-type cost)
-    if not size_price_dict:
-        plan_items = soup.find_all("div", class_="plan-list-item")
-        for item in plan_items:
-            # Skip free plan
-            if "plan-5gb" in " ".join(item.get("class", [])):
-                continue
-                
-            cost_elem = item.find("p", class_="typography-compare-body plan-type cost")
-            if cost_elem:
-                aria_label = cost_elem.get("aria-label", "")
-                price_text = cost_elem.get_text(strip=True)
-                
-                # Extract capacity from aria-label
-                capacity_match = re.search(r"(\d+\s*(?:GB|TB))", aria_label)
-                if capacity_match and currency and (currency in price_text or currency.replace("Y", "L") in price_text):
-                    capacity = capacity_match.group(1).replace(" ", "")
+            logger.debug(f"Processing item: aria-label='{aria_label}', price_text='{price_text}'")
+            
+            # Extract capacity from aria-label
+            capacity_match = re.search(r"(\d+\s*(?:GB|TB))", aria_label)
+            if capacity_match:
+                capacity = capacity_match.group(1).replace(" ", "")
+                # Handle both paid plans (with TL) and free plans (Ücretsiz)
+                if "TL" in price_text or "Ücretsiz" in price_text or "Free" in price_text:
                     size_price_dict[capacity] = price_text
+                    logger.info(f"Added plan: {capacity} = {price_text}")
+                else:
+                    logger.debug(f"Skipped plan {capacity}: price '{price_text}' doesn't match criteria")
+            else:
+                logger.debug(f"No capacity match in aria-label: '{aria_label}'")
     
-    # Method 3: Accordion structure
+    # Method 2: Accordion structure (fallback)
     if not size_price_dict:
         accordion_buttons = soup.find_all("button")
         for button in accordion_buttons:
@@ -182,39 +176,33 @@ def get_icloud_prices_from_apple_website(content: str, country_code: str) -> dic
                 # Find price span (role="text")
                 for span in button.find_all("span"):
                     span_text = span.get_text(strip=True)
-                    if span.get("role") == "text" and (currency in span_text or currency.replace("Y", "L") in span_text):
+                    if span.get("role") == "text" and ("TL" in span_text or "Ücretsiz" in span_text or "Free" in span_text):
                         price_span = span
                         break
                 
                 if capacity_elem and price_span:
-                    capacity = capacity_elem.get_text(strip=True)
+                    capacity = capacity_elem.get_text(strip=True).replace(" ", "")
                     price = price_span.get_text(strip=True)
                     size_price_dict[capacity] = price
     
-    # Method 4: Generic search for pricing patterns
+    # Method 3: Hero section pricing (fallback for basic plans)
     if not size_price_dict:
-        # Look for any elements containing pricing information
-        all_elements = soup.find_all(["p", "span", "div"], string=re.compile(r"\d+[.,]\d+\s*" + re.escape(currency) if currency else r"\d+[.,]\d+\s*(?:TL|₺|USD|\$|EUR|€)"))
+        price_elements = soup.find_all("p", class_="typography-hero-compare-price")
+        plan_elements = soup.find_all("h3", class_="typography-hero-compare-plan")
         
-        storage_elements = soup.find_all(["h1", "h2", "h3", "h4", "p", "span"], string=re.compile(r"\d+\s*(?:GB|TB)"))
-        
-        # Try to match storage and pricing elements
-        for storage_elem in storage_elements:
-            storage_text = storage_elem.get_text(strip=True)
-            storage_match = re.search(r"(\d+\s*(?:GB|TB))", storage_text)
-            if storage_match:
-                storage_size = storage_match.group(1).replace(" ", "")
+        if price_elements and plan_elements and len(price_elements) == len(plan_elements):
+            for price_elem, plan_elem in zip(price_elements, plan_elements):
+                price_text = price_elem.get_text(strip=True)
+                plan_text = plan_elem.get_text(strip=True).replace(" ", "")
                 
-                # Look for nearby pricing elements
-                parent = storage_elem.parent
-                if parent:
-                    price_elem = parent.find(string=re.compile(r"\d+[.,]\d+"))
-                    if price_elem and (not currency or currency in str(price_elem) or currency.replace("Y", "L") in str(price_elem)):
-                        size_price_dict[storage_size] = price_elem.strip()
+                if price_text and plan_text:
+                    size_price_dict[plan_text] = price_text
     
     if size_price_dict:
+        logger.info(f"Successfully parsed {len(size_price_dict)} iCloud plans for {country_name}")
         return {country_name: {"currency": currency, "prices": size_price_dict}}
     else:
+        logger.warning(f"No iCloud pricing data found for {country_name} using Apple website parser")
         return {}
 
 
@@ -294,13 +282,14 @@ async def get_service_info(url: str, country_code: str, service: str, context: C
             if not matched_country:
                 result_lines.append(f"{service_display_name} 服务在该国家/地区不可用。")
             else:
-                size_order = ["50GB", "200GB", "2TB", "6TB", "12TB"]
+                size_order = ["5GB", "50GB", "200GB", "2TB", "6TB", "12TB"]
                 country_prices = prices[matched_country]["prices"]
                 for size in size_order:
                     if size in country_prices:
                         price = country_prices[size]
                         line = f"{size}: {price}"
-                        if country_code != "CN":
+                        # Don't convert free plans or CNY prices
+                        if country_code != "CN" and "Ücretsiz" not in price and "Free" not in price and "免费" not in price:
                             cny_price_str = await convert_price_to_cny(price, country_code, context)
                             line += cny_price_str
                         result_lines.append(line)
