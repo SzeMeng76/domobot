@@ -584,7 +584,8 @@ def format_hotel_summary(hotels_data: Dict, search_params: Dict) -> str:
             if rating:
                 rating_display = f"⭐ {rating:.1f}"
                 if reviews:
-                    rating_display += f" ({reviews:,})"
+                    # 转义括号
+                    rating_display += f" （{reviews:,}）"
             
             # 构建价格显示
             price_display = "价格询价"
@@ -602,10 +603,11 @@ def format_hotel_summary(hotels_data: Dict, search_params: Dict) -> str:
                                 price_value = float(numbers[0])
                     
                     if price_value:
-                        price_display = f"{currency} {price_value:,.0f}/晚"
+                        safe_currency = escape_markdown(currency, version=2)
+                        price_display = f"{safe_currency} {price_value:,.0f}/晚"
                         if nights > 1:
                             total_price = price_value * nights
-                            price_display += f" (共{nights}晚: {currency} {total_price:,.0f})"
+                            price_display += f" （共{nights}晚: {safe_currency} {total_price:,.0f}）"
             elif total_rate:
                 if isinstance(total_rate, dict):
                     # 优先使用extracted_lowest (数字格式)
@@ -620,10 +622,11 @@ def format_hotel_summary(hotels_data: Dict, search_params: Dict) -> str:
                                 price_value = float(numbers[0])
                     
                     if price_value:
-                        price_display = f"总价: {currency} {price_value:,.0f}"
+                        safe_currency = escape_markdown(currency, version=2)
+                        price_display = f"总价: {safe_currency} {price_value:,.0f}"
                         if nights > 1:
                             per_night = price_value / nights
-                            price_display += f" ({currency} {per_night:,.0f}/晚)"
+                            price_display += f" （{safe_currency} {per_night:,.0f}/晚）"
             
             # 构建单个酒店条目
             hotel_entry = f"🏨 *{safe_name}*"
