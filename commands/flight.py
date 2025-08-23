@@ -2087,9 +2087,9 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         return
     
     elif data == "flight_main_menu":
-            # 清理用户会话并返回主菜单 - 与map.py完全一致
-            user_id = update.effective_user.id
-            flight_session_manager.remove_session(user_id)
+        # 清理用户会话并返回主菜单 - 与map.py完全一致
+        user_id = update.effective_user.id
+        flight_session_manager.remove_session(user_id)
         
         # 返回主菜单
         keyboard = [
