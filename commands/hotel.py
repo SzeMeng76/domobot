@@ -1899,7 +1899,7 @@ async def _process_hotel_search_with_location(query: CallbackQuery, location_que
             reply_markup=reply_markup
         )
         
-        # 更新会话数据
+        # 更新会话数据 - 保存完整的搜索信息
         session_data = {
             'message_id': query.message.message_id,
             'hotels_data': hotels_data,
@@ -2159,13 +2159,13 @@ async def _show_hotel_map_view(query: CallbackQuery, session_data: Dict, context
     )
 
 async def _create_hotel_telegraph_page(hotels_data: Dict, search_params: Dict) -> Optional[str]:
-    """创建Telegraph页面显示详细酒店信息"""
+    """创建Telegraph页面显示100%完整的酒店信息"""
     if not httpx_client:
         logger.error("HTTP client not available for Telegraph")
         return None
     
     try:
-        properties = hotels_data.get('properties', [])[:20]  # 最多显示20家酒店
+        properties = hotels_data.get('properties', [])  # 显示所有酒店，不限制数量
         location_query = search_params.get('location_query', '')
         check_in_date = search_params.get('check_in_date', '')
         check_out_date = search_params.get('check_out_date', '')
@@ -2175,146 +2175,250 @@ async def _create_hotel_telegraph_page(hotels_data: Dict, search_params: Dict) -
         duration_info = calculate_stay_duration(check_in_date, check_out_date)
         nights = duration_info.get('days', 1) if 'error' not in duration_info else 1
         
-        # 构建Telegraph内容 - 使用纯文本格式
+        # 构建Telegraph内容 - 完整详细信息
         content_lines = []
-        content_lines.append(f"🏨 {location_query} 酒店列表")
+        content_lines.append(f"🏨 {location_query} 完整酒店信息")
         content_lines.append("")
-        content_lines.append(f"📅 入住: {check_in_date} - 退房: {check_out_date} ({nights}晚)")
-        content_lines.append(f"🔍 找到 {len(properties)} 家酒店")
+        content_lines.append(f"📅 入住日期: {check_in_date}")
+        content_lines.append(f"📅 退房日期: {check_out_date}")
+        content_lines.append(f"🛏️ 住宿时长: {nights}晚")
+        content_lines.append(f"🏨 找到酒店: {len(properties)} 家")
+        content_lines.append(f"💱 显示货币: {currency}")
         content_lines.append("")
-        content_lines.append("=" * 50)
+        content_lines.append("=" * 80)
         content_lines.append("")
         
-        # 添加每个酒店的详细信息
+        # 添加每个酒店的100%完整信息
         for i, hotel in enumerate(properties, 1):
             try:
-                name = hotel.get('name', f'酒店 #{i}')
+                content_lines.append(f"🏨 酒店 #{i}")
+                content_lines.append("=" * 60)
+                content_lines.append("")
+                
+                # 基本信息
+                name = hotel.get('name', f'未知酒店 #{i}')
+                content_lines.append(f"📝 酒店名称: {name}")
+                
+                # 星级信息 - 完整显示
                 extracted_hotel_class = hotel.get('extracted_hotel_class')
-                hotel_class = hotel.get('hotel_class', 0)
-                rating = hotel.get('overall_rating', 0)
-                reviews = hotel.get('reviews', 0)
+                hotel_class = hotel.get('hotel_class')
                 
-                # 价格信息
-                rate_per_night = hotel.get('rate_per_night', {})
-                total_rate = hotel.get('total_rate', {})
-                
-                # 酒店名称和星级
-                hotel_title = f"{i}. {name}"
-                
-                # 处理星级显示
-                star_display = ""
                 if extracted_hotel_class:
                     try:
                         stars = int(extracted_hotel_class)
                         star_display = "⭐" * stars
+                        content_lines.append(f"⭐ 官方星级: {stars}星 {star_display}")
                     except (ValueError, TypeError):
-                        pass
+                        content_lines.append(f"⭐ 星级信息: {extracted_hotel_class}")
                 
-                if not star_display and hotel_class:
-                    try:
-                        import re
-                        match = re.search(r'(\d+)', str(hotel_class))
-                        if match:
-                            stars = int(match.group(1))
-                            star_display = "⭐" * stars
-                    except (ValueError, TypeError):
-                        pass
+                if hotel_class and hotel_class != extracted_hotel_class:
+                    content_lines.append(f"🏷️ 酒店类别: {hotel_class}")
                 
-                if star_display:
-                    hotel_title += f" {star_display}"
+                # 评分和评价 - 完整信息
+                rating = hotel.get('overall_rating')
+                reviews = hotel.get('reviews')
                 
-                content_lines.append(hotel_title)
-                content_lines.append("")
-                
-                # 评分信息
                 if rating:
-                    rating_text = f"⭐ 评分: {rating:.1f}/5.0"
-                    if reviews:
-                        rating_text += f" （{reviews:,} 条评价）"
-                    content_lines.append(rating_text)
+                    content_lines.append(f"⭐ 综合评分: {rating:.1f}/5.0")
+                if reviews:
+                    content_lines.append(f"💬 用户评价: {reviews:,} 条")
                 
-                # 价格信息
-                if rate_per_night and isinstance(rate_per_night, dict):
-                    price_value = rate_per_night.get('extracted_lowest')
-                    if price_value is None:
+                # 价格信息 - 完整分析
+                content_lines.append("")
+                content_lines.append("💰 价格详情:")
+                
+                rate_per_night = hotel.get('rate_per_night', {})
+                total_rate = hotel.get('total_rate', {})
+                
+                if rate_per_night:
+                    content_lines.append(f"  📊 每晚价格数据: {rate_per_night}")
+                    
+                    # 提取并显示所有价格信息
+                    if isinstance(rate_per_night, dict):
+                        extracted_lowest = rate_per_night.get('extracted_lowest')
                         lowest_str = rate_per_night.get('lowest')
-                        if lowest_str and isinstance(lowest_str, str):
-                            import re
-                            numbers = re.findall(r'\d+(?:\.\d+)?', lowest_str)
-                            if numbers:
-                                price_value = float(numbers[0])
-                    
-                    if price_value:
-                        price_text = f"💰 价格: {currency} {price_value:,.0f}/晚"
-                        if nights > 1:
-                            total_price = price_value * nights
-                            price_text += f" (总计: {currency} {total_price:,.0f})"
-                        content_lines.append(price_text)
-                elif total_rate and isinstance(total_rate, dict):
-                    price_value = total_rate.get('extracted_lowest')
-                    if price_value is None:
-                        lowest_str = total_rate.get('lowest')
-                        if lowest_str and isinstance(lowest_str, str):
-                            import re
-                            numbers = re.findall(r'\d+(?:\.\d+)?', lowest_str)
-                            if numbers:
-                                price_value = float(numbers[0])
-                    
-                    if price_value:
-                        price_text = f"💰 总价: {currency} {price_value:,.0f}"
-                        if nights > 1:
-                            per_night = price_value / nights
-                            price_text += f" (约 {currency} {per_night:,.0f}/晚)"
-                        content_lines.append(price_text)
+                        
+                        if extracted_lowest:
+                            total_price = extracted_lowest * nights
+                            content_lines.append(f"  💵 最低每晚: {currency} {extracted_lowest:,.0f}")
+                            content_lines.append(f"  💵 {nights}晚总价: {currency} {total_price:,.0f}")
+                        
+                        if lowest_str and lowest_str != str(extracted_lowest):
+                            content_lines.append(f"  💷 价格显示: {lowest_str}")
                 
-                # 位置信息
+                if total_rate:
+                    content_lines.append(f"  📊 总价格数据: {total_rate}")
+                    
+                    if isinstance(total_rate, dict):
+                        extracted_lowest = total_rate.get('extracted_lowest')
+                        lowest_str = total_rate.get('lowest')
+                        
+                        if extracted_lowest:
+                            per_night = extracted_lowest / nights if nights > 0 else extracted_lowest
+                            content_lines.append(f"  💵 住宿总价: {currency} {extracted_lowest:,.0f}")
+                            content_lines.append(f"  💵 平均每晚: {currency} {per_night:,.0f}")
+                        
+                        if lowest_str and lowest_str != str(extracted_lowest):
+                            content_lines.append(f"  💷 价格显示: {lowest_str}")
+                
+                # 位置信息 - 完整地址
+                content_lines.append("")
                 location = hotel.get('location')
                 if location:
-                    content_lines.append(f"📍 位置: {location}")
+                    content_lines.append(f"📍 详细位置: {location}")
                 
-                # 设施信息
+                # GPS坐标（如果有）
+                gps_coordinates = hotel.get('gps_coordinates', {})
+                if gps_coordinates:
+                    latitude = gps_coordinates.get('latitude')
+                    longitude = gps_coordinates.get('longitude')
+                    if latitude and longitude:
+                        content_lines.append(f"🗺️ GPS坐标: {latitude}, {longitude}")
+                
+                # 联系信息
+                phone = hotel.get('phone')
+                if phone:
+                    content_lines.append(f"📞 电话: {phone}")
+                
+                website = hotel.get('website')
+                if website:
+                    content_lines.append(f"🌐 官网: {website}")
+                
+                # 完整设施列表
+                content_lines.append("")
                 amenities = hotel.get('amenities', [])
                 if amenities:
-                    amenities_text = "🏢 设施: " + ", ".join(amenities[:5])
-                    if len(amenities) > 5:
-                        amenities_text += f"等 {len(amenities)} 项设施"
-                    content_lines.append(amenities_text)
+                    content_lines.append(f"🏢 酒店设施 (共{len(amenities)}项):")
+                    
+                    # 按类别分组显示设施
+                    essential_amenities = []
+                    luxury_amenities = []
+                    business_amenities = []
+                    other_amenities = []
+                    
+                    for amenity in amenities:
+                        amenity_lower = amenity.lower()
+                        if any(keyword in amenity_lower for keyword in ['wifi', 'internet', 'parking', 'breakfast', 'ac', 'air conditioning']):
+                            essential_amenities.append(amenity)
+                        elif any(keyword in amenity_lower for keyword in ['spa', 'pool', 'bar', 'restaurant', 'gym', 'fitness', 'sauna']):
+                            luxury_amenities.append(amenity)
+                        elif any(keyword in amenity_lower for keyword in ['business', 'meeting', 'conference', 'concierge', 'shuttle']):
+                            business_amenities.append(amenity)
+                        else:
+                            other_amenities.append(amenity)
+                    
+                    if essential_amenities:
+                        content_lines.append(f"  🔧 基础设施: {', '.join(essential_amenities)}")
+                    
+                    if luxury_amenities:
+                        content_lines.append(f"  ✨ 豪华设施: {', '.join(luxury_amenities)}")
+                    
+                    if business_amenities:
+                        content_lines.append(f"  💼 商务设施: {', '.join(business_amenities)}")
+                    
+                    if other_amenities:
+                        content_lines.append(f"  🏨 其他设施: {', '.join(other_amenities)}")
                 
-                # 描述信息
+                # 房间类型（如果有）
+                room_types = hotel.get('room_types', [])
+                if room_types:
+                    content_lines.append("")
+                    content_lines.append(f"🛏️ 可选房型 (共{len(room_types)}种):")
+                    for room_type in room_types:
+                        content_lines.append(f"  • {room_type}")
+                
+                # 酒店描述 - 完整显示，不限制长度
+                content_lines.append("")
                 description = hotel.get('description')
-                if description and len(description) < 200:
-                    content_lines.append(f"📝 简介: {description}")
+                if description:
+                    content_lines.append(f"📋 酒店介绍:")
+                    # 将长描述分段显示
+                    description_lines = description.split('. ')
+                    for desc_line in description_lines:
+                        if desc_line.strip():
+                            content_lines.append(f"  {desc_line.strip()}{'.' if not desc_line.strip().endswith('.') else ''}")
+                
+                # 附加信息
+                check_in_time = hotel.get('check_in_time')
+                check_out_time = hotel.get('check_out_time')
+                if check_in_time:
+                    content_lines.append(f"🕐 入住时间: {check_in_time}")
+                if check_out_time:
+                    content_lines.append(f"🕐 退房时间: {check_out_time}")
+                
+                # 取消政策
+                cancellation_policy = hotel.get('cancellation_policy')
+                if cancellation_policy:
+                    content_lines.append(f"❌ 取消政策: {cancellation_policy}")
+                
+                # 环保认证
+                green_leaders = hotel.get('green_leaders')
+                if green_leaders:
+                    content_lines.append(f"🌱 环保认证: {green_leaders}")
+                
+                # 所有剩余的API数据字段
+                content_lines.append("")
+                content_lines.append("📊 完整API数据:")
+                for key, value in hotel.items():
+                    if key not in ['name', 'extracted_hotel_class', 'hotel_class', 'overall_rating', 'reviews', 
+                                   'rate_per_night', 'total_rate', 'location', 'gps_coordinates', 'phone', 
+                                   'website', 'amenities', 'room_types', 'description', 'check_in_time', 
+                                   'check_out_time', 'cancellation_policy', 'green_leaders']:
+                        if value:  # 只显示非空值
+                            content_lines.append(f"  {key}: {value}")
                 
                 content_lines.append("")
-                content_lines.append("-" * 30)
+                content_lines.append("-" * 80)
                 content_lines.append("")
                 
             except Exception as e:
                 logger.error(f"处理酒店 {i} 信息失败: {e}")
+                content_lines.append(f"❌ 酒店 #{i} 信息处理失败: {str(e)}")
+                content_lines.append("")
                 continue
         
-        # 添加页脚
+        # 搜索元数据
+        content_lines.append("🔍 搜索信息")
+        content_lines.append("=" * 40)
+        search_metadata = hotels_data.get('search_metadata', {})
+        if search_metadata:
+            content_lines.append("搜索元数据:")
+            for key, value in search_metadata.items():
+                content_lines.append(f"  {key}: {value}")
+            content_lines.append("")
+        
+        # 搜索参数
+        content_lines.append("搜索参数:")
+        for key, value in search_params.items():
+            content_lines.append(f"  {key}: {value}")
+        content_lines.append("")
+        
+        # 页脚信息
         from datetime import datetime
-        content_lines.append(f"数据更新时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-        content_lines.append("🤖 由 Claude Code 生成")
+        content_lines.append("=" * 80)
+        content_lines.append(f"📅 数据更新时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        content_lines.append(f"📡 数据来源: Google Hotels API via SerpAPI")
+        content_lines.append(f"🤖 生成工具: Claude Code Hotel Search Module")
+        content_lines.append(f"📊 数据完整度: 100% (所有可用字段)")
+        content_lines.append(f"🔗 更多功能: 使用 /hotel 命令搜索其他位置")
         
         # 组合内容
         content_text = "\n".join(content_lines)
         
         # 使用flight.py的create_telegraph_page函数
         from commands.flight import create_telegraph_page
-        title = f"🏨 {location_query} 酒店搜索结果"
+        title = f"🏨 {location_query} 完整酒店信息 | {len(properties)}家酒店"
         telegraph_url = await create_telegraph_page(title, content_text)
         
         if telegraph_url:
-            logger.info(f"Telegraph页面创建成功: {telegraph_url}")
+            logger.info(f"完整Telegraph页面创建成功: {telegraph_url} (包含{len(properties)}家酒店的完整信息)")
             return telegraph_url
         
         logger.error("Telegraph页面创建失败")
         return None
         
     except Exception as e:
-        logger.error(f"创建Telegraph页面失败: {e}")
+        logger.error(f"创建完整Telegraph页面失败: {e}")
         return None
 
 async def _show_brand_filter(query: CallbackQuery, session_data: Dict, context: ContextTypes.DEFAULT_TYPE):
@@ -2617,15 +2721,18 @@ async def _apply_filter_and_research(query: CallbackQuery, session_data: Dict, c
             )
             return
         
-        # 更新会话数据
-        session_data['hotels_data'] = hotels_data
-        session_data['search_params'] = search_params
-        hotel_session_manager.set_session(user_id, session_data)
-        
         # 构建结果消息
         enhanced_display = enhance_hotel_location_display(hotels_data, search_params)
         summary_result = format_hotel_summary(hotels_data, search_params)
         full_message = f"{enhanced_display}\n🎯 *已应用筛选: {filter_display}*\n\n{summary_result['content']}"
+        
+        # 更新会话数据 - 包含所有必要信息
+        session_data['hotels_data'] = hotels_data
+        session_data['search_params'] = search_params
+        session_data['current_page'] = summary_result['current_page']
+        session_data['total_pages'] = summary_result['total_pages']
+        session_data['step'] = 'results_displayed'
+        hotel_session_manager.set_session(user_id, session_data)
         
         # 创建操作按钮
         keyboard = [
