@@ -360,7 +360,7 @@ def calculate_stay_duration(check_in: str, check_out: str) -> Dict:
 
 def enhance_hotel_location_display(api_search_data: Dict, search_params: Dict) -> str:
     """
-    增强酒店位置显示，结合API数据和本地位置信息
+    增强酒店位置显示，结合API数据和本地位置信息 - 返回普通文本，不做转义
     """
     location_query = search_params.get('location_query', '')
     check_in_date = search_params.get('check_in_date', '')
@@ -378,19 +378,15 @@ def enhance_hotel_location_display(api_search_data: Dict, search_params: Dict) -
     # 计算住宿时长
     duration_info = calculate_stay_duration(check_in_date, check_out_date)
     
-    # 构建显示信息
-    from telegram.helpers import escape_markdown
-    
-    # 安全转义所有字段
-    safe_location = escape_markdown(location_query, version=2)
+    # 构建显示信息 - 不做任何转义，返回普通文本
     
     result_parts = [
-        f"🏨 *{safe_location}* 酒店搜索"
+        f"🏨 *{location_query}* 酒店搜索"
     ]
     
     # 添加日期信息
     if check_in_date and check_out_date:
-        result_parts[0] += f" （{escape_markdown(check_in_date, version=2)} - {escape_markdown(check_out_date, version=2)}）"
+        result_parts[0] += f" （{check_in_date} - {check_out_date}）"
         
         if "error" not in duration_info:
             duration = duration_info['days']
@@ -398,16 +394,12 @@ def enhance_hotel_location_display(api_search_data: Dict, search_params: Dict) -
             check_in_day = duration_info['check_in_day']
             check_out_day = duration_info['check_out_day']
             
-            safe_check_in_day = escape_markdown(check_in_day, version=2)
-            safe_check_out_day = escape_markdown(check_out_day, version=2)
-            safe_stay_type = escape_markdown(stay_type, version=2)
-            
             result_parts.extend([
                 "",
                 f"📅 *住宿信息*:",
-                f"• 入住: {escape_markdown(check_in_date, version=2)} （{safe_check_in_day}）",
-                f"• 退房: {escape_markdown(check_out_date, version=2)} （{safe_check_out_day}）",
-                f"• 时长: {duration}晚 （{safe_stay_type}）"
+                f"• 入住: {check_in_date} （{check_in_day}）",
+                f"• 退房: {check_out_date} （{check_out_day}）",
+                f"• 时长: {duration}晚 （{stay_type}）"
             ])
     
     # 添加客人信息
@@ -415,10 +407,9 @@ def enhance_hotel_location_display(api_search_data: Dict, search_params: Dict) -
     if children > 0:
         guest_info += f", {children}位儿童"
     
-    safe_guest_info = escape_markdown(guest_info, version=2)
     result_parts.extend([
         "",
-        f"👥 *客人信息*: {safe_guest_info}"
+        f"👥 *客人信息*: {guest_info}"
     ])
     
     # 添加位置相关信息
@@ -426,9 +417,6 @@ def enhance_hotel_location_display(api_search_data: Dict, search_params: Dict) -
         city = api_location_info.get('city', '')
         country = api_location_info.get('country', '')
         if city and country:
-            safe_city = escape_markdown(city, version=2)
-            safe_country = escape_markdown(country, version=2)
-            
             # 获取国家标志
             from utils.country_data import get_country_flag
             country_code = api_location_info.get('country_code', '')
@@ -436,7 +424,7 @@ def enhance_hotel_location_display(api_search_data: Dict, search_params: Dict) -
             
             result_parts.extend([
                 "",
-                f"📍 *位置*: {safe_city}, {safe_country} {flag}"
+                f"📍 *位置*: {city}, {country} {flag}"
             ])
     
     # 添加住宿类型建议
@@ -756,9 +744,7 @@ class HotelCacheService:
             return False
 
 def format_hotel_summary(hotels_data: Dict, search_params: Dict) -> str:
-    """格式化酒店搜索摘要"""
-    from telegram.helpers import escape_markdown
-    
+    """格式化酒店搜索摘要 - 返回普通文本，不做转义"""
     if not hotels_data or 'properties' not in hotels_data:
         return "未找到酒店信息"
     
@@ -787,8 +773,8 @@ def format_hotel_summary(hotels_data: Dict, search_params: Dict) -> str:
             rate_per_night = hotel.get('rate_per_night', {})
             total_rate = hotel.get('total_rate', {})
             
-            # 安全转义
-            safe_name = escape_markdown(str(name), version=2)
+            # 酒店名称 - 不转义，返回普通文本
+            hotel_name = str(name)
             
             # 构建星级显示
             star_display = ""
@@ -813,9 +799,8 @@ def format_hotel_summary(hotels_data: Dict, search_params: Dict) -> str:
             # 构建评分显示
             rating_display = ""
             if rating:
-                rating_display = f"⭐ {rating:.1f}".replace(".", "\\.")
+                rating_display = f"⭐ {rating:.1f}"
                 if reviews:
-                    # 转义括号
                     rating_display += f" （{reviews:,}）"
             
             # 构建价格显示
@@ -834,11 +819,10 @@ def format_hotel_summary(hotels_data: Dict, search_params: Dict) -> str:
                                 price_value = float(numbers[0])
                     
                     if price_value:
-                        safe_currency = escape_markdown(currency, version=2)
-                        price_display = f"{safe_currency} {price_value:,.0f}/晚"
+                        price_display = f"{currency} {price_value:,.0f}/晚"
                         if nights > 1:
                             total_price = price_value * nights
-                            price_display += f" （共{nights}晚: {safe_currency} {total_price:,.0f}）"
+                            price_display += f" （共{nights}晚: {currency} {total_price:,.0f}）"
             elif total_rate:
                 if isinstance(total_rate, dict):
                     # 优先使用extracted_lowest (数字格式)
@@ -853,14 +837,13 @@ def format_hotel_summary(hotels_data: Dict, search_params: Dict) -> str:
                                 price_value = float(numbers[0])
                     
                     if price_value:
-                        safe_currency = escape_markdown(currency, version=2)
-                        price_display = f"总价: {safe_currency} {price_value:,.0f}"
+                        price_display = f"总价: {currency} {price_value:,.0f}"
                         if nights > 1:
                             per_night = price_value / nights
-                            price_display += f" （{safe_currency} {per_night:,.0f}/晚）"
+                            price_display += f" （{currency} {per_night:,.0f}/晚）"
             
             # 构建单个酒店条目
-            hotel_entry = f"🏨 *{safe_name}*"
+            hotel_entry = f"🏨 *{hotel_name}*"
             if star_display:
                 hotel_entry += f" {star_display}"
             
@@ -872,8 +855,7 @@ def format_hotel_summary(hotels_data: Dict, search_params: Dict) -> str:
             # 添加位置信息（如果有）
             if hotel.get('location'):
                 location = hotel['location']
-                safe_location = escape_markdown(str(location), version=2)
-                hotel_entry += f"\n📍 {safe_location}"
+                hotel_entry += f"\n📍 {location}"
             
             result_parts.append(hotel_entry)
             
@@ -994,12 +976,9 @@ async def hotel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         suggestions = await get_smart_location_suggestions(location_input, max_suggestions=8)
         
         if suggestions:
-            # 构建智能建议消息
-            from telegram.helpers import escape_markdown
-            safe_input = escape_markdown(location_input, version=2)
-            
+            # 构建智能建议消息 - 不做转义，交由foldable_text_with_markdown_v2处理
             message_parts = [
-                f"🔍 未找到位置 '*{safe_input}*'",
+                f"🔍 未找到位置 '*{location_input}*'",
                 "",
                 "💡 *智能建议*："
             ]
@@ -1016,9 +995,8 @@ async def hotel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 # 添加到消息文本（仅前5个）
                 if i < 5:
-                    safe_name = escape_markdown(suggestion_name, version=2)
                     type_label = "本地" if suggestion['type'] == 'local' else "推荐"
-                    message_parts.append(f"• {safe_name} _{type_label}_")
+                    message_parts.append(f"• {suggestion_name} _{type_label}_")
             
             if len(suggestions) > 5:
                 message_parts.append(f"• _...还有 {len(suggestions) - 5} 个建议_")
@@ -1232,7 +1210,7 @@ async def hotel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             message = await send_error(
                 context,
                 chat_id,
-                f"😔 未找到酒店\n\n位置: {escape_markdown(location_query, version=2)}\n日期: {escape_markdown(check_in_date, version=2)} \\- {escape_markdown(check_out_date, version=2)}\n\n请尝试:\n• 调整搜索日期\n• 使用更宽泛的位置描述\n• 检查拼写是否正确"
+                f"😔 未找到酒店\n\n位置: {location_query}\n日期: {check_in_date} - {check_out_date}\n\n请尝试:\n• 调整搜索日期\n• 使用更宽泛的位置描述\n• 检查拼写是否正确"
             )
             await _schedule_auto_delete(context, message.chat_id, message.message_id, 
                                       getattr(config, 'auto_delete_delay', 600))
@@ -1774,8 +1752,7 @@ async def _sort_hotels_by_price(query: CallbackQuery, session_data: Dict, contex
     ]
     
     await query.edit_message_text(
-        text=full_message,
-        parse_mode=ParseMode.MARKDOWN_V2,
+        text=format_with_markdown_v2(full_message),
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -1824,8 +1801,7 @@ async def _sort_hotels_by_rating(query: CallbackQuery, session_data: Dict, conte
     ]
     
     await query.edit_message_text(
-        text=full_message,
-        parse_mode=ParseMode.MARKDOWN_V2,
+        text=format_with_markdown_v2(full_message),
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -1900,11 +1876,8 @@ async def _show_hotel_map_view(query: CallbackQuery, session_data: Dict, context
         ]
     ]
     
-    from telegram.helpers import escape_markdown
-    safe_location = escape_markdown(location_query, version=2)
-    
     await query.edit_message_text(
-        f"🗺️ *地图查看*\n\n位置: {safe_location}\n\n点击下方按钮在Google地图中查看该区域的酒店分布和位置信息。",
+        foldable_text_with_markdown_v2(f"🗺️ *地图查看*\n\n位置: {location_query}\n\n点击下方按钮在Google地图中查看该区域的酒店分布和位置信息。"),
         parse_mode=ParseMode.MARKDOWN_V2,
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
@@ -2359,7 +2332,7 @@ async def _apply_filter_and_research(query: CallbackQuery, session_data: Dict, c
         
         if not hotels_data or 'properties' not in hotels_data or len(hotels_data['properties']) == 0:
             await query.edit_message_text(
-                f"😔 应用筛选条件后未找到匹配的酒店\n\n筛选条件: {escape_markdown(filter_display, version=2)}\n\n请尝试调整筛选条件或返回原始结果。",
+                foldable_text_with_markdown_v2(f"😔 应用筛选条件后未找到匹配的酒店\n\n筛选条件: {filter_display}\n\n请尝试调整筛选条件或返回原始结果。"),
                 parse_mode=ParseMode.MARKDOWN_V2,
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔙 返回筛选", callback_data="hotel_filter")],
@@ -2376,7 +2349,7 @@ async def _apply_filter_and_research(query: CallbackQuery, session_data: Dict, c
         # 构建结果消息
         enhanced_display = enhance_hotel_location_display(hotels_data, search_params)
         hotels_summary = format_hotel_summary(hotels_data, search_params)
-        full_message = f"{enhanced_display}\n🎯 *已应用筛选: {escape_markdown(filter_display, version=2)}*\n\n{hotels_summary}"
+        full_message = f"{enhanced_display}\n🎯 *已应用筛选: {filter_display}*\n\n{hotels_summary}"
         
         # 创建操作按钮
         keyboard = [
