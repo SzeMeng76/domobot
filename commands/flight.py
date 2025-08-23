@@ -1877,6 +1877,8 @@ async def flight_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 `/flight 吉隆坡 普吉 2024-12-25 2024-12-30` - 自动选择KUL→HKT  
 `/flight Shanghai Tokyo 2024-12-25` - 混合语言输入
 
+🔗 完整国际机场列表: https://en\\.wikipedia\\.org/wiki/List\\_of\\_international\\_airports\\_by\\_country
+
 请选择功能:"""
     
     await send_message_with_auto_delete(
@@ -2255,19 +2257,101 @@ async def flight_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def _parse_and_execute_flight_search(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
     """解析并执行航班搜索"""
-    # 解析格式: "PEK LAX 2024-12-25 [2024-12-30]"
-    parts = text.strip().split()
+    # 智能解析格式，支持带空格的城市名
+    # 例如: "Kuala Lumpur Krabi 2024-12-25" 或 "New York Tokyo 2024-12-25 2024-12-30"
     
-    if len(parts) < 3:
+    text = text.strip()
+    
+    # 查找日期模式 (YYYY-MM-DD)
+    import re
+    date_pattern = r'\d{4}-\d{2}-\d{2}'
+    dates = re.findall(date_pattern, text)
+    
+    if len(dates) < 1:
         await send_error(context, update.message.chat_id, 
-                        "❌ 格式错误\n\n请使用: `出发机场 到达机场 出发日期 [返回日期]`\n"
-                        "例如: `PEK LAX 2024-12-25 2024-12-30`")
+                        "❌ 格式错误\n\n请使用: `出发地 到达地 出发日期 [返回日期]`\n"
+                        "例如: `Kuala Lumpur Krabi 2024-12-25`\n"
+                        "或: `PEK LAX 2024-12-25 2024-12-30`")
         return
     
-    departure_input = parts[0]
-    arrival_input = parts[1]
-    outbound_date = parts[2]
-    return_date = parts[3] if len(parts) > 3 else None
+    outbound_date = dates[0]
+    return_date = dates[1] if len(dates) > 1 else None
+    
+    # 移除日期，剩下的就是出发地和目的地
+    text_without_dates = text
+    for date in dates:
+        text_without_dates = text_without_dates.replace(date, '').strip()
+    
+    # 智能分割出发地和目的地
+    # 策略：寻找可能的机场代码（3个大写字母）或者按最后一个词作为目的地
+    parts = text_without_dates.split()
+    
+    if len(parts) < 2:
+        await send_error(context, update.message.chat_id, 
+                        "❌ 格式错误\n\n请提供出发地和到达地\n"
+                        "例如: `Kuala Lumpur Krabi 2024-12-25`")
+        return
+    
+    # 智能分割策略
+    departure_input = ""
+    arrival_input = ""
+    
+    # 检查是否有IATA机场代码（3个大写字母）
+    iata_codes = [part for part in parts if len(part) == 3 and part.isupper() and part.isalpha()]
+    
+    if len(iata_codes) >= 2:
+        # 如果有2个或更多IATA代码，使用前两个
+        departure_input = iata_codes[0]
+        arrival_input = iata_codes[1]
+    elif len(iata_codes) == 1:
+        # 如果只有1个IATA代码，需要确定它是出发地还是目的地
+        iata_index = parts.index(iata_codes[0])
+        if iata_index == 0:
+            # IATA代码在开头，作为出发地
+            departure_input = iata_codes[0]
+            arrival_input = " ".join(parts[1:])
+        else:
+            # IATA代码在后面，作为目的地
+            departure_input = " ".join(parts[:iata_index])
+            arrival_input = iata_codes[0]
+    else:
+        # 没有IATA代码，按词数智能分割
+        if len(parts) == 2:
+            # 刚好两个词，各取一个
+            departure_input = parts[0]
+            arrival_input = parts[1]
+        elif len(parts) == 3:
+            # 三个词，可能是 "Kuala Lumpur Bangkok" 的情况
+            # 尝试判断哪个是两个词的城市名
+            # 简单策略：如果第一个和第二个词都是首字母大写，可能是一个城市
+            if parts[0][0].isupper() and parts[1][0].isupper() and len(parts[0]) > 2 and len(parts[1]) > 2:
+                departure_input = f"{parts[0]} {parts[1]}"
+                arrival_input = parts[2]
+            else:
+                departure_input = parts[0]
+                arrival_input = f"{parts[1]} {parts[2]}"
+        elif len(parts) == 4:
+            # 四个词，可能是 "Kuala Lumpur New York" 的情况
+            departure_input = f"{parts[0]} {parts[1]}"
+            arrival_input = f"{parts[2]} {parts[3]}"
+        else:
+            # 更多词，按中间分割
+            mid_point = len(parts) // 2
+            departure_input = " ".join(parts[:mid_point])
+            arrival_input = " ".join(parts[mid_point:])
+    
+    # 清理输入
+    departure_input = departure_input.strip()
+    arrival_input = arrival_input.strip()
+    
+    if not departure_input or not arrival_input:
+        await send_error(context, update.message.chat_id, 
+                        "❌ 无法解析出发地和目的地\n\n"
+                        "请使用清晰的格式:\n"
+                        "• `出发地 目的地 日期`: `北京 东京 2024-12-25`\n"
+                        "• `IATA代码`: `PEK NRT 2024-12-25`\n"
+                        "• `英文城市`: `Kuala Lumpur Bangkok 2024-12-25`")
+        return
     
     # 日期格式验证
     try:
@@ -2338,18 +2422,35 @@ async def _parse_and_execute_flight_search(update: Update, context: ContextTypes
 async def _parse_and_execute_flight_search_from(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                                                text: str, departure_code: str) -> None:
     """解析并执行从特定机场出发的航班搜索"""
-    # 解析格式: "目的地 出发日期 [返回日期]"
-    parts = text.strip().split()
+    # 智能解析格式，支持带空格的目的地名称: "目的地 出发日期 [返回日期]"
+    text = text.strip()
     
-    if len(parts) < 2:
+    # 查找日期模式 (YYYY-MM-DD)
+    import re
+    date_pattern = r'\d{4}-\d{2}-\d{2}'
+    dates = re.findall(date_pattern, text)
+    
+    if len(dates) < 1:
         await send_error(context, update.message.chat_id, 
                         "❌ 格式错误\n\n请使用: `目的地 出发日期 [返回日期]`\n"
-                        "例如: `东京 2024-12-25 2024-12-30`")
+                        "例如: `New York 2024-12-25 2024-12-30`")
         return
     
-    arrival_input = parts[0]
-    outbound_date = parts[1]
-    return_date = parts[2] if len(parts) > 2 else None
+    outbound_date = dates[0]
+    return_date = dates[1] if len(dates) > 1 else None
+    
+    # 移除日期，剩下的就是目的地
+    text_without_dates = text
+    for date in dates:
+        text_without_dates = text_without_dates.replace(date, '').strip()
+    
+    if not text_without_dates:
+        await send_error(context, update.message.chat_id, 
+                        "❌ 格式错误\n\n请提供目的地\n"
+                        "例如: `New York 2024-12-25`")
+        return
+    
+    arrival_input = text_without_dates.strip()
     
     # 日期格式验证
     try:
@@ -2677,17 +2778,86 @@ async def _execute_airport_query(update: Update, context: ContextTypes.DEFAULT_T
 
 async def _execute_price_monitoring(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
     """执行价格监控设置"""
-    # 解析航线信息
-    parts = text.strip().split()
+    # 智能解析航线信息，支持带空格的城市名
+    text = text.strip()
     
-    if len(parts) < 3:
+    # 查找日期模式 (YYYY-MM-DD)
+    import re
+    date_pattern = r'\d{4}-\d{2}-\d{2}'
+    dates = re.findall(date_pattern, text)
+    
+    if len(dates) < 1:
         await send_error(context, update.message.chat_id, 
-                        "❌ 格式错误\n\n请使用: `出发机场 到达机场 出发日期`")
+                        "❌ 格式错误\n\n请使用: `出发地 到达地 出发日期`\n"
+                        "例如: `Kuala Lumpur Krabi 2024-12-25`")
         return
     
-    departure_input = parts[0]
-    arrival_input = parts[1]
-    outbound_date = parts[2]
+    outbound_date = dates[0]
+    
+    # 移除日期，剩下的就是出发地和目的地
+    text_without_dates = text
+    for date in dates:
+        text_without_dates = text_without_dates.replace(date, '').strip()
+    
+    # 智能分割出发地和目的地（与搜索功能相同的逻辑）
+    parts = text_without_dates.split()
+    
+    if len(parts) < 2:
+        await send_error(context, update.message.chat_id, 
+                        "❌ 格式错误\n\n请提供出发地和到达地\n"
+                        "例如: `Kuala Lumpur Krabi 2024-12-25`")
+        return
+    
+    # 智能分割策略（与搜索功能完全一致）
+    departure_input = ""
+    arrival_input = ""
+    
+    # 检查是否有IATA机场代码（3个大写字母）
+    iata_codes = [part for part in parts if len(part) == 3 and part.isupper() and part.isalpha()]
+    
+    if len(iata_codes) >= 2:
+        departure_input = iata_codes[0]
+        arrival_input = iata_codes[1]
+    elif len(iata_codes) == 1:
+        iata_index = parts.index(iata_codes[0])
+        if iata_index == 0:
+            departure_input = iata_codes[0]
+            arrival_input = " ".join(parts[1:])
+        else:
+            departure_input = " ".join(parts[:iata_index])
+            arrival_input = iata_codes[0]
+    else:
+        # 没有IATA代码，按词数智能分割
+        if len(parts) == 2:
+            departure_input = parts[0]
+            arrival_input = parts[1]
+        elif len(parts) == 3:
+            if parts[0][0].isupper() and parts[1][0].isupper() and len(parts[0]) > 2 and len(parts[1]) > 2:
+                departure_input = f"{parts[0]} {parts[1]}"
+                arrival_input = parts[2]
+            else:
+                departure_input = parts[0]
+                arrival_input = f"{parts[1]} {parts[2]}"
+        elif len(parts) == 4:
+            departure_input = f"{parts[0]} {parts[1]}"
+            arrival_input = f"{parts[2]} {parts[3]}"
+        else:
+            mid_point = len(parts) // 2
+            departure_input = " ".join(parts[:mid_point])
+            arrival_input = " ".join(parts[mid_point:])
+    
+    # 清理输入
+    departure_input = departure_input.strip()
+    arrival_input = arrival_input.strip()
+    
+    if not departure_input or not arrival_input:
+        await send_error(context, update.message.chat_id, 
+                        "❌ 无法解析出发地和目的地\n\n"
+                        "请使用清晰的格式:\n"
+                        "• `出发地 目的地 日期`: `北京 东京 2024-12-25`\n"
+                        "• `IATA代码`: `PEK NRT 2024-12-25`\n"
+                        "• `英文城市`: `Kuala Lumpur Bangkok 2024-12-25`")
+        return
     
     # 使用智能机场解析 - 与主搜索功能一致
     airport_resolution = resolve_flight_airports(departure_input, arrival_input)
@@ -2849,6 +3019,8 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
 `/flight 吉隆坡 普吉 2024-12-25 2024-12-30` - 智能识别KUL→HKT往返
 `/flight Shanghai Tokyo 2024-12-25` - 混合语言输入PVG→NRT
 
+🔗 完整国际机场列表: https://en\\.wikipedia\\.org/wiki/List\\_of\\_international\\_airports\\_by\\_country
+
 请选择功能:"""
         
         await query.edit_message_text(
@@ -2886,7 +3058,9 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
 💡 智能特性:
 • 自动识别城市最佳机场
 • 支持城市别名和简称
-• 多机场城市自动推荐主要机场"""
+• 多机场城市自动推荐主要机场
+
+🔗 完整国际机场列表: https://en\\.wikipedia\\.org/wiki/List\\_of\\_international\\_airports\\_by\\_country"""
 
         await query.edit_message_text(
             text=foldable_text_with_markdown_v2(search_help_text),

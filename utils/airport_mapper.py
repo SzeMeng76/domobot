@@ -431,9 +431,10 @@ MAJOR_CITIES_AIRPORTS = {
     # 东南亚主要城市
     "新加坡": {
         "primary": "SIN", 
-        "secondary": [], 
+        "secondary": ["XSP"], 
         "airports": [
-            {"code": "SIN", "name": "新加坡樟宜机场", "name_en": "Singapore Changi Airport", "note": "世界顶级机场,东南亚枢纽"}
+            {"code": "SIN", "name": "新加坡樟宜机场", "name_en": "Singapore Changi Airport", "note": "世界顶级机场,东南亚枢纽"},
+            {"code": "XSP", "name": "新加坡实里达机场", "name_en": "Singapore Seletar Airport", "note": "主要用于私人飞机和货运"}
         ]
     },
     "吉隆坡": {
@@ -1126,6 +1127,659 @@ MAJOR_CITIES_AIRPORTS = {
             {"code": "MIA", "name": "迈阿密国际机场", "name_en": "Miami International Airport", "note": "通往拉美的门户"}
         ]
     },
+    "亚特兰大": {
+        "primary": "ATL", 
+        "secondary": [], 
+        "airports": [
+            {"code": "ATL", "name": "哈茨菲尔德-杰克逊亚特兰大国际机场", "name_en": "Hartsfield–Jackson Atlanta International Airport", "note": "世界最繁忙机场"}
+        ]
+    },
+    "波士顿": {
+        "primary": "BOS", 
+        "secondary": [], 
+        "airports": [
+            {"code": "BOS", "name": "洛根国际机场", "name_en": "Logan International Airport", "note": "新英格兰地区枢纽"}
+        ]
+    },
+    "达拉斯": {
+        "primary": "DFW", 
+        "secondary": ["DAL"], 
+        "airports": [
+            {"code": "DFW", "name": "达拉斯/沃思堡国际机场", "name_en": "Dallas/Fort Worth International Airport", "note": "美国航空枢纽"},
+            {"code": "DAL", "name": "达拉斯爱田机场", "name_en": "Dallas Love Field", "note": "西南航空基地"}
+        ]
+    },
+    "丹佛": {
+        "primary": "DEN", 
+        "secondary": [], 
+        "airports": [
+            {"code": "DEN", "name": "丹佛国际机场", "name_en": "Denver International Airport", "note": "美国面积最大机场"}
+        ]
+    },
+    "底特律": {
+        "primary": "DTW", 
+        "secondary": [], 
+        "airports": [
+            {"code": "DTW", "name": "底特律都会韦恩县机场", "name_en": "Detroit Metropolitan Airport", "note": "达美航空枢纽"}
+        ]
+    },
+    "休斯顿": {
+        "primary": "IAH", 
+        "secondary": ["HOU"], 
+        "airports": [
+            {"code": "IAH", "name": "乔治·布什洲际机场", "name_en": "George Bush Intercontinental Airport", "note": "联合航空枢纽"},
+            {"code": "HOU", "name": "威廉·霍比机场", "name_en": "William P. Hobby Airport", "note": "西南航空基地"}
+        ]
+    },
+    "拉斯维加斯": {
+        "primary": "LAS", 
+        "secondary": [], 
+        "airports": [
+            {"code": "LAS", "name": "哈里·里德国际机场", "name_en": "Harry Reid International Airport", "note": "娱乐之都门户"}
+        ]
+    },
+    "明尼阿波利斯": {
+        "primary": "MSP", 
+        "secondary": [], 
+        "airports": [
+            {"code": "MSP", "name": "明尼阿波利斯-圣保罗国际机场", "name_en": "Minneapolis/St. Paul International Airport", "note": "达美航空枢纽"}
+        ]
+    },
+    "奥兰多": {
+        "primary": "MCO", 
+        "secondary": [], 
+        "airports": [
+            {"code": "MCO", "name": "奥兰多国际机场", "name_en": "Orlando International Airport", "note": "迪士尼世界门户"}
+        ]
+    },
+    "费城": {
+        "primary": "PHL", 
+        "secondary": [], 
+        "airports": [
+            {"code": "PHL", "name": "费城国际机场", "name_en": "Philadelphia International Airport", "note": "美国航空枢纽"}
+        ]
+    },
+    "凤凰城": {
+        "primary": "PHX", 
+        "secondary": [], 
+        "airports": [
+            {"code": "PHX", "name": "凤凰城天港国际机场", "name_en": "Phoenix Sky Harbor International Airport", "note": "西南地区枢纽"}
+        ]
+    },
+    "波特兰": {
+        "primary": "PDX", 
+        "secondary": [], 
+        "airports": [
+            {"code": "PDX", "name": "波特兰国际机场", "name_en": "Portland International Airport", "note": "俄勒冈州主要机场"}
+        ]
+    },
+    "圣地亚哥": {
+        "primary": "SAN", 
+        "secondary": [], 
+        "airports": [
+            {"code": "SAN", "name": "圣地亚哥国际机场", "name_en": "San Diego International Airport", "note": "南加州重要机场"}
+        ]
+    },
+    "圣安东尼奥": {
+        "primary": "SAT", 
+        "secondary": [], 
+        "airports": [
+            {"code": "SAT", "name": "圣安东尼奥国际机场", "name_en": "San Antonio International Airport", "note": "德州南部枢纽"}
+        ]
+    },
+    "圣何塞": {
+        "primary": "SJC", 
+        "secondary": [], 
+        "airports": [
+            {"code": "SJC", "name": "圣何塞国际机场", "name_en": "San Jose International Airport", "note": "硅谷门户"}
+        ]
+    },
+    "盐湖城": {
+        "primary": "SLC", 
+        "secondary": [], 
+        "airports": [
+            {"code": "SLC", "name": "盐湖城国际机场", "name_en": "Salt Lake City International Airport", "note": "达美航空枢纽"}
+        ]
+    },
+    "圣路易斯": {
+        "primary": "STL", 
+        "secondary": [], 
+        "airports": [
+            {"code": "STL", "name": "圣路易斯兰伯特国际机场", "name_en": "St. Louis Lambert International Airport", "note": "中西部重要机场"}
+        ]
+    },
+    "坦帕": {
+        "primary": "TPA", 
+        "secondary": [], 
+        "airports": [
+            {"code": "TPA", "name": "坦帕国际机场", "name_en": "Tampa International Airport", "note": "佛州西海岸枢纽"}
+        ]
+    },
+    "安克雷奇": {
+        "primary": "ANC", 
+        "secondary": [], 
+        "airports": [
+            {"code": "ANC", "name": "安克雷奇国际机场", "name_en": "Anchorage International Airport", "note": "阿拉斯加最大机场"}
+        ]
+    },
+    "火奴鲁鲁": {
+        "primary": "HNL", 
+        "secondary": [], 
+        "airports": [
+            {"code": "HNL", "name": "丹尼尔·井上国际机场", "name_en": "Daniel K. Inouye International Airport", "note": "夏威夷主要机场"}
+        ]
+    },
+    "夏洛特": {
+        "primary": "CLT", 
+        "secondary": [], 
+        "airports": [
+            {"code": "CLT", "name": "夏洛特道格拉斯国际机场", "name_en": "Charlotte Douglas International Airport", "note": "美国航空枢纽"}
+        ]
+    },
+    "纳什维尔": {
+        "primary": "BNA", 
+        "secondary": [], 
+        "airports": [
+            {"code": "BNA", "name": "纳什维尔国际机场", "name_en": "Nashville International Airport", "note": "音乐之城门户"}
+        ]
+    },
+    "新奥尔良": {
+        "primary": "MSY", 
+        "secondary": [], 
+        "airports": [
+            {"code": "MSY", "name": "路易·阿姆斯特朗新奥尔良国际机场", "name_en": "Louis Armstrong New Orleans International Airport", "note": "爵士乐之都"}
+        ]
+    },
+    "堪萨斯城": {
+        "primary": "MCI", 
+        "secondary": [], 
+        "airports": [
+            {"code": "MCI", "name": "堪萨斯城国际机场", "name_en": "Kansas City International Airport", "note": "中西部枢纽"}
+        ]
+    },
+    "印第安纳波利斯": {
+        "primary": "IND", 
+        "secondary": [], 
+        "airports": [
+            {"code": "IND", "name": "印第安纳波利斯国际机场", "name_en": "Indianapolis International Airport", "note": "联邦快递枢纽"}
+        ]
+    },
+    "哥伦布": {
+        "primary": "CMH", 
+        "secondary": [], 
+        "airports": [
+            {"code": "CMH", "name": "约翰·格伦哥伦布国际机场", "name_en": "John Glenn Columbus International Airport", "note": "俄亥俄州枢纽"}
+        ]
+    },
+    "密尔沃基": {
+        "primary": "MKE", 
+        "secondary": [], 
+        "airports": [
+            {"code": "MKE", "name": "米切尔将军国际机场", "name_en": "General Mitchell International Airport", "note": "威斯康星州主要机场"}
+        ]
+    },
+    "俄克拉荷马城": {
+        "primary": "OKC", 
+        "secondary": [], 
+        "airports": [
+            {"code": "OKC", "name": "威尔·罗杰斯世界机场", "name_en": "Will Rogers World Airport", "note": "俄克拉荷马州枢纽"}
+        ]
+    },
+    "孟菲斯": {
+        "primary": "MEM", 
+        "secondary": [], 
+        "airports": [
+            {"code": "MEM", "name": "孟菲斯国际机场", "name_en": "Memphis International Airport", "note": "联邦快递全球枢纽"}
+        ]
+    },
+    "路易维尔": {
+        "primary": "SDF", 
+        "secondary": [], 
+        "airports": [
+            {"code": "SDF", "name": "路易维尔国际机场", "name_en": "Louisville International Airport", "note": "UPS全球枢纽"}
+        ]
+    },
+    "里诺": {
+        "primary": "RNO", 
+        "secondary": [], 
+        "airports": [
+            {"code": "RNO", "name": "里诺-塔霍国际机场", "name_en": "Reno–Tahoe International Airport", "note": "内华达州北部机场"}
+        ]
+    },
+    "奥马哈": {
+        "primary": "OMA", 
+        "secondary": [], 
+        "airports": [
+            {"code": "OMA", "name": "埃普利机场", "name_en": "Eppley Airfield", "note": "内布拉斯加州枢纽"}
+        ]
+    },
+    "阿尔伯克基": {
+        "primary": "ABQ", 
+        "secondary": [], 
+        "airports": [
+            {"code": "ABQ", "name": "阿尔伯克基国际太阳港", "name_en": "Albuquerque International Sunport", "note": "新墨西哥州枢纽"}
+        ]
+    },
+    "图森": {
+        "primary": "TUS", 
+        "secondary": [], 
+        "airports": [
+            {"code": "TUS", "name": "图森国际机场", "name_en": "Tucson International Airport", "note": "南亚利桑那机场"}
+        ]
+    },
+    "杰克逊维尔": {
+        "primary": "JAX", 
+        "secondary": [], 
+        "airports": [
+            {"code": "JAX", "name": "杰克逊维尔国际机场", "name_en": "Jacksonville International Airport", "note": "佛州东北部机场"}
+        ]
+    },
+    "奥克兰": {
+        "primary": "OAK", 
+        "secondary": [], 
+        "airports": [
+            {"code": "OAK", "name": "奥克兰国际机场", "name_en": "Oakland International Airport", "note": "湾区廉价航空基地"}
+        ]
+    },
+    "巴尔的摩": {
+        "primary": "BWI", 
+        "secondary": [], 
+        "airports": [
+            {"code": "BWI", "name": "巴尔的摩/华盛顿国际机场", "name_en": "Baltimore/Washington International Airport", "note": "华盛顿地区第三机场"}
+        ]
+    },
+    "罗利": {
+        "primary": "RDU", 
+        "secondary": [], 
+        "airports": [
+            {"code": "RDU", "name": "罗利-达勒姆国际机场", "name_en": "Raleigh–Durham International Airport", "note": "北卡州主要机场"}
+        ]
+    },
+    "辛辛那提": {
+        "primary": "CVG", 
+        "secondary": [], 
+        "airports": [
+            {"code": "CVG", "name": "辛辛那提/北肯塔基国际机场", "name_en": "Cincinnati/Northern Kentucky International Airport", "note": "达美航空枢纽"}
+        ]
+    },
+    "克利夫兰": {
+        "primary": "CLE", 
+        "secondary": [], 
+        "airports": [
+            {"code": "CLE", "name": "克利夫兰霍普金斯国际机场", "name_en": "Cleveland Hopkins International Airport", "note": "俄亥俄州北部机场"}
+        ]
+    },
+    "匹兹堡": {
+        "primary": "PIT", 
+        "secondary": [], 
+        "airports": [
+            {"code": "PIT", "name": "匹兹堡国际机场", "name_en": "Pittsburgh International Airport", "note": "宾州西部枢纽"}
+        ]
+    },
+    "伯明翰": {
+        "primary": "BHM", 
+        "secondary": [], 
+        "airports": [
+            {"code": "BHM", "name": "伯明翰-沙特尔沃思国际机场", "name_en": "Birmingham–Shuttlesworth International Airport", "note": "阿拉巴马州主要机场"}
+        ]
+    },
+    "小石城": {
+        "primary": "LIT", 
+        "secondary": [], 
+        "airports": [
+            {"code": "LIT", "name": "比尔和希拉里·克林顿国家机场", "name_en": "Bill and Hillary Clinton National Airport", "note": "阿肯色州主要机场"}
+        ]
+    },
+    "里奇蒙": {
+        "primary": "RIC", 
+        "secondary": [], 
+        "airports": [
+            {"code": "RIC", "name": "里奇蒙国际机场", "name_en": "Richmond International Airport", "note": "弗吉尼亚州枢纽"}
+        ]
+    },
+    "诺福克": {
+        "primary": "ORF", 
+        "secondary": [], 
+        "airports": [
+            {"code": "ORF", "name": "诺福克国际机场", "name_en": "Norfolk International Airport", "note": "弗州沿海机场"}
+        ]
+    },
+    "萨凡纳": {
+        "primary": "SAV", 
+        "secondary": [], 
+        "airports": [
+            {"code": "SAV", "name": "萨凡纳/希尔顿海德国际机场", "name_en": "Savannah/Hilton Head International Airport", "note": "乔治亚州沿海机场"}
+        ]
+    },
+    "大急流城": {
+        "primary": "GRR", 
+        "secondary": [], 
+        "airports": [
+            {"code": "GRR", "name": "杰拉尔德·福特国际机场", "name_en": "Gerald R. Ford International Airport", "note": "密歇根州西部机场"}
+        ]
+    },
+    "博伊西": {
+        "primary": "BOI", 
+        "secondary": [], 
+        "airports": [
+            {"code": "BOI", "name": "博伊西机场", "name_en": "Boise Airport", "note": "爱达荷州主要机场"}
+        ]
+    },
+    "塔尔萨": {
+        "primary": "TUL", 
+        "secondary": [], 
+        "airports": [
+            {"code": "TUL", "name": "塔尔萨国际机场", "name_en": "Tulsa International Airport", "note": "俄克拉荷马州第二大机场"}
+        ]
+    },
+    "萨克拉门托": {
+        "primary": "SMF", 
+        "secondary": [], 
+        "airports": [
+            {"code": "SMF", "name": "萨克拉门托国际机场", "name_en": "Sacramento International Airport", "note": "加州首府机场"}
+        ]
+    },
+    "弗雷斯诺": {
+        "primary": "FAT", 
+        "secondary": [], 
+        "airports": [
+            {"code": "FAT", "name": "弗雷斯诺优胜美地国际机场", "name_en": "Fresno Yosemite International Airport", "note": "加州中央谷地机场"}
+        ]
+    },
+    "奥尔巴尼": {
+        "primary": "ALB", 
+        "secondary": [], 
+        "airports": [
+            {"code": "ALB", "name": "奥尔巴尼国际机场", "name_en": "Albany International Airport", "note": "纽约州首府机场"}
+        ]
+    },
+    "罗切斯特": {
+        "primary": "ROC", 
+        "secondary": [], 
+        "airports": [
+            {"code": "ROC", "name": "大罗切斯特国际机场", "name_en": "Greater Rochester International Airport", "note": "纽约州西部机场"}
+        ]
+    },
+    "锡拉丘兹": {
+        "primary": "SYR", 
+        "secondary": [], 
+        "airports": [
+            {"code": "SYR", "name": "锡拉丘兹汉考克国际机场", "name_en": "Syracuse Hancock International Airport", "note": "纽约州中部机场"}
+        ]
+    },
+    "布法罗": {
+        "primary": "BUF", 
+        "secondary": [], 
+        "airports": [
+            {"code": "BUF", "name": "布法罗尼亚加拉国际机场", "name_en": "Buffalo Niagara International Airport", "note": "尼亚加拉大瀑布门户"}
+        ]
+    },
+    "哈特福德": {
+        "primary": "BDL", 
+        "secondary": [], 
+        "airports": [
+            {"code": "BDL", "name": "布拉德利国际机场", "name_en": "Bradley International Airport", "note": "康涅狄格州主要机场"}
+        ]
+    },
+    "普罗维登斯": {
+        "primary": "PVD", 
+        "secondary": [], 
+        "airports": [
+            {"code": "PVD", "name": "罗德岛T.F.格林国际机场", "name_en": "Rhode Island T. F. Green International Airport", "note": "罗德岛机场"}
+        ]
+    },
+    "南卡查尔斯顿": {
+        "primary": "CHS", 
+        "secondary": [], 
+        "airports": [
+            {"code": "CHS", "name": "查尔斯顿国际机场", "name_en": "Charleston International Airport", "note": "南卡沿海机场"}
+        ]
+    },
+    "哥伦比亚": {
+        "primary": "CAE", 
+        "secondary": [], 
+        "airports": [
+            {"code": "CAE", "name": "哥伦比亚都会机场", "name_en": "Columbia Metropolitan Airport", "note": "南卡州首府机场"}
+        ]
+    },
+    "绿湾": {
+        "primary": "GRB", 
+        "secondary": [], 
+        "airports": [
+            {"code": "GRB", "name": "绿湾-奥斯汀·斯特劳贝尔国际机场", "name_en": "Green Bay–Austin Straubel International Airport", "note": "威州东北部机场"}
+        ]
+    },
+    "麦迪逊": {
+        "primary": "MSN", 
+        "secondary": [], 
+        "airports": [
+            {"code": "MSN", "name": "戴恩县地区机场", "name_en": "Dane County Regional Airport", "note": "威州首府机场"}
+        ]
+    },
+    "得梅因": {
+        "primary": "DSM", 
+        "secondary": [], 
+        "airports": [
+            {"code": "DSM", "name": "得梅因国际机场", "name_en": "Des Moines International Airport", "note": "爱荷华州主要机场"}
+        ]
+    },
+    "斯波坎": {
+        "primary": "GEG", 
+        "secondary": [], 
+        "airports": [
+            {"code": "GEG", "name": "斯波坎国际机场", "name_en": "Spokane International Airport", "note": "华盛顿州东部机场"}
+        ]
+    },
+    "班戈": {
+        "primary": "BGR", 
+        "secondary": [], 
+        "airports": [
+            {"code": "BGR", "name": "班戈国际机场", "name_en": "Bangor International Airport", "note": "缅因州东部机场"}
+        ]
+    },
+    "基韦斯特": {
+        "primary": "EYW", 
+        "secondary": [], 
+        "airports": [
+            {"code": "EYW", "name": "基韦斯特国际机场", "name_en": "Key West International Airport", "note": "佛州最南端机场"}
+        ]
+    },
+    "达顿": {
+        "primary": "DAY", 
+        "secondary": [], 
+        "airports": [
+            {"code": "DAY", "name": "代顿国际机场", "name_en": "Dayton International Airport", "note": "俄亥俄州西南机场"}
+        ]
+    },
+    "诺克斯维尔": {
+        "primary": "TYS", 
+        "secondary": [], 
+        "airports": [
+            {"code": "TYS", "name": "麦吉·泰森机场", "name_en": "McGhee Tyson Airport", "note": "田纳西州东部机场"}
+        ]
+    },
+    "格林斯伯勒": {
+        "primary": "GSO", 
+        "secondary": [], 
+        "airports": [
+            {"code": "GSO", "name": "皮埃蒙特三合会国际机场", "name_en": "Piedmont Triad International Airport", "note": "北卡州中部机场"}
+        ]
+    },
+    "格林维尔": {
+        "primary": "GSP", 
+        "secondary": [], 
+        "airports": [
+            {"code": "GSP", "name": "格林维尔-斯帕坦堡国际机场", "name_en": "Greenville-Spartanburg International Airport", "note": "南卡州北部机场"}
+        ]
+    },
+    "塔拉哈西": {
+        "primary": "TLH", 
+        "secondary": [], 
+        "airports": [
+            {"code": "TLH", "name": "塔拉哈西国际机场", "name_en": "Tallahassee International Airport", "note": "佛州首府机场"}
+        ]
+    },
+    "彭萨科拉": {
+        "primary": "PNS", 
+        "secondary": [], 
+        "airports": [
+            {"code": "PNS", "name": "彭萨科拉国际机场", "name_en": "Pensacola International Airport", "note": "佛州西北部机场"}
+        ]
+    },
+    "萨拉索塔": {
+        "primary": "SRQ", 
+        "secondary": [], 
+        "airports": [
+            {"code": "SRQ", "name": "萨拉索塔-布雷登顿国际机场", "name_en": "Sarasota–Bradenton International Airport", "note": "佛州西海岸机场"}
+        ]
+    },
+    "罗德岱尔堡": {
+        "primary": "FLL", 
+        "secondary": [], 
+        "airports": [
+            {"code": "FLL", "name": "劳德代尔堡-好莱坞国际机场", "name_en": "Fort Lauderdale–Hollywood International Airport", "note": "南佛州第二大机场"}
+        ]
+    },
+    "西棕榈滩": {
+        "primary": "PBI", 
+        "secondary": [], 
+        "airports": [
+            {"code": "PBI", "name": "棕榈滩国际机场", "name_en": "Palm Beach International Airport", "note": "南佛州机场"}
+        ]
+    },
+    "迈尔斯堡": {
+        "primary": "RSW", 
+        "secondary": [], 
+        "airports": [
+            {"code": "RSW", "name": "西南佛罗里达国际机场", "name_en": "Southwest Florida International Airport", "note": "佛州西南部机场"}
+        ]
+    },
+    "亨茨维尔": {
+        "primary": "HSV", 
+        "secondary": [], 
+        "airports": [
+            {"code": "HSV", "name": "亨茨维尔国际机场", "name_en": "Huntsville International Airport", "note": "阿拉巴马州北部机场"}
+        ]
+    },
+    "杰克逊": {
+        "primary": "JAN", 
+        "secondary": [], 
+        "airports": [
+            {"code": "JAN", "name": "杰克逊-梅德加·威利·埃弗斯国际机场", "name_en": "Jackson–Medgar Wiley Evers International Airport", "note": "密西西比州首府机场"}
+        ]
+    },
+    "哈里斯堡": {
+        "primary": "MDT", 
+        "secondary": [], 
+        "airports": [
+            {"code": "MDT", "name": "哈里斯堡国际机场", "name_en": "Harrisburg International Airport", "note": "宾州首府机场"}
+        ]
+    },
+    "艾瑞": {
+        "primary": "ERI", 
+        "secondary": [], 
+        "airports": [
+            {"code": "ERI", "name": "艾瑞国际机场", "name_en": "Erie International Airport", "note": "宾州西北机场"}
+        ]
+    },
+    "德卢斯": {
+        "primary": "DLH", 
+        "secondary": [], 
+        "airports": [
+            {"code": "DLH", "name": "德卢斯国际机场", "name_en": "Duluth International Airport", "note": "明尼苏达州北部机场"}
+        ]
+    },
+    "兰辛": {
+        "primary": "LAN", 
+        "secondary": [], 
+        "airports": [
+            {"code": "LAN", "name": "首府地区国际机场", "name_en": "Capital Region International Airport", "note": "密歇根州首府机场"}
+        ]
+    },
+    "费尔班克斯": {
+        "primary": "FAI", 
+        "secondary": [], 
+        "airports": [
+            {"code": "FAI", "name": "费尔班克斯国际机场", "name_en": "Fairbanks International Airport", "note": "阿拉斯加内陆机场"}
+        ]
+    },
+    "朱诺": {
+        "primary": "JNU", 
+        "secondary": [], 
+        "airports": [
+            {"code": "JNU", "name": "朱诺国际机场", "name_en": "Juneau International Airport", "note": "阿拉斯加州首府机场"}
+        ]
+    },
+    "科纳": {
+        "primary": "KOA", 
+        "secondary": [], 
+        "airports": [
+            {"code": "KOA", "name": "科纳国际机场", "name_en": "Kona International Airport", "note": "夏威夷大岛西部机场"}
+        ]
+    },
+    "希洛": {
+        "primary": "ITO", 
+        "secondary": [], 
+        "airports": [
+            {"code": "ITO", "name": "希洛国际机场", "name_en": "Hilo International Airport", "note": "夏威夷大岛东部机场"}
+        ]
+    },
+    "埃尔帕索": {
+        "primary": "ELP", 
+        "secondary": [], 
+        "airports": [
+            {"code": "ELP", "name": "埃尔帕索国际机场", "name_en": "El Paso International Airport", "note": "德州西部机场"}
+        ]
+    },
+    "阿马里洛": {
+        "primary": "AMA", 
+        "secondary": [], 
+        "airports": [
+            {"code": "AMA", "name": "里克·赫斯班德阿马里洛国际机场", "name_en": "Rick Husband Amarillo International Airport", "note": "德州北部机场"}
+        ]
+    },
+    "科珀斯克里斯蒂": {
+        "primary": "CRP", 
+        "secondary": [], 
+        "airports": [
+            {"code": "CRP", "name": "科珀斯克里斯蒂国际机场", "name_en": "Corpus Christi International Airport", "note": "德州沿海机场"}
+        ]
+    },
+    "拉伯克": {
+        "primary": "LBB", 
+        "secondary": [], 
+        "airports": [
+            {"code": "LBB", "name": "拉伯克普雷斯顿·史密斯国际机场", "name_en": "Lubbock Preston Smith International Airport", "note": "德州北部平原机场"}
+        ]
+    },
+    "棕榈泉": {
+        "primary": "PSP", 
+        "secondary": [], 
+        "airports": [
+            {"code": "PSP", "name": "棕榈泉国际机场", "name_en": "Palm Springs International Airport", "note": "加州沙漠度假区机场"}
+        ]
+    },
+    "安大略": {
+        "primary": "ONT", 
+        "secondary": [], 
+        "airports": [
+            {"code": "ONT", "name": "安大略国际机场", "name_en": "Ontario International Airport", "note": "大洛杉矶地区机场"}
+        ]
+    },
+    "橙县": {
+        "primary": "SNA", 
+        "secondary": [], 
+        "airports": [
+            {"code": "SNA", "name": "约翰·韦恩机场", "name_en": "John Wayne Airport", "note": "橙县机场"}
+        ]
+    },
+    "伯班克": {
+        "primary": "BUR", 
+        "secondary": [], 
+        "airports": [
+            {"code": "BUR", "name": "好莱坞伯班克机场", "name_en": "Hollywood Burbank Airport", "note": "洛杉矶北部机场"}
+        ]
+    },
     
     # 加拿大主要城市
     "多伦多": {
@@ -1432,12 +2086,111 @@ ENGLISH_CITIES_AIRPORTS = {
     "dushanbe": "杜尚别",
     "ashgabat": "阿什哈巴德",
     
-    # 其他地区（保持原有）
+    # 美国城市
     "new york": "纽约",
-    "los angeles": "洛杉矶",
+    "los angeles": "洛杉矶", 
     "san francisco": "旧金山",
     "chicago": "芝加哥",
     "seattle": "西雅图",
+    "washington": "华盛顿",
+    "washington dc": "华盛顿",
+    "miami": "迈阿密",
+    "atlanta": "亚特兰大",
+    "boston": "波士顿",
+    "dallas": "达拉斯",
+    "denver": "丹佛",
+    "detroit": "底特律",
+    "houston": "休斯顿",
+    "las vegas": "拉斯维加斯",
+    "minneapolis": "明尼阿波利斯",
+    "orlando": "奥兰多",
+    "philadelphia": "费城",
+    "phoenix": "凤凰城",
+    "portland": "波特兰",
+    "san diego": "圣地亚哥",
+    "san antonio": "圣安东尼奥",
+    "san jose": "圣何塞",
+    "salt lake city": "盐湖城",
+    "st louis": "圣路易斯",
+    "saint louis": "圣路易斯",
+    "tampa": "坦帕",
+    "anchorage": "安克雷奇",
+    "honolulu": "火奴鲁鲁",
+    "charlotte": "夏洛特",
+    "nashville": "纳什维尔",
+    "new orleans": "新奥尔良",
+    "kansas city": "堪萨斯城",
+    "indianapolis": "印第安纳波利斯",
+    "columbus": "哥伦布",
+    "milwaukee": "密尔沃基",
+    "oklahoma city": "俄克拉荷马城",
+    "memphis": "孟菲斯",
+    "louisville": "路易维尔",
+    "reno": "里诺",
+    "omaha": "奥马哈",
+    "albuquerque": "阿尔伯克基",
+    "tucson": "图森",
+    "jacksonville": "杰克逊维尔",
+    "oakland": "奥克兰",
+    "baltimore": "巴尔的摩",
+    "raleigh": "罗利",
+    "cincinnati": "辛辛那提",
+    "cleveland": "克利夫兰",
+    "pittsburgh": "匹兹堡",
+    "birmingham": "伯明翰",
+    "little rock": "小石城",
+    "richmond": "里奇蒙",
+    "norfolk": "诺福克",
+    "savannah": "萨凡纳",
+    "grand rapids": "大急流城",
+    "boise": "博伊西",
+    "tulsa": "塔尔萨",
+    "sacramento": "萨克拉门托",
+    "fresno": "弗雷斯诺",
+    "albany": "奥尔巴尼",
+    "rochester": "罗切斯特",
+    "syracuse": "锡拉丘兹",
+    "buffalo": "布法罗",
+    "hartford": "哈特福德",
+    "providence": "普罗维登斯",
+    "charleston": "南卡查尔斯顿",
+    "columbia": "哥伦比亚",
+    "green bay": "绿湾",
+    "madison": "麦迪逊",
+    "des moines": "得梅因",
+    "spokane": "斯波坎",
+    "bangor": "班戈",
+    "key west": "基韦斯特",
+    "dayton": "达顿",
+    "knoxville": "诺克斯维尔",
+    "greensboro": "格林斯伯勒",
+    "greenville": "格林维尔",
+    "tallahassee": "塔拉哈西",
+    "pensacola": "彭萨科拉",
+    "sarasota": "萨拉索塔",
+    "fort lauderdale": "罗德岱尔堡",
+    "west palm beach": "西棕榈滩",
+    "fort myers": "迈尔斯堡",
+    "huntsville": "亨茨维尔",
+    "jackson": "杰克逊",
+    "harrisburg": "哈里斯堡",
+    "erie": "艾瑞",
+    "duluth": "德卢斯",
+    "lansing": "兰辛",
+    "fairbanks": "费尔班克斯",
+    "juneau": "朱诺",
+    "kona": "科纳",
+    "hilo": "希洛",
+    "el paso": "埃尔帕索",
+    "amarillo": "阿马里洛",
+    "corpus christi": "科珀斯克里斯蒂",
+    "lubbock": "拉伯克",
+    "palm springs": "棕榈泉",
+    "ontario": "安大略",
+    "orange county": "橙县",
+    "burbank": "伯班克",
+    
+    # 加拿大和其他地区
     "toronto": "多伦多",
     "vancouver": "温哥华",
     "london": "伦敦",
@@ -1715,7 +2468,18 @@ def get_country_airports(country_name: str) -> List[Dict]:
         "土库曼斯坦": ["阿什哈巴德"],
         
         # 北美洲
-        "美国": ["纽约", "洛杉矶", "旧金山", "芝加哥", "西雅图", "华盛顿", "迈阿密"],
+        "美国": ["纽约", "洛杉矶", "旧金山", "芝加哥", "西雅图", "华盛顿", "迈阿密", "亚特兰大", "波士顿", "达拉斯", 
+               "丹佛", "底特律", "休斯顿", "拉斯维加斯", "明尼阿波利斯", "奥兰多", "费城", "凤凰城", "波特兰", 
+               "圣地亚哥", "圣安东尼奥", "圣何塞", "盐湖城", "圣路易斯", "坦帕", "安克雷奇", "火奴鲁鲁", "夏洛特", 
+               "纳什维尔", "新奥尔良", "堪萨斯城", "印第安纳波利斯", "哥伦布", "密尔沃基", "俄克拉荷马城", "孟菲斯", 
+               "路易维尔", "里诺", "奥马哈", "阿尔伯克基", "图森", "杰克逊维尔", "奥克兰", "巴尔的摩", "罗利", 
+               "辛辛那提", "克利夫兰", "匹兹堡", "伯明翰", "小石城", "里奇蒙", "诺福克", "萨凡纳", "大急流城", 
+               "博伊西", "塔尔萨", "萨克拉门托", "弗雷斯诺", "奥尔巴尼", "罗切斯特", "锡拉丘兹", "布法罗", 
+               "哈特福德", "普罗维登斯", "南卡查尔斯顿", "哥伦比亚", "绿湾", "麦迪逊", "得梅因", "斯波坎", 
+               "班戈", "基韦斯特", "达顿", "诺克斯维尔", "格林斯伯勒", "格林维尔", "塔拉哈西", "彭萨科拉", 
+               "萨拉索塔", "罗德岱尔堡", "西棕榈滩", "迈尔斯堡", "亨茨维尔", "杰克逊", "哈里斯堡", "艾瑞", 
+               "德卢斯", "兰辛", "费尔班克斯", "朱诺", "科纳", "希洛", "埃尔帕索", "阿马里洛", "科珀斯克里斯蒂", 
+               "拉伯克", "棕榈泉", "安大略", "橙县", "伯班克"],
         "加拿大": ["多伦多", "温哥华"],
         
         # 欧洲

@@ -101,6 +101,7 @@ docker-compose down
 | `TRAKT_API_KEY`             | **（可选）** Trakt的API Key，用于增强电影/电视剧统计和热门趋势数据。        |                         |
 | `GOOGLE_MAPS_API_KEY`       | **（可选）** Google Maps的API Key，用于 `/map` 命令（英文用户）。          |                         |
 | `AMAP_API_KEY`              | **（可选）** 高德地图的API Key，用于 `/map` 命令（中文用户）。             |                         |
+| `SERPAPI_KEY`               | **（可选）** SerpAPI的API Key，用于启用 `/flight` 航班服务命令。            |                         |
 | `QWEATHER_API_KEY`          | **（可选）** 和风天气的API Key，用于启用 `/tq` 命令。                       |                         |
 | `EXCHANGE_RATE_API_KEYS`    | **（可选）** openexchangerates.org的API Key，用于启用 `/rate` 命令。多个密钥用逗号分隔。 |                         |
 | `ENABLE_USER_CACHE`         | **（可选）** 启用用户缓存系统 (`true`/`false`)。                            | `false`                 |
@@ -195,6 +196,15 @@ docker-compose down
 
 #### 白名单专享命令
 ```bash
+# 智能航班搜索和预订（多语言机场识别）
+/flight                        # 航班服务交互式菜单
+/flight 北京 洛杉矶 2024-12-25     # 中文城市名（自动转换PEK→LAX）
+/flight 吉隆坡 普吉 2024-12-25 2024-12-30  # 往返航班（KUL→HKT）
+/flight Shanghai Tokyo 2024-12-25  # 混合语言输入（PVG→NRT）
+/flight PEK LAX 2024-12-25     # 直接使用IATA代码
+/flight Jakarta Bangkok 2024-12-25  # 英文城市名（CGK→BKK）
+# 交互功能：价格分析、预订选项、多城市规划、机场信息
+
 # BIN查询
 /bin 123456
 /bin 12345678
@@ -621,6 +631,7 @@ docker-compose down
 - **Steam API:** 用于游戏价格信息
 - **Google Maps API:** 用于位置搜索、附近场所、路线规划和地理编码服务（英文用户）
 - **高德地图API:** 用于位置搜索、附近场所、路线规划和地理编码服务（中文用户）
+- **SerpAPI:** 用于航班搜索和预订信息，通过Google Flights集成提供多语言机场识别
 - **IP-API.com:** 用于IP地理位置和实际服务器位置数据（免费服务）
 - **Yahoo Finance API:** 用于实时股票价格、市场数据、排行榜、分析师评级和财务报表
 - **各种流媒体服务API:** 用于订阅价格查询
