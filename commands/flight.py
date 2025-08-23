@@ -530,16 +530,148 @@ class FlightServiceManager:
             params["children"] = kwargs["children"]
         
         try:
+            # 第一次调用：获取出发段航班
             response = await httpx_client.get(SERPAPI_BASE_URL, params=params)
-            if response.status_code == 200:
-                data = response.json()
-                return data
-            else:
+            if response.status_code != 200:
                 logger.error(f"SerpAPI request failed: {response.status_code}")
                 return None
+            
+            data = response.json()
+            
+            # 如果是往返航班，需要获取返程航班
+            if return_date and data:
+                data = await self._get_complete_round_trip_data(data, params)
+            
+            return data
+            
         except Exception as e:
             logger.error(f"Flight search failed: {e}")
             return None
+    
+    async def _get_complete_round_trip_data(self, outbound_data: Dict, original_params: Dict) -> Dict:
+        """获取完整的往返航班数据（包含返程段）"""
+        try:
+            # 合并所有出发段航班
+            all_outbound_flights = []
+            if outbound_data.get('best_flights'):
+                all_outbound_flights.extend(outbound_data['best_flights'])
+            if outbound_data.get('other_flights'):
+                all_outbound_flights.extend(outbound_data['other_flights'])
+            
+            # 为每个出发段航班获取对应的返程航班
+            enhanced_flights = []
+            
+            for outbound_flight in all_outbound_flights[:10]:  # 限制处理前10个航班
+                departure_token = outbound_flight.get('departure_token')
+                if not departure_token:
+                    # 如果没有departure_token，保持原样
+                    enhanced_flights.append(outbound_flight)
+                    continue
+                
+                # 使用departure_token获取返程航班
+                return_params = original_params.copy()
+                return_params.pop('outbound_date', None)
+                return_params.pop('return_date', None)
+                return_params['departure_token'] = departure_token
+                
+                return_response = await httpx_client.get(SERPAPI_BASE_URL, params=return_params)
+                if return_response.status_code == 200:
+                    return_data = return_response.json()
+                    
+                    # 合并出发段和返程段
+                    combined_flight = self._combine_outbound_and_return_flights(
+                        outbound_flight, return_data
+                    )
+                    enhanced_flights.append(combined_flight)
+                else:
+                    # 返程请求失败，保持原出发段航班
+                    enhanced_flights.append(outbound_flight)
+                
+                # 避免过于频繁的API调用
+                await asyncio.sleep(0.1)
+            
+            # 更新原数据
+            result_data = outbound_data.copy()
+            if enhanced_flights:
+                # 根据原始分类更新数据
+                best_count = len(outbound_data.get('best_flights', []))
+                if best_count > 0:
+                    result_data['best_flights'] = enhanced_flights[:best_count]
+                    if len(enhanced_flights) > best_count:
+                        result_data['other_flights'] = enhanced_flights[best_count:]
+                else:
+                    result_data['other_flights'] = enhanced_flights
+            
+            return result_data
+            
+        except Exception as e:
+            logger.error(f"获取返程航班失败: {e}")
+            return outbound_data  # 返回原始数据
+    
+    def _combine_outbound_and_return_flights(self, outbound_flight: Dict, return_data: Dict) -> Dict:
+        """合并出发段和返程段航班信息"""
+        try:
+            # 获取返程段的最佳航班
+            return_flights = []
+            if return_data.get('best_flights'):
+                return_flights = return_data['best_flights']
+            elif return_data.get('other_flights'):
+                return_flights = return_data['other_flights']
+            
+            if not return_flights:
+                return outbound_flight
+            
+            # 取第一个返程航班作为默认选择
+            return_flight = return_flights[0]
+            
+            # 合并航班段
+            combined_flight = outbound_flight.copy()
+            
+            # 合并flights数组
+            outbound_segments = outbound_flight.get('flights', [])
+            return_segments = return_flight.get('flights', [])
+            combined_flight['flights'] = outbound_segments + return_segments
+            
+            # 合并layovers
+            outbound_layovers = outbound_flight.get('layovers', [])
+            return_layovers = return_flight.get('layovers', [])
+            combined_flight['layovers'] = outbound_layovers + return_layovers
+            
+            # 更新总时长
+            outbound_duration = outbound_flight.get('total_duration', 0)
+            return_duration = return_flight.get('total_duration', 0)
+            combined_flight['total_duration'] = outbound_duration + return_duration
+            
+            # 更新价格（如果都有的话）
+            outbound_price = outbound_flight.get('price', 0)
+            return_price = return_flight.get('price', 0)
+            if outbound_price and return_price:
+                combined_flight['price'] = outbound_price + return_price
+            
+            # 合并碳排放
+            outbound_emissions = outbound_flight.get('carbon_emissions', {})
+            return_emissions = return_flight.get('carbon_emissions', {})
+            if outbound_emissions and return_emissions:
+                combined_emissions = {
+                    'this_flight': outbound_emissions.get('this_flight', 0) + return_emissions.get('this_flight', 0),
+                    'typical_for_this_route': outbound_emissions.get('typical_for_this_route', 0) + return_emissions.get('typical_for_this_route', 0)
+                }
+                # 重新计算差异百分比
+                if combined_emissions['typical_for_this_route'] > 0:
+                    combined_emissions['difference_percent'] = int(
+                        (combined_emissions['this_flight'] - combined_emissions['typical_for_this_route']) / 
+                        combined_emissions['typical_for_this_route'] * 100
+                    )
+                combined_flight['carbon_emissions'] = combined_emissions
+            
+            # 保持往返标记
+            combined_flight['type'] = 'Round trip'
+            
+            return combined_flight
+            
+        except Exception as e:
+            logger.error(f"合并航班信息失败: {e}")
+            return outbound_flight
     
     async def get_booking_options(self, booking_token: str, search_params: Dict, **kwargs) -> Optional[Dict]:
         """获取预订选项 - 需要原始搜索参数"""
@@ -718,26 +850,25 @@ def format_flight_info(flight: Dict) -> str:
     flight_type = flight.get('type', '')  # "Round trip", "One way", etc.
     is_round_trip = flight_type == "Round trip"
     
-    # 用于检测返程段开始的逻辑
+    # 用于检测返程段开始的逻辑（改进版）
     original_departure = None
-    outbound_final_destination = None
     is_return_leg = False
+    return_start_index = -1
     
-    if len(flights) > 1:
-        # 获取原始出发地和最终目的地
+    if len(flights) > 1 and is_round_trip:
+        # 获取原始出发地
         original_departure = flights[0].get('departure_airport', {}).get('id', '')
         
-        # 寻找往程的最终目的地（通过寻找返程开始的地点）
-        for i in range(len(flights)):
-            curr_departure = flights[i].get('departure_airport', {}).get('id', '')
-            curr_arrival = flights[i].get('arrival_airport', {}).get('id', '')
-            
-            # 如果有航班从某地出发回到原始出发地，那么这个某地就是往程的最终目的地
-            if i > 0 and curr_arrival == original_departure:
-                # 这是返程段的一部分，前一个到达地可能是往程终点
-                for j in range(i):
-                    if flights[j].get('arrival_airport', {}).get('id', '') == curr_departure:
-                        outbound_final_destination = curr_departure
+        # 寻找返程开始点：从某个航班返回到原始出发地
+        for i in range(1, len(flights)):
+            arrival_id = flights[i].get('arrival_airport', {}).get('id', '')
+            if arrival_id == original_departure:
+                # 找到返回原始出发地的航班，向前寻找返程开始点
+                for j in range(i, 0, -1):
+                    departure_id = flights[j].get('departure_airport', {}).get('id', '')
+                    # 如果这个航班的出发地不是前一个航班的到达地（非中转），则可能是返程开始
+                    if j == 1 or flights[j-1].get('arrival_airport', {}).get('id', '') != departure_id:
+                        return_start_index = j
                         break
                 break
     
@@ -749,16 +880,14 @@ def format_flight_info(flight: Dict) -> str:
         arrival_id = arrival.get('id', '')
         
         # 检测是否是返程段开始
-        if (len(flights) > 1 and outbound_final_destination and 
-            departure_id == outbound_final_destination and not is_return_leg and
-            i > 0):
+        if (is_round_trip and return_start_index > 0 and i == return_start_index and not is_return_leg):
             result += "\n🔄 *返程航班*\n"
             is_return_leg = True
         elif i > 0 and not is_return_leg:
             # 普通中转
             result += "\n📍 *中转*\n"
-        elif i == 0 and len(flights) > 2:
-            # 第一段，如果有多个航班段则标记为出发段
+        elif i == 0 and is_round_trip:
+            # 第一段，如果是往返航班则标记为出发段
             result += "🛫 *出发航班*\n"
         
         result += f"✈️ {segment.get('airline', 'Unknown')} {segment.get('flight_number', '')}\n"
