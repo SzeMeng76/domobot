@@ -383,8 +383,7 @@ def enhance_flight_route_display(api_search_data: Dict, search_params: Dict) -> 
     safe_arr_name = escape_markdown(arr_info['name'], version=2)
     safe_dep_country = escape_markdown(dep_info['country'], version=2)
     safe_arr_country = escape_markdown(arr_info['country'], version=2)
-    safe_outbound_date = escape_markdown(outbound_date, version=2)
-    
+    # 日期不需要转义，它们是安全的格式
     trip_type = "往返" if return_date else "单程"
     
     result_parts = [
@@ -392,10 +391,9 @@ def enhance_flight_route_display(api_search_data: Dict, search_params: Dict) -> 
     ]
     
     if return_date:
-        safe_return_date = escape_markdown(return_date, version=2)
-        result_parts[0] += f" ({safe_outbound_date} - {safe_return_date})"
+        result_parts[0] += f" ({outbound_date} - {return_date})"
     else:
-        result_parts[0] += f" ({safe_outbound_date})"
+        result_parts[0] += f" ({outbound_date})"
     
     result_parts.extend([
         "",
@@ -468,12 +466,12 @@ def add_flight_time_context(flight_data: Dict, search_params: Dict) -> str:
             
             if departure_time and time_info['time_difference'] != 0:
                 from telegram.helpers import escape_markdown
-                safe_date = escape_markdown(outbound_date, version=2)
+                # 日期不需要转义，但出发时间需要转义
                 safe_dep_time = escape_markdown(departure_time, version=2)
                 
                 result_parts = [
                     "",
-                    f"🕐 *航班时间提醒* ({safe_date}):",
+                    f"🕐 *航班时间提醒* ({outbound_date}):",
                     f"🌅 出发: {safe_dep_time} {time_info['departure_tz']['name']}"
                 ]
                 
@@ -2262,12 +2260,133 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 await _execute_flight_search(update, context, departure_id, arrival_id, outbound_date, return_date, query)
     
     elif data.startswith("flight_as:"):
-        # 处理机场选择 (airport selection) - 暂未实现详细选择UI
-        await query.edit_message_text(
-            text="🔧 详细机场选择功能开发中...\n\n请使用推荐选项或直接输入完整命令",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
+        # 处理机场选择 (airport selection) - 详细交互选择UI
+        short_id = data.split(":", 1)[1]
+        full_data = get_full_flight_id(short_id)
+        
+        if not full_data:
+            await query.edit_message_text(
+                text="❌ 选择会话已过期，请重新输入航班搜索命令",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
+                ])
+            )
+            return
+        
+        # 解析数据: airport_selection:departure_input:arrival_input:outbound_date:return_date
+        parts = full_data.split(":", 4)
+        if len(parts) != 5:
+            await query.edit_message_text(
+                text="❌ 数据格式错误，请重新选择",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
+                ])
+            )
+            return
+        
+        departure_input, arrival_input, outbound_date, return_date = parts[1], parts[2], parts[3], parts[4]
+        return_date = return_date if return_date else None
+        
+        # 重新解析机场信息
+        airport_resolution = resolve_flight_airports(departure_input, arrival_input)
+        dep_result = airport_resolution["departure"]
+        arr_result = airport_resolution["arrival"]
+        
+        # 构建详细选择界面
+        from telegram.helpers import escape_markdown
+        
+        message_lines = [
+            "✈️ **详细机场选择**",
+            "",
+            f"📅 **搜索日期**: {outbound_date}" + (f" - {return_date}" if return_date else ""),
+            ""
+        ]
+        
+        # 创建选择按钮
+        keyboard = []
+        
+        # 出发机场选择
+        if dep_result.get("status") == "multiple":
+            message_lines.extend([
+                f"🛫 **出发**: {departure_input}",
+                "请选择出发机场:"
             ])
+            
+            airports = dep_result.get("airports", [])
+            for airport in airports[:6]:  # 最多显示6个选项
+                airport_code = airport["code"]
+                airport_name = escape_markdown(airport["name"], version=2)
+                note = escape_markdown(airport.get("note", ""), version=2)
+                
+                display_text = f"{airport_code} - {airport_name}"
+                if note:
+                    display_text += f" ({note})"
+                
+                # 创建选择按钮 - 使用临时数据格式
+                selection_data = f"flight_dep_select:{airport_code}:{arrival_input}:{outbound_date}:{return_date or ''}"
+                selection_short_id = get_short_flight_id(selection_data)
+                keyboard.append([
+                    InlineKeyboardButton(display_text, callback_data=f"flight_short:{selection_short_id}")
+                ])
+            
+            message_lines.append("")
+        
+        # 到达机场选择
+        if arr_result.get("status") == "multiple":
+            message_lines.extend([
+                f"🛬 **到达**: {arrival_input}",
+                "请选择到达机场:"
+            ])
+            
+            airports = arr_result.get("airports", [])
+            for airport in airports[:6]:  # 最多显示6个选项
+                airport_code = airport["code"]
+                airport_name = escape_markdown(airport["name"], version=2)
+                note = escape_markdown(airport.get("note", ""), version=2)
+                
+                display_text = f"{airport_code} - {airport_name}"
+                if note:
+                    display_text += f" ({note})"
+                
+                # 创建选择按钮
+                selection_data = f"flight_arr_select:{departure_input}:{airport_code}:{outbound_date}:{return_date or ''}"
+                selection_short_id = get_short_flight_id(selection_data)
+                keyboard.append([
+                    InlineKeyboardButton(display_text, callback_data=f"flight_short:{selection_short_id}")
+                ])
+        
+        # 如果两个都已确定，显示组合选择
+        if (dep_result.get("status") == "multiple" and arr_result.get("status") == "multiple" and
+            len(dep_result.get("airports", [])) <= 3 and len(arr_result.get("airports", [])) <= 3):
+            
+            message_lines.extend([
+                "",
+                "🔄 **直接组合选择**:"
+            ])
+            
+            # 生成常见组合
+            dep_airports = dep_result.get("airports", [])[:3]
+            arr_airports = arr_result.get("airports", [])[:3]
+            
+            for dep_airport in dep_airports:
+                for arr_airport in arr_airports:
+                    if dep_airport["code"] != arr_airport["code"]:  # 避免相同机场
+                        combo_text = f"{dep_airport['code']} → {arr_airport['code']}"
+                        search_data = f"flight_search:{dep_airport['code']}:{arr_airport['code']}:{outbound_date}:{return_date or ''}"
+                        combo_short_id = get_short_flight_id(search_data)
+                        keyboard.append([
+                            InlineKeyboardButton(combo_text, callback_data=f"flight_short:{combo_short_id}")
+                        ])
+        
+        # 添加返回按钮
+        keyboard.append([
+            InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")
+        ])
+        
+        await query.edit_message_text(
+            text=foldable_text_with_markdown_v2("\n".join(message_lines)),
+            parse_mode="MarkdownV2",
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
     
     elif data.startswith("flight_short:"):
@@ -2292,6 +2411,130 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 # 获取价格洞察
                 await _show_price_insights(query, context, departure_id, arrival_id, outbound_date, language)
                 
+        elif full_data.startswith("flight_search:"):
+            # 处理直接航班搜索
+            search_data = full_data.replace("flight_search:", "")
+            parts = search_data.split(":")
+            if len(parts) >= 4:
+                departure_id, arrival_id, outbound_date = parts[0], parts[1], parts[2]
+                return_date = parts[3] if parts[3] else None
+                
+                await _execute_flight_search(context, query, departure_id, arrival_id, outbound_date, return_date, query)
+            else:
+                await query.edit_message_text("❌ 搜索数据格式错误")
+                
+        elif full_data.startswith("flight_dep_select:"):
+            # 处理出发机场选择后，显示到达机场选择界面
+            select_data = full_data.replace("flight_dep_select:", "")
+            parts = select_data.split(":")
+            if len(parts) >= 4:
+                selected_dep_code, arrival_input, outbound_date = parts[0], parts[1], parts[2]
+                return_date = parts[3] if parts[3] else None
+                
+                # 重新解析到达机场
+                from utils.airport_mapper import resolve_airport_codes
+                arr_result = resolve_airport_codes(arrival_input)
+                
+                if arr_result.get("status") == "multiple":
+                    # 显示到达机场选择界面
+                    message_lines = [
+                        "✈️ **机场选择 - 第2步**",
+                        "",
+                        f"✅ **已选出发**: {selected_dep_code}",
+                        f"🛬 **请选择到达**: {arrival_input}",
+                        ""
+                    ]
+                    
+                    keyboard = []
+                    airports = arr_result.get("airports", [])
+                    for airport in airports[:6]:
+                        airport_code = airport["code"]
+                        airport_name = airport["name"]
+                        note = airport.get("note", "")
+                        
+                        display_text = f"{airport_code} - {airport_name}"
+                        if note:
+                            display_text += f" ({note})"
+                        
+                        # 直接搜索
+                        search_data = f"flight_search:{selected_dep_code}:{airport_code}:{outbound_date}:{return_date or ''}"
+                        search_short_id = get_short_flight_id(search_data)
+                        keyboard.append([
+                            InlineKeyboardButton(display_text, callback_data=f"flight_short:{search_short_id}")
+                        ])
+                    
+                    keyboard.append([
+                        InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")
+                    ])
+                    
+                    await query.edit_message_text(
+                        text=foldable_text_with_markdown_v2("\n".join(message_lines)),
+                        parse_mode="MarkdownV2",
+                        reply_markup=InlineKeyboardMarkup(keyboard)
+                    )
+                else:
+                    # 直接搜索
+                    primary_code = arr_result.get("primary", arrival_input)
+                    await _execute_flight_search(context, query, selected_dep_code, primary_code, outbound_date, return_date, query)
+            else:
+                await query.edit_message_text("❌ 选择数据格式错误")
+                
+        elif full_data.startswith("flight_arr_select:"):
+            # 处理到达机场选择后，显示出发机场选择界面
+            select_data = full_data.replace("flight_arr_select:", "")
+            parts = select_data.split(":")
+            if len(parts) >= 4:
+                departure_input, selected_arr_code, outbound_date = parts[0], parts[1], parts[2]
+                return_date = parts[3] if parts[3] else None
+                
+                # 重新解析出发机场
+                from utils.airport_mapper import resolve_airport_codes
+                dep_result = resolve_airport_codes(departure_input)
+                
+                if dep_result.get("status") == "multiple":
+                    # 显示出发机场选择界面
+                    message_lines = [
+                        "✈️ **机场选择 - 第2步**",
+                        "",
+                        f"🛫 **请选择出发**: {departure_input}",
+                        f"✅ **已选到达**: {selected_arr_code}",
+                        ""
+                    ]
+                    
+                    keyboard = []
+                    airports = dep_result.get("airports", [])
+                    for airport in airports[:6]:
+                        airport_code = airport["code"]
+                        airport_name = airport["name"]
+                        note = airport.get("note", "")
+                        
+                        display_text = f"{airport_code} - {airport_name}"
+                        if note:
+                            display_text += f" ({note})"
+                        
+                        # 直接搜索
+                        search_data = f"flight_search:{airport_code}:{selected_arr_code}:{outbound_date}:{return_date or ''}"
+                        search_short_id = get_short_flight_id(search_data)
+                        keyboard.append([
+                            InlineKeyboardButton(display_text, callback_data=f"flight_short:{search_short_id}")
+                        ])
+                    
+                    keyboard.append([
+                        InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")
+                    ])
+                    
+                    await query.edit_message_text(
+                        text=foldable_text_with_markdown_v2("\n".join(message_lines)),
+                        parse_mode="MarkdownV2",
+                        reply_markup=InlineKeyboardMarkup(keyboard)
+                    )
+                else:
+                    # 直接搜索
+                    primary_code = dep_result.get("primary", departure_input)
+                    await _execute_flight_search(context, query, primary_code, selected_arr_code, outbound_date, return_date, query)
+            else:
+                await query.edit_message_text("❌ 选择数据格式错误")
+
         elif full_data.startswith("booking_info:"):
             search_data = full_data.replace("booking_info:", "")
             parts = search_data.split(":")
