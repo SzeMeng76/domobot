@@ -1680,6 +1680,7 @@ async def create_booking_telegraph_page(all_flights: List[Dict], search_params: 
     
     return content
 
+@with_error_handling
 async def flight_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """航班服务主命令 /flight - 与map.py的map_command完全一致的结构"""
     if not update.message:
@@ -1973,14 +1974,49 @@ async def _execute_flight_search(update: Update, context: ContextTypes.DEFAULT_T
                     compressed_lines.append(line)
                 
                 # 添加Telegraph链接
+                total_flights = len(all_flights)
+                
+                # 获取价格洞察数据
+                price_insights = flight_data.get('price_insights', {})
+                price_info_lines = []
+                if price_insights:
+                    if 'lowest_price' in price_insights:
+                        price_info_lines.append(f"💰 最低价格: ${price_insights['lowest_price']}")
+                    
+                    if 'price_level' in price_insights:
+                        level = price_insights['price_level']
+                        level_emoji = {"low": "🟢", "typical": "🟡", "high": "🔴"}.get(level, "⚪")
+                        price_info_lines.append(f"{level_emoji} 价格水平: {level}")
+                    
+                    # 添加典型价格区间
+                    if 'typical_price_range' in price_insights:
+                        price_range = price_insights['typical_price_range']
+                        if isinstance(price_range, list) and len(price_range) >= 2:
+                            price_info_lines.append(f"📊 典型价格: ${price_range[0]} - ${price_range[1]}")
+                    
+                    # 添加价格历史趋势
+                    if 'price_history' in price_insights:
+                        history = price_insights['price_history']
+                        if isinstance(history, list) and len(history) >= 2:
+                            latest_price = history[-1][1] if len(history[-1]) > 1 else None
+                            previous_price = history[-2][1] if len(history[-2]) > 1 else None
+                            if latest_price and previous_price:
+                                change = latest_price - previous_price
+                                if change > 0:
+                                    price_info_lines.append(f"📈 价格趋势: 上涨 ${change}")
+                                elif change < 0:
+                                    price_info_lines.append(f"📉 价格趋势: 下降 ${abs(change)}")
+                                else:
+                                    price_info_lines.append(f"➡️ 价格趋势: 无变化")
+                else:
+                    price_info_lines.append("💰 价格信息处理中...")
+                
                 compressed_lines.extend([
                     "",
-                    f"📋 *完整航班列表*: [查看全部 {best_flights_count + other_flights_count} 个选项]({telegraph_url})",
+                    f"📋 *完整航班列表*: [查看全部 {total_flights} 个选项]({telegraph_url})" if 'telegraph_url' in locals() else f"📋 *查看更多选项*: 使用下方按钮查看完整航班列表",
                     "",
                     "📊 *价格分析*:",
-                    f"💰 最低价格: ${price_info.get('lowest', 'N/A')}",
-                    price_level_line,
-                    f"📈 典型价格区间: ${price_info.get('low', 'N/A')} - ${price_info.get('high', 'N/A')}",
+                ] + price_info_lines + [
                     "",
                     f"_数据来源: Google Flights via SerpAPI_",
                     f"_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
@@ -2017,11 +2053,41 @@ async def _execute_flight_search(update: Update, context: ContextTypes.DEFAULT_T
                             if '🌟 *推荐航班*:' in line:
                                 flight_count = 0  # 重置计数开始处理航班
                     
+                    # 获取价格信息用于最终压缩
+                    price_insights = flight_data.get('price_insights', {})
+                    price_summary = "💰 价格信息处理中..."
+                    if price_insights:
+                        price_parts = []
+                        
+                        # 最低价格和价格水平
+                        lowest_price = price_insights.get('lowest_price')
+                        price_level = price_insights.get('price_level')
+                        if lowest_price and price_level:
+                            level_emoji = {"low": "🟢", "typical": "🟡", "high": "🔴"}.get(price_level, "⚪")
+                            price_parts.append(f"💰 最低: ${lowest_price} {level_emoji}")
+                        
+                        # 价格趋势（简化版）
+                        price_history = price_insights.get('price_history')
+                        if isinstance(price_history, list) and len(price_history) >= 2:
+                            latest_price = price_history[-1][1] if len(price_history[-1]) > 1 else None
+                            previous_price = price_history[-2][1] if len(price_history[-2]) > 1 else None
+                            if latest_price and previous_price:
+                                change = latest_price - previous_price
+                                if change > 0:
+                                    price_parts.append(f"📈 +${change}")
+                                elif change < 0:
+                                    price_parts.append(f"📉 -${abs(change)}")
+                                else:
+                                    price_parts.append("➡️ 持平")
+                        
+                        if price_parts:
+                            price_summary = " | ".join(price_parts)
+                    
                     basic_lines.extend([
                         "",
-                        f"📋 *查看完整信息*: [全部 {best_flights_count + other_flights_count} 个航班选项]({telegraph_url})",
+                        f"📋 *查看完整信息*: [全部 {total_flights} 个航班选项]({telegraph_url})" if 'telegraph_url' in locals() else "📋 *查看更多选项*: 使用下方按钮",
                         "",
-                        f"💰 最低价格: ${price_info.get('lowest', 'N/A')} | {price_level_line.replace('🔴 ', '').replace('🟡 ', '').replace('🟢 ', '')}",
+                        price_summary,
                         f"_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
                     ])
                     
@@ -2096,6 +2162,7 @@ async def _execute_flight_search(update: Update, context: ContextTypes.DEFAULT_T
             await _schedule_auto_delete(context, message.chat_id, message.message_id, 
                                       getattr(config, 'auto_delete_delay', 600))
 
+@with_error_handling
 async def flight_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理航班功能的文本输入 - 与map.py的map_text_handler完全一致的结构"""
     if not update.message or not update.message.text:
