@@ -1479,23 +1479,15 @@ async def _create_hotel_telegraph_page(hotels_data: Dict, search_params: Dict) -
         duration_info = calculate_stay_duration(check_in_date, check_out_date)
         nights = duration_info.get('days', 1) if 'error' not in duration_info else 1
         
-        # 创建Telegraph内容
-        content = []
-        
-        # 标题和基本信息
-        content.append({
-            "tag": "h3",
-            "children": [f"🏨 {location_query} 酒店列表"]
-        })
-        
-        content.append({
-            "tag": "p",
-            "children": [
-                f"📅 入住: {check_in_date} \\- 退房: {check_out_date} ({nights}晚)",
-                {"tag": "br"},
-                f"🔍 找到 {len(properties)} 家酒店"
-            ]
-        })
+        # 构建Telegraph内容 - 使用纯文本格式
+        content_lines = []
+        content_lines.append(f"🏨 {location_query} 酒店列表")
+        content_lines.append("")
+        content_lines.append(f"📅 入住: {check_in_date} - 退房: {check_out_date} ({nights}晚)")
+        content_lines.append(f"🔍 找到 {len(properties)} 家酒店")
+        content_lines.append("")
+        content_lines.append("=" * 50)
+        content_lines.append("")
         
         # 添加每个酒店的详细信息
         for i, hotel in enumerate(properties, 1):
@@ -1509,9 +1501,6 @@ async def _create_hotel_telegraph_page(hotels_data: Dict, search_params: Dict) -
                 # 价格信息
                 rate_per_night = hotel.get('rate_per_night', {})
                 total_rate = hotel.get('total_rate', {})
-                
-                # 构建酒店条目
-                hotel_content = []
                 
                 # 酒店名称和星级
                 hotel_title = f"{i}. {name}"
@@ -1527,7 +1516,6 @@ async def _create_hotel_telegraph_page(hotels_data: Dict, search_params: Dict) -
                 
                 if not star_display and hotel_class:
                     try:
-                        # 尝试从字符串中提取数字，如 "5-star hotel" -> 5
                         import re
                         match = re.search(r'(\d+)', str(hotel_class))
                         if match:
@@ -1539,28 +1527,20 @@ async def _create_hotel_telegraph_page(hotels_data: Dict, search_params: Dict) -
                 if star_display:
                     hotel_title += f" {star_display}"
                 
-                hotel_content.append({
-                    "tag": "h4",
-                    "children": [hotel_title]
-                })
+                content_lines.append(hotel_title)
+                content_lines.append("")
                 
                 # 评分信息
                 if rating:
-                    rating_text = f"⭐ 评分: {rating:.1f}/5.0".replace(".", "\\.")
+                    rating_text = f"⭐ 评分: {rating:.1f}/5.0"
                     if reviews:
                         rating_text += f" （{reviews:,} 条评价）"
-                    hotel_content.append({
-                        "tag": "p",
-                        "children": [rating_text]
-                    })
+                    content_lines.append(rating_text)
                 
                 # 价格信息
-                price_content = []
                 if rate_per_night and isinstance(rate_per_night, dict):
-                    # 优先使用extracted_lowest (数字格式)
                     price_value = rate_per_night.get('extracted_lowest')
                     if price_value is None:
-                        # 如果没有extracted_lowest，尝试解析lowest字符串
                         lowest_str = rate_per_night.get('lowest')
                         if lowest_str and isinstance(lowest_str, str):
                             import re
@@ -1569,15 +1549,14 @@ async def _create_hotel_telegraph_page(hotels_data: Dict, search_params: Dict) -
                                 price_value = float(numbers[0])
                     
                     if price_value:
-                        price_content.append(f"💰 价格: {currency} {price_value:,.0f}/晚")
+                        price_text = f"💰 价格: {currency} {price_value:,.0f}/晚"
                         if nights > 1:
                             total_price = price_value * nights
-                            price_content.append(f" (总计: {currency} {total_price:,.0f})")
+                            price_text += f" (总计: {currency} {total_price:,.0f})"
+                        content_lines.append(price_text)
                 elif total_rate and isinstance(total_rate, dict):
-                    # 优先使用extracted_lowest (数字格式)
                     price_value = total_rate.get('extracted_lowest')
                     if price_value is None:
-                        # 如果没有extracted_lowest，尝试解析lowest字符串
                         lowest_str = total_rate.get('lowest')
                         if lowest_str and isinstance(lowest_str, str):
                             import re
@@ -1586,24 +1565,16 @@ async def _create_hotel_telegraph_page(hotels_data: Dict, search_params: Dict) -
                                 price_value = float(numbers[0])
                     
                     if price_value:
-                        price_content.append(f"💰 总价: {currency} {price_value:,.0f}")
+                        price_text = f"💰 总价: {currency} {price_value:,.0f}"
                         if nights > 1:
                             per_night = price_value / nights
-                            price_content.append(f" (约 {currency} {per_night:,.0f}/晚)")
-                
-                if price_content:
-                    hotel_content.append({
-                        "tag": "p",
-                        "children": price_content
-                    })
+                            price_text += f" (约 {currency} {per_night:,.0f}/晚)"
+                        content_lines.append(price_text)
                 
                 # 位置信息
                 location = hotel.get('location')
                 if location:
-                    hotel_content.append({
-                        "tag": "p",
-                        "children": [f"📍 位置: {location}"]
-                    })
+                    content_lines.append(f"📍 位置: {location}")
                 
                 # 设施信息
                 amenities = hotel.get('amenities', [])
@@ -1611,62 +1582,39 @@ async def _create_hotel_telegraph_page(hotels_data: Dict, search_params: Dict) -
                     amenities_text = "🏢 设施: " + ", ".join(amenities[:5])
                     if len(amenities) > 5:
                         amenities_text += f"等 {len(amenities)} 项设施"
-                    hotel_content.append({
-                        "tag": "p",
-                        "children": [amenities_text]
-                    })
+                    content_lines.append(amenities_text)
                 
                 # 描述信息
                 description = hotel.get('description')
                 if description and len(description) < 200:
-                    hotel_content.append({
-                        "tag": "p",
-                        "children": [f"📝 简介: {description}"]
-                    })
+                    content_lines.append(f"📝 简介: {description}")
                 
-                # 添加分隔线
-                hotel_content.append({"tag": "hr"})
-                
-                content.extend(hotel_content)
+                content_lines.append("")
+                content_lines.append("-" * 30)
+                content_lines.append("")
                 
             except Exception as e:
                 logger.error(f"处理酒店 {i} 信息失败: {e}")
                 continue
         
         # 添加页脚
-        content.append({
-            "tag": "p",
-            "children": [
-                {"tag": "em", "children": [
-                    f"数据更新时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-                    {"tag": "br"},
-                    "🤖 由 Claude Code 生成"
-                ]}
-            ]
-        })
+        from datetime import datetime
+        content_lines.append(f"数据更新时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+        content_lines.append("🤖 由 Claude Code 生成")
         
-        # 创建Telegraph页面
-        page_data = {
-            "access_token": "b968da509bb76866c35425099bc7c93181e3c9ca3e7b7a05",  # 匿名access token
-            "title": f"🏨 {location_query} 酒店搜索结果",
-            "author_name": "Claude Code Hotel Search",
-            "content": content,
-            "return_content": True
-        }
+        # 组合内容
+        content_text = "\n".join(content_lines)
         
-        response = await httpx_client.post(
-            f"{TELEGRAPH_API_URL}/createPage",
-            json=page_data
-        )
+        # 使用flight.py的create_telegraph_page函数
+        from commands.flight import create_telegraph_page
+        title = f"🏨 {location_query} 酒店搜索结果"
+        telegraph_url = await create_telegraph_page(title, content_text)
         
-        if response.status_code == 200:
-            result = response.json()
-            if result.get('ok'):
-                page_url = result['result']['url']
-                logger.info(f"Telegraph页面创建成功: {page_url}")
-                return page_url
+        if telegraph_url:
+            logger.info(f"Telegraph页面创建成功: {telegraph_url}")
+            return telegraph_url
         
-        logger.error(f"Telegraph页面创建失败: {response.text}")
+        logger.error("Telegraph页面创建失败")
         return None
         
     except Exception as e:
