@@ -177,6 +177,74 @@ async def get_smart_location_suggestions(location_input: str, max_suggestions: i
         logger.error(f"获取智能位置建议失败: {e}")
         return []
 
+def _parse_hotel_command_args(args: List[str]) -> Tuple[str, str]:
+    """
+    智能解析酒店命令参数，区分位置和日期
+    
+    速度: /hotel aman puri 23 25
+    -> location: "aman puri", date: "23 25"
+    
+    策略: 从后往前检查，找到第一个不像日期的参数作为分割点
+    """
+    if not args:
+        return "", ""
+    
+    if len(args) == 1:
+        return args[0], ""
+    
+    # 从后往前检查，找到第一个不像日期的参数
+    date_start_index = len(args)  # 默认所有都是位置
+    
+    # 从最后一个往前检查，最多检查2个参数（支持入住+退房日期）
+    for i in range(len(args) - 1, max(0, len(args) - 3) - 1, -1):
+        arg = args[i]
+        if _looks_like_date(arg):
+            date_start_index = i
+        else:
+            break
+    
+    # 分割位置和日期
+    if date_start_index < len(args):
+        location_parts = args[:date_start_index]
+        date_parts = args[date_start_index:]
+        location_input = " ".join(location_parts) if location_parts else ""
+        date_input = " ".join(date_parts)
+    else:
+        location_input = " ".join(args)
+        date_input = ""
+    
+    return location_input, date_input
+
+def _looks_like_date(arg: str) -> bool:
+    """
+    检查一个参数是否像日期
+    """
+    if not arg:
+        return False
+    
+    # 移除可能的标点符号
+    clean_arg = arg.replace('-', '').replace('/', '').replace('.', '')
+    
+    # 检查是否是纯数字（支持 23, 01-15, 2024-12-25 等）
+    if clean_arg.isdigit():
+        num = int(clean_arg)
+        # 合理的日期数字范围
+        if 1 <= num <= 31:  # 日期
+            return True
+        if 101 <= num <= 1231:  # MMDD 格式
+            return True
+        if 20200101 <= num <= 20301231:  # YYYYMMDD 格式
+            return True
+    
+    # 检查是否包含日期分隔符且格式像日期
+    if '-' in arg or '/' in arg:
+        import re
+        # 匹配 YYYY-MM-DD, MM-DD, MM/DD 等格式
+        if re.match(r'^\d{1,4}[-/]\d{1,2}([-/]\d{1,2})?$', arg):
+            return True
+    
+    return False
+
 def parse_hotel_dates(date_str: str) -> Tuple[Optional[str], Optional[str]]:
     """
     解析酒店日期输入
@@ -882,6 +950,8 @@ async def hotel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • `/hotel 北京` - 智能区域选择 + 搜索建议
 • `/hotel Tokyo 2024-03-15` - 自动位置识别
 • `/hotel 上海外滩 01-20 01-25` - 精准位置匹配
+• `/hotel aman puri 23 25` - 智能参数解析（多词位置名）
+• `/hotel times square nyc 2024-12-25` - 复杂位置名自动识别
 • `/hotel New Y` - 智能建议 "New York"、"New Delhi" 等
 • `/hotel 曼` - 提供 "曼谷"、"曼哈顿"、"曼彻斯特" 等建议
 
@@ -899,6 +969,7 @@ async def hotel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • 🌐 API智能建议 (全球覆盖，实时数据)
 • 🔍 支持模糊搜索，输入部分地名即可获得建议
 • 📍 智能识别地标、区域、机场代码等
+• 🤖 **智能参数解析** - 自动区分多词位置名和日期（如 "aman puri 23 25")
 
 🎯 *筛选提示:* 搜索后可使用"⚙️ 筛选条件"按钮进行高级筛选
 📋 *详细信息:* 点击"📋 详细列表"查看完整酒店信息
@@ -912,9 +983,8 @@ async def hotel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                   getattr(config, 'auto_delete_delay', 600))
         return
     
-    # 解析参数
-    location_input = args[0]
-    date_input = " ".join(args[1:]) if len(args) > 1 else ""
+    # 智能解析参数 - 区分位置和日期
+    location_input, date_input = _parse_hotel_command_args(args)
     
     # 解析位置
     location_result = resolve_hotel_location(location_input)
