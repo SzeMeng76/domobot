@@ -743,12 +743,46 @@ class HotelCacheService:
             logger.error(f"缓存搜索结果失败: {e}")
             return False
 
-def format_hotel_summary(hotels_data: Dict, search_params: Dict) -> str:
-    """格式化酒店搜索摘要 - 返回普通文本，不做转义"""
-    if not hotels_data or 'properties' not in hotels_data:
-        return "未找到酒店信息"
+def format_hotel_summary(hotels_data: Dict, search_params: Dict, page: int = 0, items_per_page: int = 10) -> Dict:
+    """
+    格式化酒店搜索摘要 - 返回普通文本，不做转义
+    支持分页显示
     
-    properties = hotels_data['properties'][:10]  # 只显示前10个
+    Args:
+        hotels_data: API返回的酒店数据
+        search_params: 搜索参数
+        page: 当前页码 (0-based)
+        items_per_page: 每页显示数量
+    
+    Returns:
+        Dict包含: {
+            'content': str - 格式化的内容,
+            'total_hotels': int - 总酒店数,
+            'current_page': int - 当前页,
+            'total_pages': int - 总页数,
+            'has_prev': bool - 是否有上一页,
+            'has_next': bool - 是否有下一页
+        }
+    """
+    if not hotels_data or 'properties' not in hotels_data:
+        return {
+            'content': "未找到酒店信息",
+            'total_hotels': 0,
+            'current_page': 0,
+            'total_pages': 0,
+            'has_prev': False,
+            'has_next': False
+        }
+    
+    all_properties = hotels_data['properties']
+    total_hotels = len(all_properties)
+    total_pages = (total_hotels + items_per_page - 1) // items_per_page
+    
+    # 分页处理
+    start_idx = page * items_per_page
+    end_idx = start_idx + items_per_page
+    properties = all_properties[start_idx:end_idx]
+    
     location_query = search_params.get('location_query', '')
     check_in_date = search_params.get('check_in_date', '')
     check_out_date = search_params.get('check_out_date', '')
@@ -842,10 +876,27 @@ def format_hotel_summary(hotels_data: Dict, search_params: Dict) -> str:
                             per_night = price_value / nights
                             price_display += f" （{currency} {per_night:,.0f}/晚）"
             
-            # 构建单个酒店条目
-            hotel_entry = f"🏨 *{hotel_name}*"
+            # 构建单个酒店条目 (显示在列表中的顺序号)
+            overall_index = start_idx + i + 1
+            hotel_entry = f"🏨 *{hotel_name}* #{overall_index}"
             if star_display:
                 hotel_entry += f" {star_display}"
+            
+            # 检查环保认证标识
+            eco_badges = []
+            # 检查名称、描述等字段中的环保关键词
+            all_text = f"{hotel_name} {hotel.get('description', '')} {' '.join(hotel.get('amenities', []))}"
+            all_text_lower = all_text.lower()
+            
+            if any(keyword in all_text_lower for keyword in ['eco', 'green', 'sustainable', 'leed', 'carbon neutral', 'organic']):
+                eco_badges.append("🌱 环保")
+            if any(keyword in all_text_lower for keyword in ['energy efficient', 'solar', 'renewable']):
+                eco_badges.append("⚡ 节能")
+            if any(keyword in all_text_lower for keyword in ['recycling', 'waste reduction', 'zero waste']):
+                eco_badges.append("♻️ 循环利用")
+                
+            if eco_badges:
+                hotel_entry += f" {' '.join(eco_badges)}"
             
             hotel_entry += f"\n💰 {price_display}"
             
@@ -857,17 +908,64 @@ def format_hotel_summary(hotels_data: Dict, search_params: Dict) -> str:
                 location = hotel['location']
                 hotel_entry += f"\n📍 {location}"
             
+            # 添加详细设施信息
+            amenities = hotel.get('amenities', [])
+            if amenities:
+                # 将设施分类显示
+                amenities_display = []
+                essential_amenities = []
+                luxury_amenities = []
+                
+                for amenity in amenities:
+                    amenity_lower = amenity.lower()
+                    if any(keyword in amenity_lower for keyword in ['wifi', 'internet', 'parking', 'breakfast', 'gym', 'fitness']):
+                        essential_amenities.append(amenity)
+                    elif any(keyword in amenity_lower for keyword in ['spa', 'pool', 'bar', 'restaurant', 'concierge']):
+                        luxury_amenities.append(amenity)
+                    else:
+                        amenities_display.append(amenity)
+                
+                # 优先显示基础设施
+                if essential_amenities:
+                    hotel_entry += f"\n🔧 基础设施: {', '.join(essential_amenities[:3])}"
+                    if len(essential_amenities) > 3:
+                        hotel_entry += f"等{len(essential_amenities)}项"
+                
+                # 显示豪华设施
+                if luxury_amenities:
+                    hotel_entry += f"\n✨ 豪华设施: {', '.join(luxury_amenities[:3])}"
+                    if len(luxury_amenities) > 3:
+                        hotel_entry += f"等{len(luxury_amenities)}项"
+                
+                # 显示其他设施
+                if amenities_display:
+                    hotel_entry += f"\n🏢 其他设施: {', '.join(amenities_display[:2])}"
+                    if len(amenities_display) > 2:
+                        hotel_entry += f"等{len(amenities_display)}项"
+            
             result_parts.append(hotel_entry)
             
         except Exception as e:
             logger.error(f"格式化酒店信息失败: {e}")
             continue
     
+    # 构建分页信息
     if result_parts:
-        header = f"🏨 找到 {len(properties)} 家酒店"
-        return f"{header}\n\n" + "\n\n".join(result_parts)
+        header = f"🏨 找到 {total_hotels} 家酒店"
+        if total_pages > 1:
+            header += f" （第 {page + 1}/{total_pages} 页）"
+        content = f"{header}\n\n" + "\n\n".join(result_parts)
     else:
-        return "暂无可显示的酒店信息"
+        content = "暂无可显示的酒店信息"
+    
+    return {
+        'content': content,
+        'total_hotels': total_hotels,
+        'current_page': page,
+        'total_pages': total_pages,
+        'has_prev': page > 0,
+        'has_next': page < total_pages - 1
+    }
 
 # 注册命令处理器
 @with_error_handling
@@ -1139,7 +1237,7 @@ async def hotel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     search_msg = await send_info(
         context, 
         chat_id, 
-        foldable_text_v2("🔍 正在搜索酒店...")
+        "🔍 正在搜索酒店..."
     )
     
     try:
@@ -1220,12 +1318,12 @@ async def hotel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         enhanced_display = enhance_hotel_location_display(hotels_data, search_params)
         
         # 格式化酒店摘要
-        hotels_summary = format_hotel_summary(hotels_data, search_params)
+        summary_result = format_hotel_summary(hotels_data, search_params)
         
         # 组合完整消息
-        full_message = f"{enhanced_display}\n{hotels_summary}"
+        full_message = f"{enhanced_display}\n{summary_result['content']}"
         
-        # 创建操作按钮
+        # 创建操作按钮 - 添加分页按钮
         keyboard = [
             [
                 InlineKeyboardButton("🔄 重新搜索", callback_data="hotel_research"),
@@ -1234,12 +1332,28 @@ async def hotel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [
                 InlineKeyboardButton("💰 价格排序", callback_data="hotel_sort_price"),
                 InlineKeyboardButton("⭐ 评分排序", callback_data="hotel_sort_rating")
-            ],
+            ]
+        ]
+        
+        # 添加分页导航按钮（如果有多页）
+        if summary_result['total_pages'] > 1:
+            pagination_row = []
+            if summary_result['has_prev']:
+                pagination_row.append(InlineKeyboardButton("⬅️ 上页", callback_data="hotel_page_prev"))
+            
+            pagination_row.append(InlineKeyboardButton(f"📄 {summary_result['current_page'] + 1}/{summary_result['total_pages']}", callback_data="hotel_page_info"))
+            
+            if summary_result['has_next']:
+                pagination_row.append(InlineKeyboardButton("➡️ 下页", callback_data="hotel_page_next"))
+            
+            keyboard.append(pagination_row)
+        
+        keyboard.extend([
             [
                 InlineKeyboardButton("📋 详细列表", callback_data="hotel_detailed_list"),
                 InlineKeyboardButton("🗺️ 地图查看", callback_data="hotel_map_view")
             ]
-        ]
+        ])
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         
@@ -1257,6 +1371,8 @@ async def hotel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             'message_id': result_msg.message_id,
             'hotels_data': hotels_data,
             'search_params': search_params,
+            'current_page': summary_result['current_page'],
+            'total_pages': summary_result['total_pages'],
             'step': 'results_displayed'
         }
         hotel_session_manager.set_session(user_id, session_data)
@@ -1501,8 +1617,9 @@ async def hotel_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         search_params = session_data['search_params']
         
         enhanced_display = enhance_hotel_location_display(hotels_data, search_params)
-        hotels_summary = format_hotel_summary(hotels_data, search_params)
-        full_message = f"{enhanced_display}\n{hotels_summary}"
+        current_page = session_data.get('current_page', 0)
+        summary_result = format_hotel_summary(hotels_data, search_params, page=current_page)
+        full_message = f"{enhanced_display}\n{summary_result['content']}"
         
         keyboard = [
             [
@@ -1512,12 +1629,28 @@ async def hotel_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             [
                 InlineKeyboardButton("💰 价格排序", callback_data="hotel_sort_price"),
                 InlineKeyboardButton("⭐ 评分排序", callback_data="hotel_sort_rating")
-            ],
+            ]
+        ]
+        
+        # 添加分页导航按钮（如果有多页）
+        if summary_result['total_pages'] > 1:
+            pagination_row = []
+            if summary_result['has_prev']:
+                pagination_row.append(InlineKeyboardButton("⬅️ 上页", callback_data="hotel_page_prev"))
+            
+            pagination_row.append(InlineKeyboardButton(f"📄 {summary_result['current_page'] + 1}/{summary_result['total_pages']}", callback_data="hotel_page_info"))
+            
+            if summary_result['has_next']:
+                pagination_row.append(InlineKeyboardButton("➡️ 下页", callback_data="hotel_page_next"))
+            
+            keyboard.append(pagination_row)
+        
+        keyboard.extend([
             [
                 InlineKeyboardButton("📋 详细列表", callback_data="hotel_detailed_list"),
                 InlineKeyboardButton("🗺️ 地图查看", callback_data="hotel_map_view")
             ]
-        ]
+        ])
         
         await query.edit_message_text(
             text=foldable_text_with_markdown_v2(full_message),
@@ -1561,6 +1694,95 @@ async def hotel_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     # 筛选应用处理
     elif query.data.startswith("hotel_apply_"):
         await _apply_filter_and_research(query, session_data, context)
+    
+    # 分页导航处理
+    elif query.data == "hotel_page_prev":
+        await _handle_pagination(query, session_data, context, "prev")
+    
+    elif query.data == "hotel_page_next":
+        await _handle_pagination(query, session_data, context, "next")
+    
+    elif query.data == "hotel_page_info":
+        # 分页信息按钮 - 无操作，仅显示信息
+        await query.answer("当前分页信息")
+
+
+async def _handle_pagination(query: CallbackQuery, session_data: Dict, context: ContextTypes.DEFAULT_TYPE, direction: str):
+    """处理分页导航"""
+    user_id = query.from_user.id
+    
+    if not session_data or 'hotels_data' not in session_data:
+        config = get_config()
+        await query.edit_message_text("❌ 会话已过期，请重新搜索")
+        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+        return
+    
+    current_page = session_data.get('current_page', 0)
+    total_pages = session_data.get('total_pages', 1)
+    
+    # 计算新页码
+    if direction == "prev" and current_page > 0:
+        new_page = current_page - 1
+    elif direction == "next" and current_page < total_pages - 1:
+        new_page = current_page + 1
+    else:
+        # 已经是第一页或最后一页
+        page_info = "已经是第一页" if direction == "prev" else "已经是最后一页"
+        await query.answer(page_info)
+        return
+    
+    # 获取数据
+    hotels_data = session_data['hotels_data']
+    search_params = session_data['search_params']
+    
+    # 生成新页面内容
+    enhanced_display = enhance_hotel_location_display(hotels_data, search_params)
+    summary_result = format_hotel_summary(hotels_data, search_params, page=new_page)
+    full_message = f"{enhanced_display}\n{summary_result['content']}"
+    
+    # 创建操作按钮
+    keyboard = [
+        [
+            InlineKeyboardButton("🔄 重新搜索", callback_data="hotel_research"),
+            InlineKeyboardButton("⚙️ 筛选条件", callback_data="hotel_filter")
+        ],
+        [
+            InlineKeyboardButton("💰 价格排序", callback_data="hotel_sort_price"),
+            InlineKeyboardButton("⭐ 评分排序", callback_data="hotel_sort_rating")
+        ]
+    ]
+    
+    # 添加分页导航按钮
+    if summary_result['total_pages'] > 1:
+        pagination_row = []
+        if summary_result['has_prev']:
+            pagination_row.append(InlineKeyboardButton("⬅️ 上页", callback_data="hotel_page_prev"))
+        
+        pagination_row.append(InlineKeyboardButton(f"📄 {summary_result['current_page'] + 1}/{summary_result['total_pages']}", callback_data="hotel_page_info"))
+        
+        if summary_result['has_next']:
+            pagination_row.append(InlineKeyboardButton("➡️ 下页", callback_data="hotel_page_next"))
+        
+        keyboard.append(pagination_row)
+    
+    keyboard.extend([
+        [
+            InlineKeyboardButton("📋 详细列表", callback_data="hotel_detailed_list"),
+            InlineKeyboardButton("🗺️ 地图查看", callback_data="hotel_map_view")
+        ]
+    ])
+    
+    # 更新消息
+    await query.edit_message_text(
+        text=foldable_text_with_markdown_v2(full_message),
+        parse_mode="MarkdownV2",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    
+    # 更新会话数据
+    session_data['current_page'] = new_page
+    session_data['total_pages'] = summary_result['total_pages']
+    hotel_session_manager.set_session(user_id, session_data)
 
 
 async def _process_hotel_search_with_location(query: CallbackQuery, location_query: str, date_input: str, 
@@ -1577,7 +1799,7 @@ async def _process_hotel_search_with_location(query: CallbackQuery, location_que
     
     # 更新消息为搜索中
     await query.edit_message_text(
-        foldable_text_v2("🔍 正在搜索酒店...")
+        "🔍 正在搜索酒店..."
     )
     
     try:
@@ -1634,10 +1856,10 @@ async def _process_hotel_search_with_location(query: CallbackQuery, location_que
         
         # 构建结果消息
         enhanced_display = enhance_hotel_location_display(hotels_data, search_params)
-        hotels_summary = format_hotel_summary(hotels_data, search_params)
-        full_message = f"{enhanced_display}\n{hotels_summary}"
+        summary_result = format_hotel_summary(hotels_data, search_params)
+        full_message = f"{enhanced_display}\n{summary_result['content']}"
         
-        # 创建操作按钮
+        # 创建操作按钮 - 添加分页按钮
         keyboard = [
             [
                 InlineKeyboardButton("🔄 重新搜索", callback_data="hotel_research"),
@@ -1646,12 +1868,28 @@ async def _process_hotel_search_with_location(query: CallbackQuery, location_que
             [
                 InlineKeyboardButton("💰 价格排序", callback_data="hotel_sort_price"),
                 InlineKeyboardButton("⭐ 评分排序", callback_data="hotel_sort_rating")
-            ],
+            ]
+        ]
+        
+        # 添加分页导航按钮（如果有多页）
+        if summary_result['total_pages'] > 1:
+            pagination_row = []
+            if summary_result['has_prev']:
+                pagination_row.append(InlineKeyboardButton("⬅️ 上页", callback_data="hotel_page_prev"))
+            
+            pagination_row.append(InlineKeyboardButton(f"📄 {summary_result['current_page'] + 1}/{summary_result['total_pages']}", callback_data="hotel_page_info"))
+            
+            if summary_result['has_next']:
+                pagination_row.append(InlineKeyboardButton("➡️ 下页", callback_data="hotel_page_next"))
+            
+            keyboard.append(pagination_row)
+        
+        keyboard.extend([
             [
                 InlineKeyboardButton("📋 详细列表", callback_data="hotel_detailed_list"),
                 InlineKeyboardButton("🗺️ 地图查看", callback_data="hotel_map_view")
             ]
-        ]
+        ])
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         # 更新消息
@@ -1666,6 +1904,8 @@ async def _process_hotel_search_with_location(query: CallbackQuery, location_que
             'message_id': query.message.message_id,
             'hotels_data': hotels_data,
             'search_params': search_params,
+            'current_page': summary_result['current_page'],
+            'total_pages': summary_result['total_pages'],
             'step': 'results_displayed'
         }
         hotel_session_manager.set_session(user_id, session_data)
@@ -1734,8 +1974,8 @@ async def _sort_hotels_by_price(query: CallbackQuery, session_data: Dict, contex
     
     # 重新生成消息
     enhanced_display = enhance_hotel_location_display(sorted_hotels_data, search_params)
-    hotels_summary = format_hotel_summary(sorted_hotels_data, search_params)
-    full_message = f"{enhanced_display}\n💰 *已按价格排序（低到高）*\n\n{hotels_summary}"
+    summary_result = format_hotel_summary(sorted_hotels_data, search_params)
+    full_message = f"{enhanced_display}\n💰 *已按价格排序（低到高）*\n\n{summary_result['content']}"
     
     # 创建操作按钮
     keyboard = [
@@ -1746,12 +1986,28 @@ async def _sort_hotels_by_price(query: CallbackQuery, session_data: Dict, contex
         [
             InlineKeyboardButton("💰 价格排序", callback_data="hotel_sort_price"),
             InlineKeyboardButton("⭐ 评分排序", callback_data="hotel_sort_rating")
-        ],
+        ]
+    ]
+    
+    # 添加分页导航按钮（如果有多页）
+    if summary_result['total_pages'] > 1:
+        pagination_row = []
+        if summary_result['has_prev']:
+            pagination_row.append(InlineKeyboardButton("⬅️ 上页", callback_data="hotel_page_prev"))
+        
+        pagination_row.append(InlineKeyboardButton(f"📄 {summary_result['current_page'] + 1}/{summary_result['total_pages']}", callback_data="hotel_page_info"))
+        
+        if summary_result['has_next']:
+            pagination_row.append(InlineKeyboardButton("➡️ 下页", callback_data="hotel_page_next"))
+        
+        keyboard.append(pagination_row)
+    
+    keyboard.extend([
         [
             InlineKeyboardButton("📋 详细列表", callback_data="hotel_detailed_list"),
             InlineKeyboardButton("🗺️ 地图查看", callback_data="hotel_map_view")
         ]
-    ]
+    ])
     
     await query.edit_message_text(
         text=foldable_text_with_markdown_v2(full_message),
@@ -1784,8 +2040,8 @@ async def _sort_hotels_by_rating(query: CallbackQuery, session_data: Dict, conte
     
     # 重新生成消息
     enhanced_display = enhance_hotel_location_display(sorted_hotels_data, search_params)
-    hotels_summary = format_hotel_summary(sorted_hotels_data, search_params)
-    full_message = f"{enhanced_display}\n⭐ *已按评分排序（高到低）*\n\n{hotels_summary}"
+    summary_result = format_hotel_summary(sorted_hotels_data, search_params)
+    full_message = f"{enhanced_display}\n⭐ *已按评分排序（高到低）*\n\n{summary_result['content']}"
     
     # 创建操作按钮
     keyboard = [
@@ -1796,12 +2052,28 @@ async def _sort_hotels_by_rating(query: CallbackQuery, session_data: Dict, conte
         [
             InlineKeyboardButton("💰 价格排序", callback_data="hotel_sort_price"),
             InlineKeyboardButton("⭐ 评分排序", callback_data="hotel_sort_rating")
-        ],
+        ]
+    ]
+    
+    # 添加分页导航按钮（如果有多页）
+    if summary_result['total_pages'] > 1:
+        pagination_row = []
+        if summary_result['has_prev']:
+            pagination_row.append(InlineKeyboardButton("⬅️ 上页", callback_data="hotel_page_prev"))
+        
+        pagination_row.append(InlineKeyboardButton(f"📄 {summary_result['current_page'] + 1}/{summary_result['total_pages']}", callback_data="hotel_page_info"))
+        
+        if summary_result['has_next']:
+            pagination_row.append(InlineKeyboardButton("➡️ 下页", callback_data="hotel_page_next"))
+        
+        keyboard.append(pagination_row)
+    
+    keyboard.extend([
         [
             InlineKeyboardButton("📋 详细列表", callback_data="hotel_detailed_list"),
             InlineKeyboardButton("🗺️ 地图查看", callback_data="hotel_map_view")
         ]
-    ]
+    ])
     
     await query.edit_message_text(
         text=foldable_text_with_markdown_v2(full_message),
@@ -1818,7 +2090,7 @@ async def _show_detailed_hotel_list(query: CallbackQuery, session_data: Dict, co
                                   getattr(config, 'auto_delete_delay', 600))
         return
     
-    await query.edit_message_text(foldable_text_v2("📋 正在生成详细列表..."))
+    await query.edit_message_text("📋 正在生成详细列表...")
     
     try:
         hotels_data = session_data['hotels_data']
@@ -2318,7 +2590,7 @@ async def _apply_filter_and_research(query: CallbackQuery, session_data: Dict, c
     # 显示搜索中消息
     filter_display = _get_filter_display_name(filter_type)
     await query.edit_message_text(
-        foldable_text_v2("🔍 正在应用筛选条件...")
+        "🔍 正在应用筛选条件..."
     )
     
     try:
@@ -2352,8 +2624,8 @@ async def _apply_filter_and_research(query: CallbackQuery, session_data: Dict, c
         
         # 构建结果消息
         enhanced_display = enhance_hotel_location_display(hotels_data, search_params)
-        hotels_summary = format_hotel_summary(hotels_data, search_params)
-        full_message = f"{enhanced_display}\n🎯 *已应用筛选: {filter_display}*\n\n{hotels_summary}"
+        summary_result = format_hotel_summary(hotels_data, search_params)
+        full_message = f"{enhanced_display}\n🎯 *已应用筛选: {filter_display}*\n\n{summary_result['content']}"
         
         # 创建操作按钮
         keyboard = [
@@ -2364,12 +2636,28 @@ async def _apply_filter_and_research(query: CallbackQuery, session_data: Dict, c
             [
                 InlineKeyboardButton("💰 价格排序", callback_data="hotel_sort_price"),
                 InlineKeyboardButton("⭐ 评分排序", callback_data="hotel_sort_rating")
-            ],
+            ]
+        ]
+        
+        # 添加分页导航按钮（如果有多页）
+        if summary_result['total_pages'] > 1:
+            pagination_row = []
+            if summary_result['has_prev']:
+                pagination_row.append(InlineKeyboardButton("⬅️ 上页", callback_data="hotel_page_prev"))
+            
+            pagination_row.append(InlineKeyboardButton(f"📄 {summary_result['current_page'] + 1}/{summary_result['total_pages']}", callback_data="hotel_page_info"))
+            
+            if summary_result['has_next']:
+                pagination_row.append(InlineKeyboardButton("➡️ 下页", callback_data="hotel_page_next"))
+            
+            keyboard.append(pagination_row)
+        
+        keyboard.extend([
             [
                 InlineKeyboardButton("📋 详细列表", callback_data="hotel_detailed_list"),
                 InlineKeyboardButton("🗺️ 地图查看", callback_data="hotel_map_view")
             ]
-        ]
+        ])
         
         await query.edit_message_text(
             text=foldable_text_with_markdown_v2(full_message),
