@@ -259,7 +259,7 @@ def enhance_hotel_location_display(api_search_data: Dict, search_params: Dict) -
     
     # 添加日期信息
     if check_in_date and check_out_date:
-        result_parts[0] += f" ({check_in_date} - {check_out_date})"
+        result_parts[0] += f" （{check_in_date} - {check_out_date}）"
         
         if "error" not in duration_info:
             duration = duration_info['days']
@@ -274,9 +274,9 @@ def enhance_hotel_location_display(api_search_data: Dict, search_params: Dict) -
             result_parts.extend([
                 "",
                 f"📅 *住宿信息*:",
-                f"• 入住: {check_in_date} ({safe_check_in_day})",
-                f"• 退房: {check_out_date} ({safe_check_out_day})",
-                f"• 时长: {duration}晚 ({safe_stay_type})"
+                f"• 入住: {check_in_date} （{safe_check_in_day}）",
+                f"• 退房: {check_out_date} （{safe_check_out_day}）",
+                f"• 时长: {duration}晚 （{safe_stay_type}）"
             ])
     
     # 添加客人信息
@@ -565,6 +565,7 @@ def format_hotel_summary(hotels_data: Dict, search_params: Dict) -> str:
         try:
             # 提取酒店基本信息
             name = hotel.get('name', '未知酒店')
+            extracted_hotel_class = hotel.get('extracted_hotel_class')
             hotel_class = hotel.get('hotel_class', 0)
             rating = hotel.get('overall_rating', 0)
             reviews = hotel.get('reviews', 0)
@@ -577,7 +578,24 @@ def format_hotel_summary(hotels_data: Dict, search_params: Dict) -> str:
             safe_name = escape_markdown(str(name), version=2)
             
             # 构建星级显示
-            star_display = "⭐" * int(hotel_class) if hotel_class else ""
+            star_display = ""
+            if extracted_hotel_class:
+                try:
+                    stars = int(extracted_hotel_class)
+                    star_display = "⭐" * stars
+                except (ValueError, TypeError):
+                    pass
+            
+            if not star_display and hotel_class:
+                try:
+                    # 尝试从字符串中提取数字，如 "5-star hotel" -> 5
+                    import re
+                    match = re.search(r'(\d+)', str(hotel_class))
+                    if match:
+                        stars = int(match.group(1))
+                        star_display = "⭐" * stars
+                except (ValueError, TypeError):
+                    pass
             
             # 构建评分显示
             rating_display = ""
@@ -1482,6 +1500,7 @@ async def _create_hotel_telegraph_page(hotels_data: Dict, search_params: Dict) -
         for i, hotel in enumerate(properties, 1):
             try:
                 name = hotel.get('name', f'酒店 #{i}')
+                extracted_hotel_class = hotel.get('extracted_hotel_class')
                 hotel_class = hotel.get('hotel_class', 0)
                 rating = hotel.get('overall_rating', 0)
                 reviews = hotel.get('reviews', 0)
@@ -1495,8 +1514,29 @@ async def _create_hotel_telegraph_page(hotels_data: Dict, search_params: Dict) -
                 
                 # 酒店名称和星级
                 hotel_title = f"{i}. {name}"
-                if hotel_class:
-                    hotel_title += f" {'⭐' * int(hotel_class)}"
+                
+                # 处理星级显示
+                star_display = ""
+                if extracted_hotel_class:
+                    try:
+                        stars = int(extracted_hotel_class)
+                        star_display = "⭐" * stars
+                    except (ValueError, TypeError):
+                        pass
+                
+                if not star_display and hotel_class:
+                    try:
+                        # 尝试从字符串中提取数字，如 "5-star hotel" -> 5
+                        import re
+                        match = re.search(r'(\d+)', str(hotel_class))
+                        if match:
+                            stars = int(match.group(1))
+                            star_display = "⭐" * stars
+                    except (ValueError, TypeError):
+                        pass
+                
+                if star_display:
+                    hotel_title += f" {star_display}"
                 
                 hotel_content.append({
                     "tag": "h4",
@@ -1507,7 +1547,7 @@ async def _create_hotel_telegraph_page(hotels_data: Dict, search_params: Dict) -
                 if rating:
                     rating_text = f"⭐ 评分: {rating:.1f}/5.0"
                     if reviews:
-                        rating_text += f" ({reviews:,} 条评价)"
+                        rating_text += f" （{reviews:,} 条评价）"
                     hotel_content.append({
                         "tag": "p",
                         "children": [rating_text]
