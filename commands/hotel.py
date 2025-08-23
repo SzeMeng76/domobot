@@ -259,7 +259,7 @@ def enhance_hotel_location_display(api_search_data: Dict, search_params: Dict) -
     
     # 添加日期信息
     if check_in_date and check_out_date:
-        result_parts[0] += f" （{check_in_date} - {check_out_date}）"
+        result_parts[0] += f" （{escape_markdown(check_in_date, version=2)} \\- {escape_markdown(check_out_date, version=2)}）"
         
         if "error" not in duration_info:
             duration = duration_info['days']
@@ -838,7 +838,7 @@ async def hotel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     search_msg = await send_info(
         context, 
         chat_id, 
-        f"🔍 正在搜索酒店...\n📍 位置: {location_query}\n📅 日期: {check_in_date} - {check_out_date}"
+        f"🔍 正在搜索酒店...\n📍 位置: {escape_markdown(location_query, version=2)}\n📅 日期: {escape_markdown(check_in_date, version=2)} \\- {escape_markdown(check_out_date, version=2)}"
     )
     
     try:
@@ -909,7 +909,7 @@ async def hotel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             message = await send_error(
                 context,
                 chat_id,
-                f"😔 未找到酒店\n\n位置: {location_query}\n日期: {check_in_date} - {check_out_date}\n\n请尝试:\n• 调整搜索日期\n• 使用更宽泛的位置描述\n• 检查拼写是否正确"
+                f"😔 未找到酒店\n\n位置: {escape_markdown(location_query, version=2)}\n日期: {escape_markdown(check_in_date, version=2)} \\- {escape_markdown(check_out_date, version=2)}\n\n请尝试:\n• 调整搜索日期\n• 使用更宽泛的位置描述\n• 检查拼写是否正确"
             )
             await _schedule_auto_delete(context, message.chat_id, message.message_id, 
                                       getattr(config, 'auto_delete_delay', 600))
@@ -1060,7 +1060,7 @@ async def hotel_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         
         # 更新消息为搜索中
         await query.edit_message_text(
-            f"🔍 正在搜索酒店...\n📍 位置: {selected_area['name']}\n📅 日期: {check_in_date} - {check_out_date}",
+            f"🔍 正在搜索酒店...\n📍 位置: {escape_markdown(selected_area['name'], version=2)}\n📅 日期: {escape_markdown(check_in_date, version=2)} \\- {escape_markdown(check_out_date, version=2)}",
             parse_mode=ParseMode.MARKDOWN_V2
         )
         
@@ -1109,7 +1109,7 @@ async def hotel_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             if not hotels_data or 'properties' not in hotels_data or len(hotels_data['properties']) == 0:
                 config = get_config()
                 await query.edit_message_text(
-                    f"😔 未找到酒店\n\n位置: {selected_area['name']}\n日期: {check_in_date} - {check_out_date}"
+                    f"😔 未找到酒店\n\n位置: {escape_markdown(selected_area['name'], version=2)}\n日期: {escape_markdown(check_in_date, version=2)} \\- {escape_markdown(check_out_date, version=2)}"
                 )
                 await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
                                           getattr(config, 'auto_delete_delay', 600))
@@ -1490,7 +1490,7 @@ async def _create_hotel_telegraph_page(hotels_data: Dict, search_params: Dict) -
         content.append({
             "tag": "p",
             "children": [
-                f"📅 入住: {check_in_date} - 退房: {check_out_date} ({nights}晚)",
+                f"📅 入住: {check_in_date} \\- 退房: {check_out_date} ({nights}晚)",
                 {"tag": "br"},
                 f"🔍 找到 {len(properties)} 家酒店"
             ]
