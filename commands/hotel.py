@@ -274,8 +274,8 @@ def enhance_hotel_location_display(api_search_data: Dict, search_params: Dict) -
             result_parts.extend([
                 "",
                 f"📅 *住宿信息*:",
-                f"• 入住: {check_in_date} （{safe_check_in_day}）",
-                f"• 退房: {check_out_date} （{safe_check_out_day}）",
+                f"• 入住: {escape_markdown(check_in_date, version=2)} （{safe_check_in_day}）",
+                f"• 退房: {escape_markdown(check_out_date, version=2)} （{safe_check_out_day}）",
                 f"• 时长: {duration}晚 （{safe_stay_type}）"
             ])
     
