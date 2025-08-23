@@ -854,6 +854,12 @@ async def hotel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • `入住日期` - 可选，格式: YYYY-MM-DD
 • `退房日期` - 可选，格式: YYYY-MM-DD
 
+*🧠 智能搜索功能:*
+• **智能位置建议** - 输入模糊位置时自动提供精准建议
+• **多源数据整合** - 结合本地数据库和Google Hotels API
+• **自动完成提示** - 根据输入提供实时搜索建议
+• **混合语言支持** - 支持中英文混合输入和智能识别
+
 *支持的位置格式:*
 • 中文城市名: `北京`、`上海`、`东京`
 • 英文城市名: `New York`、`London`、`Tokyo`
@@ -872,11 +878,12 @@ async def hotel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🏷️ *物业类型* - 传统酒店、公寓酒店、别墅、民宿、度假村
 🏢 *设施筛选* - 游泳池、SPA、健身房、停车场、WiFi、厨房等
 
-*示例:*
-• `/hotel 北京` - 搜索北京酒店(明天入住)
-• `/hotel Tokyo 2024-03-15` - 搜索东京酒店，3月15日入住
-• `/hotel 上海外滩 01-20 01-25` - 搜索上海外滩酒店，1月20-25日
-• `/hotel New York 15 18` - 搜索纽约酒店，本月15-18日
+*智能搜索示例:*
+• `/hotel 北京` - 智能区域选择 + 搜索建议
+• `/hotel Tokyo 2024-03-15` - 自动位置识别
+• `/hotel 上海外滩 01-20 01-25` - 精准位置匹配
+• `/hotel New Y` - 智能建议 "New York"、"New Delhi" 等
+• `/hotel 曼` - 提供 "曼谷"、"曼哈顿"、"曼彻斯特" 等建议
 
 *支持的主要城市:*
 🇨🇳 北京、上海、广州、深圳、香港、澳门、台北
@@ -887,19 +894,17 @@ async def hotel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🇬🇧 伦敦、🇫🇷 巴黎、🇩🇪 法兰克福
 🇦🇪 迪拜、🇦🇺 悉尼、墨尔本
 
-💡 *提示:* 支持智能位置识别，可使用中英文混合输入
-🎯 *筛选:* 搜索后可使用"⚙️ 筛选条件"按钮进行高级筛选
+💡 *智能搜索提示:*
+• 🎯 本地数据库匹配 (高置信度，精准快速)
+• 🌐 API智能建议 (全球覆盖，实时数据)
+• 🔍 支持模糊搜索，输入部分地名即可获得建议
+• 📍 智能识别地标、区域、机场代码等
 
-*使用示例:*
-• `/hotel 北京` - 基础搜索，选择区域后可进行筛选
-• `/hotel Tokyo 2024-03-15` - 搜索后点击"🏢 酒店品牌"选择万豪酒店
-• `/hotel 上海外滩 01-20 01-25` - 搜索后可选择"🎯 特殊服务"筛选免费取消酒店
-• `/hotel New York 15 18` - 搜索后可通过"🏠 度假租赁"筛选公寓式住宿
+🎯 *筛选提示:* 搜索后可使用"⚙️ 筛选条件"按钮进行高级筛选
+📋 *详细信息:* 点击"📋 详细列表"查看完整酒店信息
 
-📋 *筛选功能说明:*
-• 筛选后会重新搜索，显示符合条件的酒店
-• 可结合多个筛选条件获得精准结果  
-• 部分筛选可能无结果，建议调整筛选条件
+*使用流程:*
+1️⃣ 输入位置 → 2️⃣ 选择智能建议 → 3️⃣ 筛选和排序 → 4️⃣ 查看详细信息
         """
         message = await send_help(context, chat_id, help_text)
         config = get_config()
@@ -1304,8 +1309,9 @@ async def hotel_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         await _process_hotel_search_with_location(query, location_query, date_input, context, user_id)
     
     elif query.data.startswith("hotel_suggestion_"):
-        # 智能建议选择
-        if not session_data or session_data.get('step') != 'smart_suggestions':
+        # 智能建议选择 - 支持两种模式
+        step = session_data.get('step') if session_data else None
+        if not session_data or (step not in ['smart_suggestions', 'enhanced_location_selection']):
             config = get_config()
             await query.edit_message_text("❌ 会话已过期，请重新搜索")
             await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
@@ -1355,126 +1361,17 @@ async def hotel_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         
         await _process_hotel_search_with_location(query, location_query, date_input, context, user_id)
     
+    elif query.data == "hotel_separator":
+        # 分隔符按钮 - 无操作，只是视觉分隔
+        await query.answer("这只是一个视觉分隔符")
+        return
+    
     elif query.data == "hotel_retry_input":
         # 重新输入
         await query.edit_message_text(
             foldable_text_v2("🔄 请使用 /hotel 命令重新搜索酒店\n\n格式: /hotel <位置> [日期]")
         )
         config = get_config()
-        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
-                                  getattr(config, 'auto_delete_delay', 600))
-        hotel_session_manager.remove_session(user_id)
-
-async def _process_hotel_search_with_location(query: CallbackQuery, location_query: str, date_input: str, 
-                                            context: ContextTypes.DEFAULT_TYPE, user_id: int):
-    """处理酒店搜索的通用逻辑"""
-    # 解析日期
-    check_in_date, check_out_date = parse_hotel_dates(date_input)
-    if not check_in_date or not check_out_date:
-        # 使用默认日期
-        tomorrow = datetime.now() + timedelta(days=1)
-        day_after = tomorrow + timedelta(days=1)
-        check_in_date = tomorrow.strftime('%Y-%m-%d')
-        check_out_date = day_after.strftime('%Y-%m-%d')
-    
-    # 更新消息为搜索中
-    await query.edit_message_text(
-        foldable_text_v2(f"🔍 正在搜索酒店...\n📍 位置: {location_query}\n📅 日期: {check_in_date} - {check_out_date}")
-    )
-    
-    try:
-        # 执行搜索
-        search_params = {
-            'location_query': location_query,
-            'check_in_date': check_in_date,
-            'check_out_date': check_out_date,
-            'adults': 1,
-            'children': 0,
-            'currency': 'USD',
-            'language': 'en'
-        }
-        
-        cache_service = HotelCacheService(cache_manager)
-        
-        # 检查缓存
-        cached_result = await cache_service.get_cached_search(
-            location_query, check_in_date, check_out_date,
-            search_params['adults'], search_params['children'],
-            currency=search_params['currency']
-        )
-        
-        if cached_result:
-            hotels_data = cached_result
-        else:
-            hotels_data = await hotel_service_manager.search_hotels(
-                location_query=location_query,
-                check_in_date=check_in_date,
-                check_out_date=check_out_date,
-                adults=search_params['adults'],
-                children=search_params['children'],
-                currency=search_params['currency'],
-                language=search_params['language']
-            )
-            
-            if hotels_data:
-                await cache_service.cache_search_result(
-                    location_query, check_in_date, check_out_date,
-                    search_params['adults'], search_params['children'],
-                    hotels_data,
-                    currency=search_params['currency']
-                )
-        
-        if not hotels_data or 'properties' not in hotels_data or len(hotels_data['properties']) == 0:
-            config = get_config()
-            await query.edit_message_text(
-                foldable_text_v2(f"😔 未找到酒店\n\n位置: {location_query}\n日期: {check_in_date} - {check_out_date}")
-            )
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
-                                      getattr(config, 'auto_delete_delay', 600))
-            hotel_session_manager.remove_session(user_id)
-            return
-        
-        # 构建结果消息
-        enhanced_display = enhance_hotel_location_display(hotels_data, search_params)
-        hotels_summary = format_hotel_summary(hotels_data, search_params)
-        full_message = f"{enhanced_display}\n{hotels_summary}"
-        
-        # 创建操作按钮
-        keyboard = [
-            [
-                InlineKeyboardButton("🔄 重新搜索", callback_data="hotel_research"),
-                InlineKeyboardButton("⚙️ 筛选条件", callback_data="hotel_filter")
-            ],
-            [
-                InlineKeyboardButton("💰 价格排序", callback_data="hotel_sort_price"),
-                InlineKeyboardButton("⭐ 评分排序", callback_data="hotel_sort_rating")
-            ],
-            [
-                InlineKeyboardButton("📋 详细列表", callback_data="hotel_detailed_list"),
-                InlineKeyboardButton("🗺️ 地图查看", callback_data="hotel_map_view")
-            ]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        # 更新消息
-        await query.edit_message_text(
-            text=format_with_markdown_v2(full_message),
-            reply_markup=reply_markup
-        )
-        
-        # 更新会话数据
-        session_data = {
-            'message_id': query.message.message_id,
-            'hotels_data': hotels_data,
-            'search_params': search_params,
-            'step': 'results_displayed'
-        }
-        hotel_session_manager.set_session(user_id, session_data)
-        
-    except Exception as e:
-        logger.error(f"酒店搜索处理失败: {e}")
-        config = get_config()
-        await query.edit_message_text(f"🚫 搜索失败: {str(e)}")
         await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
                                   getattr(config, 'auto_delete_delay', 600))
         hotel_session_manager.remove_session(user_id)
@@ -1615,6 +1512,121 @@ async def _process_hotel_search_with_location(query: CallbackQuery, location_que
     # 筛选应用处理
     elif query.data.startswith("hotel_apply_"):
         await _apply_filter_and_research(query, session_data, context)
+
+
+async def _process_hotel_search_with_location(query: CallbackQuery, location_query: str, date_input: str, 
+                                            context: ContextTypes.DEFAULT_TYPE, user_id: int):
+    """处理酒店搜索的通用逻辑"""
+    # 解析日期
+    check_in_date, check_out_date = parse_hotel_dates(date_input)
+    if not check_in_date or not check_out_date:
+        # 使用默认日期
+        tomorrow = datetime.now() + timedelta(days=1)
+        day_after = tomorrow + timedelta(days=1)
+        check_in_date = tomorrow.strftime('%Y-%m-%d')
+        check_out_date = day_after.strftime('%Y-%m-%d')
+    
+    # 更新消息为搜索中
+    await query.edit_message_text(
+        foldable_text_v2(f"🔍 正在搜索酒店...\n📍 位置: {location_query}\n📅 日期: {check_in_date} - {check_out_date}")
+    )
+    
+    try:
+        # 执行搜索
+        search_params = {
+            'location_query': location_query,
+            'check_in_date': check_in_date,
+            'check_out_date': check_out_date,
+            'adults': 1,
+            'children': 0,
+            'currency': 'USD',
+            'language': 'en'
+        }
+        
+        cache_service = HotelCacheService(cache_manager)
+        
+        # 检查缓存
+        cached_result = await cache_service.get_cached_search(
+            location_query, check_in_date, check_out_date,
+            search_params['adults'], search_params['children'],
+            currency=search_params['currency']
+        )
+        
+        if cached_result:
+            hotels_data = cached_result
+        else:
+            hotels_data = await hotel_service_manager.search_hotels(
+                location_query=location_query,
+                check_in_date=check_in_date,
+                check_out_date=check_out_date,
+                adults=search_params['adults'],
+                children=search_params['children'],
+                currency=search_params['currency'],
+                language=search_params['language']
+            )
+            
+            if hotels_data:
+                await cache_service.cache_search_result(
+                    location_query, check_in_date, check_out_date,
+                    search_params['adults'], search_params['children'],
+                    hotels_data,
+                    currency=search_params['currency']
+                )
+        
+        if not hotels_data or 'properties' not in hotels_data or len(hotels_data['properties']) == 0:
+            config = get_config()
+            await query.edit_message_text(
+                foldable_text_v2(f"😔 未找到酒店\n\n位置: {location_query}\n日期: {check_in_date} - {check_out_date}")
+            )
+            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+                                      getattr(config, 'auto_delete_delay', 600))
+            hotel_session_manager.remove_session(user_id)
+            return
+        
+        # 构建结果消息
+        enhanced_display = enhance_hotel_location_display(hotels_data, search_params)
+        hotels_summary = format_hotel_summary(hotels_data, search_params)
+        full_message = f"{enhanced_display}\n{hotels_summary}"
+        
+        # 创建操作按钮
+        keyboard = [
+            [
+                InlineKeyboardButton("🔄 重新搜索", callback_data="hotel_research"),
+                InlineKeyboardButton("⚙️ 筛选条件", callback_data="hotel_filter")
+            ],
+            [
+                InlineKeyboardButton("💰 价格排序", callback_data="hotel_sort_price"),
+                InlineKeyboardButton("⭐ 评分排序", callback_data="hotel_sort_rating")
+            ],
+            [
+                InlineKeyboardButton("📋 详细列表", callback_data="hotel_detailed_list"),
+                InlineKeyboardButton("🗺️ 地图查看", callback_data="hotel_map_view")
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # 更新消息
+        await query.edit_message_text(
+            text=format_with_markdown_v2(full_message),
+            reply_markup=reply_markup
+        )
+        
+        # 更新会话数据
+        session_data = {
+            'message_id': query.message.message_id,
+            'hotels_data': hotels_data,
+            'search_params': search_params,
+            'step': 'results_displayed'
+        }
+        hotel_session_manager.set_session(user_id, session_data)
+        
+    except Exception as e:
+        logger.error(f"酒店搜索处理失败: {e}")
+        config = get_config()
+        await query.edit_message_text(f"🚫 搜索失败: {str(e)}")
+        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+                                  getattr(config, 'auto_delete_delay', 600))
+        hotel_session_manager.remove_session(user_id)
 
 async def _sort_hotels_by_price(query: CallbackQuery, session_data: Dict, context: ContextTypes.DEFAULT_TYPE):
     """按价格排序酒店"""
