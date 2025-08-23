@@ -67,7 +67,7 @@ def parse_countries_from_args(args: list[str]) -> list[str]:
 
 
 def get_icloud_prices_from_html(content: str) -> dict:
-    """Extracts iCloud prices from Apple Support HTML content."""
+    """Extracts iCloud prices from Apple Support HTML content (legacy Chinese support page)."""
     soup = BeautifulSoup(content, "html.parser")
     prices = {}
 
@@ -129,6 +129,95 @@ def get_icloud_prices_from_html(content: str) -> dict:
     return prices
 
 
+def get_icloud_prices_from_apple_website(content: str, country_code: str) -> dict:
+    """Extracts iCloud prices from Apple website HTML content (e.g., apple.com/tr/icloud/)."""
+    soup = BeautifulSoup(content, "html.parser")
+    country_info = SUPPORTED_COUNTRIES.get(country_code, {})
+    country_name = country_info.get("name", country_code)
+    currency = country_info.get("currency", "")
+    
+    size_price_dict = {}
+    
+    # Try to find pricing information in various possible structures
+    
+    # Method 1: Hero section pricing (typography-hero-compare-price)
+    price_elements = soup.find_all("p", class_="typography-hero-compare-price")
+    plan_elements = soup.find_all("h3", class_="typography-hero-compare-plan")
+    
+    if price_elements and plan_elements and len(price_elements) == len(plan_elements):
+        for price_elem, plan_elem in zip(price_elements, plan_elements):
+            price_text = price_elem.get_text(strip=True)
+            plan_text = plan_elem.get_text(strip=True)
+            
+            if price_text and plan_text:
+                size_price_dict[plan_text] = price_text
+    
+    # Method 2: Comparison table pricing (typography-compare-body plan-type cost)
+    if not size_price_dict:
+        plan_items = soup.find_all("div", class_="plan-list-item")
+        for item in plan_items:
+            # Skip free plan
+            if "plan-5gb" in " ".join(item.get("class", [])):
+                continue
+                
+            cost_elem = item.find("p", class_="typography-compare-body plan-type cost")
+            if cost_elem:
+                aria_label = cost_elem.get("aria-label", "")
+                price_text = cost_elem.get_text(strip=True)
+                
+                # Extract capacity from aria-label
+                capacity_match = re.search(r"(\d+\s*(?:GB|TB))", aria_label)
+                if capacity_match and currency and (currency in price_text or currency.replace("Y", "L") in price_text):
+                    capacity = capacity_match.group(1).replace(" ", "")
+                    size_price_dict[capacity] = price_text
+    
+    # Method 3: Accordion structure
+    if not size_price_dict:
+        accordion_buttons = soup.find_all("button")
+        for button in accordion_buttons:
+            if "data-accordion-item" in button.attrs or "accordion" in " ".join(button.get("class", [])):
+                capacity_elem = button.find("span", class_="plan-capacity")
+                price_span = None
+                
+                # Find price span (role="text")
+                for span in button.find_all("span"):
+                    span_text = span.get_text(strip=True)
+                    if span.get("role") == "text" and (currency in span_text or currency.replace("Y", "L") in span_text):
+                        price_span = span
+                        break
+                
+                if capacity_elem and price_span:
+                    capacity = capacity_elem.get_text(strip=True)
+                    price = price_span.get_text(strip=True)
+                    size_price_dict[capacity] = price
+    
+    # Method 4: Generic search for pricing patterns
+    if not size_price_dict:
+        # Look for any elements containing pricing information
+        all_elements = soup.find_all(["p", "span", "div"], string=re.compile(r"\d+[.,]\d+\s*" + re.escape(currency) if currency else r"\d+[.,]\d+\s*(?:TL|₺|USD|\$|EUR|€)"))
+        
+        storage_elements = soup.find_all(["h1", "h2", "h3", "h4", "p", "span"], string=re.compile(r"\d+\s*(?:GB|TB)"))
+        
+        # Try to match storage and pricing elements
+        for storage_elem in storage_elements:
+            storage_text = storage_elem.get_text(strip=True)
+            storage_match = re.search(r"(\d+\s*(?:GB|TB))", storage_text)
+            if storage_match:
+                storage_size = storage_match.group(1).replace(" ", "")
+                
+                # Look for nearby pricing elements
+                parent = storage_elem.parent
+                if parent:
+                    price_elem = parent.find(string=re.compile(r"\d+[.,]\d+"))
+                    if price_elem and (not currency or currency in str(price_elem) or currency.replace("Y", "L") in str(price_elem)):
+                        size_price_dict[storage_size] = price_elem.strip()
+    
+    if size_price_dict:
+        return {country_name: {"currency": currency, "prices": size_price_dict}}
+    else:
+        return {}
+
+
 async def get_service_info(url: str, country_code: str, service: str, context: ContextTypes.DEFAULT_TYPE) -> str:
     """Fetches and parses Apple service price information with caching."""
     cache_manager = context.bot_data["cache_manager"]
@@ -186,15 +275,22 @@ async def get_service_info(url: str, country_code: str, service: str, context: C
         )
 
         if service == "icloud":
-            prices = get_icloud_prices_from_html(content)
+            # Try to parse as Apple website first (for country-specific URLs)
+            prices = get_icloud_prices_from_apple_website(content, country_code)
+            
+            # Fallback to legacy Apple Support page format if no prices found
+            if not prices:
+                prices = get_icloud_prices_from_html(content)
+            
             country_name = country_info["name"]
-
+            
+            # Find matching country data
             matched_country = None
             for name in prices.keys():
-                if country_name in name or name in country_name:
+                if country_name in name or name in country_name or name == country_name:
                     matched_country = name
                     break
-
+            
             if not matched_country:
                 result_lines.append(f"{service_display_name} 服务在该国家/地区不可用。")
             else:
@@ -441,8 +537,15 @@ async def apple_services_command(update: Update, context: ContextTypes.DEFAULT_T
         for country in countries:
             url = ""
             if service == "icloud":
-                # iCloud has a universal URL for all regions
-                url = "https://support.apple.com/zh-cn/108047"
+                if country == "US":
+                    # For US, use the base URL without country code
+                    url = "https://www.apple.com/icloud/"
+                elif country == "CN":
+                    # For China, use .cn domain
+                    url = "https://www.apple.com.cn/icloud/"
+                else:
+                    # For other countries, use country code format like Apple One
+                    url = f"https://www.apple.com/{country.lower()}/icloud/"
             elif country == "US":
                 # For US, use the base URL without country code
                 url = f"https://www.apple.com/{service}/"
