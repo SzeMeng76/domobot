@@ -182,12 +182,26 @@ def get_icloud_prices_from_apple_website(content: str, country_code: str) -> dic
             capacity_match = re.search(r"(\d+\s*(?:GB|TB))", aria_label)
             if capacity_match:
                 capacity = capacity_match.group(1).replace(" ", "")
-                # Handle both paid plans (with TL) and free plans (Ücretsiz)
-                if "TL" in price_text or "Ücretsiz" in price_text or "Free" in price_text:
+                # Handle both paid plans (with currency) and free plans
+                # Check for common currency patterns or free terms
+                is_valid_price = (
+                    # Free terms in various languages
+                    "ücretsiz" in price_text.lower() or "free" in price_text.lower() or 
+                    "gratis" in price_text.lower() or "gratuit" in price_text.lower() or
+                    "kostenlos" in price_text.lower() or "免费" in price_text or
+                    # Currency patterns
+                    re.search(r'[\d.,]+\s*(?:TL|RM|USD|\$|EUR|€|£|¥|₹|₩|₦|R\$|C\$|A\$|NZ\$|HK\$|S\$|₱|₪|₨|kr|₽|zł|Kč|Ft)', price_text) or
+                    # Month/year patterns (subscription pricing)
+                    "/month" in price_text or "per month" in price_text or 
+                    "/year" in price_text or "per year" in price_text or
+                    "ayda" in price_text.lower() or "月" in price_text
+                )
+                
+                if is_valid_price:
                     size_price_dict[capacity] = price_text
                     logger.info(f"Added plan: {capacity} = {price_text}")
                 else:
-                    logger.debug(f"Skipped plan {capacity}: price '{price_text}' doesn't match criteria")
+                    logger.debug(f"Skipped plan {capacity}: price '{price_text}' doesn't match pricing criteria")
             else:
                 logger.debug(f"No capacity match in aria-label: '{aria_label}'")
     
@@ -202,9 +216,20 @@ def get_icloud_prices_from_apple_website(content: str, country_code: str) -> dic
                 # Find price span (role="text")
                 for span in button.find_all("span"):
                     span_text = span.get_text(strip=True)
-                    if span.get("role") == "text" and ("TL" in span_text or "Ücretsiz" in span_text or "Free" in span_text):
-                        price_span = span
-                        break
+                    if span.get("role") == "text":
+                        # Check for valid pricing patterns
+                        is_valid_price = (
+                            "ücretsiz" in span_text.lower() or "free" in span_text.lower() or 
+                            "gratis" in span_text.lower() or "gratuit" in span_text.lower() or
+                            "kostenlos" in span_text.lower() or "免费" in span_text or
+                            re.search(r'[\d.,]+\s*(?:TL|RM|USD|\$|EUR|€|£|¥|₹|₩|₦|R\$|C\$|A\$|NZ\$|HK\$|S\$|₱|₪|₨|kr|₽|zł|Kč|Ft)', span_text) or
+                            "/month" in span_text or "per month" in span_text or 
+                            "/year" in span_text or "per year" in span_text or
+                            "ayda" in span_text.lower() or "月" in span_text
+                        )
+                        if is_valid_price:
+                            price_span = span
+                            break
                 
                 if capacity_elem and price_span:
                     capacity = capacity_elem.get_text(strip=True).replace(" ", "")
