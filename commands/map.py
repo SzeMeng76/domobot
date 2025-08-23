@@ -32,6 +32,7 @@ from utils.permissions import Permission
 from utils.language_detector import detect_user_language
 from utils.map_services import MapServiceManager, AmapService
 from utils.session_manager import SessionManager
+from utils.error_handling import with_error_handling
 
 logger = logging.getLogger(__name__)
 
@@ -862,13 +863,17 @@ async def _execute_location_search(update: Update, context: ContextTypes.DEFAULT
             )
             await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
 
+@with_error_handling
 async def map_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理地图功能的文本输入"""
     if not update.message or not update.message.text:
+        logger.debug("MapService: map_text_handler called but no message/text")
         return
     
     user_id = update.effective_user.id
     text = update.message.text.strip()
+    
+    logger.info(f"MapService: map_text_handler called for user {user_id}, text: {text[:50]}")
     
     # 获取用户会话
     session_data = map_session_manager.get_session(user_id)

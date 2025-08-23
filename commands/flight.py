@@ -2207,10 +2207,13 @@ async def _execute_flight_search(update: Update, context: ContextTypes.DEFAULT_T
 async def flight_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理航班功能的文本输入 - 与map.py的map_text_handler完全一致的结构"""
     if not update.message or not update.message.text:
+        logger.debug("FlightService: flight_text_handler called but no message/text")
         return
     
     user_id = update.effective_user.id
     text = update.message.text.strip()
+    
+    logger.info(f"FlightService: flight_text_handler called for user {user_id}, text: {text[:50]}")
     
     # 检查消息是否已被地图服务处理
     if hasattr(context, '_map_processed_messages'):
