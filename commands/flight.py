@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 from telegram import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import ContextTypes, StopPropagation, CallbackQueryHandler
+from telegram.ext import ContextTypes, CallbackQueryHandler
 from telegram.constants import ParseMode
 from telegram.helpers import escape_markdown
 
@@ -2212,6 +2212,13 @@ async def flight_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     user_id = update.effective_user.id
     text = update.message.text.strip()
     
+    # 检查消息是否已被地图服务处理
+    if hasattr(context, '_map_processed_messages'):
+        message_id = f"{user_id}_{update.message.message_id}"
+        if message_id in context._map_processed_messages:
+            logger.debug(f"FlightService: 消息已被地图服务处理，跳过: {text[:50]}")
+            return
+    
     # 获取用户会话 - 与map.py完全一致的会话管理
     session_data = flight_session_manager.get_session(user_id)
     if not session_data:
@@ -2255,8 +2262,8 @@ async def flight_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         await send_error(context, update.message.chat_id, f"处理失败: {str(e)}")
         flight_session_manager.remove_session(user_id)
     
-    # 阻止其他文本处理器处理这条消息
-    raise StopPropagation
+    # 消息已处理完成
+    return
 
 async def _parse_and_execute_flight_search(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
     """解析并执行航班搜索"""
