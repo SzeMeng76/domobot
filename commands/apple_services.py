@@ -17,9 +17,9 @@ from utils.permissions import Permission
 from utils.price_parser import extract_price_value_from_country_info
 
 
-def normalize_free_pricing(price_text: str) -> str:
-    """Normalize free pricing text to Chinese '免费' for consistent display."""
-    # Common free pricing terms in different languages
+def normalize_pricing_text(price_text: str) -> str:
+    """Normalize pricing text to Chinese for consistent display."""
+    # First check for free pricing terms in different languages
     free_terms = [
         "ücretsiz",    # Turkish
         "free",        # English
@@ -40,7 +40,45 @@ def normalize_free_pricing(price_text: str) -> str:
         if term.lower() in price_lower:
             return "免费"
     
-    return price_text
+    # Normalize subscription periods to Chinese
+    normalized_text = price_text
+    
+    # Remove duplicate period indicators (e.g., "/monthper month")
+    normalized_text = re.sub(r'/month\s*per month', '/month', normalized_text)
+    normalized_text = re.sub(r'per month\s*/month', 'per month', normalized_text)
+    
+    # Replace various period indicators with Chinese equivalents
+    period_replacements = [
+        # Monthly patterns
+        (r'/month', '每月'),
+        (r'per month', '每月'),
+        (r'\bmonth\b', '每月'),
+        (r'\bayda\b', '每月'),  # Turkish
+        (r'月額', '每月'),      # Japanese
+        (r'월', '每월'),        # Korean
+        (r'/mes', '每月'),      # Spanish
+        (r'par mois', '每月'),  # French
+        (r'pro Monat', '每月'), # German
+        
+        # Yearly patterns  
+        (r'/year', '每年'),
+        (r'per year', '每年'),
+        (r'\byear\b', '每年'),
+        (r'yıllık', '每年'),   # Turkish
+        (r'年額', '每年'),      # Japanese
+        (r'연', '每年'),        # Korean
+        (r'/año', '每年'),      # Spanish
+        (r'par an', '每年'),    # French
+        (r'pro Jahr', '每年'),  # German
+    ]
+    
+    for pattern, replacement in period_replacements:
+        normalized_text = re.sub(pattern, replacement, normalized_text, flags=re.IGNORECASE)
+    
+    # Clean up extra whitespace
+    normalized_text = re.sub(r'\s+', ' ', normalized_text).strip()
+    
+    return normalized_text
 
 
 # Configure logging
@@ -404,8 +442,8 @@ async def get_service_info(url: str, country_code: str, service: str, context: C
                 for size in size_order:
                     if size in country_prices:
                         price = country_prices[size]
-                        # Normalize free pricing to Chinese for consistent display
-                        normalized_price = normalize_free_pricing(price)
+                        # Normalize pricing text to Chinese for consistent display
+                        normalized_price = normalize_pricing_text(price)
                         line = f"{size}: {normalized_price}"
                         
                         # Don't convert free plans or CNY prices
