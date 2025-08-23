@@ -1661,15 +1661,30 @@ async def _execute_flight_search(update: Update, context: ContextTypes.DEFAULT_T
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
+            # 检查消息长度限制（Telegram限制为4096字符）
+            formatted_text = foldable_text_with_markdown_v2(result_text)
+            if len(formatted_text) > 4000:  # 留一些安全边距
+                # 如果消息过长，创建简化版本
+                simplified_text = result_text.split("📋 *其他选择*:")[0]  # 只保留推荐航班部分
+                if "📋 *完整航班列表*:" in simplified_text:
+                    # 保留Telegraph链接
+                    parts = simplified_text.split("📋 *完整航班列表*:")
+                    if len(parts) > 1:
+                        simplified_text = parts[0] + "📋 *完整航班列表*:" + parts[1]
+                else:
+                    simplified_text += f"\n\n📋 *查看更多选项*: 使用下方按钮查看完整航班列表"
+                
+                formatted_text = foldable_text_with_markdown_v2(simplified_text)
+            
             if callback_query:
                 await callback_query.edit_message_text(
-                    text=foldable_text_with_markdown_v2(result_text),
+                    text=formatted_text,
                     parse_mode="MarkdownV2",
                     reply_markup=reply_markup
                 )
             else:
                 await message.edit_text(
-                    text=foldable_text_with_markdown_v2(result_text),
+                    text=formatted_text,
                     parse_mode="MarkdownV2",
                     reply_markup=reply_markup
                 )
