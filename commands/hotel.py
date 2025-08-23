@@ -654,7 +654,6 @@ def format_hotel_summary(hotels_data: Dict, search_params: Dict) -> str:
         return "暂无可显示的酒店信息"
 
 # 注册命令处理器
-@command_factory.register("hotel", permissions=[Permission.BASIC])
 @with_error_handling
 async def hotel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
@@ -731,14 +730,20 @@ async def hotel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     location_result = resolve_hotel_location(location_input)
     
     if location_result['status'] == 'not_found':
-        config = get_config()
-        message = await send_error(
-            context,
-            chat_id,
-            f"❓ 未找到位置 '{location_input}'\n\n💡 请尝试使用更具体的城市名称或地址"
-        )
-        await _schedule_auto_delete(context, message.chat_id, message.message_id, 5)
-        return
+        # 检查是否有fallback_query可以直接搜索
+        if 'fallback_query' in location_result and location_result['fallback_query']:
+            logger.info(f"使用fallback查询搜索: {location_result['fallback_query']}")
+            location_query = location_result['fallback_query']
+            # 继续执行搜索，不返回错误
+        else:
+            config = get_config()
+            message = await send_error(
+                context,
+                chat_id,
+                f"❓ 未找到位置 '{location_input}'\n\n💡 请尝试使用更具体的城市名称或地址"
+            )
+            await _schedule_auto_delete(context, message.chat_id, message.message_id, 5)
+            return
     
     if location_result['status'] == 'multiple':
         # 需要用户选择具体位置
@@ -777,7 +782,11 @@ async def hotel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     # 获取位置查询字符串
-    location_query = get_location_query(location_result)
+    if location_result['status'] == 'not_found':
+        # 这里不应该到达，因为上面已经处理了
+        location_query = location_input  # 保险起见
+    else:
+        location_query = get_location_query(location_result)
     
     # 解析日期
     check_in_date, check_out_date = parse_hotel_dates(date_input)
@@ -1619,6 +1628,14 @@ async def _create_hotel_telegraph_page(hotels_data: Dict, search_params: Dict) -
     except Exception as e:
         logger.error(f"创建Telegraph页面失败: {e}")
         return None
+
+# 注册命令
+command_factory.register_command(
+    "hotel",
+    hotel_command,
+    permission=Permission.USER,
+    description="🏨 智能酒店服务 - 酒店搜索、价格对比、预订信息"
+)
 
 # 注册回调查询处理器
 command_factory.register_callback(r"^hotel_", hotel_callback_handler, permission=Permission.USER, description="酒店服务回调")
