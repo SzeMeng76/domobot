@@ -322,6 +322,7 @@ async def get_service_info(url: str, country_code: str, service: str, context: C
 
         client = get_http_client()
         response = await client.get(url, timeout=15)
+        content = None
 
         if response.status_code == 404:
             logger.info(f"{service} not available in {country_code} (404).")
@@ -333,6 +334,7 @@ async def get_service_info(url: str, country_code: str, service: str, context: C
                     fallback_response = await client.get(support_url, timeout=15)
                     if fallback_response.status_code == 200:
                         content = fallback_response.text
+                        url = support_url  # Update URL to reflect we're using support page
                         logger.info(f"Successfully fetched fallback URL: {support_url}")
                         # Continue with parsing using the support page content
                     else:
@@ -342,10 +344,13 @@ async def get_service_info(url: str, country_code: str, service: str, context: C
                     return f"📍 国家/地区: {flag_emoji} {country_info['name']}\n{service_display_name} 服务在该国家/地区不可用。"
             else:
                 return f"📍 国家/地区: {flag_emoji} {country_info['name']}\n{service_display_name} 服务在该国家/地区不可用。"
-
-        response.raise_for_status()
-        content = response.text
-        logger.info(f"Successfully fetched URL: {url}")
+        else:
+            response.raise_for_status()
+            content = response.text
+            logger.info(f"Successfully fetched URL: {url}")
+        
+        if content is None:
+            return f"📍 国家/地区: {flag_emoji} {country_info['name']}\n{service_display_name} 服务在该国家/地区不可用。"
 
     except httpx.HTTPStatusError as e:
         logger.error(f"Network error for {url}: {e}")
@@ -358,6 +363,7 @@ async def get_service_info(url: str, country_code: str, service: str, context: C
                     fallback_response = await client.get(support_url, timeout=15)
                     if fallback_response.status_code == 200:
                         content = fallback_response.text
+                        url = support_url  # Update URL to reflect we're using support page
                         logger.info(f"Successfully fetched fallback URL: {support_url}")
                         # Continue with parsing using the support page content
                     else:
