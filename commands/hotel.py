@@ -960,8 +960,10 @@ async def hotel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         }
         hotel_session_manager.set_session(user_id, session_data)
         
-        # 调度自动删除 - 10分钟
-        await _schedule_auto_delete(context, chat_id, result_msg.message_id, 600)
+        # 调度自动删除 - 使用配置延迟
+        config = get_config()
+        await _schedule_auto_delete(context, chat_id, result_msg.message_id, 
+                                  getattr(config, 'auto_delete_delay', 600))
         
     except Exception as e:
         # 删除搜索中消息
@@ -1178,7 +1180,8 @@ async def hotel_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         if not session_data or 'hotels_data' not in session_data:
             config = get_config()
             await query.edit_message_text("❌ 会话已过期，请重新搜索")
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+                                      getattr(config, 'auto_delete_delay', 600))
             return
         
         filter_keyboard = [
@@ -1223,7 +1226,8 @@ async def hotel_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         if not session_data or 'hotels_data' not in session_data:
             config = get_config()
             await query.edit_message_text("❌ 会话已过期，请重新搜索")
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+                                      getattr(config, 'auto_delete_delay', 600))
             return
         
         # 重新构建结果页面
@@ -1260,7 +1264,8 @@ async def _sort_hotels_by_price(query: CallbackQuery, session_data: Dict, contex
     if not session_data or 'hotels_data' not in session_data:
         config = get_config()
         await query.edit_message_text("❌ 会话已过期，请重新搜索")
-        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+                                  getattr(config, 'auto_delete_delay', 600))
         return
     
     hotels_data = session_data['hotels_data']
@@ -1340,7 +1345,8 @@ async def _sort_hotels_by_rating(query: CallbackQuery, session_data: Dict, conte
     if not session_data or 'hotels_data' not in session_data:
         config = get_config()
         await query.edit_message_text("❌ 会话已过期，请重新搜索")
-        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+                                  getattr(config, 'auto_delete_delay', 600))
         return
     
     hotels_data = session_data['hotels_data']
@@ -1389,7 +1395,8 @@ async def _show_detailed_hotel_list(query: CallbackQuery, session_data: Dict, co
     if not session_data or 'hotels_data' not in session_data:
         config = get_config()
         await query.edit_message_text("❌ 会话已过期，请重新搜索")
-        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+                                  getattr(config, 'auto_delete_delay', 600))
         return
     
     await query.edit_message_text("📋 正在生成详细列表...")
@@ -1434,7 +1441,8 @@ async def _show_hotel_map_view(query: CallbackQuery, session_data: Dict, context
     if not session_data or 'hotels_data' not in session_data:
         config = get_config()
         await query.edit_message_text("❌ 会话已过期，请重新搜索")
-        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+                                  getattr(config, 'auto_delete_delay', 600))
         return
     
     hotels_data = session_data['hotels_data']

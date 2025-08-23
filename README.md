@@ -50,6 +50,7 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 -   📊 **Public Finance & Stocks:** Available to all users - comprehensive financial market data powered by Yahoo Finance. Features **real-time stock prices** with market data and technical indicators, **15 ranking categories** including day gainers/losers, most actives, growth tech stocks, undervalued stocks, and mutual fund rankings, **intelligent stock search** supporting ticker symbols and company names across multiple markets (US, HK, CN, MY), **analyst recommendations** with buy/sell/hold ratings, **financial statements** (income, balance sheet, cash flow), categorized inline button interface, intelligent caching with different TTL for various data types, and comprehensive error handling with auto-deletion. Supports flexible search queries like "AAPL", "Apple", "Tesla", "6033.KL", "Maybank" with multilingual matching.
 -   🗺️ **Map Services:** Intelligent location search and navigation system with **automatic language detection** - Google Maps API for English users and Amap (高德地图) API for Chinese users. Features **comprehensive location search** with detailed place information, ratings, and types, **nearby service recommendations** (restaurants, hospitals, banks, gas stations, supermarkets, schools, hotels), **route planning** with step-by-step directions and travel time estimates, **geocoding** for address-to-coordinates conversion, **reverse geocoding** for coordinates-to-address lookup, **interactive button interface** with single `/map` command, **session management** for multi-step operations, **Redis caching** with appropriate TTL for different data types, and **auto-deletion** for all messages. Supports text input, location sharing, and coordinate queries with comprehensive error handling. *(Whitelist required)*
 -   ✈️ **Flight Services:** Intelligent flight search and booking information powered by Google Flights API. Features **multi-language airport recognition** (Chinese, English, IATA codes), **global airport coverage** (Asia, Europe, Americas, Oceania), **smart airport matching** with automatic selection of optimal airports, **real-time flight data** with price analysis and booking options, **intelligent route planning** with time zone calculations and flight distance information, **comprehensive airline coverage** with multiple booking channels, and **Telegraph integration** for detailed flight lists. Supports mixed-language input like `北京 New York` or `吉隆坡 Bangkok` with automatic conversion to optimal airport pairs (PEK↔JFK, KUL↔BKK). *(Whitelist required)*
+-   🏨 **Hotel Services:** Intelligent hotel search and booking information powered by Google Hotels API. Features **multi-language location recognition** (Chinese, English, specific areas), **global hotel coverage** with support for major cities worldwide, **smart location matching** with automatic area selection, **real-time hotel data** with price analysis and booking options, **comprehensive accommodation information** including ratings, amenities, and descriptions, **flexible date handling** with automatic check-in/out date parsing, **interactive sorting and filtering** with price/rating options, **Telegraph integration** for detailed hotel lists, and **intelligent stay duration analysis**. Supports mixed-language input like `北京`, `Tokyo`, `Kepong`, `Times Square NYC` with automatic location resolution. *(Whitelist required)*
 -   🎬 **Movie & TV Information:** Query movie/TV details with posters, ratings, cast, trailers, reviews, recommendations, viewing platforms, and season/episode info. Features **3-platform data integration** (TMDB + JustWatch + Trakt) with **JustWatch streaming charts**, real-time ranking trends, platform availability, Telegraph integration for long content, trending discovery, people search, and enhanced statistics with watch counts and community data. *(Whitelist required)*
 -   🪙 **Crypto Prices:** Look up real-time cryptocurrency prices with support for custom amounts and currency conversion, including 24h and 7d percentage changes. *(Whitelist required)*
 -   💳 **BIN Lookup:** Query credit card BIN (Bank Identification Number) information including card brand, type, issuing bank, and country details. *(Whitelist required)*
@@ -101,7 +102,7 @@ All configurations are managed via the `.env` file. You must copy `.env.example`
 | `TRAKT_API_KEY`             | **(Optional)** API Key from Trakt for enhanced movie/TV statistics and trending data. |                         |
 | `GOOGLE_MAPS_API_KEY`       | **(Optional)** API Key from Google Maps for the `/map` command (English users). |                         |
 | `AMAP_API_KEY`              | **(Optional)** API Key from Amap (高德地图) for the `/map` command (Chinese users). |                         |
-| `SERPAPI_KEY`               | **(Optional)** API Key from SerpAPI for the `/flight` command with Google Flights integration. |                         |
+| `SERPAPI_KEY`               | **(Optional)** API Key from SerpAPI for the `/flight` and `/hotel` commands with Google Flights & Hotels integration. |                         |
 | `QWEATHER_API_KEY`          | **(Optional)** API Key from HeFeng Weather for the `/tq` command.           |                         |
 | `EXCHANGE_RATE_API_KEYS`    | **(Optional)** API Keys from openexchangerates.org for the `/rate` command. Multiple keys separated by commas. |                         |
 | `ENABLE_USER_CACHE`         | **(Optional)** Enable user caching system (`true`/`false`).                 | `false`                 |
@@ -204,6 +205,16 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /flight PEK LAX 2024-12-25     # Direct IATA codes
 /flight Jakarta Bangkok 2024-12-25  # English cities (CGK→BKK)
 # Interactive features: Price analysis, booking options, multi-city planning, airport info
+
+# Intelligent Hotel Search & Booking (Multi-language Location Recognition)
+/hotel                         # Interactive hotel service help
+/hotel 北京                    # Chinese cities with area selection
+/hotel 东京 2024-12-25          # Single date (auto check-out next day)
+/hotel Tokyo 2024-12-25 2024-12-28  # Check-in and check-out dates
+/hotel Kepong 25 28           # Current month dates (25th-28th)
+/hotel "Times Square NYC" 2024-12-25  # Specific locations
+/hotel Bangkok 01-20 01-25    # Month-day format (current year)
+# Interactive features: Price sorting, rating sorting, detailed lists, map view
 
 # BIN lookup
 /bin 123456
@@ -635,7 +646,7 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 - **Steam API:** For game pricing information
 - **Google Maps API:** For location search, nearby places, route planning, and geocoding services (English users)
 - **Amap (高德地图) API:** For location search, nearby places, route planning, and geocoding services (Chinese users)
-- **SerpAPI:** For flight search and booking information via Google Flights integration with multi-language airport recognition
+- **SerpAPI:** For flight search and booking information via Google Flights integration with multi-language airport recognition, and hotel search with multi-language location recognition via Google Hotels integration
 - **IP-API.com:** For IP geolocation and actual server location data (free service)
 - **Yahoo Finance API:** For real-time stock prices, market data, rankings, analyst recommendations, and financial statements
 - **Various streaming service APIs:** For subscription pricing
