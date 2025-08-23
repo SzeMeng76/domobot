@@ -971,17 +971,73 @@ async def create_flight_search_telegraph_page(all_flights: List[Dict], search_pa
     
     trip_type = "往返" if return_date else "单程"
     
-    content = f"""航班搜索结果
-
-📍 航线: {departure_id} → {arrival_id}
-📅 出发: {outbound_date}"""
+    # 获取增强路线信息（纯文本版本）
+    def get_enhanced_route_info_plain_text() -> str:
+        """获取增强路线信息的纯文本版本"""
+        # 获取本地机场信息
+        dep_local_info = get_airport_info_from_code(departure_id)
+        arr_local_info = get_airport_info_from_code(arrival_id)
+        
+        # 获取时差和距离信息
+        time_info = calculate_time_difference(departure_id, arrival_id)
+        distance_info = get_flight_distance_info(departure_id, arrival_id)
+        
+        # 获取国家标志（简化显示）
+        from utils.country_data import get_country_flag
+        dep_flag = get_country_flag('CN') if departure_id in ['PEK', 'PKX', 'PVG', 'SHA', 'CAN'] else '🌍'
+        arr_flag = '🌍'  # 简化处理
+        
+        result_parts = [
+            f"✈️ {dep_local_info['city']} → {arr_local_info['city']} 航班搜索",
+            f"📅 出发: {outbound_date}" + (f" | 返回: {return_date}" if return_date else ""),
+            f"🎫 类型: {trip_type}",
+            "",
+            f"📍 出发: {dep_local_info['name']} ({departure_id})",
+            f"{dep_flag} {dep_local_info['city']} | 🕐 {time_info['departure_tz']['name']} (UTC{time_info['departure_tz']['offset']:+d})",
+            "",
+            f"📍 到达: {arr_local_info['name']} ({arrival_id})",  
+            f"{arr_flag} {arr_local_info['city']} | 🕐 {time_info['arrival_tz']['name']} (UTC{time_info['arrival_tz']['offset']:+d})"
+        ]
+        
+        # 添加时差信息
+        if time_info['time_difference'] != 0:
+            if time_info['time_difference'] > 0:
+                result_parts.append(f"⏰ 时差: 到达地比出发地快{abs(time_info['time_difference'])}小时")
+            else:
+                result_parts.append(f"⏰ 时差: 到达地比出发地慢{abs(time_info['time_difference'])}小时")
+        
+        # 添加距离和飞行信息
+        if distance_info['distance'] > 0:
+            result_parts.extend([
+                f"✈️ 航线信息:",
+                f"• 飞行距离: {distance_info['distance']:,}公里",
+                f"• 预计飞行: {distance_info['flight_time']}",
+                f"• 航线类型: {distance_info['type']}"
+            ])
+        
+        # 添加特殊提醒
+        if distance_info['type'] in ['跨太平洋', '跨极地'] and abs(time_info['time_difference']) >= 10:
+            result_parts.extend([
+                "",
+                "💡 长途飞行提醒:",
+                "• 建议提前调整作息时间",
+                "• 到达后可能需要1-3天适应时差",
+                "• 选择合适的座位和餐食"
+            ])
+        elif distance_info['type'] in ['东北亚', '东南亚'] and distance_info['distance'] < 3000:
+            result_parts.extend([
+                "",
+                "💡 短途航线:",
+                "• 适合商务出行",
+                "• 当日往返可行",
+                "• 通常有多个航班选择"
+            ])
+        
+        return "\n".join(result_parts)
     
-    if return_date:
-        content += f"\n📅 返回: {return_date}"
-    
-    content += f"\n🎫 类型: {trip_type}\n\n"
-    
-    content += f"✈️ 找到 {len(all_flights)} 个航班选项:\n\n"
+    # 构建Telegraph页面内容
+    content = get_enhanced_route_info_plain_text()
+    content += f"\n\n✈️ 找到 {len(all_flights)} 个航班选项:\n\n"
     
     # 显示所有航班 - 使用format_flight_info的完整逻辑，纯文本格式
     for i, flight in enumerate(all_flights, 1):
@@ -1025,17 +1081,46 @@ async def create_booking_telegraph_page(all_flights: List[Dict], search_params: 
     
     trip_type = "往返" if return_date else "单程"
     
-    content = f"""航班预订详情
-
-📍 航线: {departure_id} → {arrival_id}
-📅 出发: {outbound_date}"""
+    # 获取增强路线信息（纯文本版本）
+    def get_enhanced_route_info_plain_text() -> str:
+        """获取增强路线信息的纯文本版本"""
+        # 获取本地机场信息
+        dep_local_info = get_airport_info_from_code(departure_id)
+        arr_local_info = get_airport_info_from_code(arrival_id)
+        
+        # 获取时差和距离信息
+        time_info = calculate_time_difference(departure_id, arrival_id)
+        distance_info = get_flight_distance_info(departure_id, arrival_id)
+        
+        trip_type = "往返" if return_date else "单程"
+        
+        result_parts = [
+            f"💺 {dep_local_info['city']} → {arr_local_info['city']} 航班预订",
+            f"📅 出发: {outbound_date}" + (f" | 返回: {return_date}" if return_date else ""),
+            f"🎫 类型: {trip_type}",
+            "",
+            f"📍 出发: {dep_local_info['name']} ({departure_id})",
+            f"📍 到达: {arr_local_info['name']} ({arrival_id})",
+        ]
+        
+        # 添加航线特点
+        if distance_info['distance'] > 0:
+            result_parts.extend([
+                f"✈️ 航线: {distance_info['distance']:,}公里 | {distance_info['flight_time']} | {distance_info['type']}"
+            ])
+        
+        # 添加时差提醒
+        if time_info['time_difference'] != 0:
+            if time_info['time_difference'] > 0:
+                result_parts.append(f"⏰ 时差: 到达地快{abs(time_info['time_difference'])}小时")
+            else:
+                result_parts.append(f"⏰ 时差: 到达地慢{abs(time_info['time_difference'])}小时")
+        
+        return "\n".join(result_parts)
     
-    if return_date:
-        content += f"\n📅 返回: {return_date}"
-    
-    content += f"\n🎫 类型: {trip_type}\n\n"
-    
-    content += f"💺 可预订航班 (共{len(all_flights)}个选项):\n\n"
+    # 构建Telegraph页面内容
+    content = get_enhanced_route_info_plain_text()
+    content += f"\n\n💺 可预订航班 (共{len(all_flights)}个选项):\n\n"
     
     # 显示所有航班 - 完全复制_show_booking_options的逻辑，包括API调用
     for i, flight in enumerate(all_flights, 1):
