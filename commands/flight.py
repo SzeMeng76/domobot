@@ -31,6 +31,12 @@ from utils.message_manager import (
 from utils.permissions import Permission
 from utils.language_detector import detect_user_language
 from utils.session_manager import SessionManager
+from utils.airport_mapper import (
+    resolve_flight_airports,
+    format_airport_selection_message,
+    get_recommended_airport_pair,
+    format_airport_info
+)
 
 logger = logging.getLogger(__name__)
 
@@ -949,19 +955,103 @@ async def flight_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     # 如果有参数，解析并搜索航班
     if context.args:
-        # 简单参数解析: /flight PEK LAX 2024-12-25 [2024-12-30]
         args = context.args
         if len(args) >= 3:
-            departure_id = args[0].upper()
-            arrival_id = args[1].upper()
+            departure_input = args[0]
+            arrival_input = args[1]
             outbound_date = args[2]
             return_date = args[3] if len(args) > 3 else None
             
-            await _execute_flight_search(update, context, departure_id, arrival_id, outbound_date, return_date)
+            # 智能解析机场输入
+            airport_resolution = resolve_flight_airports(departure_input, arrival_input)
+            resolution_status = airport_resolution.get("status")
+            
+            if resolution_status == "ready":
+                # 直接搜索
+                dep_primary, arr_primary = get_recommended_airport_pair(
+                    airport_resolution["departure"], 
+                    airport_resolution["arrival"]
+                )
+                await _execute_flight_search(update, context, dep_primary, arr_primary, outbound_date, return_date)
+                
+            elif resolution_status in ["multiple_choice", "suggestion_needed"]:
+                # 显示选择菜单
+                selection_message = format_airport_selection_message(
+                    airport_resolution["departure"], 
+                    airport_resolution["arrival"]
+                )
+                
+                # 创建快速选择按钮
+                keyboard = []
+                
+                # 如果有推荐的机场对，提供快速选择
+                dep_result = airport_resolution["departure"]
+                arr_result = airport_resolution["arrival"]
+                
+                if (dep_result.get("status") in ["success", "multiple"] and 
+                    arr_result.get("status") in ["success", "multiple"]):
+                    dep_primary, arr_primary = get_recommended_airport_pair(dep_result, arr_result)
+                    if dep_primary and arr_primary:
+                        quick_search_data = f"flight_quick_search:{dep_primary}:{arr_primary}:{outbound_date}:{return_date or ''}"
+                        short_id = get_short_flight_id(quick_search_data)
+                        keyboard.append([
+                            InlineKeyboardButton(f"⚡ 推荐: {dep_primary}→{arr_primary}", callback_data=f"flight_qs:{short_id}")
+                        ])
+                
+                # 添加详细选择按钮
+                airport_selection_data = f"airport_selection:{departure_input}:{arrival_input}:{outbound_date}:{return_date or ''}"
+                selection_short_id = get_short_flight_id(airport_selection_data)
+                keyboard.append([
+                    InlineKeyboardButton("🔍 详细选择", callback_data=f"flight_as:{selection_short_id}")
+                ])
+                keyboard.append([
+                    InlineKeyboardButton("❌ 取消", callback_data="flight_close")
+                ])
+                
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await send_message_with_auto_delete(
+                    context=context,
+                    chat_id=update.message.chat_id,
+                    text=foldable_text_with_markdown_v2(selection_message),
+                    parse_mode="MarkdownV2",
+                    reply_markup=reply_markup
+                )
+                
+            elif resolution_status == "not_found":
+                error_parts = ["❌ 无法识别机场信息\n"]
+                
+                dep_result = airport_resolution["departure"]
+                arr_result = airport_resolution["arrival"]
+                
+                if dep_result.get("status") == "not_found":
+                    dep_input = dep_result.get("input", departure_input)
+                    error_parts.append(f"• 出发地 '{dep_input}' 无法识别")
+                
+                if arr_result.get("status") == "not_found":
+                    arr_input = arr_result.get("input", arrival_input)
+                    error_parts.append(f"• 到达地 '{arr_input}' 无法识别")
+                
+                error_parts.extend([
+                    "\n💡 *支持格式*:",
+                    "• 城市名: `北京`, `东京`, `纽约`",
+                    "• IATA代码: `PEK`, `NRT`, `JFK`",
+                    "• 英文城市: `Beijing`, `Tokyo`, `New York`",
+                    "\n📋 *使用示例*:",
+                    "• `/flight 北京 东京 2024-12-25`",
+                    "• `/flight PEK NRT 2024-12-25 2024-12-30`",
+                    "• `/flight Shanghai New York 2024-12-25`"
+                ])
+                
+                await send_error(context, update.message.chat_id, "\n".join(error_parts))
+            
         else:
             await send_error(context, update.message.chat_id, 
-                           "❌ 参数不足\n\n格式: `/flight 出发机场 到达机场 出发日期 [返回日期]`\n"
-                           "例如: `/flight PEK LAX 2024-12-25 2024-12-30`")
+                           "❌ 参数不足\n\n格式: `/flight 出发地 到达地 出发日期 [返回日期]`\n\n"
+                           "🌟 *智能输入支持*:\n"
+                           "• 城市名: `/flight 北京 东京 2024-12-25`\n"
+                           "• 机场代码: `/flight PEK NRT 2024-12-25`\n"
+                           "• 中英混合: `/flight 上海 New York 2024-12-25`")
         
         await delete_user_command(context, update.message.chat_id, update.message.message_id)
         return
@@ -977,6 +1067,7 @@ async def flight_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             InlineKeyboardButton("🗺️ 多城市", callback_data="flight_multi_city")
         ],
         [
+            InlineKeyboardButton("🛬 机场信息", callback_data="flight_airport_info"),
             InlineKeyboardButton("❌ 关闭", callback_data="flight_close")
         ]
     ]
@@ -993,13 +1084,15 @@ async def flight_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 🤖 智能特性:
 • 实时价格比较
-• 价格历史趋势分析
+• 价格历史趋势分析  
 • 最佳出行时间建议
 • 碳排放信息
+• 智能机场识别
 
-💡 快速使用:
-`/flight PEK LAX 2024-12-25` - 搜索单程
-`/flight PEK LAX 2024-12-25 2024-12-30` - 搜索往返
+💡 智能搜索 (支持中文城市名):
+`/flight 北京 洛杉矶 2024-12-25` - 智能识别机场
+`/flight 上海 纽约 2024-12-25 2024-12-30` - 自动推荐最佳机场
+`/flight PEK LAX 2024-12-25` - 传统机场代码
 
 请选择功能:"""
     
@@ -1207,6 +1300,11 @@ async def flight_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
             await _execute_price_monitoring(update, context, text)
             flight_session_manager.remove_session(user_id)
             
+        elif action == "airport_info" and waiting_for == "airport_query":
+            # 处理机场信息查询
+            await _execute_airport_query(update, context, text)
+            flight_session_manager.remove_session(user_id)
+            
     except Exception as e:
         logger.error(f"处理航班文本输入失败: {e}")
         await send_error(context, update.message.chat_id, f"处理失败: {str(e)}")
@@ -1223,22 +1321,221 @@ async def _parse_and_execute_flight_search(update: Update, context: ContextTypes
                         "例如: `PEK LAX 2024-12-25 2024-12-30`")
         return
     
-    departure_id = parts[0].upper()
-    arrival_id = parts[1].upper()
+    departure_input = parts[0]
+    arrival_input = parts[1]
     outbound_date = parts[2]
     return_date = parts[3] if len(parts) > 3 else None
     
-    # 简单的日期格式验证
+    # 日期格式验证
     try:
         datetime.strptime(outbound_date, '%Y-%m-%d')
         if return_date:
             datetime.strptime(return_date, '%Y-%m-%d')
     except ValueError:
         await send_error(context, update.message.chat_id, 
-                        "❌ 日期格式错误，请使用 YYYY-MM-DD 格式")
+                        "❌ 日期格式错误\n\n请使用 YYYY-MM-DD 格式\n例如: 2024-12-25")
         return
     
-    await _execute_flight_search(update, context, departure_id, arrival_id, outbound_date, return_date)
+    # 智能解析机场输入
+    airport_resolution = resolve_flight_airports(departure_input, arrival_input)
+    resolution_status = airport_resolution.get("status")
+    
+    if resolution_status == "ready":
+        # 直接搜索
+        dep_primary, arr_primary = get_recommended_airport_pair(
+            airport_resolution["departure"], 
+            airport_resolution["arrival"]
+        )
+        await _execute_flight_search(update, context, dep_primary, arr_primary, outbound_date, return_date)
+        
+    elif resolution_status in ["multiple_choice", "suggestion_needed"]:
+        # 显示选择信息但提供自动搜索推荐选项
+        selection_message = format_airport_selection_message(
+            airport_resolution["departure"], 
+            airport_resolution["arrival"]
+        )
+        
+        dep_result = airport_resolution["departure"]
+        arr_result = airport_resolution["arrival"]
+        
+        # 如果可以推荐，提供快速搜索并显示选择信息
+        if (dep_result.get("status") in ["success", "multiple"] and 
+            arr_result.get("status") in ["success", "multiple"]):
+            dep_primary, arr_primary = get_recommended_airport_pair(dep_result, arr_result)
+            if dep_primary and arr_primary:
+                selection_message += f"\n⚡ *自动选择推荐*: {dep_primary} → {arr_primary}"
+                
+                # 先发送选择信息
+                info_message = await context.bot.send_message(
+                    chat_id=update.message.chat_id,
+                    text=foldable_text_with_markdown_v2(selection_message),
+                    parse_mode="MarkdownV2"
+                )
+                
+                config = get_config()
+                await _schedule_auto_delete(context, info_message.chat_id, info_message.message_id, 10)
+                
+                # 然后执行搜索
+                await _execute_flight_search(update, context, dep_primary, arr_primary, outbound_date, return_date)
+                return
+        
+        # 如果无法自动推荐，显示错误和建议
+        selection_message += "\n\n❌ 无法自动选择机场，请明确指定\n"
+        await send_error(context, update.message.chat_id, selection_message)
+        
+    else:
+        # 无法识别
+        await send_error(context, update.message.chat_id, 
+                        f"❌ 无法识别机场: {departure_input}, {arrival_input}\n\n"
+                        "请使用:\n"
+                        "• 标准IATA代码: `PEK LAX`\n"  
+                        "• 中文城市名: `北京 洛杉矶`\n"
+                        "• 英文城市名: `Beijing Los Angeles`")
+
+async def _execute_airport_query(update: Update, context: ContextTypes.DEFAULT_TYPE, query_text: str) -> None:
+    """执行机场信息查询"""
+    from telegram.helpers import escape_markdown
+    from utils.airport_mapper import resolve_airport_codes
+    
+    # 检查是否是机场代码
+    if len(query_text) == 3 and query_text.isupper() and query_text.isalpha():
+        # 直接查询机场代码
+        airport_info = format_airport_info(query_text)
+        
+        keyboard = [
+            [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        message = await context.bot.send_message(
+            chat_id=update.message.chat_id,
+            text=foldable_text_with_markdown_v2(airport_info),
+            parse_mode="MarkdownV2",
+            reply_markup=reply_markup
+        )
+        
+        # 调度自动删除
+        config = get_config()
+        await _schedule_auto_delete(context, message.chat_id, message.message_id, 
+                                  getattr(config, 'auto_delete_delay', 600))
+        
+    else:
+        # 查询城市的机场
+        result = resolve_airport_codes(query_text)
+        
+        if result.get("status") == "success":
+            airport_info = format_airport_info(result["primary"])
+            
+            keyboard = [
+                [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            message = await context.bot.send_message(
+                chat_id=update.message.chat_id,
+                text=foldable_text_with_markdown_v2(airport_info),
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup
+            )
+            
+        elif result.get("status") == "multiple":
+            # 多个机场，显示列表
+            city = result.get("city", query_text)
+            airports = result.get("airports", [])
+            safe_city = escape_markdown(city, version=2)
+            
+            response_parts = [f"🛬 *{safe_city}的机场信息*\n"]
+            
+            for i, airport in enumerate(airports, 1):
+                code = airport.get("code", "")
+                name = airport.get("name", "")
+                note = airport.get("note", "")
+                
+                safe_name = escape_markdown(name, version=2)
+                safe_note = escape_markdown(note, version=2)
+                
+                response_parts.append(f"{i}\\. *{code}* \\- {safe_name}")
+                if note:
+                    response_parts.append(f"   💡 {safe_note}")
+                response_parts.append("")
+            
+            # 添加快速航班搜索按钮
+            keyboard = []
+            if len(airports) <= 3:  # 如果机场不多，提供快速搜索按钮
+                for airport in airports[:2]:  # 最多显示前2个
+                    code = airport.get("code", "")
+                    keyboard.append([
+                        InlineKeyboardButton(f"✈️ 从{code}出发搜索航班", callback_data=f"flight_search_from:{code}")
+                    ])
+            
+            keyboard.append([InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")])
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            message = await context.bot.send_message(
+                chat_id=update.message.chat_id,
+                text=foldable_text_with_markdown_v2("\n".join(response_parts)),
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup
+            )
+            
+        elif result.get("status") == "suggestion_needed":
+            # 显示建议
+            city = result.get("city", query_text)
+            suggestions = result.get("suggestions", [])
+            safe_city = escape_markdown(city, version=2)
+            
+            response_parts = [
+                f"❓ *{safe_city}* 暂无国际机场\n",
+                "🔍 *建议方案*:"
+            ]
+            
+            for suggestion in suggestions:
+                airport = suggestion.get("airport", "")
+                airport_city = suggestion.get("city", "")
+                transport = suggestion.get("transport", "")
+                note = suggestion.get("note", "")
+                
+                safe_airport_city = escape_markdown(airport_city, version=2)
+                safe_transport = escape_markdown(transport, version=2)
+                
+                note_icon = "⭐" if note == "推荐" else "🚄"
+                response_parts.append(f"{note_icon} *{airport}* \\- {safe_airport_city}")
+                response_parts.append(f"   🚅 {safe_transport}")
+            
+            keyboard = [
+                [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            message = await context.bot.send_message(
+                chat_id=update.message.chat_id,
+                text=foldable_text_with_markdown_v2("\n".join(response_parts)),
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup
+            )
+            
+        else:
+            # 未找到
+            safe_query = escape_markdown(query_text, version=2)
+            error_message = f"❌ 未找到 '{safe_query}' 的机场信息\n\n请检查输入格式或尝试使用其他关键词"
+            
+            keyboard = [
+                [InlineKeyboardButton("🔄 重新查询", callback_data="flight_airport_info")],
+                [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            message = await context.bot.send_message(
+                chat_id=update.message.chat_id,
+                text=foldable_text_with_markdown_v2(error_message),
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup
+            )
+        
+        # 调度自动删除
+        config = get_config()
+        await _schedule_auto_delete(context, message.chat_id, message.message_id, 
+                                  getattr(config, 'auto_delete_delay', 600))
 
 async def _execute_price_monitoring(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
     """执行价格监控设置"""
@@ -1345,6 +1642,7 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 InlineKeyboardButton("🗺️ 多城市", callback_data="flight_multi_city")
             ],
             [
+                InlineKeyboardButton("🛬 机场信息", callback_data="flight_airport_info"),
                 InlineKeyboardButton("❌ 关闭", callback_data="flight_close")
             ]
         ]
@@ -1389,12 +1687,12 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         # 航班搜索指引
         search_help_text = """🔍 请输入航班搜索信息:
 
-格式: `出发机场 到达机场 出发日期 [返回日期]`
+格式: `出发地 到达地 出发日期 [返回日期]`
 
-例如:
-• `PEK LAX 2025-09-25` (单程)
-• `PEK LAX 2025-09-25 2025-09-30` (往返)
-• `BJS NYC 2025-09-25` (单程)"""
+🌟 智能输入支持:
+• 城市名: `北京 洛杉矶 2024-12-25`
+• 机场代码: `PEK LAX 2024-12-25 2024-12-30`
+• 中英混合: `上海 New York 2024-12-25`"""
 
         await query.edit_message_text(
             text=foldable_text_with_markdown_v2(search_help_text),
@@ -1441,6 +1739,37 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             parse_mode="MarkdownV2"
         )
     
+    elif data == "flight_airport_info":
+        user_id = update.effective_user.id
+        
+        # 设置会话状态
+        flight_session_manager.set_session(user_id, {
+            "action": "airport_info",
+            "waiting_for": "airport_query"
+        })
+        
+        airport_help_text = """🛬 *机场信息查询*
+
+请输入要查询的机场或城市:
+
+🌟 *支持格式*:
+• 机场代码: `PEK`, `LAX`, `NRT`
+• 中文城市: `北京`, `上海`, `东京`
+• 英文城市: `Beijing`, `New York`, `Tokyo`
+
+💡 *示例*:
+• `PVG` \\- 查询浦东机场详细信息
+• `上海` \\- 查询上海的所有机场
+• `New York` \\- 查询纽约地区机场"""
+
+        await query.edit_message_text(
+            text=foldable_text_with_markdown_v2(airport_help_text),
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
+            ]),
+            parse_mode="MarkdownV2"
+        )
+    
     elif data == "flight_multi_city":
         # 多城市功能
         await query.edit_message_text(
@@ -1452,6 +1781,35 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                  "• 考虑中转时间和便利性",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔍 开始搜索", callback_data="flight_search")],
+                [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
+            ])
+        )
+    
+    elif data.startswith("flight_qs:"):
+        # 处理快速搜索 (quick search) 
+        short_id = data.split(":", 1)[1]
+        full_data = get_full_flight_id(short_id)
+        
+        if not full_data:
+            await query.edit_message_text("❌ 链接已过期，请重新输入")
+            config = get_config()
+            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            return
+        
+        if full_data.startswith("flight_quick_search:"):
+            search_data = full_data.replace("flight_quick_search:", "")
+            parts = search_data.split(":")
+            if len(parts) >= 4:
+                departure_id, arrival_id, outbound_date = parts[0], parts[1], parts[2]
+                return_date = parts[3] if parts[3] else None
+                
+                await _execute_flight_search(update, context, departure_id, arrival_id, outbound_date, return_date, query)
+    
+    elif data.startswith("flight_as:"):
+        # 处理机场选择 (airport selection) - 暂未实现详细选择UI
+        await query.edit_message_text(
+            text="🔧 详细机场选择功能开发中...\n\n请使用推荐选项或直接输入完整命令",
+            reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
             ])
         )
