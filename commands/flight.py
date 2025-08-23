@@ -19,6 +19,7 @@ from telegram.helpers import escape_markdown
 
 from utils.command_factory import command_factory
 from utils.config_manager import get_config
+from utils.error_handling import with_error_handling
 from utils.formatter import foldable_text_v2, foldable_text_with_markdown_v2, format_with_markdown_v2
 from utils.message_manager import (
     delete_user_command, 
@@ -1564,8 +1565,12 @@ async def _execute_flight_search(update: Update, context: ContextTypes.DEFAULT_T
                                 departure_id: str, arrival_id: str, outbound_date: str, 
                                 return_date: str = None, callback_query: CallbackQuery = None) -> None:
     """执行航班搜索 - 与map.py的_execute_location_search相同模式"""
-    # 检测用户语言
-    user_locale = update.effective_user.language_code if update.effective_user else None
+    # 检测用户语言 - 安全获取用户信息
+    user_locale = None
+    if hasattr(update, 'effective_user') and update.effective_user:
+        user_locale = update.effective_user.language_code
+    elif callback_query and hasattr(callback_query, 'from_user') and callback_query.from_user:
+        user_locale = callback_query.from_user.language_code
     language = detect_user_language("", user_locale)  # 航班搜索主要使用locale检测
     
     trip_type = "往返" if return_date else "单程"
@@ -2066,6 +2071,7 @@ async def _execute_price_monitoring(update: Update, context: ContextTypes.DEFAUL
         await _schedule_auto_delete(context, message.chat_id, message.message_id, 
                                   getattr(config, 'auto_delete_delay', 600))
 
+@with_error_handling
 async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理航班功能的回调查询 - 与map.py的map_callback_handler完全一致的结构"""
     query = update.callback_query
@@ -2081,9 +2087,9 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         return
     
     elif data == "flight_main_menu":
-        # 清理用户会话并返回主菜单 - 与map.py完全一致
-        user_id = update.effective_user.id
-        flight_session_manager.remove_session(user_id)
+            # 清理用户会话并返回主菜单 - 与map.py完全一致
+            user_id = update.effective_user.id
+            flight_session_manager.remove_session(user_id)
         
         # 返回主菜单
         keyboard = [
@@ -2419,7 +2425,7 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 departure_id, arrival_id, outbound_date = parts[0], parts[1], parts[2]
                 return_date = parts[3] if parts[3] else None
                 
-                await _execute_flight_search(context, query, departure_id, arrival_id, outbound_date, return_date, query)
+                await _execute_flight_search(query, context, departure_id, arrival_id, outbound_date, return_date, query)
             else:
                 await query.edit_message_text("❌ 搜索数据格式错误")
                 
@@ -2475,7 +2481,7 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 else:
                     # 直接搜索
                     primary_code = arr_result.get("primary", arrival_input)
-                    await _execute_flight_search(context, query, selected_dep_code, primary_code, outbound_date, return_date, query)
+                    await _execute_flight_search(query, context, selected_dep_code, primary_code, outbound_date, return_date, query)
             else:
                 await query.edit_message_text("❌ 选择数据格式错误")
                 
@@ -2531,7 +2537,7 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 else:
                     # 直接搜索
                     primary_code = dep_result.get("primary", departure_input)
-                    await _execute_flight_search(context, query, primary_code, selected_arr_code, outbound_date, return_date, query)
+                    await _execute_flight_search(query, context, primary_code, selected_arr_code, outbound_date, return_date, query)
             else:
                 await query.edit_message_text("❌ 选择数据格式错误")
 
