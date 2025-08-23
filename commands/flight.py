@@ -715,12 +715,51 @@ def format_flight_info(flight: Dict) -> str:
     result = ""
     
     # 显示航班段信息
-    for i, segment in enumerate(flights):
-        if i > 0:
-            result += "\n📍 *中转*\n"
+    flight_type = flight.get('type', '')  # "Round trip", "One way", etc.
+    is_round_trip = flight_type == "Round trip"
+    
+    # 用于检测返程段开始的逻辑
+    original_departure = None
+    outbound_final_destination = None
+    is_return_leg = False
+    
+    if len(flights) > 1:
+        # 获取原始出发地和最终目的地
+        original_departure = flights[0].get('departure_airport', {}).get('id', '')
         
+        # 寻找往程的最终目的地（通过寻找返程开始的地点）
+        for i in range(len(flights)):
+            curr_departure = flights[i].get('departure_airport', {}).get('id', '')
+            curr_arrival = flights[i].get('arrival_airport', {}).get('id', '')
+            
+            # 如果有航班从某地出发回到原始出发地，那么这个某地就是往程的最终目的地
+            if i > 0 and curr_arrival == original_departure:
+                # 这是返程段的一部分，前一个到达地可能是往程终点
+                for j in range(i):
+                    if flights[j].get('arrival_airport', {}).get('id', '') == curr_departure:
+                        outbound_final_destination = curr_departure
+                        break
+                break
+    
+    for i, segment in enumerate(flights):
         departure = segment.get('departure_airport', {})
         arrival = segment.get('arrival_airport', {})
+        
+        departure_id = departure.get('id', '')
+        arrival_id = arrival.get('id', '')
+        
+        # 检测是否是返程段开始
+        if (len(flights) > 1 and outbound_final_destination and 
+            departure_id == outbound_final_destination and not is_return_leg and
+            i > 0):
+            result += "\n🔄 *返程航班*\n"
+            is_return_leg = True
+        elif i > 0 and not is_return_leg:
+            # 普通中转
+            result += "\n📍 *中转*\n"
+        elif i == 0 and len(flights) > 2:
+            # 第一段，如果有多个航班段则标记为出发段
+            result += "🛫 *出发航班*\n"
         
         result += f"✈️ {segment.get('airline', 'Unknown')} {segment.get('flight_number', '')}\n"
         result += f"🛫 {departure.get('time', '')} {departure.get('name', departure.get('id', ''))}\n"
@@ -821,10 +860,36 @@ def format_flight_info(flight: Dict) -> str:
                 result += f" ({diff}%)"
         result += "\n"
     
-    # 航班类型信息
+    # 航班类型信息和总结
     flight_type = flight.get('type')
     if flight_type:
         result += f"🎫 航班类型: {flight_type}\n"
+        
+        # 为往返航班添加详细总结
+        if flight_type == "Round trip" and len(flights) > 1:
+            original_departure = flights[0].get('departure_airport', {})
+            final_arrival = flights[-1].get('arrival_airport', {})
+            
+            outbound_count = 0
+            return_count = 0
+            
+            # 计算出发段和返程段的航班数量
+            for i, segment in enumerate(flights):
+                departure_id = segment.get('departure_airport', {}).get('id', '')
+                arrival_id = segment.get('arrival_airport', {}).get('id', '')
+                
+                # 如果到达原始出发地，说明是返程段
+                if arrival_id == original_departure.get('id', ''):
+                    return_count += 1
+                elif outbound_count == 0 or return_count == 0:
+                    outbound_count += 1
+            
+            if outbound_count == 0:
+                outbound_count = len(flights) - return_count
+            
+            result += f"📋 行程总结: 出发 {outbound_count} 段 + 返程 {return_count} 段\n"
+            result += f"🛫 原始出发: {original_departure.get('name', original_departure.get('id', ''))}\n"
+            result += f"🛬 最终返回: {final_arrival.get('name', final_arrival.get('id', ''))}\n"
     
     # 预订建议（从Telegraph版本整合）
     flights_info = flight.get('flights', [])
@@ -1303,6 +1368,8 @@ async def create_booking_telegraph_page(all_flights: List[Dict], search_params: 
                     if separate_tickets:
                         content += f"   🎫 分别预订机票\n"
                         
+                        total_price = 0
+                        
                         # 处理出发段预订
                         departing = booking_option.get('departing', {})
                         if departing:
@@ -1313,6 +1380,14 @@ async def create_booking_telegraph_page(all_flights: List[Dict], search_params: 
                             price = departing.get('price')
                             if price:
                                 content += f"      💰 价格: ${price}\n"
+                                total_price += price
+                            # 显示出发段的预订链接
+                            booking_request = departing.get('booking_request', {})
+                            booking_url = booking_request.get('url', '')
+                            if booking_url and 'google.com' not in booking_url:
+                                content += f"      🔗 立即预订出发段: {booking_url}\n"
+                            elif book_with:
+                                content += f"      💡 建议访问 {book_with} 官网预订\n"
                         
                         # 处理返程段预订
                         returning = booking_option.get('returning', {})
@@ -1324,6 +1399,18 @@ async def create_booking_telegraph_page(all_flights: List[Dict], search_params: 
                             price = returning.get('price')
                             if price:
                                 content += f"      💰 价格: ${price}\n"
+                                total_price += price
+                            # 显示返程段的预订链接
+                            booking_request = returning.get('booking_request', {})
+                            booking_url = booking_request.get('url', '')
+                            if booking_url and 'google.com' not in booking_url:
+                                content += f"      🔗 立即预订返程段: {booking_url}\n"
+                            elif book_with:
+                                content += f"      💡 建议访问 {book_with} 官网预订\n"
+                        
+                        # 显示总价（如果有往返价格）
+                        if total_price > 0:
+                            content += f"   💵 往返总价: ${total_price}\n"
                     else:
                         # 一起预订的处理
                         together_option = booking_option.get('together', {})
@@ -2783,6 +2870,8 @@ async def _show_booking_options(query: CallbackQuery, context: ContextTypes.DEFA
                                 if separate_tickets:
                                     result_text += f"   🎫 *分别预订机票*\n"
                                     
+                                    total_price = 0
+                                    
                                     # 处理出发段预订
                                     departing = booking_option.get('departing', {})
                                     if departing:
@@ -2793,6 +2882,14 @@ async def _show_booking_options(query: CallbackQuery, context: ContextTypes.DEFA
                                         price = departing.get('price')
                                         if price:
                                             result_text += f"      💰 价格: ${price}\n"
+                                            total_price += price
+                                        # 显示出发段的预订链接
+                                        booking_request = departing.get('booking_request', {})
+                                        booking_url = booking_request.get('url', '')
+                                        if booking_url and 'google.com' not in booking_url:
+                                            result_text += f"      🔗 [立即预订出发段]({booking_url})\n"
+                                        elif book_with:
+                                            result_text += f"      💡 建议访问 {book_with} 官网预订\n"
                                     
                                     # 处理返程段预订
                                     returning = booking_option.get('returning', {})
@@ -2804,6 +2901,18 @@ async def _show_booking_options(query: CallbackQuery, context: ContextTypes.DEFA
                                         price = returning.get('price')
                                         if price:
                                             result_text += f"      💰 价格: ${price}\n"
+                                            total_price += price
+                                        # 显示返程段的预订链接
+                                        booking_request = returning.get('booking_request', {})
+                                        booking_url = booking_request.get('url', '')
+                                        if booking_url and 'google.com' not in booking_url:
+                                            result_text += f"      🔗 [立即预订返程段]({booking_url})\n"
+                                        elif book_with:
+                                            result_text += f"      💡 建议访问 {book_with} 官网预订\n"
+                                    
+                                    # 显示总价（如果有往返价格）
+                                    if total_price > 0:
+                                        result_text += f"   💵 *往返总价: ${total_price}*\n"
                                 else:
                                     # 一起预订的处理
                                     together_option = booking_option.get('together', {})

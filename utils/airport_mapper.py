@@ -91,6 +91,69 @@ MAJOR_CITIES_AIRPORTS = {
             {"code": "KMG", "name": "昆明长水国际机场", "name_en": "Kunming Changshui International Airport", "note": "面向南亚东南亚枢纽"}
         ]
     },
+    "天津": {
+        "primary": "TSN", 
+        "secondary": [], 
+        "airports": [
+            {"code": "TSN", "name": "天津滨海国际机场", "name_en": "Tianjin Binhai International Airport", "note": "京津冀重要机场"}
+        ]
+    },
+    "武汉": {
+        "primary": "WUH", 
+        "secondary": [], 
+        "airports": [
+            {"code": "WUH", "name": "武汉天河国际机场", "name_en": "Wuhan Tianhe International Airport", "note": "华中地区枢纽"}
+        ]
+    },
+    "郑州": {
+        "primary": "CGO", 
+        "secondary": [], 
+        "airports": [
+            {"code": "CGO", "name": "郑州新郑国际机场", "name_en": "Zhengzhou Xinzheng International Airport", "note": "中原地区重要机场"}
+        ]
+    },
+    "沈阳": {
+        "primary": "SHE", 
+        "secondary": [], 
+        "airports": [
+            {"code": "SHE", "name": "沈阳桃仙国际机场", "name_en": "Shenyang Taoxian International Airport", "note": "东北地区重要机场"}
+        ]
+    },
+    "大连": {
+        "primary": "DLC", 
+        "secondary": [], 
+        "airports": [
+            {"code": "DLC", "name": "大连周水子国际机场", "name_en": "Dalian Zhoushuizi International Airport", "note": "东北沿海重要机场"}
+        ]
+    },
+    "青岛": {
+        "primary": "TAO", 
+        "secondary": [], 
+        "airports": [
+            {"code": "TAO", "name": "青岛胶东国际机场", "name_en": "Qingdao Jiaodong International Airport", "note": "山东省重要机场"}
+        ]
+    },
+    "长沙": {
+        "primary": "CSX", 
+        "secondary": [], 
+        "airports": [
+            {"code": "CSX", "name": "长沙黄花国际机场", "name_en": "Changsha Huanghua International Airport", "note": "湖南省重要机场"}
+        ]
+    },
+    "南昌": {
+        "primary": "KHN", 
+        "secondary": [], 
+        "airports": [
+            {"code": "KHN", "name": "南昌昌北国际机场", "name_en": "Nanchang Changbei International Airport", "note": "江西省重要机场"}
+        ]
+    },
+    "合肥": {
+        "primary": "HFE", 
+        "secondary": [], 
+        "airports": [
+            {"code": "HFE", "name": "合肥新桥国际机场", "name_en": "Hefei Xinqiao International Airport", "note": "安徽省重要机场"}
+        ]
+    },
     
     # 港澳台
     "香港": {
@@ -157,6 +220,92 @@ MAJOR_CITIES_AIRPORTS = {
             {"code": "PUS", "name": "釜山金海国际机场", "name_en": "Busan Gimhae International Airport", "note": "韩国第二大机场"}
         ]
     },
+    "济州": {
+        "primary": "CJU", 
+        "secondary": [], 
+        "airports": [
+            {"code": "CJU", "name": "济州国际机场", "name_en": "Jeju International Airport", "note": "济州岛主要机场"}
+        ]
+    },
+    "大邱": {
+        "primary": "TAE", 
+        "secondary": [], 
+        "airports": [
+            {"code": "TAE", "name": "大邱国际机场", "name_en": "Daegu International Airport", "note": "韩国东南部机场"}
+        ]
+    },
+    "光州": {
+        "primary": "KWJ", 
+        "secondary": [], 
+        "airports": [
+            {"code": "KWJ", "name": "光州机场", "name_en": "Gwangju Airport", "note": "韩国西南部机场"}
+        ]
+    },
+    
+    # 补充日本其他重要城市
+    "福冈": {
+        "primary": "FUK", 
+        "secondary": [], 
+        "airports": [
+            {"code": "FUK", "name": "福冈机场", "name_en": "Fukuoka Airport", "note": "九州地区主要机场"}
+        ]
+    },
+    "札幌": {
+        "primary": "CTS", 
+        "secondary": [], 
+        "airports": [
+            {"code": "CTS", "name": "新千岁机场", "name_en": "New Chitose Airport", "note": "北海道主要机场"}
+        ]
+    },
+    "仙台": {
+        "primary": "SDJ", 
+        "secondary": [], 
+        "airports": [
+            {"code": "SDJ", "name": "仙台机场", "name_en": "Sendai Airport", "note": "东北地区主要机场"}
+        ]
+    },
+    "广岛": {
+        "primary": "HIJ", 
+        "secondary": [], 
+        "airports": [
+            {"code": "HIJ", "name": "广岛机场", "name_en": "Hiroshima Airport", "note": "中国地区主要机场"}
+        ]
+    },
+    "冲绳": {
+        "primary": "OKA", 
+        "secondary": [], 
+        "airports": [
+            {"code": "OKA", "name": "那霸机场", "name_en": "Naha Airport", "note": "冲绳主要机场"}
+        ]
+    },
+    "熊本": {
+        "primary": "KMJ", 
+        "secondary": [], 
+        "airports": [
+            {"code": "KMJ", "name": "熊本机场", "name_en": "Kumamoto Airport", "note": "九州地区机场"}
+        ]
+    },
+    "鹿儿岛": {
+        "primary": "KOJ", 
+        "secondary": [], 
+        "airports": [
+            {"code": "KOJ", "name": "鹿儿岛机场", "name_en": "Kagoshima Airport", "note": "九州南部机场"}
+        ]
+    },
+    "高松": {
+        "primary": "TAK", 
+        "secondary": [], 
+        "airports": [
+            {"code": "TAK", "name": "高松机场", "name_en": "Takamatsu Airport", "note": "四国地区主要机场"}
+        ]
+    },
+    "松山": {
+        "primary": "MYJ", 
+        "secondary": [], 
+        "airports": [
+            {"code": "MYJ", "name": "松山机场", "name_en": "Matsuyama Airport", "note": "四国地区机场"}
+        ]
+    },
     
     # 东南亚主要城市
     "新加坡": {
@@ -210,6 +359,421 @@ MAJOR_CITIES_AIRPORTS = {
         ]
     },
     
+    # 补充东南亚其他重要城市
+    "清迈": {
+        "primary": "CNX", 
+        "secondary": [], 
+        "airports": [
+            {"code": "CNX", "name": "清迈国际机场", "name_en": "Chiang Mai International Airport", "note": "泰国北部主要机场"}
+        ]
+    },
+    "普吉": {
+        "primary": "HKT", 
+        "secondary": [], 
+        "airports": [
+            {"code": "HKT", "name": "普吉国际机场", "name_en": "Phuket International Airport", "note": "泰国南部旅游机场"}
+        ]
+    },
+    "芭提雅": {
+        "primary": "UTP", 
+        "secondary": [], 
+        "airports": [
+            {"code": "UTP", "name": "乌塔堡国际机场", "name_en": "U-Tapao International Airport", "note": "芭提雅地区机场"}
+        ]
+    },
+    "合艾": {
+        "primary": "HDY", 
+        "secondary": [], 
+        "airports": [
+            {"code": "HDY", "name": "合艾机场", "name_en": "Hat Yai Airport", "note": "泰国南部机场"}
+        ]
+    },
+    "苏梅岛": {
+        "primary": "USM", 
+        "secondary": [], 
+        "airports": [
+            {"code": "USM", "name": "苏梅机场", "name_en": "Samui Airport", "note": "泰国海岛度假胜地"}
+        ]
+    },
+    "甲米": {
+        "primary": "KBV", 
+        "secondary": [], 
+        "airports": [
+            {"code": "KBV", "name": "甲米机场", "name_en": "Krabi Airport", "note": "泰国南部海滨旅游机场"}
+        ]
+    },
+    "素可泰": {
+        "primary": "THS", 
+        "secondary": [], 
+        "airports": [
+            {"code": "THS", "name": "素可泰机场", "name_en": "Sukhothai Airport", "note": "泰国古都历史名城"}
+        ]
+    },
+    "乌隆他尼": {
+        "primary": "UTH", 
+        "secondary": [], 
+        "airports": [
+            {"code": "UTH", "name": "乌隆他尼机场", "name_en": "Udon Thani Airport", "note": "泰国东北部机场"}
+        ]
+    },
+    "乌汶": {
+        "primary": "UBP", 
+        "secondary": [], 
+        "airports": [
+            {"code": "UBP", "name": "乌汶机场", "name_en": "Ubon Ratchathani Airport", "note": "泰国东北部机场"}
+        ]
+    },
+    "巴厘岛": {
+        "primary": "DPS", 
+        "secondary": [], 
+        "airports": [
+            {"code": "DPS", "name": "伍拉·赖国际机场", "name_en": "Ngurah Rai International Airport", "note": "巴厘岛登巴萨机场"}
+        ]
+    },
+    "泗水": {
+        "primary": "MLG", 
+        "secondary": [], 
+        "airports": [
+            {"code": "MLG", "name": "阿卜杜勒·拉赫曼·萨利赫机场", "name_en": "Abdul Rachman Saleh Airport", "note": "东爪哇主要机场"}
+        ]
+    },
+    "日惹": {
+        "primary": "JOG", 
+        "secondary": [], 
+        "airports": [
+            {"code": "JOG", "name": "日惹国际机场", "name_en": "Yogyakarta International Airport", "note": "中爪哇文化名城"}
+        ]
+    },
+    "棉兰": {
+        "primary": "KNO", 
+        "secondary": [], 
+        "airports": [
+            {"code": "KNO", "name": "瓜拉纳穆国际机场", "name_en": "Kualanamu International Airport", "note": "苏门答腊北部机场"}
+        ]
+    },
+    "宿务": {
+        "primary": "CEB", 
+        "secondary": [], 
+        "airports": [
+            {"code": "CEB", "name": "宿务国际机场", "name_en": "Mactan-Cebu International Airport", "note": "菲律宾第二大机场"}
+        ]
+    },
+    "达沃": {
+        "primary": "DVO", 
+        "secondary": [], 
+        "airports": [
+            {"code": "DVO", "name": "达沃国际机场", "name_en": "Francisco Bangoy International Airport", "note": "菲律宾南部主要机场"}
+        ]
+    },
+    "卡加延德奥罗": {
+        "primary": "CGY", 
+        "secondary": [], 
+        "airports": [
+            {"code": "CGY", "name": "卡加延德奥罗机场", "name_en": "Cagayan de Oro Airport", "note": "菲律宾棉兰老岛机场"}
+        ]
+    },
+    "仰光": {
+        "primary": "RGN", 
+        "secondary": [], 
+        "airports": [
+            {"code": "RGN", "name": "仰光国际机场", "name_en": "Yangon International Airport", "note": "缅甸主要国际机场"}
+        ]
+    },
+    "曼德勒": {
+        "primary": "MDL", 
+        "secondary": [], 
+        "airports": [
+            {"code": "MDL", "name": "曼德勒国际机场", "name_en": "Mandalay International Airport", "note": "缅甸第二大机场"}
+        ]
+    },
+    "金边": {
+        "primary": "PNH", 
+        "secondary": [], 
+        "airports": [
+            {"code": "PNH", "name": "金边国际机场", "name_en": "Phnom Penh International Airport", "note": "柬埔寨主要机场"}
+        ]
+    },
+    "暹粒": {
+        "primary": "REP", 
+        "secondary": [], 
+        "airports": [
+            {"code": "REP", "name": "暹粒国际机场", "name_en": "Siem Reap International Airport", "note": "吴哥窟旅游机场"}
+        ]
+    },
+    "万象": {
+        "primary": "VTE", 
+        "secondary": [], 
+        "airports": [
+            {"code": "VTE", "name": "万象瓦岱国际机场", "name_en": "Wattay International Airport", "note": "老挝主要机场"}
+        ]
+    },
+    "琅勃拉邦": {
+        "primary": "LPQ", 
+        "secondary": [], 
+        "airports": [
+            {"code": "LPQ", "name": "琅勃拉邦机场", "name_en": "Luang Prabang Airport", "note": "老挝古都旅游机场"}
+        ]
+    },
+    "斯里巴加湾市": {
+        "primary": "BWN", 
+        "secondary": [], 
+        "airports": [
+            {"code": "BWN", "name": "文莱国际机场", "name_en": "Brunei International Airport", "note": "文莱唯一国际机场"}
+        ]
+    },
+    "亚庇": {
+        "primary": "BKI", 
+        "secondary": [], 
+        "airports": [
+            {"code": "BKI", "name": "亚庇国际机场", "name_en": "Kota Kinabalu International Airport", "note": "东马沙巴州机场"}
+        ]
+    },
+    "古晋": {
+        "primary": "KCH", 
+        "secondary": [], 
+        "airports": [
+            {"code": "KCH", "name": "古晋国际机场", "name_en": "Kuching International Airport", "note": "东马砂拉越州机场"}
+        ]
+    },
+    "槟城": {
+        "primary": "PEN", 
+        "secondary": [], 
+        "airports": [
+            {"code": "PEN", "name": "槟城国际机场", "name_en": "Penang International Airport", "note": "马来西亚北部机场"}
+        ]
+    },
+    "兰卡威": {
+        "primary": "LGK", 
+        "secondary": [], 
+        "airports": [
+            {"code": "LGK", "name": "兰卡威国际机场", "name_en": "Langkawi International Airport", "note": "马来西亚度假岛机场"}
+        ]
+    },
+    
+    # 南亚主要城市
+    "新德里": {
+        "primary": "DEL", 
+        "secondary": [], 
+        "airports": [
+            {"code": "DEL", "name": "英迪拉·甘地国际机场", "name_en": "Indira Gandhi International Airport", "note": "印度首都机场,南亚重要枢纽"}
+        ]
+    },
+    "孟买": {
+        "primary": "BOM", 
+        "secondary": [], 
+        "airports": [
+            {"code": "BOM", "name": "贾特拉帕蒂·希瓦吉国际机场", "name_en": "Chhatrapati Shivaji International Airport", "note": "印度商业之都"}
+        ]
+    },
+    "班加罗尔": {
+        "primary": "BLR", 
+        "secondary": [], 
+        "airports": [
+            {"code": "BLR", "name": "班加罗尔国际机场", "name_en": "Kempegowda International Airport", "note": "印度IT中心"}
+        ]
+    },
+    "钦奈": {
+        "primary": "MAA", 
+        "secondary": [], 
+        "airports": [
+            {"code": "MAA", "name": "钦奈国际机场", "name_en": "Chennai International Airport", "note": "南印度重要机场"}
+        ]
+    },
+    "海得拉巴": {
+        "primary": "HYD", 
+        "secondary": [], 
+        "airports": [
+            {"code": "HYD", "name": "海得拉巴国际机场", "name_en": "Rajiv Gandhi International Airport", "note": "印度IT城市"}
+        ]
+    },
+    "加尔各答": {
+        "primary": "CCU", 
+        "secondary": [], 
+        "airports": [
+            {"code": "CCU", "name": "内塔吉·苏巴斯·钱德拉·鲍斯国际机场", "name_en": "Netaji Subhash Chandra Bose International Airport", "note": "东印度重要机场"}
+        ]
+    },
+    "加德满都": {
+        "primary": "KTM", 
+        "secondary": [], 
+        "airports": [
+            {"code": "KTM", "name": "特里布万国际机场", "name_en": "Tribhuvan International Airport", "note": "尼泊尔唯一国际机场"}
+        ]
+    },
+    "达卡": {
+        "primary": "DAC", 
+        "secondary": [], 
+        "airports": [
+            {"code": "DAC", "name": "沙阿贾拉勒国际机场", "name_en": "Hazrat Shahjalal International Airport", "note": "孟加拉国主要机场"}
+        ]
+    },
+    "科伦坡": {
+        "primary": "CMB", 
+        "secondary": [], 
+        "airports": [
+            {"code": "CMB", "name": "班达拉奈克国际机场", "name_en": "Bandaranaike International Airport", "note": "斯里兰卡主要机场"}
+        ]
+    },
+    "卡拉奇": {
+        "primary": "KHI", 
+        "secondary": [], 
+        "airports": [
+            {"code": "KHI", "name": "真纳国际机场", "name_en": "Jinnah International Airport", "note": "巴基斯坦最大机场"}
+        ]
+    },
+    "拉合尔": {
+        "primary": "LHE", 
+        "secondary": [], 
+        "airports": [
+            {"code": "LHE", "name": "阿拉马·伊克巴勒国际机场", "name_en": "Allama Iqbal International Airport", "note": "巴基斯坦第二大机场"}
+        ]
+    },
+    "伊斯兰堡": {
+        "primary": "ISB", 
+        "secondary": [], 
+        "airports": [
+            {"code": "ISB", "name": "伊斯兰堡国际机场", "name_en": "Islamabad International Airport", "note": "巴基斯坦首都机场"}
+        ]
+    },
+    "马尔代夫": {
+        "primary": "MLE", 
+        "secondary": [], 
+        "airports": [
+            {"code": "MLE", "name": "易卜拉欣·纳西尔国际机场", "name_en": "Velana International Airport", "note": "马尔代夫首都马累机场"}
+        ]
+    },
+    "马累": {
+        "primary": "MLE", 
+        "secondary": [], 
+        "airports": [
+            {"code": "MLE", "name": "易卜拉欣·纳西尔国际机场", "name_en": "Velana International Airport", "note": "马尔代夫度假天堂门户"}
+        ]
+    },
+    
+    # 西亚中东主要城市
+    "伊斯坦布尔": {
+        "primary": "IST", 
+        "secondary": ["SAW"], 
+        "airports": [
+            {"code": "IST", "name": "伊斯坦布尔机场", "name_en": "Istanbul Airport", "note": "土耳其新主要国际机场"},
+            {"code": "SAW", "name": "萨比哈·格克琴国际机场", "name_en": "Sabiha Gökçen International Airport", "note": "亚洲区机场"}
+        ]
+    },
+    "阿布扎比": {
+        "primary": "AUH", 
+        "secondary": [], 
+        "airports": [
+            {"code": "AUH", "name": "阿布扎比国际机场", "name_en": "Abu Dhabi International Airport", "note": "阿联酋首都机场"}
+        ]
+    },
+    "德黑兰": {
+        "primary": "IKA", 
+        "secondary": [], 
+        "airports": [
+            {"code": "IKA", "name": "伊玛目霍梅尼国际机场", "name_en": "Imam Khomeini International Airport", "note": "伊朗主要国际机场"}
+        ]
+    },
+    "科威特城": {
+        "primary": "KWI", 
+        "secondary": [], 
+        "airports": [
+            {"code": "KWI", "name": "科威特国际机场", "name_en": "Kuwait International Airport", "note": "科威特主要机场"}
+        ]
+    },
+    "利雅得": {
+        "primary": "RUH", 
+        "secondary": [], 
+        "airports": [
+            {"code": "RUH", "name": "哈立德国王国际机场", "name_en": "King Khalid International Airport", "note": "沙特阿拉伯首都机场"}
+        ]
+    },
+    "吉达": {
+        "primary": "JED", 
+        "secondary": [], 
+        "airports": [
+            {"code": "JED", "name": "阿卜杜勒·阿齐兹国王国际机场", "name_en": "King Abdulaziz International Airport", "note": "沙特第二大机场"}
+        ]
+    },
+    "巴格达": {
+        "primary": "BGW", 
+        "secondary": [], 
+        "airports": [
+            {"code": "BGW", "name": "巴格达国际机场", "name_en": "Baghdad International Airport", "note": "伊拉克主要机场"}
+        ]
+    },
+    "贝鲁特": {
+        "primary": "BEY", 
+        "secondary": [], 
+        "airports": [
+            {"code": "BEY", "name": "拉菲克·哈里里国际机场", "name_en": "Rafic Hariri International Airport", "note": "黎巴嫩主要机场"}
+        ]
+    },
+    "大马士革": {
+        "primary": "DAM", 
+        "secondary": [], 
+        "airports": [
+            {"code": "DAM", "name": "大马士革国际机场", "name_en": "Damascus International Airport", "note": "叙利亚主要机场"}
+        ]
+    },
+    "安曼": {
+        "primary": "AMM", 
+        "secondary": [], 
+        "airports": [
+            {"code": "AMM", "name": "阿卜杜拉二世女王国际机场", "name_en": "Queen Alia International Airport", "note": "约旦主要机场"}
+        ]
+    },
+    
+    # 中亚主要城市
+    "巴库": {
+        "primary": "GYD", 
+        "secondary": [], 
+        "airports": [
+            {"code": "GYD", "name": "盖达尔·阿利耶夫国际机场", "name_en": "Heydar Aliyev International Airport", "note": "阿塞拜疆主要机场"}
+        ]
+    },
+    "塔什干": {
+        "primary": "TAS", 
+        "secondary": [], 
+        "airports": [
+            {"code": "TAS", "name": "塔什干国际机场", "name_en": "Tashkent International Airport", "note": "乌兹别克斯坦主要机场"}
+        ]
+    },
+    "阿拉木图": {
+        "primary": "ALA", 
+        "secondary": [], 
+        "airports": [
+            {"code": "ALA", "name": "阿拉木图国际机场", "name_en": "Almaty International Airport", "note": "哈萨克斯坦最大机场"}
+        ]
+    },
+    "努尔苏丹": {
+        "primary": "NUR", 
+        "secondary": [], 
+        "airports": [
+            {"code": "NUR", "name": "努尔苏丹纳扎尔巴耶夫国际机场", "name_en": "Nur-Sultan Nazarbayev International Airport", "note": "哈萨克斯坦首都机场"}
+        ]
+    },
+    "比什凯克": {
+        "primary": "FRU", 
+        "secondary": [], 
+        "airports": [
+            {"code": "FRU", "name": "玛纳斯国际机场", "name_en": "Manas International Airport", "note": "吉尔吉斯斯坦主要机场"}
+        ]
+    },
+    "杜尚别": {
+        "primary": "DYU", 
+        "secondary": [], 
+        "airports": [
+            {"code": "DYU", "name": "杜尚别国际机场", "name_en": "Dushanbe International Airport", "note": "塔吉克斯坦主要机场"}
+        ]
+    },
+    "阿什哈巴德": {
+        "primary": "ASB", 
+        "secondary": [], 
+        "airports": [
+            {"code": "ASB", "name": "奥古兹汗机场", "name_en": "Oguzhan Airport", "note": "土库曼斯坦主要机场"}
+        ]
+    },
+
     # 美国主要城市
     "纽约": {
         "primary": "JFK", 
@@ -385,17 +949,139 @@ MAJOR_CITIES_AIRPORTS = {
 
 # 英文城市名映射（小写匹配）
 ENGLISH_CITIES_AIRPORTS = {
+    # 中国大陆
     "beijing": "北京",
     "shanghai": "上海", 
     "guangzhou": "广州",
     "shenzhen": "深圳",
+    "chengdu": "成都",
+    "chongqing": "重庆",
+    "hangzhou": "杭州",
+    "nanjing": "南京",
+    "xi'an": "西安",
+    "xian": "西安",
+    "xiamen": "厦门",
+    "kunming": "昆明",
+    "tianjin": "天津",
+    "wuhan": "武汉",
+    "zhengzhou": "郑州",
+    "shenyang": "沈阳",
+    "dalian": "大连",
+    "qingdao": "青岛",
+    "changsha": "长沙",
+    "nanchang": "南昌",
+    "hefei": "合肥",
+    
+    # 港澳台
     "hong kong": "香港",
     "hongkong": "香港",
+    "macau": "澳门",
+    "macao": "澳门",
+    "taipei": "台北",
+    
+    # 日本
     "tokyo": "东京",
+    "osaka": "大阪",
+    "nagoya": "名古屋",
+    "fukuoka": "福冈",
+    "sapporo": "札幌",
+    "sendai": "仙台",
+    "hiroshima": "广岛",
+    "okinawa": "冲绳",
+    "kumamoto": "熊本",
+    "kagoshima": "鹿儿岛",
+    "takamatsu": "高松",
+    "matsuyama": "松山",
+    
+    # 韩国
     "seoul": "首尔",
+    "busan": "釜山",
+    "jeju": "济州",
+    "daegu": "大邱",
+    "gwangju": "光州",
+    
+    # 东南亚
     "singapore": "新加坡",
     "bangkok": "曼谷",
     "kuala lumpur": "吉隆坡",
+    "jakarta": "雅加达",
+    "manila": "马尼拉",
+    "ho chi minh city": "胡志明市",
+    "saigon": "胡志明市",
+    "hanoi": "河内",
+    "chiang mai": "清迈",
+    "phuket": "普吉",
+    "pattaya": "芭提雅",
+    "hat yai": "合艾",
+    "samui": "苏梅岛",
+    "koh samui": "苏梅岛",
+    "krabi": "甲米",
+    "sukhothai": "素可泰",
+    "udon thani": "乌隆他尼",
+    "ubon ratchathani": "乌汶",
+    "bali": "巴厘岛",
+    "denpasar": "巴厘岛",
+    "surabaya": "泗水",
+    "yogyakarta": "日惹",
+    "medan": "棉兰",
+    "cebu": "宿务",
+    "davao": "达沃",
+    "yangon": "仰光",
+    "mandalay": "曼德勒",
+    "phnom penh": "金边",
+    "siem reap": "暹粒",
+    "vientiane": "万象",
+    "luang prabang": "琅勃拉邦",
+    "bandar seri begawan": "斯里巴加湾市",
+    "kota kinabalu": "亚庇",
+    "kuching": "古晋",
+    "penang": "槟城",
+    "langkawi": "兰卡威",
+    
+    # 南亚
+    "new delhi": "新德里",
+    "delhi": "新德里",
+    "mumbai": "孟买",
+    "bombay": "孟买",
+    "bangalore": "班加罗尔",
+    "bengaluru": "班加罗尔",
+    "chennai": "钦奈",
+    "madras": "钦奈",
+    "hyderabad": "海得拉巴",
+    "kolkata": "加尔各答",
+    "calcutta": "加尔各答",
+    "kathmandu": "加德满都",
+    "dhaka": "达卡",
+    "colombo": "科伦坡",
+    "karachi": "卡拉奇",
+    "lahore": "拉合尔",
+    "islamabad": "伊斯兰堡",
+    "maldives": "马尔代夫",
+    "male": "马累",
+    
+    # 西亚中东
+    "istanbul": "伊斯坦布尔",
+    "abu dhabi": "阿布扎比",
+    "tehran": "德黑兰",
+    "kuwait city": "科威特城",
+    "riyadh": "利雅得",
+    "jeddah": "吉达",
+    "baghdad": "巴格达",
+    "beirut": "贝鲁特",
+    "damascus": "大马士革",
+    "amman": "安曼",
+    
+    # 中亚
+    "baku": "巴库",
+    "tashkent": "塔什干",
+    "almaty": "阿拉木图",
+    "nur-sultan": "努尔苏丹",
+    "astana": "努尔苏丹",
+    "bishkek": "比什凯克",
+    "dushanbe": "杜尚别",
+    "ashgabat": "阿什哈巴德",
+    
+    # 其他地区（保持原有）
     "new york": "纽约",
     "los angeles": "洛杉矶",
     "san francisco": "旧金山",
@@ -408,6 +1094,7 @@ ENGLISH_CITIES_AIRPORTS = {
     "frankfurt": "法兰克福",
     "amsterdam": "阿姆斯特丹",
     "dubai": "迪拜",
+    "doha": "多哈",
     "sydney": "悉尼",
     "melbourne": "墨尔本",
 }
