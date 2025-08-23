@@ -1937,6 +1937,8 @@ async def _process_hotel_search_with_location(query: CallbackQuery, location_que
 
 async def _sort_hotels_by_price(query: CallbackQuery, session_data: Dict, context: ContextTypes.DEFAULT_TYPE):
     """按价格排序酒店"""
+    user_id = query.from_user.id
+    
     if not session_data or 'hotels_data' not in session_data:
         config = get_config()
         await query.edit_message_text("❌ 会话已过期，请重新搜索")
@@ -1994,6 +1996,12 @@ async def _sort_hotels_by_price(query: CallbackQuery, session_data: Dict, contex
     summary_result = format_hotel_summary(sorted_hotels_data, search_params)
     full_message = f"{enhanced_display}\n💰 *已按价格排序（低到高）*\n\n{summary_result['content']}"
     
+    # 更新会话数据 - 保存排序后的数据
+    session_data['hotels_data'] = sorted_hotels_data
+    session_data['current_page'] = summary_result['current_page']
+    session_data['total_pages'] = summary_result['total_pages']
+    hotel_session_manager.set_session(user_id, session_data)
+    
     # 创建操作按钮
     keyboard = [
         [
@@ -2034,6 +2042,8 @@ async def _sort_hotels_by_price(query: CallbackQuery, session_data: Dict, contex
 
 async def _sort_hotels_by_rating(query: CallbackQuery, session_data: Dict, context: ContextTypes.DEFAULT_TYPE):
     """按评分排序酒店"""
+    user_id = query.from_user.id
+    
     if not session_data or 'hotels_data' not in session_data:
         config = get_config()
         await query.edit_message_text("❌ 会话已过期，请重新搜索")
@@ -2059,6 +2069,12 @@ async def _sort_hotels_by_rating(query: CallbackQuery, session_data: Dict, conte
     enhanced_display = enhance_hotel_location_display(sorted_hotels_data, search_params)
     summary_result = format_hotel_summary(sorted_hotels_data, search_params)
     full_message = f"{enhanced_display}\n⭐ *已按评分排序（高到低）*\n\n{summary_result['content']}"
+    
+    # 更新会话数据 - 保存排序后的数据
+    session_data['hotels_data'] = sorted_hotels_data
+    session_data['current_page'] = summary_result['current_page']
+    session_data['total_pages'] = summary_result['total_pages']
+    hotel_session_manager.set_session(user_id, session_data)
     
     # 创建操作按钮
     keyboard = [
@@ -2113,8 +2129,8 @@ async def _show_detailed_hotel_list(query: CallbackQuery, session_data: Dict, co
         hotels_data = session_data['hotels_data']
         search_params = session_data['search_params']
         
-        # 生成Telegraph页面
-        telegraph_url = await _create_hotel_telegraph_page(hotels_data, search_params)
+        # 生成Telegraph分页页面
+        telegraph_url = await _create_hotel_telegraph_pages(hotels_data, search_params)
         
         if telegraph_url:
             # 创建按钮
@@ -2207,14 +2223,14 @@ async def _show_hotel_map_view(query: CallbackQuery, session_data: Dict, context
         except Exception as nested_e:
             logger.error(f"地图错误处理失败: {nested_e}")
 
-async def _create_hotel_telegraph_page(hotels_data: Dict, search_params: Dict) -> Optional[str]:
-    """创建Telegraph页面显示酒店信息 - 考虑Telegraph内容大小限制"""
+async def _create_hotel_telegraph_pages(hotels_data: Dict, search_params: Dict) -> Optional[str]:
+    """创建分页Telegraph页面显示酒店信息 - 支持所有酒店"""
     if not httpx_client:
         logger.error("HTTP client not available for Telegraph")
         return None
     
     try:
-        properties = hotels_data.get('properties', [])[:10]  # 限制为10家酒店以控制内容大小
+        all_properties = hotels_data.get('properties', [])
         location_query = search_params.get('location_query', '')
         check_in_date = search_params.get('check_in_date', '')
         check_out_date = search_params.get('check_out_date', '')
@@ -2224,180 +2240,221 @@ async def _create_hotel_telegraph_page(hotels_data: Dict, search_params: Dict) -
         duration_info = calculate_stay_duration(check_in_date, check_out_date)
         nights = duration_info.get('days', 1) if 'error' not in duration_info else 1
         
-        # 构建Telegraph内容 - 简化版本以控制大小
-        content_lines = []
-        content_lines.append(f"🏨 {location_query} 酒店详细信息")
-        content_lines.append("")
-        content_lines.append(f"📅 入住: {check_in_date} | 退房: {check_out_date} | {nights}晚")
-        content_lines.append(f"🏨 显示前 {len(properties)} 家酒店 (共 {len(hotels_data.get('properties', []))} 家)")
-        content_lines.append("")
-        content_lines.append("=" * 60)
-        content_lines.append("")
+        total_hotels = len(all_properties)
+        if total_hotels <= 10:
+            # 如果酒店数量不超过10家，创建单页面
+            return await _create_single_telegraph_page(hotels_data, search_params)
         
-        # 添加每个酒店的详细信息 - 优化版本
-        for i, hotel in enumerate(properties, 1):
-            try:
-                content_lines.append(f"🏨 #{i}. {hotel.get('name', f'酒店 #{i}')}")
-                content_lines.append("-" * 40)
-                
-                # 基本信息
-                extracted_hotel_class = hotel.get('extracted_hotel_class')
-                if extracted_hotel_class:
-                    try:
-                        stars = int(extracted_hotel_class)
-                        content_lines.append(f"⭐ 星级: {stars}星 {'⭐' * stars}")
-                    except (ValueError, TypeError):
-                        content_lines.append(f"⭐ 星级: {extracted_hotel_class}")
-                
-                # 评分和评价
-                rating = hotel.get('overall_rating')
-                reviews = hotel.get('reviews')
-                if rating:
-                    rating_text = f"⭐ 评分: {rating:.1f}/5.0"
-                    if reviews:
-                        rating_text += f" ({reviews:,} 条评价)"
-                    content_lines.append(rating_text)
-                
-                # 价格信息 - 简化版本
-                rate_per_night = hotel.get('rate_per_night', {})
-                total_rate = hotel.get('total_rate', {})
-                
-                price_displayed = False
-                if rate_per_night and isinstance(rate_per_night, dict):
-                    extracted_lowest = rate_per_night.get('extracted_lowest')
-                    if extracted_lowest:
-                        total_price = extracted_lowest * nights
-                        content_lines.append(f"💰 价格: {currency} {extracted_lowest:,.0f}/晚 (共{nights}晚: {currency} {total_price:,.0f})")
-                        price_displayed = True
-                
-                if not price_displayed and total_rate and isinstance(total_rate, dict):
-                    extracted_lowest = total_rate.get('extracted_lowest')
-                    if extracted_lowest:
-                        per_night = extracted_lowest / nights if nights > 0 else extracted_lowest
-                        content_lines.append(f"💰 总价: {currency} {extracted_lowest:,.0f} (约 {currency} {per_night:,.0f}/晚)")
-                
-                # 位置信息
-                location = hotel.get('location')
-                if location:
-                    content_lines.append(f"📍 位置: {location}")
-                
-                # 设施信息 - 简化显示
-                amenities = hotel.get('amenities', [])
-                if amenities:
-                    # 只显示前8个设施以节省空间
-                    display_amenities = amenities[:8]
-                    amenities_text = f"🏢 设施 ({len(amenities)}项): {', '.join(display_amenities)}"
-                    if len(amenities) > 8:
-                        amenities_text += f" 等"
-                    content_lines.append(amenities_text)
-                
-                # 简化的描述 - 限制长度
-                description = hotel.get('description')
-                if description:
-                    # 限制描述长度为200字符
-                    short_desc = description[:200]
-                    if len(description) > 200:
-                        short_desc += "..."
-                    content_lines.append(f"📝 简介: {short_desc}")
-                
-                # GPS坐标（如果有）
-                gps_coordinates = hotel.get('gps_coordinates', {})
-                if gps_coordinates:
-                    latitude = gps_coordinates.get('latitude')
-                    longitude = gps_coordinates.get('longitude')
-                    if latitude and longitude:
-                        content_lines.append(f"🗺️ GPS: {latitude}, {longitude}")
-                
-                # 联系信息
-                phone = hotel.get('phone')
-                if phone:
-                    content_lines.append(f"📞 电话: {phone}")
-                
-                website = hotel.get('website')
-                if website:
-                    content_lines.append(f"🌐 网站: {website}")
-                
-                content_lines.append("")
-                
-            except Exception as e:
-                logger.error(f"处理酒店 {i} 信息失败: {e}")
-                content_lines.append(f"❌ 酒店 #{i} 信息处理失败")
-                content_lines.append("")
-                continue
+        # 分为两页：第1页显示1-10家，第2页显示11-20家
+        page1_properties = all_properties[:10]
+        page2_properties = all_properties[10:20] if len(all_properties) > 10 else []
         
-        # 页脚信息 - 简化版本
-        from datetime import datetime
-        content_lines.append("=" * 60)
-        content_lines.append(f"📅 更新时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-        content_lines.append(f"📊 显示: 前{len(properties)}家酒店 / 共{len(hotels_data.get('properties', []))}家")
-        content_lines.append("🤖 生成: Claude Code Hotel Search")
+        # 创建第2页内容
+        page2_url = None
+        if page2_properties:
+            page2_content = await _generate_telegraph_content(
+                page2_properties, search_params, page_num=2, 
+                start_index=11, total_hotels=total_hotels, nights=nights
+            )
+            if page2_content:
+                # 使用flight.py的create_telegraph_page函数创建第2页
+                from commands.flight import create_telegraph_page
+                page2_title = f"🏨 {location_query} 酒店信息 (第2页)"
+                page2_url = await create_telegraph_page(page2_title, page2_content)
         
-        # 组合内容
-        content_text = "\n".join(content_lines)
+        # 创建第1页内容，包含到第2页的链接
+        page1_content = await _generate_telegraph_content(
+            page1_properties, search_params, page_num=1, 
+            start_index=1, total_hotels=total_hotels, nights=nights, next_page_url=page2_url
+        )
         
-        # 检查内容大小 - Telegraph限制约64KB
-        content_size = len(content_text.encode('utf-8'))
-        if content_size > 60000:  # 60KB 安全边界
-            logger.warning(f"Telegraph内容过大 ({content_size} bytes)，进一步缩减")
-            # 如果还是太大，只显示前5家酒店
-            properties = properties[:5]
-            # 重新构建更简化的内容...
-            content_lines = [
-                f"🏨 {location_query} 酒店信息",
-                "",
-                f"📅 {check_in_date} - {check_out_date} ({nights}晚)",
-                f"🏨 显示前 {len(properties)} 家酒店",
-                "",
-                "=" * 40
-            ]
+        if page1_content:
+            # 创建第1页
+            from commands.flight import create_telegraph_page
+            page1_title = f"🏨 {location_query} 酒店信息 (第1页)"
+            page1_url = await create_telegraph_page(page1_title, page1_content)
             
-            for i, hotel in enumerate(properties, 1):
-                try:
-                    name = hotel.get('name', f'酒店 #{i}')[:50]  # 限制名称长度
-                    content_lines.append(f"\n{i}. {name}")
-                    
-                    # 只保留最重要的信息
-                    rating = hotel.get('overall_rating')
-                    if rating:
-                        content_lines.append(f"⭐ {rating:.1f}/5.0")
-                    
-                    rate_per_night = hotel.get('rate_per_night', {})
-                    if rate_per_night and isinstance(rate_per_night, dict):
-                        extracted_lowest = rate_per_night.get('extracted_lowest')
-                        if extracted_lowest:
-                            content_lines.append(f"💰 {currency} {extracted_lowest:,.0f}/晚")
-                    
-                    location = hotel.get('location')
-                    if location:
-                        content_lines.append(f"📍 {location[:100]}")  # 限制位置信息长度
-                    
-                except Exception as e:
-                    logger.error(f"简化处理酒店 {i} 失败: {e}")
-                    continue
+            # 如果第2页存在，更新第2页内容添加返回第1页的链接
+            if page2_url and page2_properties:
+                updated_page2_content = await _generate_telegraph_content(
+                    page2_properties, search_params, page_num=2, 
+                    start_index=11, total_hotels=total_hotels, nights=nights, prev_page_url=page1_url
+                )
+                if updated_page2_content:
+                    # 重新创建第2页（覆盖之前的）
+                    await create_telegraph_page(page2_title, updated_page2_content)
             
-            content_lines.extend([
-                "",
-                f"📊 简化显示: {len(properties)}/{len(hotels_data.get('properties', []))} 家酒店",
-                f"🤖 生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-            ])
-            
-            content_text = "\n".join(content_lines)
+            logger.info(f"Telegraph分页创建成功: 第1页={page1_url}, 第2页={page2_url}")
+            return page1_url
         
-        # 使用flight.py的create_telegraph_page函数
-        from commands.flight import create_telegraph_page
-        title = f"🏨 {location_query} 酒店信息"
-        telegraph_url = await create_telegraph_page(title, content_text)
-        
-        if telegraph_url:
-            logger.info(f"Telegraph页面创建成功: {telegraph_url} ({len(content_text.encode('utf-8'))} bytes)")
-            return telegraph_url
-        
-        logger.error("Telegraph页面创建失败")
+        logger.error("Telegraph第1页创建失败")
         return None
         
     except Exception as e:
-        logger.error(f"创建Telegraph页面失败: {e}")
+        logger.error(f"创建Telegraph分页失败: {e}")
         return None
+
+async def _create_single_telegraph_page(hotels_data: Dict, search_params: Dict) -> Optional[str]:
+    """创建单页Telegraph页面（<=10家酒店）"""
+    try:
+        properties = hotels_data.get('properties', [])
+        location_query = search_params.get('location_query', '')
+        
+        # 计算住宿时长
+        duration_info = calculate_stay_duration(
+            search_params.get('check_in_date', ''), 
+            search_params.get('check_out_date', '')
+        )
+        nights = duration_info.get('days', 1) if 'error' not in duration_info else 1
+        
+        content = await _generate_telegraph_content(
+            properties, search_params, page_num=1, 
+            start_index=1, total_hotels=len(properties), nights=nights
+        )
+        
+        if content:
+            from commands.flight import create_telegraph_page
+            title = f"🏨 {location_query} 酒店信息"
+            return await create_telegraph_page(title, content)
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"创建单页Telegraph失败: {e}")
+        return None
+
+async def _generate_telegraph_content(properties: list, search_params: Dict, page_num: int, 
+                                    start_index: int, total_hotels: int, nights: int,
+                                    next_page_url: str = None, prev_page_url: str = None) -> str:
+    """生成Telegraph页面内容"""
+    location_query = search_params.get('location_query', '')
+    check_in_date = search_params.get('check_in_date', '')
+    check_out_date = search_params.get('check_out_date', '')
+    currency = search_params.get('currency', 'USD')
+    
+    content_lines = []
+    
+    # 页面标题
+    if total_hotels > 10:
+        content_lines.append(f"🏨 {location_query} 酒店详细信息 (第{page_num}页)")
+    else:
+        content_lines.append(f"🏨 {location_query} 酒店详细信息")
+    
+    content_lines.extend([
+        "",
+        f"📅 入住: {check_in_date} | 退房: {check_out_date} | {nights}晚",
+        f"🏨 第{page_num}页: 显示第{start_index}-{start_index + len(properties) - 1}家酒店 (共{total_hotels}家)",
+        "",
+        "=" * 60,
+        ""
+    ])
+    
+    # 添加每个酒店的详细信息
+    for i, hotel in enumerate(properties):
+        try:
+            hotel_index = start_index + i
+            content_lines.append(f"🏨 #{hotel_index}. {hotel.get('name', f'酒店 #{hotel_index}')}")
+            content_lines.append("-" * 40)
+            
+            # 星级信息
+            extracted_hotel_class = hotel.get('extracted_hotel_class')
+            if extracted_hotel_class:
+                try:
+                    stars = int(extracted_hotel_class)
+                    content_lines.append(f"⭐ 星级: {stars}星 {'⭐' * stars}")
+                except (ValueError, TypeError):
+                    content_lines.append(f"⭐ 星级: {extracted_hotel_class}")
+            
+            # 评分和评价
+            rating = hotel.get('overall_rating')
+            reviews = hotel.get('reviews')
+            if rating:
+                rating_text = f"⭐ 评分: {rating:.1f}/5.0"
+                if reviews:
+                    rating_text += f" ({reviews:,} 条评价)"
+                content_lines.append(rating_text)
+            
+            # 价格信息
+            rate_per_night = hotel.get('rate_per_night', {})
+            total_rate = hotel.get('total_rate', {})
+            
+            price_displayed = False
+            if rate_per_night and isinstance(rate_per_night, dict):
+                extracted_lowest = rate_per_night.get('extracted_lowest')
+                if extracted_lowest:
+                    total_price = extracted_lowest * nights
+                    content_lines.append(f"💰 价格: {currency} {extracted_lowest:,.0f}/晚 (共{nights}晚: {currency} {total_price:,.0f})")
+                    price_displayed = True
+            
+            if not price_displayed and total_rate and isinstance(total_rate, dict):
+                extracted_lowest = total_rate.get('extracted_lowest')
+                if extracted_lowest:
+                    per_night = extracted_lowest / nights if nights > 0 else extracted_lowest
+                    content_lines.append(f"💰 总价: {currency} {extracted_lowest:,.0f} (约 {currency} {per_night:,.0f}/晚)")
+            
+            # 位置信息
+            location = hotel.get('location')
+            if location:
+                content_lines.append(f"📍 位置: {location}")
+            
+            # GPS坐标
+            gps_coordinates = hotel.get('gps_coordinates', {})
+            if gps_coordinates:
+                latitude = gps_coordinates.get('latitude')
+                longitude = gps_coordinates.get('longitude')
+                if latitude and longitude:
+                    content_lines.append(f"🗺️ GPS: {latitude}, {longitude}")
+            
+            # 设施信息（完整显示）
+            amenities = hotel.get('amenities', [])
+            if amenities:
+                content_lines.append(f"🏢 设施 ({len(amenities)}项): {', '.join(amenities)}")
+            
+            # 描述信息
+            description = hotel.get('description')
+            if description:
+                content_lines.append(f"📝 简介: {description}")
+            
+            # 联系信息
+            phone = hotel.get('phone')
+            if phone:
+                content_lines.append(f"📞 电话: {phone}")
+            
+            website = hotel.get('website')
+            if website:
+                content_lines.append(f"🌐 网站: {website}")
+            
+            content_lines.append("")
+            
+        except Exception as e:
+            logger.error(f"处理酒店 {hotel_index} 信息失败: {e}")
+            content_lines.append(f"❌ 酒店 #{hotel_index} 信息处理失败")
+            content_lines.append("")
+            continue
+    
+    # 页面导航
+    content_lines.extend([
+        "=" * 60,
+        ""
+    ])
+    
+    if total_hotels > 10:
+        content_lines.append("📄 页面导航:")
+        if prev_page_url:
+            content_lines.append(f"← 上一页: {prev_page_url}")
+        if next_page_url:
+            content_lines.append(f"→ 下一页: {next_page_url}")
+        content_lines.append("")
+    
+    # 页脚信息
+    from datetime import datetime
+    content_lines.extend([
+        f"📅 更新时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+        f"📊 第{page_num}页显示: {len(properties)}家酒店 / 共{total_hotels}家",
+        "🤖 生成: Claude Code Hotel Search"
+    ])
+    
+    return "\n".join(content_lines)
 
 async def _show_brand_filter(query: CallbackQuery, session_data: Dict, context: ContextTypes.DEFAULT_TYPE):
     """显示品牌筛选选项"""
@@ -2546,11 +2603,52 @@ async def _show_vacation_rental_filter(query: CallbackQuery, session_data: Dict,
 
 async def _show_property_type_filter(query: CallbackQuery, session_data: Dict, context: ContextTypes.DEFAULT_TYPE):
     """显示物业类型筛选选项"""
-    if not session_data:
-        config = get_config()
-        await query.edit_message_text("❌ 会话已过期，请重新搜索")
-        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
-        return
+    try:
+        if not session_data:
+            config = get_config()
+            await query.edit_message_text("❌ 会话已过期，请重新搜索")
+            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            return
+        
+        # 基于Google Hotels API文档的物业类型
+        property_options = [
+            ("🏨 传统酒店", "hotel_apply_property_hotel"),
+            ("🏢 公寓酒店", "hotel_apply_property_apartment"),
+            ("🏡 别墅", "hotel_apply_property_villa"),
+            ("🏠 民宿", "hotel_apply_property_guesthouse"),
+            ("🏕️ 度假村", "hotel_apply_property_resort")
+        ]
+        
+        keyboard = []
+        for property_name, callback_data in property_options:
+            keyboard.append([InlineKeyboardButton(property_name, callback_data=callback_data)])
+        
+        keyboard.extend([
+            [InlineKeyboardButton("🔙 返回筛选", callback_data="hotel_filter")],
+            [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
+        ])
+        
+        await query.edit_message_text(
+            "🏷️ *物业类型*\n\n选择您偏好的住宿类型:",
+            parse_mode=ParseMode.MARKDOWN_V2,
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        
+    except Exception as e:
+        logger.error(f"显示物业类型筛选失败: {e}")
+        try:
+            config = get_config()
+            await query.edit_message_text(
+                "🚫 物业类型筛选显示失败，请重新尝试",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 返回筛选", callback_data="hotel_filter")],
+                    [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
+                ])
+            )
+            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+                                      getattr(config, 'auto_delete_delay', 600))
+        except Exception as nested_e:
+            logger.error(f"物业类型筛选错误处理失败: {nested_e}")
     
     # 基于Google Hotels API文档的物业类型
     property_options = [
@@ -2578,38 +2676,55 @@ async def _show_property_type_filter(query: CallbackQuery, session_data: Dict, c
 
 async def _show_amenities_filter(query: CallbackQuery, session_data: Dict, context: ContextTypes.DEFAULT_TYPE):
     """显示设施筛选选项"""
-    if not session_data:
-        config = get_config()
-        await query.edit_message_text("❌ 会话已过期，请重新搜索")
-        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
-        return
-    
-    # 常见设施选项（基于SerpAPI文档）
-    amenity_options = [
-        ("🏊 游泳池", "hotel_apply_amenity_pool"),
-        ("🧖 SPA", "hotel_apply_amenity_spa"), 
-        ("🏋️ 健身房", "hotel_apply_amenity_fitness"),
-        ("🅿️ 停车场", "hotel_apply_amenity_parking"),
-        ("📶 WiFi", "hotel_apply_amenity_wifi"),
-        ("🍳 厨房", "hotel_apply_amenity_kitchen"),
-        ("🚗 机场接送", "hotel_apply_amenity_airport"),
-        ("🐕 宠物友好", "hotel_apply_amenity_pet")
-    ]
-    
-    keyboard = []
-    for amenity_name, callback_data in amenity_options:
-        keyboard.append([InlineKeyboardButton(amenity_name, callback_data=callback_data)])
-    
-    keyboard.extend([
-        [InlineKeyboardButton("🔙 返回筛选", callback_data="hotel_filter")],
-        [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
-    ])
-    
-    await query.edit_message_text(
-        "🏢 *设施筛选*\n\n选择您需要的设施:",
-        parse_mode=ParseMode.MARKDOWN_V2,
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    try:
+        if not session_data:
+            config = get_config()
+            await query.edit_message_text("❌ 会话已过期，请重新搜索")
+            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            return
+        
+        # 常见设施选项（基于SerpAPI文档）
+        amenity_options = [
+            ("🏊 游泳池", "hotel_apply_amenity_pool"),
+            ("🧖 SPA", "hotel_apply_amenity_spa"), 
+            ("🏋️ 健身房", "hotel_apply_amenity_fitness"),
+            ("🅿️ 停车场", "hotel_apply_amenity_parking"),
+            ("📶 WiFi", "hotel_apply_amenity_wifi"),
+            ("🍳 厨房", "hotel_apply_amenity_kitchen"),
+            ("🚗 机场接送", "hotel_apply_amenity_airport"),
+            ("🐕 宠物友好", "hotel_apply_amenity_pet")
+        ]
+        
+        keyboard = []
+        for amenity_name, callback_data in amenity_options:
+            keyboard.append([InlineKeyboardButton(amenity_name, callback_data=callback_data)])
+        
+        keyboard.extend([
+            [InlineKeyboardButton("🔙 返回筛选", callback_data="hotel_filter")],
+            [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
+        ])
+        
+        await query.edit_message_text(
+            "🏢 *设施筛选*\n\n选择您需要的设施:",
+            parse_mode=ParseMode.MARKDOWN_V2,
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        
+    except Exception as e:
+        logger.error(f"显示设施筛选失败: {e}")
+        try:
+            config = get_config()
+            await query.edit_message_text(
+                "🚫 设施筛选显示失败，请重新尝试",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 返回筛选", callback_data="hotel_filter")],
+                    [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
+                ])
+            )
+            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+                                      getattr(config, 'auto_delete_delay', 600))
+        except Exception as nested_e:
+            logger.error(f"设施筛选错误处理失败: {nested_e}")
 
 async def _apply_filter_and_research(query: CallbackQuery, session_data: Dict, context: ContextTypes.DEFAULT_TYPE):
     """应用筛选条件并重新搜索"""
@@ -2869,92 +2984,143 @@ def _get_filter_display_name(filter_type: str) -> str:
 
 async def _show_price_filter(query: CallbackQuery, session_data: Dict, context: ContextTypes.DEFAULT_TYPE):
     """显示价格筛选选项"""
-    if not session_data:
-        config = get_config()
-        await query.edit_message_text("❌ 会话已过期，请重新搜索")
-        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
-        return
-    
-    price_options = [
-        ("💰 低于$100", "hotel_apply_price_100"),
-        ("💰 $100-200", "hotel_apply_price_100_200"),
-        ("💰 $200-300", "hotel_apply_price_200_300"),
-        ("💰 $300-500", "hotel_apply_price_300_500"),
-        ("💰 高于$500", "hotel_apply_price_500")
-    ]
-    
-    keyboard = []
-    for price_name, callback_data in price_options:
-        keyboard.append([InlineKeyboardButton(price_name, callback_data=callback_data)])
-    
-    keyboard.extend([
-        [InlineKeyboardButton("🔙 返回筛选", callback_data="hotel_filter")],
-        [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
-    ])
-    
-    await query.edit_message_text(
-        foldable_text_with_markdown_v2("💰 *价格范围*\n\n选择您的价格区间:"),
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    try:
+        if not session_data:
+            config = get_config()
+            await query.edit_message_text("❌ 会话已过期，请重新搜索")
+            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            return
+        
+        price_options = [
+            ("💰 低于$100", "hotel_apply_price_100"),
+            ("💰 $100-200", "hotel_apply_price_100_200"),
+            ("💰 $200-300", "hotel_apply_price_200_300"),
+            ("💰 $300-500", "hotel_apply_price_300_500"),
+            ("💰 高于$500", "hotel_apply_price_500")
+        ]
+        
+        keyboard = []
+        for price_name, callback_data in price_options:
+            keyboard.append([InlineKeyboardButton(price_name, callback_data=callback_data)])
+        
+        keyboard.extend([
+            [InlineKeyboardButton("🔙 返回筛选", callback_data="hotel_filter")],
+            [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
+        ])
+        
+        await query.edit_message_text(
+            foldable_text_with_markdown_v2("💰 *价格范围*\n\n选择您的价格区间:"),
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        
+    except Exception as e:
+        logger.error(f"显示价格筛选失败: {e}")
+        try:
+            config = get_config()
+            await query.edit_message_text(
+                "🚫 价格筛选显示失败，请重新尝试",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 返回筛选", callback_data="hotel_filter")],
+                    [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
+                ])
+            )
+            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+                                      getattr(config, 'auto_delete_delay', 600))
+        except Exception as nested_e:
+            logger.error(f"价格筛选错误处理失败: {nested_e}")
 
 async def _show_rating_filter(query: CallbackQuery, session_data: Dict, context: ContextTypes.DEFAULT_TYPE):
     """显示评分筛选选项"""
-    if not session_data:
-        config = get_config()
-        await query.edit_message_text("❌ 会话已过期，请重新搜索")
-        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
-        return
-    
-    rating_options = [
-        ("⭐⭐⭐⭐⭐ 4.5+", "hotel_apply_rating_9"),  # Google Hotels API: 9 = 4.5+
-        ("⭐⭐⭐⭐ 4.0+", "hotel_apply_rating_8"),   # Google Hotels API: 8 = 4.0+
-        ("⭐⭐⭐ 3.5+", "hotel_apply_rating_7"),     # Google Hotels API: 7 = 3.5+
-        ("⭐⭐ 3.0+", "hotel_apply_rating_6")        # Google Hotels API: 6 = 3.0+
-    ]
-    
-    keyboard = []
-    for rating_name, callback_data in rating_options:
-        keyboard.append([InlineKeyboardButton(rating_name, callback_data=callback_data)])
-    
-    keyboard.extend([
-        [InlineKeyboardButton("🔙 返回筛选", callback_data="hotel_filter")],
-        [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
-    ])
-    
-    await query.edit_message_text(
-        foldable_text_with_markdown_v2("⭐ *最低评分*\n\n选择最低评分要求:"),
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    try:
+        if not session_data:
+            config = get_config()
+            await query.edit_message_text("❌ 会话已过期，请重新搜索")
+            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            return
+        
+        rating_options = [
+            ("⭐⭐⭐⭐⭐ 4.5+", "hotel_apply_rating_9"),  # Google Hotels API: 9 = 4.5+
+            ("⭐⭐⭐⭐ 4.0+", "hotel_apply_rating_8"),   # Google Hotels API: 8 = 4.0+
+            ("⭐⭐⭐ 3.5+", "hotel_apply_rating_7"),     # Google Hotels API: 7 = 3.5+
+            ("⭐⭐ 3.0+", "hotel_apply_rating_6")        # Google Hotels API: 6 = 3.0+
+        ]
+        
+        keyboard = []
+        for rating_name, callback_data in rating_options:
+            keyboard.append([InlineKeyboardButton(rating_name, callback_data=callback_data)])
+        
+        keyboard.extend([
+            [InlineKeyboardButton("🔙 返回筛选", callback_data="hotel_filter")],
+            [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
+        ])
+        
+        await query.edit_message_text(
+            foldable_text_with_markdown_v2("⭐ *最低评分*\n\n选择最低评分要求:"),
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        
+    except Exception as e:
+        logger.error(f"显示评分筛选失败: {e}")
+        try:
+            config = get_config()
+            await query.edit_message_text(
+                "🚫 评分筛选显示失败，请重新尝试",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 返回筛选", callback_data="hotel_filter")],
+                    [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
+                ])
+            )
+            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+                                      getattr(config, 'auto_delete_delay', 600))
+        except Exception as nested_e:
+            logger.error(f"评分筛选错误处理失败: {nested_e}")
 
 async def _show_class_filter(query: CallbackQuery, session_data: Dict, context: ContextTypes.DEFAULT_TYPE):
     """显示酒店星级筛选选项"""
-    if not session_data:
-        config = get_config()
-        await query.edit_message_text("❌ 会话已过期，请重新搜索")
-        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
-        return
-    
-    class_options = [
-        ("⭐⭐⭐⭐⭐ 5星酒店", "hotel_apply_class_5"),
-        ("⭐⭐⭐⭐ 4星酒店", "hotel_apply_class_4"),
-        ("⭐⭐⭐ 3星酒店", "hotel_apply_class_3"),
-        ("⭐⭐ 2星酒店", "hotel_apply_class_2"),
-        ("⭐ 1星酒店", "hotel_apply_class_1")
-    ]
-    
-    keyboard = []
-    for class_name, callback_data in class_options:
-        keyboard.append([InlineKeyboardButton(class_name, callback_data=callback_data)])
-    
-    keyboard.extend([
-        [InlineKeyboardButton("🔙 返回筛选", callback_data="hotel_filter")],
-        [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
-    ])
-    
-    await query.edit_message_text(
-        foldable_text_with_markdown_v2("🏨 *酒店星级*\n\n选择酒店星级:"),
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    try:
+        if not session_data:
+            config = get_config()
+            await query.edit_message_text("❌ 会话已过期，请重新搜索")
+            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            return
+        
+        class_options = [
+            ("⭐⭐⭐⭐⭐ 5星酒店", "hotel_apply_class_5"),
+            ("⭐⭐⭐⭐ 4星酒店", "hotel_apply_class_4"),
+            ("⭐⭐⭐ 3星酒店", "hotel_apply_class_3"),
+            ("⭐⭐ 2星酒店", "hotel_apply_class_2"),
+            ("⭐ 1星酒店", "hotel_apply_class_1")
+        ]
+        
+        keyboard = []
+        for class_name, callback_data in class_options:
+            keyboard.append([InlineKeyboardButton(class_name, callback_data=callback_data)])
+        
+        keyboard.extend([
+            [InlineKeyboardButton("🔙 返回筛选", callback_data="hotel_filter")],
+            [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
+        ])
+        
+        await query.edit_message_text(
+            foldable_text_with_markdown_v2("🏨 *酒店星级*\n\n选择酒店星级:"),
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        
+    except Exception as e:
+        logger.error(f"显示星级筛选失败: {e}")
+        try:
+            config = get_config()
+            await query.edit_message_text(
+                "🚫 星级筛选显示失败，请重新尝试",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 返回筛选", callback_data="hotel_filter")],
+                    [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
+                ])
+            )
+            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+                                      getattr(config, 'auto_delete_delay', 600))
+        except Exception as nested_e:
+            logger.error(f"星级筛选错误处理失败: {nested_e}")
 
 # 注册命令
 command_factory.register_command(
