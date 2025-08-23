@@ -600,7 +600,7 @@ def format_hotel_summary(hotels_data: Dict, search_params: Dict) -> str:
             # 构建评分显示
             rating_display = ""
             if rating:
-                rating_display = f"⭐ {rating:.1f}"
+                rating_display = f"⭐ {rating:.1f}".replace(".", "\\.")
                 if reviews:
                     # 转义括号
                     rating_display += f" （{reviews:,}）"
@@ -838,7 +838,8 @@ async def hotel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     search_msg = await send_info(
         context, 
         chat_id, 
-        f"🔍 正在搜索酒店...\n📍 位置: {escape_markdown(location_query, version=2)}\n📅 日期: {escape_markdown(check_in_date, version=2)} \\- {escape_markdown(check_out_date, version=2)}"
+        f"🔍 正在搜索酒店...\n📍 位置: {escape_markdown(location_query, version=2)}\n📅 日期: {escape_markdown(check_in_date, version=2)} \\- {escape_markdown(check_out_date, version=2)}",
+        parse_mode=ParseMode.MARKDOWN_V2
     )
     
     try:
@@ -1545,7 +1546,7 @@ async def _create_hotel_telegraph_page(hotels_data: Dict, search_params: Dict) -
                 
                 # 评分信息
                 if rating:
-                    rating_text = f"⭐ 评分: {rating:.1f}/5.0"
+                    rating_text = f"⭐ 评分: {rating:.1f}/5.0".replace(".", "\\.")
                     if reviews:
                         rating_text += f" （{reviews:,} 条评价）"
                     hotel_content.append({
