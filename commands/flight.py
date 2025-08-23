@@ -581,7 +581,7 @@ class FlightServiceManager:
                     logger.info(f"Fetching return flights with departure_token")
                     
                     # 使用SerpAPI的REST接口
-                    return_response = await self.session.get(
+                    return_response = await httpx_client.get(
                         "https://serpapi.com/search.json",
                         params=return_params
                     )
@@ -2063,6 +2063,17 @@ async def flight_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
             await _execute_airport_query(update, context, text)
             flight_session_manager.remove_session(user_id)
             
+        elif action == "flight_search_from" and waiting_for == "destination_and_date":
+            # 处理从特定机场出发的搜索
+            departure_code = session_data.get("departure_code")
+            if not departure_code:
+                await send_error(context, update.message.chat_id, "❌ 会话数据错误，请重新开始")
+                flight_session_manager.remove_session(user_id)
+                return
+            
+            await _parse_and_execute_flight_search_from(update, context, text, departure_code)
+            flight_session_manager.remove_session(user_id)
+            
     except Exception as e:
         logger.error(f"处理航班文本输入失败: {e}")
         await send_error(context, update.message.chat_id, f"处理失败: {str(e)}")
@@ -2150,6 +2161,131 @@ async def _parse_and_execute_flight_search(update: Update, context: ContextTypes
                         "• 中文城市名: `北京 洛杉矶`\n"
                         "• 英文城市名: `Beijing Los Angeles`")
 
+async def _parse_and_execute_flight_search_from(update: Update, context: ContextTypes.DEFAULT_TYPE, 
+                                               text: str, departure_code: str) -> None:
+    """解析并执行从特定机场出发的航班搜索"""
+    # 解析格式: "目的地 出发日期 [返回日期]"
+    parts = text.strip().split()
+    
+    if len(parts) < 2:
+        await send_error(context, update.message.chat_id, 
+                        "❌ 格式错误\n\n请使用: `目的地 出发日期 [返回日期]`\n"
+                        "例如: `东京 2024-12-25 2024-12-30`")
+        return
+    
+    arrival_input = parts[0]
+    outbound_date = parts[1]
+    return_date = parts[2] if len(parts) > 2 else None
+    
+    # 日期格式验证
+    try:
+        datetime.strptime(outbound_date, '%Y-%m-%d')
+        if return_date:
+            datetime.strptime(return_date, '%Y-%m-%d')
+    except ValueError:
+        await send_error(context, update.message.chat_id, 
+                        "❌ 日期格式错误\n\n请使用 YYYY-MM-DD 格式\n例如: 2024-12-25")
+        return
+    
+    # 智能解析到达机场输入
+    from utils.airport_mapper import resolve_airport_codes
+    arrival_result = resolve_airport_codes(arrival_input)
+    arrival_status = arrival_result.get("status")
+    
+    if arrival_status == "success":
+        # 直接搜索
+        arrival_primary = arrival_result.get("primary")
+        await _execute_flight_search(update, context, departure_code, arrival_primary, outbound_date, return_date)
+        
+    elif arrival_status == "multiple":
+        # 显示到达机场选择并提供推荐
+        airports = arrival_result.get("airports", [])
+        city = arrival_result.get("city", arrival_input)
+        
+        # 自动选择推荐机场并搜索
+        primary_code = arrival_result.get("primary")
+        if primary_code:
+            from telegram.helpers import escape_markdown
+            safe_city = escape_markdown(city, version=2)
+            info_message_text = f"⚡ *自动选择推荐*: {departure_code} → {primary_code} ({safe_city})\n\n"
+            info_message_text += f"🔍 *{safe_city}的机场选项*:\n"
+            
+            for i, airport in enumerate(airports, 1):
+                code = airport.get("code", "")
+                name = airport.get("name", "")
+                note = airport.get("note", "")
+                safe_name = escape_markdown(name, version=2)
+                safe_note = escape_markdown(note, version=2)
+                
+                icon = "🔸" if i == 1 else "🔹"  # 主要机场用实心
+                info_message_text += f"{icon} *{code}* - {safe_name}\n"
+                if note:
+                    info_message_text += f"   💡 {safe_note}\n"
+            
+            # 先发送选择信息
+            info_message = await context.bot.send_message(
+                chat_id=update.message.chat_id,
+                text=foldable_text_with_markdown_v2(info_message_text),
+                parse_mode="MarkdownV2"
+            )
+            
+            config = get_config()
+            await _schedule_auto_delete(context, info_message.chat_id, info_message.message_id, 10)
+            
+            # 然后执行搜索
+            await _execute_flight_search(update, context, departure_code, primary_code, outbound_date, return_date)
+    
+    elif arrival_status == "country_airports":
+        # 显示国家的机场并选择推荐
+        country_airports = arrival_result.get("country_airports", [])
+        if country_airports:
+            primary_code = country_airports[0].get("primary")  # 选择第一个城市的主要机场
+            if primary_code:
+                from telegram.helpers import escape_markdown
+                country = arrival_result.get("country", arrival_input)
+                first_city = country_airports[0].get("city", "")
+                
+                safe_country = escape_markdown(country, version=2)
+                safe_first_city = escape_markdown(first_city, version=2)
+                
+                info_message_text = f"⚡ *自动选择推荐*: {departure_code} → {primary_code} ({safe_first_city})\n\n"
+                info_message_text += f"🌍 *{safe_country}的主要机场*:\n"
+                
+                for city_info in country_airports[:5]:  # 显示前5个城市
+                    city_name = city_info.get("city", "")
+                    city_primary = city_info.get("primary", "")
+                    safe_city_name = escape_markdown(city_name, version=2)
+                    info_message_text += f"• *{city_primary}* - {safe_city_name}\n"
+                
+                # 先发送选择信息
+                info_message = await context.bot.send_message(
+                    chat_id=update.message.chat_id,
+                    text=foldable_text_with_markdown_v2(info_message_text),
+                    parse_mode="MarkdownV2"
+                )
+                
+                config = get_config()
+                await _schedule_auto_delete(context, info_message.chat_id, info_message.message_id, 10)
+                
+                # 然后执行搜索
+                await _execute_flight_search(update, context, departure_code, primary_code, outbound_date, return_date)
+            else:
+                await send_error(context, update.message.chat_id, 
+                                f"❌ 无法确定 {arrival_input} 的主要机场")
+        else:
+            await send_error(context, update.message.chat_id, 
+                            f"❌ 未找到 {arrival_input} 的机场信息")
+    
+    else:
+        # 无法识别目的地
+        await send_error(context, update.message.chat_id, 
+                        f"❌ 无法识别目的地: {arrival_input}\n\n"
+                        "请使用:\n"
+                        "• 标准IATA代码: `NRT`\n"
+                        "• 中文城市名: `东京`\n"
+                        "• 英文城市名: `Tokyo`\n"
+                        "• 国家名: `日本`, `Japan`")
+
 async def _execute_airport_query(update: Update, context: ContextTypes.DEFAULT_TYPE, query_text: str) -> None:
     """执行机场信息查询"""
     from telegram.helpers import escape_markdown
@@ -2225,6 +2361,76 @@ async def _execute_airport_query(update: Update, context: ContextTypes.DEFAULT_T
                     keyboard.append([
                         InlineKeyboardButton(f"✈️ 从{code}出发搜索航班", callback_data=f"flight_search_from:{code}")
                     ])
+            
+            keyboard.append([InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")])
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            message = await context.bot.send_message(
+                chat_id=update.message.chat_id,
+                text=foldable_text_with_markdown_v2("\n".join(response_parts)),
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup
+            )
+            
+        elif result.get("status") == "country_airports":
+            # 显示国家/地区的所有机场
+            country = result.get("country", query_text)
+            country_airports = result.get("country_airports", [])
+            safe_country = escape_markdown(country, version=2)
+            
+            response_parts = [f"🌍 *{safe_country}的机场信息*\n"]
+            
+            for i, city_info in enumerate(country_airports, 1):
+                city = city_info.get("city", "")
+                airports = city_info.get("airports", [])
+                safe_city = escape_markdown(city, version=2)
+                
+                response_parts.append(f"📍 *{safe_city}*:")
+                
+                for airport in airports:
+                    code = airport.get("code", "")
+                    name = airport.get("name", "")
+                    note = airport.get("note", "")
+                    
+                    safe_name = escape_markdown(name, version=2)
+                    safe_note = escape_markdown(note, version=2)
+                    
+                    # 标记主要机场
+                    primary_icon = "🔸" if code == city_info.get("primary") else "🔹"
+                    response_parts.append(f"  {primary_icon} *{code}* - {safe_name}")
+                    if note:
+                        response_parts.append(f"     💡 {safe_note}")
+                
+                response_parts.append("")
+            
+            # 添加说明
+            response_parts.extend([
+                "🔸 主要机场  🔹 备选机场",
+                "",
+                "💡 使用机场代码搜索具体航班:",
+                "例如: `/flight TPE NRT 2024-12-25`"
+            ])
+            
+            # 添加快速搜索按钮（显示前几个主要机场）
+            keyboard = []
+            main_airports = []
+            for city_info in country_airports[:6]:  # 显示前6个城市的主要机场
+                primary_code = city_info.get("primary")
+                city_name = city_info.get("city", "")
+                if primary_code and city_name:
+                    main_airports.append((primary_code, city_name))
+            
+            # 每行显示2个机场按钮
+            for i in range(0, len(main_airports), 2):
+                row = []
+                for j in range(2):
+                    if i + j < len(main_airports):
+                        code, city_name = main_airports[i + j]
+                        row.append(InlineKeyboardButton(
+                            f"✈️ {code} ({city_name})", 
+                            callback_data=f"flight_search_from:{code}"
+                        ))
+                keyboard.append(row)
             
             keyboard.append([InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")])
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -2857,6 +3063,45 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                         [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
                     ])
                 )
+    
+    elif data.startswith("flight_search_from:"):
+        # 处理从特定机场出发的搜索
+        departure_code = data.split(":", 1)[1]
+        user_id = update.effective_user.id
+        
+        # 设置会话状态，等待用户输入目的地
+        flight_session_manager.set_session(user_id, {
+            "action": "flight_search_from",
+            "waiting_for": "destination_and_date",
+            "departure_code": departure_code
+        })
+        
+        # 获取出发机场信息
+        dep_airport_info = get_airport_info_from_code(departure_code)
+        safe_dep_name = escape_markdown(dep_airport_info.get('name', departure_code), version=2)
+        safe_dep_city = escape_markdown(dep_airport_info.get('city', ''), version=2)
+        
+        search_help_text = f"""✈️ *从 {safe_dep_city} 出发*
+
+📍 出发机场: {safe_dep_name} ({departure_code})
+
+请输入目的地和出发日期:
+
+🌟 *格式*: `目的地 出发日期 [返回日期]`
+
+💡 *示例*:
+• `东京 2024-12-25` - 单程
+• `洛杉矶 2024-12-25 2024-12-30` - 往返
+• `NRT 2024-12-25` - 使用机场代码
+• `New York 2024-12-25` - 英文城市名"""
+
+        await query.edit_message_text(
+            text=foldable_text_with_markdown_v2(search_help_text),
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
+            ]),
+            parse_mode="MarkdownV2"
+        )
 
 async def _show_price_insights(query: CallbackQuery, context: ContextTypes.DEFAULT_TYPE, 
                              departure_id: str, arrival_id: str, outbound_date: str, language: str) -> None:
