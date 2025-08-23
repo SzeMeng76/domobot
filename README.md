@@ -49,6 +49,7 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 -   🎭 **Public Memes:** Available to all users - fetch random memes from memes.bupt.site API with **AI-generated descriptions** for enhanced understanding. Features **smart retry mechanism** to ensure quality content when requesting single memes, custom quantities (1-20), intelligent caching system, auto-deletion scheduling (15 minutes), and fallback link display. Includes parameter validation, real-time status updates, and comprehensive error handling for reliable meme delivery. Description priority: manual review > AI description > none.
 -   📊 **Public Finance & Stocks:** Available to all users - comprehensive financial market data powered by Yahoo Finance. Features **real-time stock prices** with market data and technical indicators, **15 ranking categories** including day gainers/losers, most actives, growth tech stocks, undervalued stocks, and mutual fund rankings, **intelligent stock search** supporting ticker symbols and company names across multiple markets (US, HK, CN, MY), **analyst recommendations** with buy/sell/hold ratings, **financial statements** (income, balance sheet, cash flow), categorized inline button interface, intelligent caching with different TTL for various data types, and comprehensive error handling with auto-deletion. Supports flexible search queries like "AAPL", "Apple", "Tesla", "6033.KL", "Maybank" with multilingual matching.
 -   🗺️ **Map Services:** Intelligent location search and navigation system with **automatic language detection** - Google Maps API for English users and Amap (高德地图) API for Chinese users. Features **comprehensive location search** with detailed place information, ratings, and types, **nearby service recommendations** (restaurants, hospitals, banks, gas stations, supermarkets, schools, hotels), **route planning** with step-by-step directions and travel time estimates, **geocoding** for address-to-coordinates conversion, **reverse geocoding** for coordinates-to-address lookup, **interactive button interface** with single `/map` command, **session management** for multi-step operations, **Redis caching** with appropriate TTL for different data types, and **auto-deletion** for all messages. Supports text input, location sharing, and coordinate queries with comprehensive error handling. *(Whitelist required)*
+-   ✈️ **Flight Services:** Intelligent flight search and booking information powered by Google Flights API. Features **multi-language airport recognition** (Chinese, English, IATA codes), **global airport coverage** (Asia, Europe, Americas, Oceania), **smart airport matching** with automatic selection of optimal airports, **real-time flight data** with price analysis and booking options, **intelligent route planning** with time zone calculations and flight distance information, **comprehensive airline coverage** with multiple booking channels, and **Telegraph integration** for detailed flight lists. Supports mixed-language input like `北京 New York` or `吉隆坡 Bangkok` with automatic conversion to optimal airport pairs (PEK↔JFK, KUL↔BKK). *(Whitelist required)*
 -   🎬 **Movie & TV Information:** Query movie/TV details with posters, ratings, cast, trailers, reviews, recommendations, viewing platforms, and season/episode info. Features **3-platform data integration** (TMDB + JustWatch + Trakt) with **JustWatch streaming charts**, real-time ranking trends, platform availability, Telegraph integration for long content, trending discovery, people search, and enhanced statistics with watch counts and community data. *(Whitelist required)*
 -   🪙 **Crypto Prices:** Look up real-time cryptocurrency prices with support for custom amounts and currency conversion, including 24h and 7d percentage changes. *(Whitelist required)*
 -   💳 **BIN Lookup:** Query credit card BIN (Bank Identification Number) information including card brand, type, issuing bank, and country details. *(Whitelist required)*
@@ -100,6 +101,7 @@ All configurations are managed via the `.env` file. You must copy `.env.example`
 | `TRAKT_API_KEY`             | **(Optional)** API Key from Trakt for enhanced movie/TV statistics and trending data. |                         |
 | `GOOGLE_MAPS_API_KEY`       | **(Optional)** API Key from Google Maps for the `/map` command (English users). |                         |
 | `AMAP_API_KEY`              | **(Optional)** API Key from Amap (高德地图) for the `/map` command (Chinese users). |                         |
+| `SERPAPI_KEY`               | **(Optional)** API Key from SerpAPI for the `/flight` command with Google Flights integration. |                         |
 | `QWEATHER_API_KEY`          | **(Optional)** API Key from HeFeng Weather for the `/tq` command.           |                         |
 | `EXCHANGE_RATE_API_KEYS`    | **(Optional)** API Keys from openexchangerates.org for the `/rate` command. Multiple keys separated by commas. |                         |
 | `ENABLE_USER_CACHE`         | **(Optional)** Enable user caching system (`true`/`false`).                 | `false`                 |
@@ -194,6 +196,15 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 
 #### Whitelist-Only Commands
 ```bash
+# Intelligent Flight Search & Booking (Multi-language Airport Recognition)
+/flight                        # Interactive flight service menu
+/flight 北京 洛杉矶 2024-12-25     # Chinese cities (auto-converts PEK→LAX)
+/flight 吉隆坡 普吉 2024-12-25 2024-12-30  # Round-trip flight (KUL→HKT)
+/flight Shanghai Tokyo 2024-12-25  # Mixed language input (PVG→NRT)
+/flight PEK LAX 2024-12-25     # Direct IATA codes
+/flight Jakarta Bangkok 2024-12-25  # English cities (CGK→BKK)
+# Interactive features: Price analysis, booking options, multi-city planning, airport info
+
 # BIN lookup
 /bin 123456
 /bin 12345678
@@ -624,6 +635,7 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 - **Steam API:** For game pricing information
 - **Google Maps API:** For location search, nearby places, route planning, and geocoding services (English users)
 - **Amap (高德地图) API:** For location search, nearby places, route planning, and geocoding services (Chinese users)
+- **SerpAPI:** For flight search and booking information via Google Flights integration with multi-language airport recognition
 - **IP-API.com:** For IP geolocation and actual server location data (free service)
 - **Yahoo Finance API:** For real-time stock prices, market data, rankings, analyst recommendations, and financial statements
 - **Various streaming service APIs:** For subscription pricing

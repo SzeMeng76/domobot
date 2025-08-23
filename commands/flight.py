@@ -1856,21 +1856,26 @@ async def flight_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 🌍 功能介绍:
 • **搜索航班**: 查找最佳航班和价格
-• **价格监控**: 跟踪价格趋势和预警
+• **价格监控**: 跟踪价格趋势和预警  
 • **预订信息**: 获取详细预订选项
-• **多城市**: 复杂行程规划
+• **机场信息**: 智能机场查询和识别
 
-🤖 智能特性:
-• 实时价格比较
-• 价格历史趋势分析  
-• 最佳出行时间建议
-• 碳排放信息
-• 智能机场识别
+🤖 智能机场识别:
+• **多语言支持**: 中文、英文、IATA代码
+• **智能匹配**: 自动识别城市对应的最佳机场
+• **别名识别**: 支持城市别名和简称
+• **推荐选择**: 多个机场时自动推荐主要机场
 
-💡 智能搜索 (支持中文城市名):
-`/flight 北京 洛杉矶 2024-12-25` - 智能识别机场
-`/flight 上海 纽约 2024-12-25 2024-12-30` - 自动推荐最佳机场
-`/flight PEK LAX 2024-12-25` - 传统机场代码
+🌟 支持的输入格式:
+**中文城市**: `北京 东京`、`吉隆坡 甲米`、`上海 洛杉矶`
+**英文城市**: `Beijing Tokyo`、`Kuala Lumpur Krabi`
+**机场代码**: `PEK NRT`、`KUL KBV`、`PVG LAX`
+**混合输入**: `北京 New York`、`Shanghai 东京`
+
+💡 快速使用示例:
+`/flight 北京 洛杉矶 2024-12-25` - 智能识别PEK→LAX
+`/flight 吉隆坡 普吉 2024-12-25 2024-12-30` - 自动选择KUL→HKT  
+`/flight Shanghai Tokyo 2024-12-25` - 混合语言输入
 
 请选择功能:"""
     
@@ -2827,20 +2832,22 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         help_text = """✈️ 智能航班服务
 
 🌍 功能介绍:
-• **搜索航班**: 查找最佳航班和价格
+• **搜索航班**: 智能识别全球机场，查找最佳航班和价格
 • **价格监控**: 跟踪价格趋势和预警
 • **预订信息**: 获取详细预订选项
 • **多城市**: 复杂行程规划
 
 🤖 智能特性:
-• 实时价格比较
-• 价格历史趋势分析
-• 最佳出行时间建议
-• 碳排放信息
+• 🌏 **全球机场智能识别** - 支持中文、英文、IATA代码
+• 💰 实时价格比较
+• 📊 价格历史趋势分析
+• ⏰ 最佳出行时间建议
+• 🌱 碳排放信息
 
-💡 快速使用:
-`/flight PEK LAX 2024-12-25` - 搜索单程
-`/flight PEK LAX 2024-12-25 2024-12-30` - 搜索往返
+🌟 智能输入示例:
+`/flight 北京 洛杉矶 2024-12-25` - 中文城市自动匹配PEK→LAX
+`/flight 吉隆坡 普吉 2024-12-25 2024-12-30` - 智能识别KUL→HKT往返
+`/flight Shanghai Tokyo 2024-12-25` - 混合语言输入PVG→NRT
 
 请选择功能:"""
         
@@ -2860,14 +2867,26 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         })
         
         # 航班搜索指引
-        search_help_text = """🔍 请输入航班搜索信息:
+        search_help_text = """🔍 智能航班搜索
 
-格式: `出发地 到达地 出发日期 [返回日期]`
+📝 格式: `出发地 到达地 出发日期 [返回日期]`
 
-🌟 智能输入支持:
-• 城市名: `北京 洛杉矶 2024-12-25`
-• 机场代码: `PEK LAX 2024-12-25 2024-12-30`
-• 中英混合: `上海 New York 2024-12-25`"""
+🌟 智能机场识别支持:
+**中文城市**: `北京 东京 2024-12-25`
+**英文城市**: `Beijing Tokyo 2024-12-25`  
+**机场代码**: `PEK NRT 2024-12-25`
+**混合输入**: `北京 New York 2024-12-25`
+
+🗺️ 覆盖全球主要目的地:
+• **亚洲**: 中国、日本、韩国、东南亚各国
+• **美洲**: 美国、加拿大主要城市
+• **欧洲**: 英国、法国、德国等主要枢纽
+• **大洋洲**: 澳洲、新西兰
+
+💡 智能特性:
+• 自动识别城市最佳机场
+• 支持城市别名和简称
+• 多机场城市自动推荐主要机场"""
 
         await query.edit_message_text(
             text=foldable_text_with_markdown_v2(search_help_text),
@@ -2887,13 +2906,16 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         })
         
         await query.edit_message_text(
-            text="📊 价格监控设置:\n\n"
+            text="📊 *智能价格监控设置*\n\n"
+                 "🤖 智能机场识别 - 支持多种输入方式:\n"
                  "请输入要监控的航线信息:\n"
-                 "格式: `出发机场 到达机场 出发日期`\n\n"
-                 "🌟 智能输入支持:\n"
-                 "• 中文城市: `吉隆坡 甲米 2024-12-25`\n"
-                 "• 机场代码: `KUL KBV 2024-12-25`\n"
-                 "• 英文城市: `Kuala Lumpur Krabi 2024-12-25`",
+                 "格式: `出发地 到达地 出发日期`\n\n"
+                 "🌟 *智能输入支持*:\n"
+                 "• **中文城市**: `吉隆坡 甲米 2024-12-25`\n"
+                 "• **机场代码**: `KUL KBV 2024-12-25`\n"
+                 "• **英文城市**: `Kuala Lumpur Krabi 2024-12-25`\n"
+                 "• **混合输入**: `吉隆坡 Phuket 2024-12-25`\n\n"
+                 "💡 **自动匹配**: 系统会自动选择最适合的机场",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
             ])
@@ -2901,12 +2923,24 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
     
     elif data == "flight_booking":
         # 预订信息功能
-        booking_help_text = """🎫 预订信息功能
+        booking_help_text = """🎫 *智能预订信息功能*
 
-此功能需要先搜索具体航班后才能使用。
+🤖 **基于智能机场识别的预订服务**
 
-请先使用 **搜索航班** 功能找到合适的航班，
-然后在结果中查看预订选项。"""
+此功能需要先使用智能航班搜索后才能使用。
+
+🌟 *功能特点*:
+• 🔍 **智能航班匹配** - 支持中英文城市输入
+• 💰 **多渠道价格比较** - 显示各平台预订选项
+• 🎫 **详细预订信息** - 包含往返航班完整信息
+• 🌏 **全球机场支持** - 覆盖主要国际航线
+
+💡 *使用流程*:
+1️⃣ 先使用 **搜索航班** 功能（支持智能输入）
+2️⃣ 在结果中查看预订选项
+3️⃣ 获得详细的预订渠道和价格信息
+
+请先使用 **搜索航班** 功能找到合适的航班。"""
 
         await query.edit_message_text(
             text=foldable_text_with_markdown_v2(booking_help_text),
@@ -2926,19 +2960,27 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             "waiting_for": "airport_query"
         })
         
-        airport_help_text = """🛬 *机场信息查询*
+        airport_help_text = """🛬 *智能机场信息查询*
 
-请输入要查询的机场或城市:
+🤖 智能识别支持多种输入方式:
 
-🌟 *支持格式*:
-• 机场代码: `PEK`, `LAX`, `NRT`
-• 中文城市: `北京`, `上海`, `东京`
-• 英文城市: `Beijing`, `New York`, `Tokyo`
+🌟 *多语言支持*:
+• **IATA代码**: `PEK`, `LAX`, `NRT`, `KUL`, `CGK`
+• **中文城市**: `北京`, `吉隆坡`, `雅加达`, `普吉`
+• **英文城市**: `Beijing`, `Kuala Lumpur`, `Jakarta`, `Phuket`
+• **城市别名**: `普吉岛`, `甲米`, `马尼拉`, `宿务`
 
-💡 *示例*:
-• `PVG` - 查询浦东机场详细信息
-• `上海` - 查询上海的所有机场
-• `New York` - 查询纽约地区机场"""
+🌍 *全球覆盖*:
+• **东南亚**: 泰国、马来西亚、印尼、菲律宾、新加坡
+• **东北亚**: 中国、日本、韩国全境机场
+• **欧美**: 美国、欧洲主要城市和枢纽
+• **其他**: 澳洲、中东、印度等地区
+
+💡 *智能示例*:
+• `PVG` - 浦东机场详细信息
+• `吉隆坡` - 显示KLIA、Subang等所有机场
+• `Jakarta` - 雅加达地区机场选项
+• `普吉岛` - 自动识别HKT普吉机场"""
 
         await query.edit_message_text(
             text=foldable_text_with_markdown_v2(airport_help_text),
@@ -2951,12 +2993,18 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
     elif data == "flight_multi_city":
         # 多城市功能
         await query.edit_message_text(
-            text="🗺️ 多城市行程规划\n\n"
-                 "此功能目前支持复杂行程的价格查询。\n\n"
-                 "💡 使用建议:\n"
-                 "• 分段搜索各个航段\n"
-                 "• 比较不同路线的总价格\n"
-                 "• 考虑中转时间和便利性",
+            text="🗺️ *智能多城市行程规划*\n\n"
+                 "🤖 **智能机场识别** - 支持全球主要城市\n"
+                 "此功能支持复杂行程的价格查询。\n\n"
+                 "💡 *智能使用建议*:\n"
+                 "• 🔍 分段搜索各个航段（支持中英文城市名）\n"
+                 "• 💰 比较不同路线的总价格\n"
+                 "• ⏰ 考虑中转时间和便利性\n"
+                 "• 🌏 利用智能机场匹配优化路线\n\n"
+                 "🌟 *示例路线*:\n"
+                 "• `北京 → 吉隆坡 → 普吉 → 北京`\n"
+                 "• `Shanghai → Bangkok → Bali → Shanghai`\n"
+                 "• 系统自动识别最佳机场组合",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔍 开始搜索", callback_data="flight_search")],
                 [InlineKeyboardButton("🔙 返回主菜单", callback_data="flight_main_menu")]
@@ -3296,19 +3344,21 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         safe_dep_name = escape_markdown(dep_airport_info.get('name', departure_code), version=2)
         safe_dep_city = escape_markdown(dep_airport_info.get('city', ''), version=2)
         
-        search_help_text = f"""✈️ *从 {safe_dep_city} 出发*
+        search_help_text = f"""✈️ *智能航班搜索 - 从 {safe_dep_city} 出发*
 
 📍 出发机场: {safe_dep_name} ({departure_code})
 
-请输入目的地和出发日期:
+🤖 **智能目的地识别** - 请输入目的地和出发日期:
 
-🌟 *格式*: `目的地 出发日期 [返回日期]`
+🌟 *智能输入格式*: `目的地 出发日期 [返回日期]`
 
-💡 *示例*:
-• `东京 2024-12-25` - 单程
-• `洛杉矶 2024-12-25 2024-12-30` - 往返
-• `NRT 2024-12-25` - 使用机场代码
-• `New York 2024-12-25` - 英文城市名"""
+🌍 *多语言支持示例*:
+• `东京 2024-12-25` - 中文城市，自动匹配NRT/HND
+• `洛杉矶 2024-12-25 2024-12-30` - 中文往返，识别LAX
+• `Bangkok 2024-12-25` - 英文城市，自动选择BKK
+• `NRT 2024-12-25` - 直接使用机场代码
+
+💡 **智能特性**: 系统会自动识别最适合的目的地机场"""
 
         await query.edit_message_text(
             text=foldable_text_with_markdown_v2(search_help_text),
