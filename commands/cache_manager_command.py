@@ -41,6 +41,7 @@ CACHE_SERVICES = {
     'dns': 'DNS查询缓存',
     'map': '地图服务缓存',
     'flights': '航班服务缓存',
+    'hotels': '酒店服务缓存',
 }
 
 async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
@@ -73,6 +74,13 @@ async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
                         ]
                         for prefix in prefixes:
                             await cache_manager.clear_cache(subdirectory="flights", key_prefix=prefix)
+                    elif svc == 'hotels':
+                        # 特殊处理hotels的复杂缓存结构
+                        prefixes = [
+                            "hotel_", "hotel_details_"
+                        ]
+                        for prefix in prefixes:
+                            await cache_manager.clear_cache(subdirectory="hotels", key_prefix=prefix)
                     else:
                         await cache_manager.clear_cache(subdirectory=svc)
             return True, "✅ 所有缓存已清理完成"
@@ -97,6 +105,13 @@ async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
                 ]
                 for prefix in prefixes:
                     await cache_manager.clear_cache(subdirectory="flights", key_prefix=prefix)
+            elif service == 'hotels':
+                # 特殊处理hotels的复杂缓存结构
+                prefixes = [
+                    "hotel_", "hotel_details_"
+                ]
+                for prefix in prefixes:
+                    await cache_manager.clear_cache(subdirectory="hotels", key_prefix=prefix)
             else:
                 await cache_manager.clear_cache(subdirectory=service)
             

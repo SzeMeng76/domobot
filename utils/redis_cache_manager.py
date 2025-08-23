@@ -89,6 +89,7 @@ class RedisCacheManager:
             "finance": self.config.finance_cache_duration,  # 5分钟，金融数据缓存
             "map": self.config.map_cache_duration,  # 30分钟，地图服务缓存
             "flights": self.config.flight_cache_duration,  # 1小时，航班服务缓存
+            "hotels": self.config.hotel_cache_duration,  # 1小时，酒店服务缓存
         }
 
         # 对于搜索结果特殊处理
@@ -115,6 +116,11 @@ class RedisCacheManager:
             elif "flight_prices_" in key:
                 return self.config.flight_price_cache_duration
             # 默认使用flight_cache_duration (航班搜索)
+        
+        if subdirectory == "hotels" and key:
+            if "hotel_details_" in key:
+                return self.config.hotel_details_cache_duration
+            # 默认使用hotel_cache_duration (酒店搜索)
 
         return ttl_mapping.get(subdirectory, self.config.default_cache_duration)
 

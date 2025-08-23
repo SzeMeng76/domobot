@@ -80,6 +80,8 @@ class BotConfig:
         self.flight_cache_duration = 3600  # 1小时，航班搜索缓存
         self.flight_booking_cache_duration = 1800  # 30分钟，航班预订选项缓存
         self.flight_price_cache_duration = 7200  # 2小时，航班价格洞察缓存
+        self.hotel_cache_duration = 3600  # 1小时，酒店搜索缓存
+        self.hotel_details_cache_duration = 7200  # 2小时，酒店详情缓存
 
         # 定时清理配置
         self.spotify_weekly_cleanup = True  # 默认启用
@@ -94,6 +96,7 @@ class BotConfig:
         self.finance_weekly_cleanup = True  # 默认启用，金融数据缓存
         self.map_weekly_cleanup = True  # 默认启用，地图服务缓存
         self.flight_weekly_cleanup = True  # 默认启用，航班服务缓存
+        self.hotel_weekly_cleanup = True  # 默认启用，酒店服务缓存
 
         # API配置
         self.exchange_rate_api_keys = []
