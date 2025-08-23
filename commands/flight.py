@@ -572,6 +572,10 @@ class FlightServiceManager:
                 try:
                     return_params = {
                         'engine': 'google_flights',
+                        'departure_id': original_params.get('departure_id'),
+                        'arrival_id': original_params.get('arrival_id'), 
+                        'outbound_date': original_params.get('outbound_date'),
+                        'return_date': original_params.get('return_date'),
                         'departure_token': departure_token,
                         'currency': original_params.get('currency', 'USD'),
                         'hl': original_params.get('hl', 'en'),
