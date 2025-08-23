@@ -419,15 +419,45 @@ class HotelServiceManager:
         if children > 0:
             params["children"] = children
         
-        # 添加其他可选参数
+        # 添加基本筛选参数
         if "hotel_class" in kwargs:
             params["hotel_class"] = kwargs["hotel_class"]
         if "sort_by" in kwargs:
-            params["sort_by"] = kwargs["sort_by"]  # price_low_to_high, price_high_to_low, rating, etc.
+            params["sort_by"] = kwargs["sort_by"]
         if "max_price" in kwargs:
             params["max_price"] = kwargs["max_price"]
-        if "min_rating" in kwargs:
-            params["min_rating"] = kwargs["min_rating"]
+        if "min_price" in kwargs:
+            params["min_price"] = kwargs["min_price"]
+        if "rating" in kwargs:
+            params["rating"] = kwargs["rating"]  # 7=3.5+, 8=4.0+, 9=4.5+
+        
+        # 品牌筛选
+        if "brands" in kwargs:
+            params["brands"] = kwargs["brands"]  # 如 "33,67,101"
+        
+        # 特殊服务选项
+        if "free_cancellation" in kwargs and kwargs["free_cancellation"]:
+            params["free_cancellation"] = "true"
+        if "special_offers" in kwargs and kwargs["special_offers"]:
+            params["special_offers"] = "true"
+        if "eco_certified" in kwargs and kwargs["eco_certified"]:
+            params["eco_certified"] = "true"
+        
+        # 度假租赁相关参数
+        if "vacation_rentals" in kwargs and kwargs["vacation_rentals"]:
+            params["vacation_rentals"] = "true"
+        if "bedrooms" in kwargs:
+            params["bedrooms"] = kwargs["bedrooms"]
+        if "bathrooms" in kwargs:
+            params["bathrooms"] = kwargs["bathrooms"]
+        
+        # 设施筛选
+        if "amenities" in kwargs:
+            params["amenities"] = kwargs["amenities"]  # 如 "35,9,19"
+        
+        # 物业类型筛选
+        if "property_types" in kwargs:
+            params["property_types"] = kwargs["property_types"]  # 如 "17,12,18"
         
         try:
             logger.info(f"Searching hotels with params: {params}")
@@ -720,6 +750,13 @@ async def hotel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • 只有日期: `15` (当月)
 • 两个日期: `2024-01-15,2024-01-18` 或 `2024-01-15 2024-01-18`
 
+*高级筛选功能:*
+🏢 *品牌筛选* - 万豪、希尔顿、洲际、雅高、凯悦、温德姆
+🎯 *特殊服务* - 免费取消、特价优惠、环保认证
+🏠 *度假租赁* - 支持1-4+卧室、1-2浴室筛选
+🏷️ *物业类型* - 传统酒店、公寓酒店、别墅、民宿、度假村
+🏢 *设施筛选* - 游泳池、SPA、健身房、停车场、WiFi、厨房等
+
 *示例:*
 • `/hotel 北京` - 搜索北京酒店(明天入住)
 • `/hotel Tokyo 2024-03-15` - 搜索东京酒店，3月15日入住
@@ -736,6 +773,18 @@ async def hotel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🇦🇪 迪拜、🇦🇺 悉尼、墨尔本
 
 💡 *提示:* 支持智能位置识别，可使用中英文混合输入
+🎯 *筛选:* 搜索后可使用"⚙️ 筛选条件"按钮进行高级筛选
+
+*使用示例:*
+• `/hotel 北京` - 基础搜索，选择区域后可进行筛选
+• `/hotel Tokyo 2024-03-15` - 搜索后点击"🏢 酒店品牌"选择万豪酒店
+• `/hotel 上海外滩 01-20 01-25` - 搜索后可选择"🎯 特殊服务"筛选免费取消酒店
+• `/hotel New York 15 18` - 搜索后可通过"🏠 度假租赁"筛选公寓式住宿
+
+📋 *筛选功能说明:*
+• 筛选后会重新搜索，显示符合条件的酒店
+• 可结合多个筛选条件获得精准结果  
+• 部分筛选可能无结果，建议调整筛选条件
         """
         message = await send_help(context, chat_id, help_text)
         config = get_config()
@@ -1191,7 +1240,15 @@ async def hotel_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             ],
             [
                 InlineKeyboardButton("🏨 酒店星级", callback_data="hotel_filter_class"),
-                InlineKeyboardButton("🏷️ 酒店类型", callback_data="hotel_filter_type")
+                InlineKeyboardButton("🏢 酒店品牌", callback_data="hotel_filter_brand")
+            ],
+            [
+                InlineKeyboardButton("🏠 度假租赁", callback_data="hotel_filter_vacation"),
+                InlineKeyboardButton("🎯 特殊服务", callback_data="hotel_filter_special")
+            ],
+            [
+                InlineKeyboardButton("🏷️ 物业类型", callback_data="hotel_filter_property"),
+                InlineKeyboardButton("🏢 设施筛选", callback_data="hotel_filter_amenities")
             ],
             [
                 InlineKeyboardButton("🔙 返回", callback_data="hotel_back_to_results"),
@@ -1258,6 +1315,31 @@ async def hotel_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             parse_mode=ParseMode.MARKDOWN_V2,
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
+    
+    # 新增筛选选项处理
+    elif query.data == "hotel_filter_brand":
+        # 品牌筛选
+        await _show_brand_filter(query, session_data, context)
+    
+    elif query.data == "hotel_filter_special":
+        # 特殊服务筛选
+        await _show_special_service_filter(query, session_data, context)
+    
+    elif query.data == "hotel_filter_vacation":
+        # 度假租赁筛选
+        await _show_vacation_rental_filter(query, session_data, context)
+    
+    elif query.data == "hotel_filter_property":
+        # 物业类型筛选
+        await _show_property_type_filter(query, session_data, context)
+    
+    elif query.data == "hotel_filter_amenities":
+        # 设施筛选
+        await _show_amenities_filter(query, session_data, context)
+    
+    # 筛选应用处理
+    elif query.data.startswith("hotel_apply_"):
+        await _apply_filter_and_research(query, session_data, context)
 
 async def _sort_hotels_by_price(query: CallbackQuery, session_data: Dict, context: ContextTypes.DEFAULT_TYPE):
     """按价格排序酒店"""
@@ -1628,6 +1710,357 @@ async def _create_hotel_telegraph_page(hotels_data: Dict, search_params: Dict) -
     except Exception as e:
         logger.error(f"创建Telegraph页面失败: {e}")
         return None
+
+async def _show_brand_filter(query: CallbackQuery, session_data: Dict, context: ContextTypes.DEFAULT_TYPE):
+    """显示品牌筛选选项"""
+    if not session_data:
+        config = get_config()
+        await query.edit_message_text("❌ 会话已过期，请重新搜索")
+        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+        return
+    
+    # 常见酒店品牌ID（基于SerpAPI文档）
+    brand_options = [
+        ("万豪 Marriott", "hotel_apply_brand_marriott"),
+        ("希尔顿 Hilton", "hotel_apply_brand_hilton"), 
+        ("洲际 IHG", "hotel_apply_brand_ihg"),
+        ("雅高 Accor", "hotel_apply_brand_accor"),
+        ("凯悦 Hyatt", "hotel_apply_brand_hyatt"),
+        ("温德姆 Wyndham", "hotel_apply_brand_wyndham")
+    ]
+    
+    keyboard = []
+    for brand_name, callback_data in brand_options:
+        keyboard.append([InlineKeyboardButton(brand_name, callback_data=callback_data)])
+    
+    keyboard.extend([
+        [InlineKeyboardButton("🔙 返回筛选", callback_data="hotel_filter")],
+        [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
+    ])
+    
+    await query.edit_message_text(
+        "🏢 *品牌筛选*\n\n选择您偏好的酒店品牌:",
+        parse_mode=ParseMode.MARKDOWN_V2,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def _show_special_service_filter(query: CallbackQuery, session_data: Dict, context: ContextTypes.DEFAULT_TYPE):
+    """显示特殊服务筛选选项"""
+    if not session_data:
+        config = get_config()
+        await query.edit_message_text("❌ 会话已过期，请重新搜索")
+        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+        return
+    
+    service_options = [
+        ("✅ 免费取消", "hotel_apply_free_cancellation"),
+        ("💎 特价优惠", "hotel_apply_special_offers"),
+        ("🌱 环保认证", "hotel_apply_eco_certified")
+    ]
+    
+    keyboard = []
+    for service_name, callback_data in service_options:
+        keyboard.append([InlineKeyboardButton(service_name, callback_data=callback_data)])
+    
+    keyboard.extend([
+        [InlineKeyboardButton("🔙 返回筛选", callback_data="hotel_filter")],
+        [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
+    ])
+    
+    await query.edit_message_text(
+        "🎯 *特殊服务*\n\n选择您需要的特殊服务:",
+        parse_mode=ParseMode.MARKDOWN_V2,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def _show_vacation_rental_filter(query: CallbackQuery, session_data: Dict, context: ContextTypes.DEFAULT_TYPE):
+    """显示度假租赁筛选选项"""
+    if not session_data:
+        config = get_config()
+        await query.edit_message_text("❌ 会话已过期，请重新搜索")
+        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+        return
+    
+    keyboard = [
+        [InlineKeyboardButton("🏠 启用度假租赁模式", callback_data="hotel_apply_vacation_rentals")],
+        [
+            InlineKeyboardButton("🛏️ 1卧室", callback_data="hotel_apply_bedrooms_1"),
+            InlineKeyboardButton("🛏️ 2卧室", callback_data="hotel_apply_bedrooms_2")
+        ],
+        [
+            InlineKeyboardButton("🛏️ 3卧室", callback_data="hotel_apply_bedrooms_3"),
+            InlineKeyboardButton("🛏️ 4+卧室", callback_data="hotel_apply_bedrooms_4")
+        ],
+        [
+            InlineKeyboardButton("🚿 1浴室", callback_data="hotel_apply_bathrooms_1"),
+            InlineKeyboardButton("🚿 2浴室", callback_data="hotel_apply_bathrooms_2")
+        ],
+        [InlineKeyboardButton("🔙 返回筛选", callback_data="hotel_filter")],
+        [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
+    ]
+    
+    await query.edit_message_text(
+        "🏠 *度假租赁筛选*\n\n选择房间和设施要求:",
+        parse_mode=ParseMode.MARKDOWN_V2,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def _show_property_type_filter(query: CallbackQuery, session_data: Dict, context: ContextTypes.DEFAULT_TYPE):
+    """显示物业类型筛选选项"""
+    if not session_data:
+        config = get_config()
+        await query.edit_message_text("❌ 会话已过期，请重新搜索")
+        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+        return
+    
+    # 基于Google Hotels API文档的物业类型
+    property_options = [
+        ("🏨 传统酒店", "hotel_apply_property_hotel"),
+        ("🏢 公寓酒店", "hotel_apply_property_apartment"),
+        ("🏡 别墅", "hotel_apply_property_villa"),
+        ("🏠 民宿", "hotel_apply_property_guesthouse"),
+        ("🏕️ 度假村", "hotel_apply_property_resort")
+    ]
+    
+    keyboard = []
+    for property_name, callback_data in property_options:
+        keyboard.append([InlineKeyboardButton(property_name, callback_data=callback_data)])
+    
+    keyboard.extend([
+        [InlineKeyboardButton("🔙 返回筛选", callback_data="hotel_filter")],
+        [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
+    ])
+    
+    await query.edit_message_text(
+        "🏷️ *物业类型*\n\n选择您偏好的住宿类型:",
+        parse_mode=ParseMode.MARKDOWN_V2,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def _show_amenities_filter(query: CallbackQuery, session_data: Dict, context: ContextTypes.DEFAULT_TYPE):
+    """显示设施筛选选项"""
+    if not session_data:
+        config = get_config()
+        await query.edit_message_text("❌ 会话已过期，请重新搜索")
+        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+        return
+    
+    # 常见设施选项（基于SerpAPI文档）
+    amenity_options = [
+        ("🏊 游泳池", "hotel_apply_amenity_pool"),
+        ("🧖 SPA", "hotel_apply_amenity_spa"), 
+        ("🏋️ 健身房", "hotel_apply_amenity_fitness"),
+        ("🅿️ 停车场", "hotel_apply_amenity_parking"),
+        ("📶 WiFi", "hotel_apply_amenity_wifi"),
+        ("🍳 厨房", "hotel_apply_amenity_kitchen"),
+        ("🚗 机场接送", "hotel_apply_amenity_airport"),
+        ("🐕 宠物友好", "hotel_apply_amenity_pet")
+    ]
+    
+    keyboard = []
+    for amenity_name, callback_data in amenity_options:
+        keyboard.append([InlineKeyboardButton(amenity_name, callback_data=callback_data)])
+    
+    keyboard.extend([
+        [InlineKeyboardButton("🔙 返回筛选", callback_data="hotel_filter")],
+        [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
+    ])
+    
+    await query.edit_message_text(
+        "🏢 *设施筛选*\n\n选择您需要的设施:",
+        parse_mode=ParseMode.MARKDOWN_V2,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def _apply_filter_and_research(query: CallbackQuery, session_data: Dict, context: ContextTypes.DEFAULT_TYPE):
+    """应用筛选条件并重新搜索"""
+    user_id = query.from_user.id
+    
+    if not session_data or 'search_params' not in session_data:
+        config = get_config()
+        await query.edit_message_text("❌ 会话已过期，请重新搜索")
+        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+        return
+    
+    # 解析筛选类型
+    filter_type = query.data.replace("hotel_apply_", "")
+    search_params = session_data['search_params'].copy()
+    
+    # 应用不同的筛选条件
+    if filter_type.startswith("brand_"):
+        brand = filter_type.replace("brand_", "")
+        brand_mapping = {
+            "marriott": "23",  # Marriott品牌ID示例
+            "hilton": "75",    # Hilton品牌ID示例
+            "ihg": "89",       # IHG品牌ID示例
+            "accor": "33",     # Accor品牌ID示例
+            "hyatt": "45",     # Hyatt品牌ID示例
+            "wyndham": "67"    # Wyndham品牌ID示例
+        }
+        if brand in brand_mapping:
+            search_params['brands'] = brand_mapping[brand]
+    
+    elif filter_type == "free_cancellation":
+        search_params['free_cancellation'] = True
+    
+    elif filter_type == "special_offers":
+        search_params['special_offers'] = True
+    
+    elif filter_type == "eco_certified":
+        search_params['eco_certified'] = True
+    
+    elif filter_type == "vacation_rentals":
+        search_params['vacation_rentals'] = True
+    
+    elif filter_type.startswith("bedrooms_"):
+        bedrooms = filter_type.replace("bedrooms_", "")
+        if bedrooms == "4":
+            search_params['bedrooms'] = "4"
+        else:
+            search_params['bedrooms'] = bedrooms
+        search_params['vacation_rentals'] = True  # 自动启用度假租赁模式
+    
+    elif filter_type.startswith("bathrooms_"):
+        bathrooms = filter_type.replace("bathrooms_", "")
+        search_params['bathrooms'] = bathrooms
+        search_params['vacation_rentals'] = True  # 自动启用度假租赁模式
+    
+    elif filter_type.startswith("property_"):
+        property_type = filter_type.replace("property_", "")
+        # 物业类型ID映射（示例，实际需要根据API文档调整）
+        property_mapping = {
+            "hotel": "1",
+            "apartment": "2", 
+            "villa": "17",
+            "guesthouse": "12",
+            "resort": "18"
+        }
+        if property_type in property_mapping:
+            search_params['property_types'] = property_mapping[property_type]
+    
+    elif filter_type.startswith("amenity_"):
+        amenity = filter_type.replace("amenity_", "")
+        # 设施ID映射（示例，实际需要根据API文档调整）
+        amenity_mapping = {
+            "pool": "35",
+            "spa": "9",
+            "fitness": "19", 
+            "parking": "22",
+            "wifi": "14",
+            "kitchen": "28",
+            "airport": "31",
+            "pet": "42"
+        }
+        if amenity in amenity_mapping:
+            search_params['amenities'] = amenity_mapping[amenity]
+    
+    # 显示搜索中消息
+    filter_display = _get_filter_display_name(filter_type)
+    await query.edit_message_text(
+        f"🔍 正在应用筛选条件: {escape_markdown(filter_display, version=2)}\n\n请稍候...",
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    
+    try:
+        # 使用新的搜索参数重新搜索
+        cache_service = HotelCacheService(cache_manager)
+        
+        hotels_data = await hotel_service_manager.search_hotels(
+            location_query=search_params['location_query'],
+            check_in_date=search_params['check_in_date'],
+            check_out_date=search_params['check_out_date'],
+            adults=search_params['adults'],
+            children=search_params['children'],
+            **{k: v for k, v in search_params.items() if k not in ['location_query', 'check_in_date', 'check_out_date', 'adults', 'children']}
+        )
+        
+        if not hotels_data or 'properties' not in hotels_data or len(hotels_data['properties']) == 0:
+            await query.edit_message_text(
+                f"😔 应用筛选条件后未找到匹配的酒店\n\n筛选条件: {escape_markdown(filter_display, version=2)}\n\n请尝试调整筛选条件或返回原始结果。",
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 返回筛选", callback_data="hotel_filter")],
+                    [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
+                ])
+            )
+            return
+        
+        # 更新会话数据
+        session_data['hotels_data'] = hotels_data
+        session_data['search_params'] = search_params
+        hotel_session_manager.set_session(user_id, session_data)
+        
+        # 构建结果消息
+        enhanced_display = enhance_hotel_location_display(hotels_data, search_params)
+        hotels_summary = format_hotel_summary(hotels_data, search_params)
+        full_message = f"{enhanced_display}\n🎯 *已应用筛选: {escape_markdown(filter_display, version=2)}*\n\n{hotels_summary}"
+        
+        # 创建操作按钮
+        keyboard = [
+            [
+                InlineKeyboardButton("🔄 重新搜索", callback_data="hotel_research"),
+                InlineKeyboardButton("⚙️ 筛选条件", callback_data="hotel_filter")
+            ],
+            [
+                InlineKeyboardButton("💰 价格排序", callback_data="hotel_sort_price"),
+                InlineKeyboardButton("⭐ 评分排序", callback_data="hotel_sort_rating")
+            ],
+            [
+                InlineKeyboardButton("📋 详细列表", callback_data="hotel_detailed_list"),
+                InlineKeyboardButton("🗺️ 地图查看", callback_data="hotel_map_view")
+            ]
+        ]
+        
+        await query.edit_message_text(
+            text=full_message,
+            parse_mode=ParseMode.MARKDOWN_V2,
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        
+    except Exception as e:
+        logger.error(f"应用筛选条件失败: {e}")
+        await query.edit_message_text(
+            f"🚫 应用筛选条件失败: {str(e)}\n\n请稍后重试",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 返回筛选", callback_data="hotel_filter")],
+                [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
+            ])
+        )
+
+def _get_filter_display_name(filter_type: str) -> str:
+    """获取筛选条件的显示名称"""
+    filter_names = {
+        "brand_marriott": "万豪 Marriott",
+        "brand_hilton": "希尔顿 Hilton",
+        "brand_ihg": "洲际 IHG", 
+        "brand_accor": "雅高 Accor",
+        "brand_hyatt": "凯悦 Hyatt",
+        "brand_wyndham": "温德姆 Wyndham",
+        "free_cancellation": "免费取消",
+        "special_offers": "特价优惠",
+        "eco_certified": "环保认证",
+        "vacation_rentals": "度假租赁模式",
+        "bedrooms_1": "1卧室",
+        "bedrooms_2": "2卧室", 
+        "bedrooms_3": "3卧室",
+        "bedrooms_4": "4+卧室",
+        "bathrooms_1": "1浴室",
+        "bathrooms_2": "2浴室",
+        "property_hotel": "传统酒店",
+        "property_apartment": "公寓酒店",
+        "property_villa": "别墅",
+        "property_guesthouse": "民宿",
+        "property_resort": "度假村",
+        "amenity_pool": "游泳池",
+        "amenity_spa": "SPA",
+        "amenity_fitness": "健身房",
+        "amenity_parking": "停车场", 
+        "amenity_wifi": "WiFi",
+        "amenity_kitchen": "厨房",
+        "amenity_airport": "机场接送",
+        "amenity_pet": "宠物友好"
+    }
+    return filter_names.get(filter_type, filter_type)
 
 # 注册命令
 command_factory.register_command(
