@@ -2203,29 +2203,21 @@ async def _execute_flight_search(update: Update, context: ContextTypes.DEFAULT_T
             await _schedule_auto_delete(context, message.chat_id, message.message_id, 
                                       getattr(config, 'auto_delete_delay', 600))
 
-@with_error_handling
-async def flight_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """处理航班功能的文本输入 - 与map.py的map_text_handler完全一致的结构"""
+async def flight_text_handler_core(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """航班文本处理的核心逻辑"""
     if not update.message or not update.message.text:
-        logger.debug("FlightService: flight_text_handler called but no message/text")
         return
     
     user_id = update.effective_user.id
     text = update.message.text.strip()
     
-    logger.info(f"FlightService: flight_text_handler called for user {user_id}, text: {text[:50]}")
-    
-    # 检查消息是否已被地图服务处理
-    if hasattr(context, '_map_processed_messages'):
-        message_id = f"{user_id}_{update.message.message_id}"
-        if message_id in context._map_processed_messages:
-            logger.debug(f"FlightService: 消息已被地图服务处理，跳过: {text[:50]}")
-            return
-    
-    # 获取用户会话 - 与map.py完全一致的会话管理
+    # 获取用户会话
     session_data = flight_session_manager.get_session(user_id)
     if not session_data:
-        return  # 没有活动会话，让其他处理器处理
+        logger.debug(f"FlightService: 用户 {user_id} 没有活动会话")
+        return
+    
+    logger.info(f"FlightService: 用户 {user_id} 活动会话 - action: {session_data.get('action')}, waiting_for: {session_data.get('waiting_for')}, 输入: {text[:50]}")
     
     action = session_data.get("action")
     waiting_for = session_data.get("waiting_for")
@@ -2267,6 +2259,11 @@ async def flight_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     # 消息已处理完成
     return
+
+@with_error_handling
+async def flight_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理航班功能的文本输入 - 向后兼容的包装器"""
+    await flight_text_handler_core(update, context)
 
 async def _parse_and_execute_flight_search(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
     """解析并执行航班搜索"""
@@ -3995,5 +3992,5 @@ command_factory.register_command(
 # 注册回调处理器
 command_factory.register_callback(r"^flight_", flight_callback_handler, permission=Permission.USER, description="航班服务回调")
 
-# 注册文本消息处理器
-command_factory.register_text_handler(flight_text_handler, permission=Permission.USER, description="航班服务文本输入处理")
+# 不注册单独的文本处理器，由统一处理器管理
+# command_factory.register_text_handler(flight_text_handler, permission=Permission.USER, description="航班服务文本输入处理")

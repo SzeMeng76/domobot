@@ -863,34 +863,21 @@ async def _execute_location_search(update: Update, context: ContextTypes.DEFAULT
             )
             await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
 
-@with_error_handling
-async def map_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """处理地图功能的文本输入"""
+async def map_text_handler_core(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """地图文本处理的核心逻辑"""
     if not update.message or not update.message.text:
-        logger.debug("MapService: map_text_handler called but no message/text")
         return
     
     user_id = update.effective_user.id
     text = update.message.text.strip()
     
-    logger.info(f"MapService: map_text_handler called for user {user_id}, text: {text[:50]}")
-    
     # 获取用户会话
     session_data = map_session_manager.get_session(user_id)
     if not session_data:
-        logger.debug(f"MapService: 用户 {user_id} 没有活动会话，忽略文本输入: {text[:50]}")
-        return  # 没有活动会话，让其他处理器处理
-    
-    # 有活动的地图会话，处理这个消息
-    logger.info(f"MapService: 用户 {user_id} 活动会话 - action: {session_data.get('action')}, waiting_for: {session_data.get('waiting_for')}, 输入: {text[:50]}")
-    
-    # 标记消息已被地图服务处理，防止其他服务重复处理
-    if not hasattr(context, '_map_processed_messages'):
-        context._map_processed_messages = set()
-    message_id = f"{user_id}_{update.message.message_id}"
-    if message_id in context._map_processed_messages:
+        logger.debug(f"MapService: 用户 {user_id} 没有活动会话")
         return
-    context._map_processed_messages.add(message_id)
+    
+    logger.info(f"MapService: 用户 {user_id} 活动会话 - action: {session_data.get('action')}, waiting_for: {session_data.get('waiting_for')}, 输入: {text[:50]}")
     
     action = session_data.get("action")
     waiting_for = session_data.get("waiting_for")
@@ -940,6 +927,11 @@ async def map_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     
     # 消息已处理完成
     return
+
+@with_error_handling
+async def map_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理地图功能的文本输入 - 向后兼容的包装器"""
+    await map_text_handler_core(update, context)
 
 async def _execute_route_planning_with_coords(update: Update, context: ContextTypes.DEFAULT_TYPE, origin: str, destination_name: str, destination_coords: Tuple[float, float], destination_language: str) -> None:
     """执行使用精确坐标的路线规划"""
@@ -1751,5 +1743,5 @@ command_factory.register_command(
 # 注册回调处理器
 command_factory.register_callback(r"^map_", map_callback_handler, permission=Permission.USER, description="地图服务回调")
 
-# 注册文本消息处理器
-command_factory.register_text_handler(map_text_handler, permission=Permission.USER, description="地图服务文本输入处理")
+# 不注册单独的文本处理器，由统一处理器管理  
+# command_factory.register_text_handler(map_text_handler, permission=Permission.USER, description="地图服务文本输入处理")

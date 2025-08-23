@@ -109,6 +109,7 @@ from commands import (
 from commands.rate_command import set_rate_converter
 from handlers.user_cache_handler import setup_user_cache_handler  # 新增：导入用户缓存处理器
 from utils.command_factory import command_factory
+from utils.unified_text_handler import unified_text_handler  # 导入统一文本处理器
 from utils.error_handling import with_error_handling
 from utils.log_manager import schedule_log_maintenance
 from utils.mysql_user_manager import MySQLUserManager
