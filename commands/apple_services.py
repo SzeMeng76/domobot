@@ -660,6 +660,7 @@ async def apple_services_command(update: Update, context: ContextTypes.DEFAULT_T
             error_message = f"清理缓存时发生错误: {e!s}"
             await message.delete()
             await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+            await delete_user_command(context, update.effective_chat.id, update.message.message_id)
             return
 
     service = args[0].lower()
@@ -667,6 +668,7 @@ async def apple_services_command(update: Update, context: ContextTypes.DEFAULT_T
         invalid_service_message = "无效的服务类型，请使用 iCloud, Apple One 或 AppleMusic"
         await message.delete()
         await send_error(context, update.effective_chat.id, foldable_text_v2(invalid_service_message), parse_mode="MarkdownV2")
+        await delete_user_command(context, update.effective_chat.id, update.message.message_id)
         return
 
     try:
@@ -742,6 +744,7 @@ async def apple_services_command(update: Update, context: ContextTypes.DEFAULT_T
         error_message = f"查询失败: {e!s}"
         await message.delete()
         await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        await delete_user_command(context, update.effective_chat.id, update.message.message_id)
 
 
 async def apple_services_clean_cache_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
