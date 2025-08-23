@@ -392,6 +392,7 @@ class HotelServiceManager:
     
     def __init__(self, serpapi_key: str = None):
         self.serpapi_key = serpapi_key
+        self.autocomplete_cache = {}  # 自动完成缓存
     
     def is_available(self) -> bool:
         """检查服务是否可用"""
@@ -887,8 +888,7 @@ async def hotel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     search_msg = await send_info(
         context, 
         chat_id, 
-        f"🔍 正在搜索酒店...\n📍 位置: {escape_markdown(location_query, version=2)}\n📅 日期: {escape_markdown(check_in_date, version=2)} \\- {escape_markdown(check_out_date, version=2)}",
-        parse_mode=ParseMode.MARKDOWN_V2
+        foldable_text_v2(f"🔍 正在搜索酒店...\n📍 位置: {location_query}\n📅 日期: {check_in_date} - {check_out_date}")
     )
     
     try:
@@ -1112,8 +1112,7 @@ async def hotel_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         
         # 更新消息为搜索中
         await query.edit_message_text(
-            f"🔍 正在搜索酒店...\n📍 位置: {escape_markdown(selected_area['name'], version=2)}\n📅 日期: {escape_markdown(check_in_date, version=2)} \\- {escape_markdown(check_out_date, version=2)}",
-            parse_mode=ParseMode.MARKDOWN_V2
+            foldable_text_v2(f"🔍 正在搜索酒店...\n📍 位置: {selected_area['name']}\n📅 日期: {check_in_date} - {check_out_date}")
         )
         
         try:
@@ -1316,6 +1315,18 @@ async def hotel_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     
+    elif query.data == "hotel_filter_price":
+        # 价格范围筛选
+        await _show_price_filter(query, session_data, context)
+    
+    elif query.data == "hotel_filter_rating":
+        # 最低评分筛选
+        await _show_rating_filter(query, session_data, context)
+    
+    elif query.data == "hotel_filter_class":
+        # 酒店星级筛选
+        await _show_class_filter(query, session_data, context)
+    
     # 新增筛选选项处理
     elif query.data == "hotel_filter_brand":
         # 品牌筛选
@@ -1481,7 +1492,7 @@ async def _show_detailed_hotel_list(query: CallbackQuery, session_data: Dict, co
                                   getattr(config, 'auto_delete_delay', 600))
         return
     
-    await query.edit_message_text("📋 正在生成详细列表...")
+    await query.edit_message_text(foldable_text_v2("📋 正在生成详细列表..."))
     
     try:
         hotels_data = session_data['hotels_data']
@@ -1887,7 +1898,34 @@ async def _apply_filter_and_research(query: CallbackQuery, session_data: Dict, c
     search_params = session_data['search_params'].copy()
     
     # 应用不同的筛选条件
-    if filter_type.startswith("brand_"):
+    if filter_type.startswith("price_"):
+        # 价格筛选
+        price_type = filter_type.replace("price_", "")
+        if price_type == "100":
+            search_params['max_price'] = "100"
+        elif price_type == "100_200":
+            search_params['min_price'] = "100"
+            search_params['max_price'] = "200"
+        elif price_type == "200_300":
+            search_params['min_price'] = "200"
+            search_params['max_price'] = "300"
+        elif price_type == "300_500":
+            search_params['min_price'] = "300"
+            search_params['max_price'] = "500"
+        elif price_type == "500":
+            search_params['min_price'] = "500"
+    
+    elif filter_type.startswith("rating_"):
+        # 评分筛选
+        rating = filter_type.replace("rating_", "")
+        search_params['rating'] = rating  # Google Hotels API格式: 7=3.5+, 8=4.0+, 9=4.5+
+    
+    elif filter_type.startswith("class_"):
+        # 星级筛选
+        hotel_class = filter_type.replace("class_", "")
+        search_params['hotel_class'] = hotel_class
+    
+    elif filter_type.startswith("brand_"):
         brand = filter_type.replace("brand_", "")
         brand_mapping = {
             "marriott": "23",  # Marriott品牌ID示例
@@ -1957,8 +1995,7 @@ async def _apply_filter_and_research(query: CallbackQuery, session_data: Dict, c
     # 显示搜索中消息
     filter_display = _get_filter_display_name(filter_type)
     await query.edit_message_text(
-        f"🔍 正在应用筛选条件: {escape_markdown(filter_display, version=2)}\n\n请稍候...",
-        parse_mode=ParseMode.MARKDOWN_V2
+        foldable_text_v2(f"🔍 正在应用筛选条件: {filter_display}\n\n请稍候...")
     )
     
     try:
@@ -2030,6 +2067,27 @@ async def _apply_filter_and_research(query: CallbackQuery, session_data: Dict, c
 def _get_filter_display_name(filter_type: str) -> str:
     """获取筛选条件的显示名称"""
     filter_names = {
+        # 价格筛选
+        "price_100": "低于$100",
+        "price_100_200": "$100-200",
+        "price_200_300": "$200-300", 
+        "price_300_500": "$300-500",
+        "price_500": "高于$500",
+        
+        # 评分筛选
+        "rating_9": "4.5+评分",
+        "rating_8": "4.0+评分",
+        "rating_7": "3.5+评分",
+        "rating_6": "3.0+评分",
+        
+        # 星级筛选
+        "class_5": "5星酒店",
+        "class_4": "4星酒店",
+        "class_3": "3星酒店",
+        "class_2": "2星酒店",
+        "class_1": "1星酒店",
+        
+        # 品牌筛选
         "brand_marriott": "万豪 Marriott",
         "brand_hilton": "希尔顿 Hilton",
         "brand_ihg": "洲际 IHG", 
@@ -2061,6 +2119,98 @@ def _get_filter_display_name(filter_type: str) -> str:
         "amenity_pet": "宠物友好"
     }
     return filter_names.get(filter_type, filter_type)
+
+async def _show_price_filter(query: CallbackQuery, session_data: Dict, context: ContextTypes.DEFAULT_TYPE):
+    """显示价格筛选选项"""
+    if not session_data:
+        config = get_config()
+        await query.edit_message_text("❌ 会话已过期，请重新搜索")
+        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+        return
+    
+    price_options = [
+        ("💰 低于$100", "hotel_apply_price_100"),
+        ("💰 $100-200", "hotel_apply_price_100_200"),
+        ("💰 $200-300", "hotel_apply_price_200_300"),
+        ("💰 $300-500", "hotel_apply_price_300_500"),
+        ("💰 高于$500", "hotel_apply_price_500")
+    ]
+    
+    keyboard = []
+    for price_name, callback_data in price_options:
+        keyboard.append([InlineKeyboardButton(price_name, callback_data=callback_data)])
+    
+    keyboard.extend([
+        [InlineKeyboardButton("🔙 返回筛选", callback_data="hotel_filter")],
+        [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
+    ])
+    
+    await query.edit_message_text(
+        "💰 *价格范围*\\n\\n选择您的价格区间:",
+        parse_mode=ParseMode.MARKDOWN_V2,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def _show_rating_filter(query: CallbackQuery, session_data: Dict, context: ContextTypes.DEFAULT_TYPE):
+    """显示评分筛选选项"""
+    if not session_data:
+        config = get_config()
+        await query.edit_message_text("❌ 会话已过期，请重新搜索")
+        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+        return
+    
+    rating_options = [
+        ("⭐⭐⭐⭐⭐ 4.5+", "hotel_apply_rating_9"),  # Google Hotels API: 9 = 4.5+
+        ("⭐⭐⭐⭐ 4.0+", "hotel_apply_rating_8"),   # Google Hotels API: 8 = 4.0+
+        ("⭐⭐⭐ 3.5+", "hotel_apply_rating_7"),     # Google Hotels API: 7 = 3.5+
+        ("⭐⭐ 3.0+", "hotel_apply_rating_6")        # Google Hotels API: 6 = 3.0+
+    ]
+    
+    keyboard = []
+    for rating_name, callback_data in rating_options:
+        keyboard.append([InlineKeyboardButton(rating_name, callback_data=callback_data)])
+    
+    keyboard.extend([
+        [InlineKeyboardButton("🔙 返回筛选", callback_data="hotel_filter")],
+        [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
+    ])
+    
+    await query.edit_message_text(
+        "⭐ *最低评分*\\n\\n选择最低评分要求:",
+        parse_mode=ParseMode.MARKDOWN_V2,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def _show_class_filter(query: CallbackQuery, session_data: Dict, context: ContextTypes.DEFAULT_TYPE):
+    """显示酒店星级筛选选项"""
+    if not session_data:
+        config = get_config()
+        await query.edit_message_text("❌ 会话已过期，请重新搜索")
+        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+        return
+    
+    class_options = [
+        ("⭐⭐⭐⭐⭐ 5星酒店", "hotel_apply_class_5"),
+        ("⭐⭐⭐⭐ 4星酒店", "hotel_apply_class_4"),
+        ("⭐⭐⭐ 3星酒店", "hotel_apply_class_3"),
+        ("⭐⭐ 2星酒店", "hotel_apply_class_2"),
+        ("⭐ 1星酒店", "hotel_apply_class_1")
+    ]
+    
+    keyboard = []
+    for class_name, callback_data in class_options:
+        keyboard.append([InlineKeyboardButton(class_name, callback_data=callback_data)])
+    
+    keyboard.extend([
+        [InlineKeyboardButton("🔙 返回筛选", callback_data="hotel_filter")],
+        [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
+    ])
+    
+    await query.edit_message_text(
+        "🏨 *酒店星级*\\n\\n选择酒店星级:",
+        parse_mode=ParseMode.MARKDOWN_V2,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 # 注册命令
 command_factory.register_command(
