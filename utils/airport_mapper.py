@@ -453,9 +453,10 @@ MAJOR_CITIES_AIRPORTS = {
     },
     "雅加达": {
         "primary": "CGK", 
-        "secondary": [], 
+        "secondary": ["HLP"], 
         "airports": [
-            {"code": "CGK", "name": "苏加诺-哈达国际机场", "name_en": "Soekarno-Hatta International Airport", "note": "印尼主要国际机场"}
+            {"code": "CGK", "name": "苏加诺-哈达国际机场", "name_en": "Soekarno–Hatta International Airport", "note": "印尼主要国际机场"},
+            {"code": "HLP", "name": "哈利姆·珀丹库苏马国际机场", "name_en": "Halim Perdanakusuma International Airport", "note": "政府及商务航班"}
         ]
     },
     "马尼拉": {
@@ -548,21 +549,21 @@ MAJOR_CITIES_AIRPORTS = {
         "primary": "DPS", 
         "secondary": [], 
         "airports": [
-            {"code": "DPS", "name": "伍拉·赖国际机场", "name_en": "Ngurah Rai International Airport", "note": "巴厘岛登巴萨机场"}
+            {"code": "DPS", "name": "伍拉·赖国际机场", "name_en": "I Gusti Ngurah Rai International Airport", "note": "巴厘岛登巴萨机场"}
         ]
     },
     "泗水": {
-        "primary": "MLG", 
+        "primary": "SUB", 
         "secondary": [], 
         "airports": [
-            {"code": "MLG", "name": "阿卜杜勒·拉赫曼·萨利赫机场", "name_en": "Abdul Rachman Saleh Airport", "note": "东爪哇主要机场"}
+            {"code": "SUB", "name": "朱安达国际机场", "name_en": "Juanda International Airport", "note": "东爪哇主要机场"}
         ]
     },
     "日惹": {
-        "primary": "JOG", 
+        "primary": "YIA", 
         "secondary": [], 
         "airports": [
-            {"code": "JOG", "name": "日惹国际机场", "name_en": "Yogyakarta International Airport", "note": "中爪哇文化名城"}
+            {"code": "YIA", "name": "日惹国际机场", "name_en": "Yogyakarta International Airport", "note": "新建国际机场"}
         ]
     },
     "棉兰": {
@@ -570,6 +571,118 @@ MAJOR_CITIES_AIRPORTS = {
         "secondary": [], 
         "airports": [
             {"code": "KNO", "name": "瓜拉纳穆国际机场", "name_en": "Kualanamu International Airport", "note": "苏门答腊北部机场"}
+        ]
+    },
+    "巴厘巴板": {
+        "primary": "BPN", 
+        "secondary": [], 
+        "airports": [
+            {"code": "BPN", "name": "苏丹阿吉·穆罕默德·苏莱曼·塞平加国际机场", "name_en": "Sultan Aji Muhammad Sulaiman Sepinggan International Airport", "note": "东加里曼丹主要机场"}
+        ]
+    },
+    "万鸦老": {
+        "primary": "MDC", 
+        "secondary": [], 
+        "airports": [
+            {"code": "MDC", "name": "萨姆·拉图兰吉国际机场", "name_en": "Sam Ratulangi International Airport", "note": "北苏拉威西主要机场"}
+        ]
+    },
+    "望加锡": {
+        "primary": "UPG", 
+        "secondary": [], 
+        "airports": [
+            {"code": "UPG", "name": "苏丹哈桑努丁国际机场", "name_en": "Sultan Hasanuddin International Airport", "note": "南苏拉威西主要机场"}
+        ]
+    },
+    "巨港": {
+        "primary": "PLM", 
+        "secondary": [], 
+        "airports": [
+            {"code": "PLM", "name": "苏丹马哈茂德·巴达鲁丁二世国际机场", "name_en": "Sultan Mahmud Badaruddin II International Airport", "note": "南苏门答腊主要机场"}
+        ]
+    },
+    "巴淡": {
+        "primary": "BTH", 
+        "secondary": [], 
+        "airports": [
+            {"code": "BTH", "name": "韩那定国际机场", "name_en": "Hang Nadim International Airport", "note": "距新加坡很近"}
+        ]
+    },
+    "北干巴鲁": {
+        "primary": "PKU", 
+        "secondary": [], 
+        "airports": [
+            {"code": "PKU", "name": "苏丹沙里夫·卡西姆二世国际机场", "name_en": "Sultan Syarif Kasim II International Airport", "note": "廖内省主要机场"}
+        ]
+    },
+    "坤甸": {
+        "primary": "PNK", 
+        "secondary": [], 
+        "airports": [
+            {"code": "PNK", "name": "苏帕迪奥国际机场", "name_en": "Supadio International Airport", "note": "西加里曼丹主要机场"}
+        ]
+    },
+    "班达亚齐": {
+        "primary": "BTJ", 
+        "secondary": [], 
+        "airports": [
+            {"code": "BTJ", "name": "苏丹伊斯坎达·穆达国际机场", "name_en": "Sultan Iskandar Muda International Airport", "note": "亚齐省主要机场"}
+        ]
+    },
+    "马塔兰": {
+        "primary": "LOP", 
+        "secondary": [], 
+        "airports": [
+            {"code": "LOP", "name": "龙目岛国际机场", "name_en": "Lombok International Airport", "note": "西努沙登加拉主要机场"}
+        ]
+    },
+    "三宝垄": {
+        "primary": "SRG", 
+        "secondary": [], 
+        "airports": [
+            {"code": "SRG", "name": "阿赫马德·亚尼将军国际机场", "name_en": "Jenderal Ahmad Yani International Airport", "note": "中爪哇主要机场"}
+        ]
+    },
+    "班查马辛": {
+        "primary": "BDJ", 
+        "secondary": [], 
+        "airports": [
+            {"code": "BDJ", "name": "夏姆苏丁·努尔国际机场", "name_en": "Syamsudin Noor International Airport", "note": "南加里曼丹主要机场"}
+        ]
+    },
+    "巴东": {
+        "primary": "PDG", 
+        "secondary": [], 
+        "airports": [
+            {"code": "PDG", "name": "米南卡堡国际机场", "name_en": "Minangkabau International Airport", "note": "西苏门答腊主要机场"}
+        ]
+    },
+    "万隆": {
+        "primary": "KJT", 
+        "secondary": [], 
+        "airports": [
+            {"code": "KJT", "name": "卡尔塔查帝国际机场", "name_en": "Kertajati International Airport", "note": "西爪哇新建机场"}
+        ]
+    },
+    "查雅普拉": {
+        "primary": "DJJ", 
+        "secondary": [], 
+        "airports": [
+            {"code": "DJJ", "name": "森塔尼国际机场", "name_en": "Sentani International Airport", "note": "巴布亚省主要机场"}
+        ]
+    },
+    "拉布安巴焦": {
+        "primary": "LBJ", 
+        "secondary": [], 
+        "airports": [
+            {"code": "LBJ", "name": "科莫多国际机场", "name_en": "Komodo International Airport", "note": "科莫多岛旅游机场"}
+        ]
+    },
+    "丹戎槟榔": {
+        "primary": "TJQ", 
+        "secondary": [], 
+        "airports": [
+            {"code": "TJQ", "name": "H.A.S.哈南朱丁国际机场", "name_en": "H.A.S. Hanandjoeddin International Airport", "note": "邦加岛主要机场"}
         ]
     },
     "宿务": {
@@ -1172,6 +1285,24 @@ ENGLISH_CITIES_AIRPORTS = {
     "surabaya": "泗水",
     "yogyakarta": "日惹",
     "medan": "棉兰",
+    # 新增印度尼西亚城市
+    "balikpapan": "巴厘巴板",
+    "manado": "万鸦老",
+    "makassar": "望加锡", 
+    "ujung pandang": "望加锡",  # 别名
+    "palembang": "巨港",
+    "batam": "巴淡",
+    "pekanbaru": "北干巴鲁",
+    "pontianak": "坤甸",
+    "banda aceh": "班达亚齐",
+    "mataram": "马塔兰",
+    "semarang": "三宝垄", 
+    "banjarmasin": "班查马辛",
+    "padang": "巴东",
+    "bandung": "万隆",
+    "jayapura": "查雅普拉",
+    "labuan bajo": "拉布安巴焦",
+    "tanjungpandan": "丹戎槟榔",
     "cebu": "宿务",
     "davao": "达沃",
     "yangon": "仰光",
@@ -1475,7 +1606,7 @@ def get_country_airports(country_name: str) -> List[Dict]:
         "泰国": ["曼谷", "清迈", "普吉", "芭提雅", "合艾", "苏梅岛", "甲米", "素可泰", "乌隆他尼", "乌汶"],
         "新加坡": ["新加坡"],
         "马来西亚": ["吉隆坡", "槟城", "兰卡威", "亚庇", "古晋"],
-        "印度尼西亚": ["雅加达", "巴厘岛", "泗水", "日惹", "棉兰"],
+        "印度尼西亚": ["雅加达", "巴厘岛", "泗水", "日惹", "棉兰", "巴厘巴板", "万鸦老", "望加锡", "巨港", "巴淡", "北干巴鲁", "坤甸", "班达亚齐", "马塔兰", "三宝垄", "班查马辛", "巴东", "万隆", "查雅普拉", "拉布安巴焦", "丹戎槟榔"],
         "菲律宾": ["马尼拉", "宿务", "达沃", "卡加延德奥罗"],
         "越南": ["胡志明市", "河内"],
         "缅甸": ["仰光", "曼德勒"],

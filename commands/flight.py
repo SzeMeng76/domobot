@@ -1471,18 +1471,52 @@ async def create_booking_telegraph_page(all_flights: List[Dict], search_params: 
     for i, flight in enumerate(all_flights, 1):
         content += f"{i}. "
         
-        # 航班基本信息
+        # 航班基本信息 - 修复：Telegraph页面也要显示返程信息
         flights_info = flight.get('flights', [])
         if flights_info:
-            segment = flights_info[0]
-            airline = segment.get('airline', '未知')
-            flight_number = segment.get('flight_number', '')
-            content += f"{airline} {flight_number}\n"
+            # 检查是否为往返航班
+            flight_type = flight.get('type', '')
+            is_round_trip = flight_type == "Round trip"
             
-            departure = segment.get('departure_airport', {})
-            arrival = segment.get('arrival_airport', {})
-            content += f"   🛫 {departure.get('time', '')}\n"
-            content += f"   🛬 {arrival.get('time', '')}\n"
+            if len(flights_info) == 1 or not is_round_trip:
+                # 单程航班
+                segment = flights_info[0]
+                airline = segment.get('airline', '未知')
+                flight_number = segment.get('flight_number', '')
+                content += f"{airline} {flight_number}\n"
+                
+                departure = segment.get('departure_airport', {})
+                arrival = segment.get('arrival_airport', {})
+                content += f"   🛫 {departure.get('time', '')}\n"
+                content += f"   🛬 {arrival.get('time', '')}\n"
+            else:
+                # 往返航班 - 显示出发段和返程段
+                first_segment = flights_info[0]
+                last_segment = flights_info[-1]
+                
+                # 显示主要航班信息
+                airline = first_segment.get('airline', '未知')
+                flight_number = first_segment.get('flight_number', '')
+                content += f"{airline} {flight_number} (往返)\n"
+                
+                # 出发段信息
+                departure = first_segment.get('departure_airport', {})
+                content += f"   🛫 出发: {departure.get('time', '')}\n"
+                
+                # 返程段信息 - 寻找返回原始出发地的航班
+                original_departure_id = departure.get('id', '')
+                return_segment = None
+                for segment in flights_info[1:]:
+                    if segment.get('arrival_airport', {}).get('id', '') == original_departure_id:
+                        return_segment = segment
+                        break
+                
+                if return_segment:
+                    content += f"   🛬 返回: {return_segment.get('arrival_airport', {}).get('time', '')}\n"
+                else:
+                    # 备选：显示最后一段的到达信息
+                    final_arrival = last_segment.get('arrival_airport', {})
+                    content += f"   🛬 到达: {final_arrival.get('time', '')}\n"
         
         # 价格信息
         price = flight.get('price')
@@ -3351,18 +3385,52 @@ async def _show_booking_options(query: CallbackQuery, context: ContextTypes.DEFA
                 for i, flight in enumerate(all_flights[:flights_to_show], 1):
                     result_text += f"`{i}.` "
                     
-                    # 航班基本信息
+                    # 航班基本信息 - 修复：显示完整的航班信息包括返程
                     flights_info = flight.get('flights', [])
                     if flights_info:
-                        segment = flights_info[0]
-                        airline = segment.get('airline', '未知')
-                        flight_number = segment.get('flight_number', '')
-                        result_text += f"*{airline} {flight_number}*\n"
+                        # 检查是否为往返航班
+                        flight_type = flight.get('type', '')
+                        is_round_trip = flight_type == "Round trip"
                         
-                        departure = segment.get('departure_airport', {})
-                        arrival = segment.get('arrival_airport', {})
-                        result_text += f"   🛫 {departure.get('time', '')}\n"
-                        result_text += f"   🛬 {arrival.get('time', '')}\n"
+                        if len(flights_info) == 1 or not is_round_trip:
+                            # 单程航班 - 显示单个航班信息
+                            segment = flights_info[0]
+                            airline = segment.get('airline', '未知')
+                            flight_number = segment.get('flight_number', '')
+                            result_text += f"*{airline} {flight_number}*\n"
+                            
+                            departure = segment.get('departure_airport', {})
+                            arrival = segment.get('arrival_airport', {})
+                            result_text += f"   🛫 {departure.get('time', '')}\n"
+                            result_text += f"   🛬 {arrival.get('time', '')}\n"
+                        else:
+                            # 往返航班 - 显示出发段和返程段
+                            first_segment = flights_info[0]
+                            last_segment = flights_info[-1]
+                            
+                            # 显示主要航班信息
+                            airline = first_segment.get('airline', '未知')
+                            flight_number = first_segment.get('flight_number', '')
+                            result_text += f"*{airline} {flight_number} (往返)*\n"
+                            
+                            # 出发段信息
+                            departure = first_segment.get('departure_airport', {})
+                            result_text += f"   🛫 出发: {departure.get('time', '')}\n"
+                            
+                            # 返程段信息 - 寻找返回原始出发地的航班
+                            original_departure_id = departure.get('id', '')
+                            return_segment = None
+                            for segment in flights_info[1:]:
+                                if segment.get('arrival_airport', {}).get('id', '') == original_departure_id:
+                                    return_segment = segment
+                                    break
+                            
+                            if return_segment:
+                                result_text += f"   🛬 返回: {return_segment.get('arrival_airport', {}).get('time', '')}\n"
+                            else:
+                                # 备选：显示最后一段的到达信息
+                                final_arrival = last_segment.get('arrival_airport', {})
+                                result_text += f"   🛬 到达: {final_arrival.get('time', '')}\n"
                     
                     # 价格信息
                     price = flight.get('price')
