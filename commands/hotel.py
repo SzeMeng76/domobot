@@ -57,42 +57,6 @@ TELEGRAPH_API_URL = "https://api.telegra.ph"
 hotel_data_mapping = {}
 mapping_counter = 0
 
-def safe_hotel_markdown_v2(text: str) -> str:
-    """
-    专为酒店信息设计的安全MarkdownV2格式化函数
-    只对真正必要的字符进行转义，保留*加粗*格式
-    """
-    if not text:
-        return ""
-    
-    # 保存*加粗*格式
-    import re
-    bold_parts = []
-    bold_pattern = r'\*([^*]+)\*'
-    
-    # 找到所有*加粗*部分
-    matches = list(re.finditer(bold_pattern, text))
-    result = text
-    
-    # 从后向前替换，保存加粗内容
-    for i, match in enumerate(reversed(matches)):
-        placeholder = f"__BOLD_{i}__"
-        bold_content = match.group(1)
-        bold_parts.append((placeholder, f"*{bold_content}*"))
-        result = result[:match.start()] + placeholder + result[match.end():]
-    
-    # 只转义真正必要的字符（但不转义常见的数字、日期、小数点等）
-    # 只转义特别危险的字符
-    dangerous_chars = ['_', '~', '|', '`', '>', '#', '+', '=', '{', '}', '!', '\\']
-    for char in dangerous_chars:
-        result = result.replace(char, f'\\{char}')
-    
-    # 恢复*加粗*部分
-    for placeholder, bold_text in bold_parts:
-        result = result.replace(placeholder, bold_text)
-    
-    return result
-
 # 创建酒店会话管理器 - 与 flight.py 相同的配置
 hotel_session_manager = SessionManager("HotelService", max_age=1800, max_sessions=200)  # 30分钟会话
 
@@ -1283,7 +1247,7 @@ async def hotel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         result_msg = await send_message_with_auto_delete(
             context=context,
             chat_id=chat_id,
-            text=safe_hotel_markdown_v2(full_message),
+            text=foldable_text_with_markdown_v2(full_message),
             parse_mode="MarkdownV2",
             reply_markup=reply_markup
         )
@@ -1556,7 +1520,7 @@ async def hotel_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         ]
         
         await query.edit_message_text(
-            text=safe_hotel_markdown_v2(full_message),
+            text=foldable_text_with_markdown_v2(full_message),
             parse_mode="MarkdownV2",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
@@ -1692,7 +1656,7 @@ async def _process_hotel_search_with_location(query: CallbackQuery, location_que
         
         # 更新消息
         await query.edit_message_text(
-            text=safe_hotel_markdown_v2(full_message),
+            text=foldable_text_with_markdown_v2(full_message),
             parse_mode="MarkdownV2",
             reply_markup=reply_markup
         )
@@ -1790,7 +1754,7 @@ async def _sort_hotels_by_price(query: CallbackQuery, session_data: Dict, contex
     ]
     
     await query.edit_message_text(
-        text=safe_hotel_markdown_v2(full_message),
+        text=foldable_text_with_markdown_v2(full_message),
         parse_mode="MarkdownV2",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
@@ -1840,7 +1804,7 @@ async def _sort_hotels_by_rating(query: CallbackQuery, session_data: Dict, conte
     ]
     
     await query.edit_message_text(
-        text=safe_hotel_markdown_v2(full_message),
+        text=foldable_text_with_markdown_v2(full_message),
         parse_mode="MarkdownV2",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
@@ -2408,7 +2372,7 @@ async def _apply_filter_and_research(query: CallbackQuery, session_data: Dict, c
         ]
         
         await query.edit_message_text(
-            text=safe_hotel_markdown_v2(full_message),
+            text=foldable_text_with_markdown_v2(full_message),
             parse_mode="MarkdownV2",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
