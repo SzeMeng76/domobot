@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from telegram import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes, CallbackQueryHandler
+from telegram.ext import StopPropagation
 from telegram.constants import ParseMode
 from telegram.helpers import escape_markdown
 
@@ -873,7 +874,11 @@ async def map_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     # 获取用户会话
     session_data = map_session_manager.get_session(user_id)
     if not session_data:
-        return  # 没有活动会话，忽略
+        logger.debug(f"MapService: 用户 {user_id} 没有活动会话，忽略文本输入: {text[:50]}")
+        return  # 没有活动会话，让其他处理器处理
+    
+    # 有活动的地图会话，处理这个消息并停止传播
+    logger.info(f"MapService: 用户 {user_id} 活动会话 - action: {session_data.get('action')}, waiting_for: {session_data.get('waiting_for')}, 输入: {text[:50]}")
     
     action = session_data.get("action")
     waiting_for = session_data.get("waiting_for")
@@ -920,6 +925,9 @@ async def map_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         logger.error(f"处理地图文本输入失败: {e}")
         await send_error(context, update.message.chat_id, f"处理失败: {str(e)}")
         map_session_manager.remove_session(user_id)
+    
+    # 阻止其他文本处理器处理这条消息
+    raise StopPropagation
 
 async def _execute_route_planning_with_coords(update: Update, context: ContextTypes.DEFAULT_TYPE, origin: str, destination_name: str, destination_coords: Tuple[float, float], destination_language: str) -> None:
     """执行使用精确坐标的路线规划"""
