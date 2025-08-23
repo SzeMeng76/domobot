@@ -569,23 +569,60 @@ class FlightServiceManager:
                     continue
                 
                 # 使用departure_token获取返程航班
-                return_params = original_params.copy()
-                return_params.pop('outbound_date', None)
-                return_params.pop('return_date', None)
-                return_params['departure_token'] = departure_token
-                
-                return_response = await httpx_client.get(SERPAPI_BASE_URL, params=return_params)
-                if return_response.status_code == 200:
-                    return_data = return_response.json()
+                try:
+                    return_params = {
+                        'engine': 'google_flights',
+                        'departure_token': departure_token,
+                        'currency': original_params.get('currency', 'USD'),
+                        'hl': original_params.get('hl', 'en'),
+                        'api_key': self.serpapi_key
+                    }
                     
-                    # 合并出发段和返程段
-                    combined_flight = self._combine_outbound_and_return_flights(
-                        outbound_flight, return_data
+                    logger.info(f"Fetching return flights with departure_token")
+                    
+                    # 使用SerpAPI的REST接口
+                    return_response = await self.session.get(
+                        "https://serpapi.com/search.json",
+                        params=return_params
                     )
-                    enhanced_flights.append(combined_flight)
-                else:
-                    # 返程请求失败，保持原出发段航班
-                    enhanced_flights.append(outbound_flight)
+                    
+                    if return_response.status_code == 200:
+                        return_data = return_response.json()
+                        
+                        # 验证返回数据
+                        if return_data and return_data.get('search_metadata', {}).get('status') == 'Success':
+                            # 检查是否有有效的返程航班
+                            return_flights = (return_data.get('best_flights', []) + 
+                                            return_data.get('other_flights', []))
+                            if return_flights:
+                                # 合并出发段和返程段
+                                combined_flight = self._combine_outbound_and_return_flights(
+                                    outbound_flight, return_data
+                                )
+                                enhanced_flights.append(combined_flight)
+                            else:
+                                # 没有返程航班，标记为单程
+                                flight_copy = outbound_flight.copy()
+                                flight_copy['type'] = 'One way (return flights unavailable)'
+                                enhanced_flights.append(flight_copy)
+                        else:
+                            # API请求失败，保持原航班但标记错误
+                            flight_copy = outbound_flight.copy()
+                            error_status = return_data.get('search_metadata', {}).get('status', 'Unknown')
+                            flight_copy['type'] = f'One way (return flight error: {error_status})'
+                            enhanced_flights.append(flight_copy)
+                    else:
+                        # HTTP请求失败
+                        flight_copy = outbound_flight.copy()
+                        flight_copy['type'] = f'One way (HTTP error: {return_response.status_code})'
+                        enhanced_flights.append(flight_copy)
+                        
+                except Exception as e:
+                    logger.error(f"Error fetching return flights for token {departure_token}: {e}")
+                    # 发生错误时，保持原始数据但添加错误标记
+                    flight_copy = outbound_flight.copy()
+                    flight_copy['type'] = f'One way (exception: {str(e)[:50]})'
+                    enhanced_flights.append(flight_copy)
                 
                 # 避免过于频繁的API调用
                 await asyncio.sleep(0.1)
@@ -619,7 +656,10 @@ class FlightServiceManager:
                 return_flights = return_data['other_flights']
             
             if not return_flights:
-                return outbound_flight
+                # 如果没有返程航班，标记为单程
+                flight_copy = outbound_flight.copy()
+                flight_copy['type'] = 'One way (no return flights found)'
+                return flight_copy
             
             # 取第一个返程航班作为默认选择
             return_flight = return_flights[0]
@@ -627,30 +667,43 @@ class FlightServiceManager:
             # 合并航班段
             combined_flight = outbound_flight.copy()
             
-            # 合并flights数组
-            outbound_segments = outbound_flight.get('flights', [])
-            return_segments = return_flight.get('flights', [])
+            # 保存原始出发段信息
+            combined_flight['outbound_flights'] = outbound_flight.get('flights', [])
+            combined_flight['outbound_layovers'] = outbound_flight.get('layovers', [])
+            combined_flight['outbound_total_duration'] = outbound_flight.get('total_duration', 0)
+            combined_flight['outbound_carbon_emissions'] = outbound_flight.get('carbon_emissions', {})
+            combined_flight['outbound_price'] = outbound_flight.get('price', 0)
+            
+            # 添加返程段信息
+            combined_flight['return_flights'] = return_flight.get('flights', [])
+            combined_flight['return_layovers'] = return_flight.get('layovers', [])
+            combined_flight['return_total_duration'] = return_flight.get('total_duration', 0)
+            combined_flight['return_carbon_emissions'] = return_flight.get('carbon_emissions', {})
+            combined_flight['return_price'] = return_flight.get('price', 0)
+            
+            # 合并所有航班段（去程+返程）
+            outbound_segments = combined_flight['outbound_flights']
+            return_segments = combined_flight['return_flights']
             combined_flight['flights'] = outbound_segments + return_segments
             
-            # 合并layovers
-            outbound_layovers = outbound_flight.get('layovers', [])
-            return_layovers = return_flight.get('layovers', [])
+            # 合并所有layovers
+            outbound_layovers = combined_flight['outbound_layovers']
+            return_layovers = combined_flight['return_layovers']
             combined_flight['layovers'] = outbound_layovers + return_layovers
             
-            # 更新总时长
-            outbound_duration = outbound_flight.get('total_duration', 0)
-            return_duration = return_flight.get('total_duration', 0)
+            # 计算总时长
+            outbound_duration = combined_flight['outbound_total_duration']
+            return_duration = combined_flight['return_total_duration']
             combined_flight['total_duration'] = outbound_duration + return_duration
             
-            # 更新价格（如果都有的话）
-            outbound_price = outbound_flight.get('price', 0)
-            return_price = return_flight.get('price', 0)
-            if outbound_price and return_price:
-                combined_flight['price'] = outbound_price + return_price
+            # 计算总价格
+            total_price = combined_flight['outbound_price'] + combined_flight['return_price']
+            combined_flight['price'] = total_price
+            combined_flight['total_price'] = total_price
             
             # 合并碳排放
-            outbound_emissions = outbound_flight.get('carbon_emissions', {})
-            return_emissions = return_flight.get('carbon_emissions', {})
+            outbound_emissions = combined_flight['outbound_carbon_emissions']
+            return_emissions = combined_flight['return_carbon_emissions']
             if outbound_emissions and return_emissions:
                 combined_emissions = {
                     'this_flight': outbound_emissions.get('this_flight', 0) + return_emissions.get('this_flight', 0),
@@ -662,16 +715,31 @@ class FlightServiceManager:
                         (combined_emissions['this_flight'] - combined_emissions['typical_for_this_route']) / 
                         combined_emissions['typical_for_this_route'] * 100
                     )
+                else:
+                    combined_emissions['difference_percent'] = 0
                 combined_flight['carbon_emissions'] = combined_emissions
+            
+            # 合并扩展信息
+            outbound_extensions = outbound_flight.get('extensions', [])
+            return_extensions = return_flight.get('extensions', [])
+            if outbound_extensions or return_extensions:
+                combined_flight['extensions'] = outbound_extensions + return_extensions
             
             # 保持往返标记
             combined_flight['type'] = 'Round trip'
+            
+            # 如果有booking_token，保留返程的booking_token
+            if return_flight.get('booking_token'):
+                combined_flight['return_booking_token'] = return_flight['booking_token']
             
             return combined_flight
             
         except Exception as e:
             logger.error(f"合并航班信息失败: {e}")
-            return outbound_flight
+            # 发生错误时，返回原始出发段航班但标记为单程
+            flight_copy = outbound_flight.copy()
+            flight_copy['type'] = 'One way (merge error)'
+            return flight_copy
     
     async def get_booking_options(self, booking_token: str, search_params: Dict, **kwargs) -> Optional[Dict]:
         """获取预订选项 - 需要原始搜索参数"""

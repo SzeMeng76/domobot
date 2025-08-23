@@ -178,6 +178,35 @@ MAJOR_CITIES_AIRPORTS = {
             {"code": "TSA", "name": "台北松山机场", "name_en": "Taipei Songshan Airport", "note": "市区机场,少量国际航班"}
         ]
     },
+    # 补充台湾其他城市机场 - 基于Wikipedia完整数据
+    "高雄": {
+        "primary": "KHH", 
+        "secondary": [], 
+        "airports": [
+            {"code": "KHH", "name": "高雄国际机场", "name_en": "Kaohsiung International Airport", "note": "台湾第二大国际机场"}
+        ]
+    },
+    "台中": {
+        "primary": "RMQ", 
+        "secondary": [], 
+        "airports": [
+            {"code": "RMQ", "name": "台中国际机场", "name_en": "Taichung International Airport", "note": "台湾中部主要机场"}
+        ]
+    },
+    "台南": {
+        "primary": "TNN", 
+        "secondary": [], 
+        "airports": [
+            {"code": "TNN", "name": "台南机场", "name_en": "Tainan Airport", "note": "台湾南部机场"}
+        ]
+    },
+    "花莲": {
+        "primary": "HUN", 
+        "secondary": [], 
+        "airports": [
+            {"code": "HUN", "name": "花莲机场", "name_en": "Hualien Airport", "note": "台湾东部机场"}
+        ]
+    },
     
     # 日本主要城市
     "东京": {
@@ -304,6 +333,77 @@ MAJOR_CITIES_AIRPORTS = {
         "secondary": [], 
         "airports": [
             {"code": "MYJ", "name": "松山机场", "name_en": "Matsuyama Airport", "note": "四国地区机场"}
+        ]
+    },
+    # 补充更多日本城市机场 - 基于Wikipedia完整数据
+    "秋田": {
+        "primary": "AXT", 
+        "secondary": [], 
+        "airports": [
+            {"code": "AXT", "name": "秋田机场", "name_en": "Akita Airport", "note": "东北地区机场"}
+        ]
+    },
+    "青森": {
+        "primary": "AOJ", 
+        "secondary": [], 
+        "airports": [
+            {"code": "AOJ", "name": "青森机场", "name_en": "Aomori Airport", "note": "本州北端机场"}
+        ]
+    },
+    "函馆": {
+        "primary": "HKD", 
+        "secondary": [], 
+        "airports": [
+            {"code": "HKD", "name": "函馆机场", "name_en": "Hakodate Airport", "note": "北海道南部机场"}
+        ]
+    },
+    "北九州": {
+        "primary": "KKJ", 
+        "secondary": [], 
+        "airports": [
+            {"code": "KKJ", "name": "北九州机场", "name_en": "Kitakyushu Airport", "note": "九州北部机场"}
+        ]
+    },
+    "小松": {
+        "primary": "KMQ", 
+        "secondary": [], 
+        "airports": [
+            {"code": "KMQ", "name": "小松机场", "name_en": "Komatsu Airport", "note": "石川县主要机场"}
+        ]
+    },
+    "长崎": {
+        "primary": "NGS", 
+        "secondary": [], 
+        "airports": [
+            {"code": "NGS", "name": "长崎机场", "name_en": "Nagasaki Airport", "note": "九州西部机场"}
+        ]
+    },
+    "新潟": {
+        "primary": "KIJ", 
+        "secondary": [], 
+        "airports": [
+            {"code": "KIJ", "name": "新潟机场", "name_en": "Niigata Airport", "note": "本州日本海侧机场"}
+        ]
+    },
+    "大分": {
+        "primary": "OIT", 
+        "secondary": [], 
+        "airports": [
+            {"code": "OIT", "name": "大分机场", "name_en": "Oita Airport", "note": "九州东部机场"}
+        ]
+    },
+    "冈山": {
+        "primary": "OKJ", 
+        "secondary": [], 
+        "airports": [
+            {"code": "OKJ", "name": "冈山机场", "name_en": "Okayama Airport", "note": "中国地区机场"}
+        ]
+    },
+    "静冈": {
+        "primary": "FSZ", 
+        "secondary": [], 
+        "airports": [
+            {"code": "FSZ", "name": "静冈机场", "name_en": "Shizuoka Airport", "note": "富士山静冈机场"}
         ]
     },
     
@@ -978,6 +1078,12 @@ ENGLISH_CITIES_AIRPORTS = {
     "macau": "澳门",
     "macao": "澳门",
     "taipei": "台北",
+    # 新增台湾城市
+    "kaohsiung": "高雄",
+    "taichung": "台中",
+    "tainan": "台南",
+    "hualien": "花莲",
+    "hualien city": "花莲",
     
     # 日本
     "tokyo": "东京",
@@ -992,6 +1098,17 @@ ENGLISH_CITIES_AIRPORTS = {
     "kagoshima": "鹿儿岛",
     "takamatsu": "高松",
     "matsuyama": "松山",
+    # 新增日本城市
+    "akita": "秋田",
+    "aomori": "青森",
+    "hakodate": "函馆",
+    "kitakyushu": "北九州",
+    "komatsu": "小松",
+    "nagasaki": "长崎",
+    "niigata": "新潟",
+    "oita": "大分",
+    "okayama": "冈山",
+    "shizuoka": "静冈",
     
     # 韩国
     "seoul": "首尔",
@@ -1127,6 +1244,7 @@ CITY_ALIASES = {
     "美国": "纽约", 
     "日本": "东京",
     "韩国": "首尔",
+    "台湾": "台北",
     "英国": "伦敦",
     "法国": "巴黎",
     "德国": "法兰克福",
@@ -1188,11 +1306,12 @@ def resolve_airport_codes(city_input: str) -> Dict:
     """
     解析城市输入到机场代码
     返回: {
-        "status": "success/multiple/not_found/suggestion_needed",
+        "status": "success/multiple/not_found/suggestion_needed/country_airports",
         "primary": "主要机场代码", 
         "secondary": ["备选机场代码"],
         "airports": [机场详细信息],
         "suggestions": [建议信息] (仅当需要建议时)
+        "country_airports": [国家所有机场] (仅当是国家搜索时)
     }
     """
     if not city_input:
@@ -1209,6 +1328,18 @@ def resolve_airport_codes(city_input: str) -> Dict:
     
     # 规范化输入
     normalized_city = normalize_city_input(city_input)
+    
+    # 检查是否是国家/地区级别搜索
+    country_airports = get_country_airports(normalized_city)
+    if country_airports:
+        return {
+            "status": "country_airports",
+            "country": normalized_city,
+            "country_airports": country_airports,
+            "primary": country_airports[0]["primary"] if country_airports else "",
+            "secondary": [],
+            "airports": []
+        }
     
     # 检查主要城市映射
     if normalized_city in MAJOR_CITIES_AIRPORTS:
@@ -1245,6 +1376,31 @@ def resolve_airport_codes(city_input: str) -> Dict:
         "input": city_input,
         "normalized": normalized_city
     }
+
+def get_country_airports(country_name: str) -> List[Dict]:
+    """获取指定国家/地区的所有机场"""
+    country_cities_map = {
+        "台湾": ["台北", "高雄", "台中", "台南", "花莲"],
+        "日本": ["东京", "大阪", "名古屋", "福冈", "札幌", "仙台", "广岛", "冲绳", "熊本", "鹿儿岛", 
+               "秋田", "青森", "函馆", "北九州", "小松", "长崎", "新潟", "大分", "冈山", "静冈", "高松", "松山"],
+        "韩国": ["首尔", "釜山", "济州", "大邱", "光州"],
+        "中国": ["北京", "上海", "广州", "深圳", "成都", "西安", "杭州", "南京", "青岛", "大连", 
+               "厦门", "武汉", "长沙", "昆明", "重庆", "天津", "沈阳", "哈尔滨", "乌鲁木齐", "拉萨", 
+               "呼和浩特", "银川", "兰州", "西宁", "海口", "三亚", "贵阳", "太原", "石家庄", "郑州", 
+               "济南", "合肥", "福州", "南昌", "长春"],
+    }
+    
+    if country_name not in country_cities_map:
+        return []
+    
+    country_airports = []
+    for city in country_cities_map[country_name]:
+        if city in MAJOR_CITIES_AIRPORTS:
+            city_info = MAJOR_CITIES_AIRPORTS[city].copy()
+            city_info["city"] = city
+            country_airports.append(city_info)
+    
+    return country_airports
 
 def resolve_flight_airports(departure_input: str, arrival_input: str) -> Dict:
     """
