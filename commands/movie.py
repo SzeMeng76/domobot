@@ -5089,6 +5089,9 @@ async def movie_detail_command(update: Update, context: ContextTypes.DEFAULT_TYP
             
             result_text, poster_url = movie_service.format_movie_details(detail_data)
             
+            # 创建功能按钮
+            function_keyboard = create_movie_function_keyboard(movie_id)
+            
             # 如果有海报URL，先发送图片再发送文本
             if poster_url:
                 try:
@@ -5097,7 +5100,8 @@ async def movie_detail_command(update: Update, context: ContextTypes.DEFAULT_TYP
                         chat_id=update.effective_chat.id,
                         photo=poster_url,
                         caption=foldable_text_with_markdown_v2(result_text),
-                        parse_mode=ParseMode.MARKDOWN_V2
+                        parse_mode=ParseMode.MARKDOWN_V2,
+                        reply_markup=function_keyboard
                     )
                     # 删除原来的加载消息
                     await message.delete()
@@ -5108,13 +5112,15 @@ async def movie_detail_command(update: Update, context: ContextTypes.DEFAULT_TYP
                     # 如果图片发送失败，改用文本消息
                     await message.edit_text(
                         foldable_text_with_markdown_v2(result_text),
-                        parse_mode=ParseMode.MARKDOWN_V2
+                        parse_mode=ParseMode.MARKDOWN_V2,
+                        reply_markup=function_keyboard
                     )
             else:
                 # 没有海报，直接发送文本
                 await message.edit_text(
                     foldable_text_with_markdown_v2(result_text),
-                    parse_mode=ParseMode.MARKDOWN_V2
+                    parse_mode=ParseMode.MARKDOWN_V2,
+                    reply_markup=function_keyboard
                 )
         else:
             await message.edit_text(f"❌ 未找到ID为 {movie_id} 的电影")
@@ -8691,7 +8697,7 @@ async def execute_movie_recommendations(query, context, movie_id: int):
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第5053-5057行）
-    await query.edit_message_text(f"🔍 正在获取电影推荐 \\\(ID: {movie_id}\\\)\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await query.edit_message_text(f"🔍 正在获取电影推荐 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
     message = query.message  # 用于后续统一处理
     
     try:
@@ -8720,7 +8726,7 @@ async def execute_movie_videos(query, context, movie_id: int):
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第5820-5824行）
-    await query.edit_message_text(f"🔍 正在获取电影视频 \\\(ID: {movie_id}\\\)\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await query.edit_message_text(f"🔍 正在获取电影视频 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
     message = query.message  # 用于后续统一处理
     
     try:
@@ -8749,7 +8755,7 @@ async def execute_movie_reviews(query, context, movie_id: int):
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第6277-6281行）
-    await query.edit_message_text(f"🔍 正在获取电影评价 \\\(ID: {movie_id}\\\)\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await query.edit_message_text(f"🔍 正在获取电影评价 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
     message = query.message  # 用于后续统一处理
     
     try:
@@ -8778,7 +8784,7 @@ async def execute_movie_related(query, context, movie_id: int):
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第6133-6137行）
-    await query.edit_message_text(f"🔍 正在获取相关电影推荐 \\\(ID: {movie_id}\\\)\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await query.edit_message_text(f"🔍 正在获取相关电影推荐 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
     message = query.message  # 用于后续统一处理
     
     try:
@@ -8807,7 +8813,7 @@ async def execute_movie_watch(query, context, movie_id: int):
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第7018-7022行）
-    await query.edit_message_text(f"🔍 正在获取观看平台信息 \\\(ID: {movie_id}\\\)\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await query.edit_message_text(f"🔍 正在获取观看平台信息 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
     message = query.message  # 用于后续统一处理
     
     try:
