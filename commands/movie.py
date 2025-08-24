@@ -2523,15 +2523,9 @@ class MovieService:
                 lines.append(reviews_section)
         
         # 添加操作提示
-        tv_id = detail_data.get("id")
         lines.extend([
             f"",
-            f"💡 使用 `/tv_rec {tv_id}` 获取相似推荐",
-            f"💡 使用 `/tv_related {tv_id}` 获取Trakt相关推荐",
-            f"💡 使用 `/tv_videos {tv_id}` 查看预告片", 
-            f"💡 使用 `/tv_reviews {tv_id}` 查看用户评价",
-            f"💡 使用 `/tv_season {tv_id} <季数>` 查看季详情",
-            f"💡 使用 `/tv_watch {tv_id}` 查看完整观看平台"
+            f"💡 使用下方按钮查看电视剧推荐、预告片、用户评价等功能"
         ])
         
         return "\n".join(filter(None, lines)), poster_url  # 过滤空行
@@ -4416,6 +4410,9 @@ tv_search_sessions = {}
 # 电影会话管理器（类似person_session_manager）
 movie_session_manager = SessionManager("movie")
 
+# TV会话管理器（用于菜单模式）
+tv_session_manager = SessionManager("tv")
+
 async def movie_text_handler_core(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """电影功能文本处理的核心逻辑 - 与flight/hotel相同的模式"""
     if not update.message or not update.message.text:
@@ -4500,6 +4497,85 @@ async def _execute_movie_search_from_menu(update: Update, context: ContextTypes.
     except Exception as e:
         logger.error(f"电影搜索失败: {e}")
         await message.edit_text(f"❌ 搜索失败: {str(e)}")
+    
+    from utils.message_manager import _schedule_deletion
+    config = get_config()
+    await _schedule_deletion(context, update.message.chat_id, message.message_id, config.auto_delete_delay)
+
+async def tv_text_handler_core(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """TV功能文本处理的核心逻辑 - 与movie_text_handler_core完全相同的模式"""
+    if not update.message or not update.message.text:
+        return
+    
+    user_id = update.effective_user.id
+    text = update.message.text.strip()
+    
+    # 获取用户会话
+    session_data = tv_session_manager.get_session(user_id)
+    if not session_data:
+        logger.debug(f"TVService: 用户 {user_id} 没有活动会话")
+        return
+    
+    logger.info(f"TVService: 用户 {user_id} 活动会话 - action: {session_data.get('action')}, waiting_for: {session_data.get('waiting_for')}, 输入: {text[:50]}")
+    
+    action = session_data.get("action")
+    waiting_for = session_data.get("waiting_for")
+    
+    try:
+        if action == "search" and waiting_for == "tv_name":
+            # 用户输入了要搜索的TV名称
+            query = text
+            
+            # 删除用户输入消息
+            await delete_user_command(context, update.message.chat_id, update.message.message_id)
+            
+            if not movie_service:
+                await send_error(context, update.message.chat_id, "❌ TV查询服务未初始化")
+                return
+            
+            # 显示搜索进度消息
+            message = await context.bot.send_message(
+                chat_id=update.message.chat_id,
+                text=f"🔍 正在搜索电视剧: `{escape_markdown(query, version=2)}`\\.\\.\\.",
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+            
+            search_data = await movie_service.search_tv_shows(query)
+            if search_data and search_data.get('results'):
+                search_data["query"] = query
+                
+                # 存储搜索会话
+                tv_search_sessions[user_id] = {
+                    "search_data": search_data,
+                    "timestamp": datetime.now()
+                }
+                
+                result_text = format_tv_search_results_for_keyboard(search_data)
+                keyboard = create_tv_search_keyboard(search_data)
+                
+                await message.edit_text(
+                    foldable_text_with_markdown_v2(result_text),
+                    parse_mode=ParseMode.MARKDOWN_V2,
+                    reply_markup=keyboard
+                )
+            else:
+                await message.edit_text(f"❌ 未找到电视剧: {query}")
+            
+            # 清理会话状态
+            tv_session_manager.remove_session(user_id)
+            
+        else:
+            logger.warning(f"TVService: 未知的会话状态 - action: {action}, waiting_for: {waiting_for}")
+            
+    except Exception as e:
+        logger.error(f"TV文本处理失败: {e}")
+        await context.bot.send_message(
+            chat_id=update.message.chat_id,
+            text=f"❌ 处理失败: {str(e)}"
+        )
+        
+        # 清理用户会话状态
+        tv_session_manager.remove_session(user_id)
     
     from utils.message_manager import _schedule_deletion
     config = get_config()
@@ -5602,6 +5678,9 @@ async def tv_detail_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             
             result_text, poster_url = movie_service.format_tv_details(detail_data)
             
+            # 创建功能按钮
+            function_keyboard = create_tv_function_keyboard(tv_id)
+            
             # 如果有海报URL，先发送图片再发送文本
             if poster_url:
                 try:
@@ -5610,7 +5689,8 @@ async def tv_detail_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                         chat_id=update.effective_chat.id,
                         photo=poster_url,
                         caption=foldable_text_with_markdown_v2(result_text),
-                        parse_mode=ParseMode.MARKDOWN_V2
+                        parse_mode=ParseMode.MARKDOWN_V2,
+                        reply_markup=function_keyboard
                     )
                     # 删除原来的加载消息
                     await message.delete()
@@ -5621,13 +5701,15 @@ async def tv_detail_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                     # 如果图片发送失败，改用文本消息
                     await message.edit_text(
                         foldable_text_with_markdown_v2(result_text),
-                        parse_mode=ParseMode.MARKDOWN_V2
+                        parse_mode=ParseMode.MARKDOWN_V2,
+                        reply_markup=function_keyboard
                     )
             else:
                 # 没有海报，直接发送文本
                 await message.edit_text(
                     foldable_text_with_markdown_v2(result_text),
-                    parse_mode=ParseMode.MARKDOWN_V2
+                    parse_mode=ParseMode.MARKDOWN_V2,
+                    reply_markup=function_keyboard
                 )
         else:
             await message.edit_text(f"❌ 未找到ID为 {tv_id} 的电视剧")
@@ -7632,6 +7714,17 @@ async def tv_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     user_id = update.effective_user.id
     callback_data = query.data
     
+    # 处理TV功能按钮（需要TV ID）
+    if callback_data.startswith("tv_func_"):
+        await handle_tv_function_callback(query, context, callback_data)
+        return
+    
+    # 处理返回TV功能按钮
+    if callback_data.startswith("tv_detail_"):
+        tv_id = int(callback_data.split("_")[2])
+        await show_tv_details_with_functions(query, context, tv_id)
+        return
+    
     # 检查用户是否有有效的搜索会话
     if user_id not in tv_search_sessions:
         await query.edit_message_text("❌ 搜索会话已过期，请重新搜索")
@@ -7687,6 +7780,9 @@ async def tv_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                     
                     result_text, poster_url = movie_service.format_tv_details(detail_data)
                     
+                    # 创建功能按钮
+                    function_keyboard = create_tv_function_keyboard(tv_id)
+                    
                     # 如果有海报URL，发送图片消息
                     if poster_url:
                         try:
@@ -7694,7 +7790,8 @@ async def tv_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                                 chat_id=query.message.chat_id,
                                 photo=poster_url,
                                 caption=foldable_text_with_markdown_v2(result_text),
-                                parse_mode=ParseMode.MARKDOWN_V2
+                                parse_mode=ParseMode.MARKDOWN_V2,
+                                reply_markup=function_keyboard
                             )
                             # 删除原来的搜索结果消息
                             await query.delete_message()
@@ -7707,7 +7804,8 @@ async def tv_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                             logger.warning(f"发送海报失败: {photo_error}，改用文本消息")
                             await query.edit_message_text(
                                 foldable_text_with_markdown_v2(result_text),
-                                parse_mode=ParseMode.MARKDOWN_V2
+                                parse_mode=ParseMode.MARKDOWN_V2,
+                                reply_markup=function_keyboard
                             )
                             
                             # 为编辑后的消息添加自动删除
@@ -7717,7 +7815,8 @@ async def tv_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                     else:
                         await query.edit_message_text(
                             foldable_text_with_markdown_v2(result_text),
-                            parse_mode=ParseMode.MARKDOWN_V2
+                            parse_mode=ParseMode.MARKDOWN_V2,
+                            reply_markup=function_keyboard
                         )
                         
                         # 为编辑后的消息添加自动删除
@@ -7725,8 +7824,9 @@ async def tv_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                         config = get_config()
                         await _schedule_deletion(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
                     
-                    # 清除用户会话
-                    del tv_search_sessions[user_id]
+                    # 更新用户会话，保存TV ID和数据供功能按钮使用
+                    tv_search_sessions[user_id]["current_tv_id"] = tv_id
+                    tv_search_sessions[user_id]["current_tv_data"] = detail_data
                 else:
                     await query.edit_message_text("❌ 获取电视剧详情失败")
             else:
@@ -8582,6 +8682,23 @@ def create_movie_function_keyboard(movie_id: int):
     ]
     return InlineKeyboardMarkup(keyboard)
 
+def create_tv_function_keyboard(tv_id: int):
+    """创建电视剧功能按钮键盘"""
+    keyboard = [
+        [
+            InlineKeyboardButton("🎯 电视剧推荐", callback_data=f"tv_func_rec_{tv_id}"),
+            InlineKeyboardButton("📺 预告片/视频", callback_data=f"tv_func_videos_{tv_id}")
+        ],
+        [
+            InlineKeyboardButton("💬 用户评价", callback_data=f"tv_func_reviews_{tv_id}"),
+            InlineKeyboardButton("🔗 相关推荐", callback_data=f"tv_func_related_{tv_id}")
+        ],
+        [
+            InlineKeyboardButton("📱 观看平台", callback_data=f"tv_func_watch_{tv_id}")
+        ]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
 async def handle_movie_menu_callback(query, context, callback_data):
     """处理电影主菜单按钮回调"""
     user_id = query.from_user.id
@@ -9116,6 +9233,405 @@ async def show_movie_details_with_functions(query, context, movie_id: int):
     config = get_config()
     await _schedule_deletion(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
 
+async def handle_tv_function_callback(query, context, callback_data):
+    """处理TV功能按钮回调 - 完全按照movieold.py中TV逻辑"""
+    parts = callback_data.split("_")
+    function_name = parts[2]  # rec, videos, reviews, related, watch
+    tv_id = int(parts[3])
+    
+    if function_name == "rec":
+        await execute_tv_recommendations(query, context, tv_id)
+    elif function_name == "videos":
+        await execute_tv_videos(query, context, tv_id)
+    elif function_name == "reviews":
+        await execute_tv_reviews(query, context, tv_id)
+    elif function_name == "related":
+        await execute_tv_related(query, context, tv_id)
+    elif function_name == "watch":
+        await execute_tv_watch(query, context, tv_id)
+    else:
+        await query.edit_message_text(f"❌ 未实现的功能: {function_name}")
+
+async def execute_tv_recommendations(query, context, tv_id: int):
+    """执行TV推荐 - 完全按照movieold的tv_rec_command逻辑"""
+    if not movie_service:
+        await query.edit_message_text("❌ 电视剧查询服务未初始化")
+        return
+        
+    message = query.message
+    await message.edit_text(f"🔍 正在获取TV推荐 \(ID: {tv_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    
+    try:
+        recommendations = await movie_service.get_tv_recommendations(tv_id)
+        if recommendations:
+            result_text = movie_service.format_tv_recommendations(recommendations, tv_id)
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
+            ])
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=return_keyboard
+            )
+        else:
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
+            ])
+            await message.edit_text(
+                "❌ 获取TV推荐失败，请稍后重试",
+                reply_markup=return_keyboard
+            )
+    except Exception as e:
+        logger.error(f"获取TV推荐失败: {e}")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
+        ])
+        await message.edit_text("❌ 获取TV推荐时发生错误", reply_markup=return_keyboard)
+    
+    # 调度删除机器人回复消息（对应movieold的tv_rec逻辑）
+    from utils.message_manager import _schedule_deletion
+    config = get_config()
+    await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
+
+async def execute_tv_videos(query, context, tv_id: int):
+    """执行TV视频 - 完全按照movieold的tv_videos_command逻辑"""
+    if not movie_service:
+        await query.edit_message_text("❌ TV查询服务未初始化")
+        return
+        
+    message = query.message
+    await message.edit_text(f"🔍 正在获取TV视频 \(ID: {tv_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    
+    try:
+        videos_data = await movie_service._get_videos_data("tv", tv_id)
+        if videos_data and videos_data.get("results"):
+            result_text = movie_service.format_tv_videos(videos_data)
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
+            ])
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=return_keyboard
+            )
+        else:
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
+            ])
+            await message.edit_text(
+                "❌ 该TV暂无可用的预告片或视频",
+                reply_markup=return_keyboard
+            )
+    except Exception as e:
+        logger.error(f"获取TV视频失败: {e}")
+        await message.edit_text("❌ 获取TV视频时发生错误")
+    
+    # 调度删除机器人回复消息（对应movieold的tv_videos逻辑）
+    from utils.message_manager import _schedule_deletion
+    config = get_config()
+    await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
+
+async def execute_tv_reviews(query, context, tv_id: int):
+    """执行TV评价 - 完全按照movieold的tv_reviews_command逻辑"""
+    if not movie_service:
+        await query.edit_message_text("❌ TV查询服务未初始化")
+        return
+        
+    message = query.message
+    await message.edit_text(f"🔍 正在获取TV评价 \(ID: {tv_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    
+    try:
+        # 获取TV标题用于Telegraph
+        tv_detail = await movie_service.get_tv_details(tv_id)
+        tv_title = tv_detail.get("name", "未知电视剧") if tv_detail else "未知电视剧"
+        
+        # 获取评价数据
+        reviews_data = await movie_service._get_reviews_data("tv", tv_id)
+        if not reviews_data:
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
+            ])
+            await message.edit_text(f"❌ 未找到电视剧《{tv_title}》的评价信息", reply_markup=return_keyboard)
+            return
+        
+        # 格式化评价列表
+        result_text = movie_service.format_reviews_list(reviews_data)
+        
+        # 检查是否需要使用Telegraph（使用movieold相同逻辑）
+        reviews_count = len(reviews_data.get("results", []))
+        avg_review_length = sum(len(r.get("content", "")) for r in reviews_data.get("results", [])) / max(reviews_count, 1)
+        max_single_review = max((len(r.get("content", "")) for r in reviews_data.get("results", [])), default=0)
+        
+        should_use_telegraph = (
+            len(result_text) > 2500 or 
+            (reviews_count >= 2 and avg_review_length > 400) or
+            max_single_review > 800
+        )
+        
+        if should_use_telegraph:
+            # 创建Telegraph页面
+            telegraph_content = movie_service.format_reviews_for_telegraph(reviews_data, tv_title)
+            telegraph_url = await movie_service.create_telegraph_page(f"{tv_title} - 用户评价", telegraph_content)
+            
+            if telegraph_url:
+                # 发送包含Telegraph链接和简短预览的消息（完全按movieold逻辑）
+                preview_lines = ["📝 *用户评价预览*\n"]
+                for i, review in enumerate(reviews_data.get("results", [])[:2], 1):
+                    author = review.get("author", "匿名用户")
+                    content = review.get("content", "")
+                    rating = review.get("author_details", {}).get("rating")
+                    
+                    # 截取前200个字符作为预览
+                    content_preview = content[:200] + "..." if len(content) > 200 else content
+                    
+                    rating_text = f"⭐ {rating}/10" if rating else "⭐ 未评分"
+                    preview_lines.append(f"**{i}\\. {escape_markdown(author, version=2)}** {rating_text}")
+                    preview_lines.append(f"{escape_markdown(content_preview, version=2)}\n")
+                
+                if reviews_count > 2:
+                    preview_lines.append(f"... 还有 {reviews_count - 2} 条评价")
+                
+                # 添加返回按钮
+                return_keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
+                ])
+                
+                preview_lines.extend([
+                    "",
+                    f"📊 *总共 {reviews_count} 条评价*",
+                    f"📄 **完整评价内容**: 由于内容较长，已生成Telegraph页面",
+                    f"🔗 **查看完整评价**: {telegraph_url}",
+                    "",
+                    f"💡 使用 `/tv_detail {tv_id}` 查看TV详情"
+                ])
+                
+                await message.edit_text(
+                    foldable_text_with_markdown_v2("\n".join(preview_lines)),
+                    parse_mode=ParseMode.MARKDOWN_V2,
+                    reply_markup=return_keyboard
+                )
+            else:
+                # Telegraph发布失败，发送截断的消息
+                truncated_text = result_text[:TELEGRAM_MESSAGE_LIMIT - 200] + "\n\n⚠️ 内容过长已截断，完整评价请查看详情页面"
+                return_keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
+                ])
+                await message.edit_text(
+                    foldable_text_with_markdown_v2(truncated_text),
+                    parse_mode=ParseMode.MARKDOWN_V2,
+                    reply_markup=return_keyboard
+                )
+        else:
+            # 直接发送格式化的评价列表
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
+            ])
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=return_keyboard
+            )
+    except Exception as e:
+        logger.error(f"获取TV评价失败: {e}")
+        await message.edit_text("❌ 获取TV评价时发生错误")
+    
+    # 调度删除机器人回复消息（对应movieold的tv_reviews逻辑）
+    from utils.message_manager import _schedule_deletion
+    config = get_config()
+    await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
+
+async def execute_tv_related(query, context, tv_id: int):
+    """执行TV相关推荐 - 完全按照movieold的tv_related_command逻辑"""
+    if not movie_service:
+        await query.edit_message_text("❌ TV查询服务未初始化")
+        return
+        
+    message = query.message
+    await message.edit_text(f"🔍 正在获取TV相关推荐 \(ID: {tv_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    
+    try:
+        # 获取TV标题
+        tv_detail = await movie_service.get_tv_details(tv_id)
+        tv_title = tv_detail.get("name", "未知电视剧") if tv_detail else "未知电视剧"
+        
+        # 查找Trakt TV ID
+        trakt_id = await movie_service._find_trakt_tv_id(tv_id)
+        if trakt_id:
+            related_data = await movie_service._get_trakt_tv_related(trakt_id)
+            if related_data:
+                result_text = movie_service.format_trakt_related_tv_shows(related_data, tv_title)
+                return_keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
+                ])
+                await message.edit_text(
+                    foldable_text_with_markdown_v2(result_text),
+                    parse_mode=ParseMode.MARKDOWN_V2,
+                    reply_markup=return_keyboard
+                )
+            else:
+                return_keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
+                ])
+                await message.edit_text(
+                    f"❌ 未找到电视剧《{tv_title}》的相关推荐",
+                    reply_markup=return_keyboard
+                )
+        else:
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
+            ])
+            await message.edit_text(
+                f"❌ 在Trakt上未找到电视剧《{tv_title}》",
+                reply_markup=return_keyboard
+            )
+    except Exception as e:
+        logger.error(f"获取相关TV推荐失败: {e}")
+        await message.edit_text("❌ 获取相关TV推荐时发生错误")
+    
+    # 调度删除机器人回复消息（对应movieold的tv_related逻辑）
+    from utils.message_manager import _schedule_deletion
+    config = get_config()
+    await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
+
+async def execute_tv_watch(query, context, tv_id: int):
+    """执行TV观看平台 - 完全按照movieold的tv_watch_command逻辑"""
+    if not movie_service:
+        await query.edit_message_text("❌ TV查询服务未初始化")
+        return
+        
+    message = query.message
+    await message.edit_text(f"🔍 正在获取TV观看平台 \(ID: {tv_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    
+    try:
+        # 获取TV详情和标题
+        tv_detail = await movie_service.get_tv_details(tv_id)
+        if tv_detail:
+            tv_title = tv_detail.get("original_name") or tv_detail.get("name", "")
+            logger.info(f"TV title for JustWatch search: {tv_title}")
+            
+            # 获取增强的观影平台数据（包含JustWatch，禁用缓存）
+            enhanced_providers = await movie_service.get_enhanced_watch_providers(
+                tv_id, "tv", tv_title
+            )
+            
+            # 格式化观看平台信息（使用movieold完全相同的逻辑）
+            result_text = movie_service.format_watch_providers(
+                enhanced_providers.get("combined") or enhanced_providers.get("tmdb") if enhanced_providers else None,
+                "tv",
+                tv_id
+            )
+            
+            # 添加数据来源信息
+            if enhanced_providers and enhanced_providers.get("justwatch_media_entry"):
+                result_text += "\n\n💡 数据来源: TMDB + JustWatch"
+            else:
+                result_text += "\n\n💡 数据来源: TMDB"
+            
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
+            ])
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=return_keyboard
+            )
+        else:
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
+            ])
+            await message.edit_text(
+                f"❌ 未找到ID为 {tv_id} 的TV观看平台信息",
+                reply_markup=return_keyboard
+            )
+    except Exception as e:
+        logger.error(f"获取TV观看平台失败: {e}")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
+        ])
+        await message.edit_text("❌ 获取观看平台信息时发生错误", reply_markup=return_keyboard)
+    
+    # 调度删除机器人回复消息（对应movieold的tv_watch逻辑）
+    from utils.message_manager import _schedule_deletion
+    config = get_config()
+    await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
+
+async def show_tv_details_with_functions(query, context, tv_id: int):
+    """显示TV详情和功能按钮 - 用于返回按钮，优先使用缓存数据"""
+    if not movie_service:
+        await query.edit_message_text("❌ TV查询服务未初始化")
+        return
+    
+    user_id = query.from_user.id
+    detail_data = None
+    
+    # 优先使用会话中缓存的TV数据
+    if user_id in tv_search_sessions:
+        session_data = tv_search_sessions[user_id]
+        if (session_data.get("current_tv_id") == tv_id and 
+            session_data.get("current_tv_data")):
+            detail_data = session_data["current_tv_data"]
+            logger.info(f"使用缓存的TV详情数据: {tv_id}")
+    
+    # 如果没有缓存数据，重新获取
+    if not detail_data:
+        await query.edit_message_text(f"🔍 正在获取TV详情 \(ID: {tv_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+        detail_data = await movie_service.get_tv_details(tv_id)
+    
+    try:
+        if detail_data:
+            # 获取增强的观影平台数据
+            tv_title = detail_data.get("original_name") or detail_data.get("name", "")
+            logger.info(f"TV title for JustWatch search: {tv_title}")
+            enhanced_providers = await movie_service.get_enhanced_watch_providers(
+                tv_id, "tv", tv_title
+            )
+            
+            # 将增强的观影平台数据合并到详情数据中
+            if enhanced_providers:
+                combined_providers = enhanced_providers.get("combined") or enhanced_providers.get("tmdb")
+                if combined_providers:
+                    detail_data["watch/providers"] = combined_providers
+                
+                # 传递完整的增强数据
+                detail_data["enhanced_providers"] = enhanced_providers
+                
+                # 传递JustWatch MediaEntry数据
+                if enhanced_providers.get("justwatch_media_entry"):
+                    detail_data["justwatch_media_entry"] = enhanced_providers["justwatch_media_entry"]
+            
+            result_text, poster_url = movie_service.format_tv_details(detail_data)
+            function_keyboard = create_tv_function_keyboard(tv_id)
+            
+            if poster_url:
+                try:
+                    await query.edit_message_media(
+                        media=InputMediaPhoto(media=poster_url, caption=foldable_text_with_markdown_v2(result_text), parse_mode=ParseMode.MARKDOWN_V2),
+                        reply_markup=function_keyboard
+                    )
+                except Exception as media_error:
+                    logger.warning(f"无法编辑媒体消息，回退到文本: {media_error}")
+                    await query.edit_message_text(
+                        foldable_text_with_markdown_v2(result_text),
+                        parse_mode=ParseMode.MARKDOWN_V2,
+                        reply_markup=function_keyboard
+                    )
+            else:
+                await query.edit_message_text(
+                    foldable_text_with_markdown_v2(result_text),
+                    parse_mode=ParseMode.MARKDOWN_V2,
+                    reply_markup=function_keyboard
+                )
+        else:
+            await query.edit_message_text(f"❌ 未找到ID为 {tv_id} 的TV")
+    except Exception as e:
+        logger.error(f"显示TV详情失败: {e}")
+        await query.edit_message_text("❌ 获取TV详情时发生错误")
+    
+    # 调度删除机器人回复消息（和movieold的详情显示一样）
+    from utils.message_manager import _schedule_deletion
+    config = get_config()
+    await _schedule_deletion(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
+
 # 注册命令 - 只保留核心的搜索和详情命令
 command_factory.register_command("movie", movie_command, permission=Permission.USER, description="搜索电影信息（统一按钮界面）")
 command_factory.register_command("movie_detail", movie_detail_command, permission=Permission.USER, description="获取电影详情")
@@ -9128,10 +9644,8 @@ command_factory.register_command("movie_detail", movie_detail_command, permissio
 command_factory.register_command("tv", tv_command, permission=Permission.USER, description="搜索电视剧信息（按钮选择）")
 command_factory.register_command("tvs", tvs_command, permission=Permission.USER, description="搜索电视剧信息（文本列表）")
 command_factory.register_command("tv_detail", tv_detail_command, permission=Permission.USER, description="获取电视剧详情")
-command_factory.register_command("tv_rec", tv_rec_command, permission=Permission.USER, description="获取电视剧推荐")
-command_factory.register_command("tv_videos", tv_videos_command, permission=Permission.USER, description="获取电视剧预告片")
-command_factory.register_command("tv_reviews", tv_reviews_command, permission=Permission.USER, description="获取电视剧用户评价")
-command_factory.register_command("tv_related", tv_related_command, permission=Permission.USER, description="获取Trakt相关电视剧推荐")
+# 以下TV功能命令已整合到按钮界面，不再需要：
+# tv_rec, tv_videos, tv_reviews, tv_related - 现在通过TV详情页按钮访问
 command_factory.register_command("tv_season", tv_season_command, permission=Permission.USER, description="获取电视剧季详情")
 command_factory.register_command("tv_episode", tv_episode_command, permission=Permission.USER, description="获取电视剧集详情")
 
@@ -9154,8 +9668,8 @@ command_factory.register_command("tv_episode", tv_episode_command, permission=Pe
 # 注册人物相关命令 - 统一的/person命令
 command_factory.register_command("person", person_command, permission=Permission.USER, description="智能人物信息服务 - 搜索、详情、热门")
 
-# 注册观看平台命令 - movie_watch已整合到按钮界面
-command_factory.register_command("tv_watch", tv_watch_command, permission=Permission.USER, description="获取电视剧观看平台")
+# 注册观看平台命令 - movie_watch已整合到按钮界面，tv_watch也已整合
+# command_factory.register_command("tv_watch", tv_watch_command, permission=Permission.USER, description="获取电视剧观看平台")
 
 # 注册统一的排行榜命令
 command_factory.register_command("chart", chart_command, permission=Permission.USER, description="统一的影视排行榜中心")
