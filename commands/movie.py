@@ -4584,6 +4584,57 @@ async def tv_text_handler_core(update: Update, context: ContextTypes.DEFAULT_TYP
                     text="❌ 请输入有效的数字ID"
                 )
             
+        elif action == "season" and waiting_for == "season_number":
+            # 用户输入了季数
+            try:
+                season_number = int(text)
+                tv_id = session_data.get("tv_id")
+                
+                # 删除用户输入消息
+                await delete_user_command(context, update.message.chat_id, update.message.message_id)
+                
+                # 执行TV季详情查询
+                await _get_tv_season_details_with_buttons(update, context, tv_id, season_number)
+                
+                # 清理会话状态
+                tv_session_manager.remove_session(user_id)
+                
+            except ValueError:
+                await context.bot.send_message(
+                    chat_id=update.message.chat_id,
+                    text="❌ 请输入有效的季数"
+                )
+            
+        elif action == "episode" and waiting_for == "season_episode_numbers":
+            # 用户输入了季数和集数
+            try:
+                parts = text.split()
+                if len(parts) != 2:
+                    await context.bot.send_message(
+                        chat_id=update.message.chat_id,
+                        text="❌ 请输入季数和集数，用空格分隔（例如：1 5）"
+                    )
+                    return
+                
+                season_number = int(parts[0])
+                episode_number = int(parts[1])
+                tv_id = session_data.get("tv_id")
+                
+                # 删除用户输入消息
+                await delete_user_command(context, update.message.chat_id, update.message.message_id)
+                
+                # 执行TV集详情查询
+                await _get_tv_episode_details_with_buttons(update, context, tv_id, season_number, episode_number)
+                
+                # 清理会话状态
+                tv_session_manager.remove_session(user_id)
+                
+            except ValueError:
+                await context.bot.send_message(
+                    chat_id=update.message.chat_id,
+                    text="❌ 请输入有效的季数和集数"
+                )
+            
         else:
             logger.warning(f"TVService: 未知的会话状态 - action: {action}, waiting_for: {waiting_for}")
             
@@ -8781,7 +8832,11 @@ def create_tv_function_keyboard(tv_id: int):
             InlineKeyboardButton("🔗 相关推荐", callback_data=f"tv_func_related_{tv_id}")
         ],
         [
-            InlineKeyboardButton("📱 观看平台", callback_data=f"tv_func_watch_{tv_id}")
+            InlineKeyboardButton("📱 观看平台", callback_data=f"tv_func_watch_{tv_id}"),
+            InlineKeyboardButton("📚 季详情", callback_data=f"tv_func_season_{tv_id}")
+        ],
+        [
+            InlineKeyboardButton("📖 集详情", callback_data=f"tv_func_episode_{tv_id}")
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -9431,7 +9486,7 @@ async def show_movie_details_with_functions(query, context, movie_id: int):
 async def handle_tv_function_callback(query, context, callback_data):
     """处理TV功能按钮回调 - 完全按照movieold.py中TV逻辑"""
     parts = callback_data.split("_")
-    function_name = parts[2]  # rec, videos, reviews, related, watch
+    function_name = parts[2]  # rec, videos, reviews, related, watch, season, episode
     tv_id = int(parts[3])
     
     if function_name == "rec":
@@ -9444,6 +9499,10 @@ async def handle_tv_function_callback(query, context, callback_data):
         await execute_tv_related(query, context, tv_id)
     elif function_name == "watch":
         await execute_tv_watch(query, context, tv_id)
+    elif function_name == "season":
+        await execute_tv_season(query, context, tv_id)
+    elif function_name == "episode":
+        await execute_tv_episode(query, context, tv_id)
     else:
         await query.edit_message_text(f"❌ 未实现的功能: {function_name}")
 
@@ -9785,6 +9844,254 @@ async def execute_tv_watch(query, context, tv_id: int):
     from utils.message_manager import _schedule_deletion
     config = get_config()
     await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
+
+async def execute_tv_season(query, context, tv_id: int):
+    """执行TV季详情 - 设置session等待用户输入季数"""
+    if not movie_service:
+        await query.edit_message_text("❌ TV查询服务未初始化")
+        return
+    
+    user_id = query.from_user.id
+    
+    try:
+        # 先获取TV详情，显示有多少季可选
+        tv_details = await movie_service.get_tv_details(tv_id)
+        if tv_details:
+            total_seasons = tv_details.get("number_of_seasons", 1)
+            tv_name = tv_details.get("name", "未知电视剧")
+            
+            prompt_text = (
+                f"📚 **{tv_name}** \\- 季详情查询\n\n"
+                f"📊 **总共 {total_seasons} 季**\n\n"
+                f"请输入要查看的季数（1\\-{total_seasons}）："
+            )
+        else:
+            prompt_text = "📚 请输入要查看的季数（例如：1）："
+        
+        # 设置session等待用户输入
+        tv_session_manager.set_session(user_id, {
+            "action": "season", 
+            "tv_id": tv_id,
+            "waiting_for": "season_number"
+        })
+        
+        await query.edit_message_text(prompt_text, parse_mode=ParseMode.MARKDOWN_V2)
+        
+    except Exception as e:
+        logger.error(f"设置TV季详情session失败: {e}")
+        await query.edit_message_text("❌ 设置查询失败")
+async def _get_tv_season_details_with_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE, tv_id: int, season_number: int):
+    """获取TV季详情的完整逻辑 - 100% movieold逻辑 + 返回按钮"""
+    if not movie_service:
+        await context.bot.send_message(update.message.chat_id, "❌ TV查询服务未初始化")
+        return
+    
+    message = await context.bot.send_message(
+        chat_id=update.message.chat_id,
+        text=f"🔍 正在获取第{season_number}季详情 \\(电视剧ID: {tv_id}\\)\\.\\.\\.",
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    
+    try:
+        season_data = await movie_service.get_tv_season_details(tv_id, season_number)
+        if not season_data:
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
+            ])
+            await message.edit_text(f"❌ 未找到电视剧ID {tv_id} 的第{season_number}季", reply_markup=return_keyboard)
+            return
+        
+        # 获取电视剧基本信息用于Telegraph标题
+        tv_detail_data = await movie_service.get_tv_details(tv_id)
+        tv_title = tv_detail_data.get("name", "未知电视剧") if tv_detail_data else "未知电视剧"
+        
+        # 格式化剧集列表
+        result_text = movie_service.format_tv_season_details(season_data, tv_id)
+        
+        # 检查是否需要使用Telegraph（更积极的触发条件）
+        episodes = season_data.get("episodes", [])
+        episodes_count = len(episodes)
+        
+        # 计算所有剧集简介的总长度
+        total_overview_length = sum(len(ep.get("overview", "")) for ep in episodes)
+        avg_overview_length = total_overview_length / max(episodes_count, 1)
+        
+        # Telegraph触发条件：
+        # 1. 消息长度超过2800字符
+        # 2. 有5集以上且平均简介长度超过150字符
+        # 3. 有任何单集简介超过400字符
+        # 4. 总集数超过15集
+        max_single_overview = max((len(ep.get("overview", "")) for ep in episodes), default=0)
+        
+        should_use_telegraph = (
+            len(result_text) > 2800 or 
+            (episodes_count > 5 and avg_overview_length > 150) or
+            max_single_overview > 400 or
+            episodes_count > 15
+        )
+        
+        if should_use_telegraph:
+            # 创建Telegraph页面
+            telegraph_content = movie_service.format_season_episodes_for_telegraph(season_data, tv_id)
+            season_name = season_data.get("name", f"第{season_number}季")
+            telegraph_url = await movie_service.create_telegraph_page(f"{tv_title} {season_name} - 完整剧集列表", telegraph_content)
+            
+            if telegraph_url:
+                # 发送包含Telegraph链接和简短预览的消息
+                
+                # 创建简短的预览版本（只显示前3集的基本信息）
+                preview_lines = [
+                    f"📺 *{season_data.get('name', f'第{season_number}季')}*",
+                    f"",
+                    f"📅 *播出日期*: {season_data.get('air_date', '') or '未知'}",
+                    f"📚 *集数*: {episodes_count}集",
+                    f"",
+                    f"📖 *简介*:",
+                    f"{season_data.get('overview', '暂无简介')[:200]}{'...' if len(season_data.get('overview', '')) > 200 else ''}",
+                    f"",
+                    f"📋 *剧集预览* (前3集):",
+                    f""
+                ]
+                
+                for ep in episodes[:3]:
+                    ep_num = ep.get("episode_number", 0)
+                    ep_name = ep.get("name", f"第{ep_num}集")
+                    ep_date = ep.get("air_date", "")
+                    
+                    preview_lines.append(f"{ep_num}. *{ep_name}*")
+                    if ep_date:
+                        preview_lines.append(f"   📅 {ep_date}")
+                    preview_lines.append("")
+                
+                if episodes_count > 3:
+                    preview_lines.append(f"... 还有 {episodes_count - 3} 集")
+                
+                preview_lines.extend([
+                    "",
+                    f"📊 *总共 {episodes_count} 集剧集*",
+                    f"📄 **完整剧集列表**: 由于内容较长，已生成Telegraph页面",
+                    f"🔗 **查看完整列表**: {telegraph_url}",
+                    "",
+                    f"💡 使用 `/tv_episode {tv_id} {season_number} <集数>` 查看集详情"
+                ])
+                
+                summary_text = "\n".join(preview_lines)
+                return_keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
+                ])
+                await message.edit_text(
+                    foldable_text_with_markdown_v2(summary_text),
+                    parse_mode=ParseMode.MARKDOWN_V2,
+                    reply_markup=return_keyboard
+                )
+            else:
+                # Telegraph发布失败，发送截断的消息
+                truncated_text = result_text[:TELEGRAM_MESSAGE_LIMIT - 200] + "\n\n⚠️ 内容过长已截断，完整剧集列表请查看详情页面"
+                return_keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
+                ])
+                await message.edit_text(
+                    foldable_text_with_markdown_v2(truncated_text),
+                    parse_mode=ParseMode.MARKDOWN_V2,
+                    reply_markup=return_keyboard
+                )
+        else:
+            # 内容不长，直接发送
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
+            ])
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=return_keyboard
+            )
+        
+    except Exception as e:
+        logger.error(f"获取TV季详情失败: {e}")
+        await message.edit_text("❌ 获取TV季详情时发生错误")
+    
+    # 调度删除机器人回复消息
+    from utils.message_manager import _schedule_deletion
+    config = get_config()
+    await _schedule_deletion(context, update.message.chat_id, message.message_id, config.auto_delete_delay)
+
+async def execute_tv_episode(query, context, tv_id: int):
+    """执行TV集详情 - 设置session等待用户输入季数和集数"""
+    if not movie_service:
+        await query.edit_message_text("❌ TV查询服务未初始化")
+        return
+    
+    user_id = query.from_user.id
+    
+    try:
+        # 先获取TV详情，显示总季数参考
+        tv_details = await movie_service.get_tv_details(tv_id)
+        if tv_details:
+            total_seasons = tv_details.get("number_of_seasons", 1)
+            tv_name = tv_details.get("name", "未知电视剧")
+            
+            prompt_text = (
+                f"📖 **{tv_name}** \\- 集详情查询\n\n"
+                f"📊 **总共 {total_seasons} 季**\n\n"
+                f"请输入季数和集数，用空格分隔：\n"
+                f"例如：`1 5` （第1季第5集）"
+            )
+        else:
+            prompt_text = (
+                f"📖 请输入季数和集数，用空格分隔：\n"
+                f"例如：`1 5` （第1季第5集）"
+            )
+        
+        # 设置session等待用户输入
+        tv_session_manager.set_session(user_id, {
+            "action": "episode",
+            "tv_id": tv_id, 
+            "waiting_for": "season_episode_numbers"
+        })
+        
+        await query.edit_message_text(prompt_text, parse_mode=ParseMode.MARKDOWN_V2)
+        
+    except Exception as e:
+        logger.error(f"设置TV集详情session失败: {e}")
+        await query.edit_message_text("❌ 设置查询失败")
+
+async def _get_tv_episode_details_with_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE, tv_id: int, season_number: int, episode_number: int):
+    """获取TV集详情的完整逻辑 - 100% movieold逻辑 + 返回按钮"""
+    if not movie_service:
+        await context.bot.send_message(update.message.chat_id, "❌ TV查询服务未初始化")
+        return
+    
+    message = await context.bot.send_message(
+        chat_id=update.message.chat_id,
+        text=f"🔍 正在获取第{season_number}季第{episode_number}集详情 \\(电视剧ID: {tv_id}\\)\\.\\.\\.",
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    
+    try:
+        episode_data = await movie_service.get_tv_episode_details(tv_id, season_number, episode_number)
+        if episode_data:
+            result_text = movie_service.format_tv_episode_details(episode_data, tv_id, season_number)
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
+            ])
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=return_keyboard
+            )
+        else:
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
+            ])
+            await message.edit_text(f"❌ 未找到电视剧ID {tv_id} 第{season_number}季第{episode_number}集", reply_markup=return_keyboard)
+    except Exception as e:
+        logger.error(f"获取TV集详情失败: {e}")
+        await message.edit_text("❌ 获取TV集详情时发生错误")
+    
+    # 调度删除机器人回复消息
+    from utils.message_manager import _schedule_deletion
+    config = get_config()
+    await _schedule_deletion(context, update.message.chat_id, message.message_id, config.auto_delete_delay)
 
 # ====================
 # 电视剧功能增强 - 统一Session管理（与movie功能完全一致）
