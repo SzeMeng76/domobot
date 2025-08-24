@@ -284,8 +284,6 @@ async def _handle_legacy_person_search_callback(query, context, callback_data):
                 
                 # 清除用户会话
                 del person_search_sessions[user_id]
-                else:
-                    await query.edit_message_text("❌ 获取人物详情失败")
             else:
                 await query.edit_message_text("❌ 选择的人物索引无效")
                 
@@ -4662,7 +4660,7 @@ async def movie_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
         # 调度删除机器人回复消息
         from utils.message_manager import _schedule_deletion
-            config = get_config()
+        config = get_config()
         await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
         return
     
@@ -5156,7 +5154,7 @@ async def tv_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         )
         # 调度删除机器人回复消息
         from utils.message_manager import _schedule_deletion
-            config = get_config()
+        config = get_config()
         await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
         return
     
@@ -6299,7 +6297,7 @@ async def movie_reviews_command(update: Update, context: ContextTypes.DEFAULT_TY
             await message.edit_text(f"❌ 未找到电影《{movie_title}》的评价信息")
             # 调度删除机器人回复消息
             from utils.message_manager import _schedule_deletion
-                    config = get_config()
+            config = get_config()
             await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
             return
         
@@ -6532,7 +6530,7 @@ async def tv_reviews_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await message.edit_text(f"❌ 未找到电视剧《{tv_title}》的评价信息")
             # 调度删除机器人回复消息
             from utils.message_manager import _schedule_deletion
-                    config = get_config()
+            config = get_config()
             await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
             return
         
@@ -7176,7 +7174,7 @@ async def movies_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             parse_mode=ParseMode.MARKDOWN_V2
         )
         from utils.message_manager import _schedule_deletion
-            config = get_config()
+        config = get_config()
         await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
         return
     
@@ -7260,7 +7258,7 @@ async def tvs_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             parse_mode=ParseMode.MARKDOWN_V2
         )
         from utils.message_manager import _schedule_deletion
-            config = get_config()
+        config = get_config()
         await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
         return
     
@@ -7825,10 +7823,14 @@ async def _execute_chart_command(query, context, command_name: str, display_name
 
 # 具体的排行榜执行函数
 async def _execute_movie_hot_chart(query, context) -> None:
-    """执行综合热门电影 - 复制原来movie_hot_command的mixed模式逻辑"""
+    """执行综合热门电影 - 完全按照movieold的movie_hot_command逻辑"""
     if not movie_service:
         await query.edit_message_text("❌ 电影查询服务未初始化")
         return
+    
+    # 先编辑为"正在获取..."消息（对应movieold第4467-4471行）
+    await query.edit_message_text("🔍 正在获取热门电影\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
+    message = query.message  # 用于后续统一处理
     
     try:
         # 混合显示TMDB、JustWatch和Trakt数据（原来的mixed模式逻辑）
@@ -7855,20 +7857,21 @@ async def _execute_movie_hot_chart(query, context) -> None:
             result_text = movie_service.format_mixed_popular_content(
                 tmdb_data, justwatch_data, content_type="movie", trakt_data=trakt_data
             )
-            await query.edit_message_text(
-                text=foldable_text_with_markdown_v2(result_text),
-                parse_mode="MarkdownV2"
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
             )
-            # 调度删除机器人回复消息
-            from utils.message_manager import _schedule_deletion
-            config = get_config()
-            await _schedule_deletion(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
         else:
-            await query.edit_message_text("❌ 获取热门电影数据失败，请稍后重试")
+            await message.edit_text("❌ 获取热门电影数据失败，请稍后重试")
             
     except Exception as e:
         logger.error(f"获取综合热门电影失败: {e}")
-        await query.edit_message_text("❌ 获取综合热门电影时发生错误")
+        await message.edit_text("❌ 获取综合热门电影时发生错误")
+    
+    # 调度删除机器人回复消息（对应movieold统一删除逻辑）
+    from utils.message_manager import _schedule_deletion  
+    config = get_config()
+    await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
 
 async def _execute_tv_hot_chart(query, context) -> None:
     """执行综合热门剧集 - 复制原来tv_hot_command的mixed模式逻辑"""
