@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import httpx
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 from telegram.helpers import escape_markdown
@@ -7479,6 +7479,12 @@ async def movie_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         await handle_movie_function_callback(query, context, callback_data)
         return
     
+    # 处理返回电影功能按钮
+    if callback_data.startswith("movie_detail_"):
+        movie_id = int(callback_data.split("_")[2])
+        await show_movie_details_with_functions(query, context, movie_id)
+        return
+    
     # 检查用户是否有有效的搜索会话
     if user_id not in movie_search_sessions:
         await query.edit_message_text("❌ 搜索会话已过期，请重新搜索")
@@ -8987,22 +8993,31 @@ async def execute_movie_watch(query, context, movie_id: int):
     message = query.message  # 用于后续统一处理
     
     try:
-        # 获取基本电影信息用于JustWatch搜索
+        # 先获取电影基本信息以便获取标题
         movie_info = await movie_service.get_movie_details(movie_id)
-        if not movie_info:
-            await message.edit_text("❌ 未找到电影信息")
-            return
+        movie_title = ""
+        if movie_info:
+            # 优先使用英文原标题，如果没有再使用本地化标题
+            movie_title = movie_info.get("original_title") or movie_info.get("title", "")
+            logger.info(f"Movie title for JustWatch search: {movie_title}")
         
-        movie_title = movie_info.get("title", "") or movie_info.get("original_title", "")
-        logger.info(f"Movie title for watch providers: {movie_title}")
-        
-        # 获取观看平台信息
-        providers_data = await movie_service.get_enhanced_watch_providers(
+        # 使用增强的观影平台功能
+        enhanced_providers = await movie_service.get_enhanced_watch_providers(
             movie_id, "movie", movie_title
         )
         
+        # 优先使用合并后的数据，如果没有则回退到 TMDB 数据
+        providers_data = enhanced_providers.get("combined") or enhanced_providers.get("tmdb")
+        
         if providers_data:
             result_text = movie_service.format_watch_providers(providers_data, "movie")
+            
+            # 如果有 JustWatch 数据，添加数据源说明
+            if enhanced_providers.get("justwatch"):
+                result_text += "\n\n💡 数据来源: TMDB + JustWatch"
+            else:
+                result_text += "\n\n💡 数据来源: TMDB"
+            
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
             ])
@@ -9016,17 +9031,75 @@ async def execute_movie_watch(query, context, movie_id: int):
                 [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
             ])
             await message.edit_text(
-                "❌ 获取观看平台信息失败，请稍后重试",
+                f"❌ 未找到ID为 {movie_id} 的电影观看平台信息",
                 reply_markup=return_keyboard
             )
     except Exception as e:
         logger.error(f"获取电影观看平台失败: {e}")
-        await message.edit_text("❌ 获取观看平台信息时发生错误")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
+        ])
+        await message.edit_text("❌ 获取观看平台信息时发生错误", reply_markup=return_keyboard)
     
     # 调度删除机器人回复消息（对应movieold第7058-7062行）
     from utils.message_manager import _schedule_deletion
     config = get_config()
     await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
+
+async def show_movie_details_with_functions(query, context, movie_id: int):
+    """显示电影详情和功能按钮 - 用于返回按钮"""
+    if not movie_service:
+        await query.edit_message_text("❌ 电影查询服务未初始化")
+        return
+    
+    await query.edit_message_text(f"🔍 正在获取电影详情 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    
+    try:
+        detail_data = await movie_service.get_movie_details(movie_id)
+        if detail_data:
+            # 获取增强的观影平台数据
+            movie_title = detail_data.get("original_title") or detail_data.get("title", "")
+            logger.info(f"Movie title for JustWatch search: {movie_title}")
+            enhanced_providers = await movie_service.get_enhanced_watch_providers(
+                movie_id, "movie", movie_title
+            )
+            
+            # 将增强的观影平台数据合并到详情数据中
+            if enhanced_providers:
+                combined_providers = enhanced_providers.get("combined") or enhanced_providers.get("tmdb")
+                if combined_providers:
+                    detail_data["watch/providers"] = combined_providers
+                
+                # 传递完整的增强数据
+                detail_data["enhanced_providers"] = enhanced_providers
+            
+            result_text, poster_url = movie_service.format_movie_details(detail_data)
+            function_keyboard = create_movie_function_keyboard(movie_id)
+            
+            if poster_url:
+                try:
+                    await query.edit_message_media(
+                        media=InputMediaPhoto(media=poster_url, caption=foldable_text_with_markdown_v2(result_text), parse_mode=ParseMode.MARKDOWN_V2),
+                        reply_markup=function_keyboard
+                    )
+                except Exception as media_error:
+                    logger.warning(f"无法编辑媒体消息，回退到文本: {media_error}")
+                    await query.edit_message_text(
+                        text=foldable_text_with_markdown_v2(result_text),
+                        parse_mode=ParseMode.MARKDOWN_V2,
+                        reply_markup=function_keyboard
+                    )
+            else:
+                await query.edit_message_text(
+                    text=foldable_text_with_markdown_v2(result_text),
+                    parse_mode=ParseMode.MARKDOWN_V2,
+                    reply_markup=function_keyboard
+                )
+        else:
+            await query.edit_message_text(f"❌ 未找到ID为 {movie_id} 的电影")
+    except Exception as e:
+        logger.error(f"显示电影详情失败: {e}")
+        await query.edit_message_text("❌ 获取电影详情时发生错误")
 
 # 注册命令
 command_factory.register_command("movie", movie_command, permission=Permission.USER, description="搜索电影信息（按钮选择）")
