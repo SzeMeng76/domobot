@@ -4417,7 +4417,7 @@ person_search_sessions = {}
 tv_search_sessions = {}
 
 # 电影会话管理器（类似person_session_manager）
-movie_session_manager = SessionManager()
+movie_session_manager = SessionManager("movie")
 
 async def movie_text_handler_core(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """电影功能文本处理的核心逻辑 - 与flight/hotel相同的模式"""
