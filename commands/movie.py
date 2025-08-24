@@ -4647,10 +4647,6 @@ async def tv_text_handler_core(update: Update, context: ContextTypes.DEFAULT_TYP
         
         # 清理用户会话状态
         tv_session_manager.remove_session(user_id)
-    
-    from utils.message_manager import _schedule_deletion
-    config = get_config()
-    await _schedule_deletion(context, update.message.chat_id, message.message_id, config.auto_delete_delay)
 
 async def _execute_movie_details_from_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, movie_id: int) -> None:
     """从菜单执行电影详情查询"""
