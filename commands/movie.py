@@ -133,14 +133,13 @@ async def person_text_handler_core(update: Update, context: ContextTypes.DEFAULT
     return
 
 async def _execute_person_details(update: Update, context: ContextTypes.DEFAULT_TYPE, person_id: int) -> None:
-    """执行人物详情查询 - 与flight/hotel完全一致的模式"""
+    """执行人物详情查询 - 参考_handle_legacy_person_search_callback的正确做法"""
     if not movie_service:
         await send_error(context, update.message.chat_id, "❌ 人物查询服务未初始化")
         return
     
     loading_message = f"🔍 正在获取人物详情 (ID: {person_id})... ⏳"
     
-    # 使用与flight/hotel完全一致的消息发送方式
     message = await send_message_with_auto_delete(
         context=context,
         chat_id=update.message.chat_id,
@@ -153,36 +152,32 @@ async def _execute_person_details(update: Update, context: ContextTypes.DEFAULT_
         if detail_data:
             result_text, profile_url = movie_service.format_person_details(detail_data)
             
-            # 如果有头像URL，发送图片消息 - 使用原来工作的方式
+            # 参考原来的逻辑：如果有头像，发送图片并删除loading消息
             if profile_url:
                 try:
-                    # 删除loading消息
-                    await message.delete()
-                    # 发送图片消息，与原来的person_detail一致
                     detail_message = await context.bot.send_photo(
                         chat_id=update.message.chat_id,
                         photo=profile_url,
                         caption=foldable_text_with_markdown_v2(result_text),
                         parse_mode="MarkdownV2"
                     )
-                    # 调度自动删除
+                    # 删除loading消息
+                    await message.delete()
+                    # 调度自动删除图片消息
+                    from utils.message_manager import _schedule_deletion
                     from utils.config_manager import get_config
                     config = get_config()
-                    await _schedule_auto_delete(context, detail_message.chat_id, detail_message.message_id, 
-                                              getattr(config, 'auto_delete_delay', 600))
-                except Exception as e:
-                    logger.warning(f"发送头像失败: {e}")
-                    # 如果图片发送失败，发送文本消息
-                    text_message = await context.bot.send_message(
-                        chat_id=update.message.chat_id,
+                    await _schedule_deletion(context, detail_message.chat_id, detail_message.message_id, config.auto_delete_delay)
+                    return
+                    
+                except Exception as photo_error:
+                    logger.warning(f"发送头像失败: {photo_error}，改用文本消息")
+                    # 图片发送失败，更新为文本消息
+                    await message.edit_text(
                         text=foldable_text_with_markdown_v2(result_text),
                         parse_mode="MarkdownV2"
                     )
-                    # 调度自动删除
-                    from utils.config_manager import get_config
-                    config = get_config()
-                    await _schedule_auto_delete(context, text_message.chat_id, text_message.message_id, 
-                                              getattr(config, 'auto_delete_delay', 600))
+                    return
             else:
                 # 没有头像，更新为文本消息
                 await message.edit_text(
