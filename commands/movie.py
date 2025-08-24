@@ -21,7 +21,7 @@ except ImportError:
     logger.warning("JustWatch API 不可用，将仅使用 TMDB 观影平台数据")
 
 from utils.command_factory import command_factory
-from utils.config_manager import config_manager
+from utils.config_manager import config_manager, get_config
 from utils.country_data import SUPPORTED_COUNTRIES, get_country_flag
 from utils.formatter import foldable_text_v2, foldable_text_with_markdown_v2
 from utils.message_manager import delete_user_command, send_error, send_success, send_message_with_auto_delete
@@ -258,7 +258,6 @@ async def _handle_legacy_person_search_callback(query, context, callback_data):
                             
                             # 为详情消息添加自动删除
                             from utils.message_manager import _schedule_deletion
-                            from utils.config_manager import get_config
                             config = get_config()
                             await _schedule_deletion(context, query.message.chat_id, detail_message.message_id, config.auto_delete_delay)
                         except Exception as photo_error:
@@ -270,7 +269,6 @@ async def _handle_legacy_person_search_callback(query, context, callback_data):
                             
                             # 为编辑后的消息添加自动删除
                             from utils.message_manager import _schedule_deletion
-                            from utils.config_manager import get_config
                             config = get_config()
                             await _schedule_deletion(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
                     else:
@@ -319,7 +317,10 @@ async def _handle_legacy_person_search_callback(query, context, callback_data):
                 
     except Exception as e:
         logger.error(f"处理旧人物搜索回调失败: {e}")
-        await query.edit_message_text("❌ 处理选择时发生错误")
+        try:
+            await query.edit_message_text("❌ 处理选择时发生错误")
+        except:
+            pass
 
 def set_dependencies(c_manager, h_client):
     global cache_manager, httpx_client
@@ -7435,7 +7436,6 @@ async def movie_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                             
                             # 为详情消息添加自动删除
                             from utils.message_manager import _schedule_deletion
-                            from utils.config_manager import get_config
                             config = get_config()
                             await _schedule_deletion(context, query.message.chat_id, detail_message.message_id, config.auto_delete_delay)
                         except Exception as photo_error:
@@ -7447,7 +7447,6 @@ async def movie_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                             
                             # 为编辑后的消息添加自动删除
                             from utils.message_manager import _schedule_deletion
-                            from utils.config_manager import get_config
                             config = get_config()
                             await _schedule_deletion(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
                     else:
@@ -7581,7 +7580,6 @@ async def tv_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                             
                             # 为详情消息添加自动删除
                             from utils.message_manager import _schedule_deletion
-                            from utils.config_manager import get_config
                             config = get_config()
                             await _schedule_deletion(context, query.message.chat_id, detail_message.message_id, config.auto_delete_delay)
                         except Exception as photo_error:
@@ -7593,7 +7591,6 @@ async def tv_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                             
                             # 为编辑后的消息添加自动删除
                             from utils.message_manager import _schedule_deletion
-                            from utils.config_manager import get_config
                             config = get_config()
                             await _schedule_deletion(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
                     else:
