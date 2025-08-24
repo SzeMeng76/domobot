@@ -51,7 +51,7 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 -   🗺️ **Map Services:** Intelligent location search and navigation system with **automatic language detection** - Google Maps API for English users and Amap (高德地图) API for Chinese users. Features **comprehensive location search** with detailed place information, ratings, and types, **nearby service recommendations** (restaurants, hospitals, banks, gas stations, supermarkets, schools, hotels), **route planning** with step-by-step directions and travel time estimates, **geocoding** for address-to-coordinates conversion, **reverse geocoding** for coordinates-to-address lookup, **interactive button interface** with single `/map` command, **session management** for multi-step operations, **Redis caching** with appropriate TTL for different data types, and **auto-deletion** for all messages. Supports text input, location sharing, and coordinate queries with comprehensive error handling. *(Whitelist required)*
 -   ✈️ **Flight Services:** Intelligent flight search and booking information powered by Google Flights API. Features **multi-language airport recognition** (Chinese, English, IATA codes), **global airport coverage** (Asia, Europe, Americas, Oceania), **smart airport matching** with automatic selection of optimal airports, **real-time flight data** with price analysis and booking options, **intelligent route planning** with time zone calculations and flight distance information, **comprehensive airline coverage** with multiple booking channels, and **Telegraph integration** for detailed flight lists. Supports mixed-language input like `北京 New York` or `吉隆坡 Bangkok` with automatic conversion to optimal airport pairs (PEK↔JFK, KUL↔BKK). *(Whitelist required)*
 -   🏨 **Hotel Services:** Intelligent hotel search and booking information powered by Google Hotels API. Features **multi-language location recognition** (Chinese, English, specific areas), **global hotel coverage** with support for major cities worldwide, **smart location matching** with automatic area selection, **real-time hotel data** with price analysis and booking options, **comprehensive accommodation information** including ratings, amenities, and descriptions, **flexible date handling** with automatic check-in/out date parsing, **interactive sorting and filtering** with price/rating options, **Telegraph integration** for detailed hotel lists, and **intelligent stay duration analysis**. Supports mixed-language input like `北京`, `Tokyo`, `Kepong`, `Times Square NYC` with automatic location resolution. *(Whitelist required)*
--   🎬 **Movie & TV Information:** Query movie/TV details with posters, ratings, cast, trailers, reviews, recommendations, viewing platforms, and season/episode info. Features **3-platform data integration** (TMDB + JustWatch + Trakt) with **JustWatch streaming charts**, real-time ranking trends, platform availability, Telegraph integration for long content, trending discovery, people search, and enhanced statistics with watch counts and community data. *(Whitelist required)*
+-   🎬 **Movie & TV Information:** Completely redesigned with **unified button interface system** for intuitive interaction. Features **triple-platform integration** (TMDB + JustWatch + Trakt) with comprehensive search capabilities, detailed movie/TV information with posters and ratings, **interactive season/episode browsing** with user-input selection, **one-click access** to recommendations, reviews, videos, related content, and streaming platforms. Enhanced with **Telegraph integration** for long content, **unified chart system** for trending/popular/upcoming content, **intelligent session management** for multi-step interactions, and **comprehensive caching** with automatic cleanup. All functionality accessed through simple `/movie`, `/tv`, `/person`, and `/chart` commands with no need to remember complex sub-commands. *(Whitelist required)*
 -   🪙 **Crypto Prices:** Look up real-time cryptocurrency prices with support for custom amounts and currency conversion, including 24h and 7d percentage changes. *(Whitelist required)*
 -   💳 **BIN Lookup:** Query credit card BIN (Bank Identification Number) information including card brand, type, issuing bank, and country details. *(Whitelist required)*
 -   🌦️ **Weather Forecasts:** Detailed, multi-format weather forecasts (real-time, daily, hourly, minutely precipitation, and lifestyle indices). *(Whitelist required)*
@@ -235,52 +235,11 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /tq Shanghai 24h           # 24-hour hourly forecast
 /tq Guangzhou indices      # Lifestyle indices
 
-# Movies and TV shows
-/movie Avengers            # Search movies (button selection)
-/movies Avengers           # Search movies (text list)
-/movie_hot                 # Multi-platform popular movies (TMDB + JustWatch + Trakt)
-/movie_hot tmdb            # TMDB popular movies only
-/movie_hot justwatch       # JustWatch streaming charts only
-/movie_hot justwatch US    # JustWatch US streaming charts
-/movie_detail 299536       # Movie details with JustWatch ranking info
-/movie_videos 299536       # Movie trailers and videos
-/movie_reviews 299536      # User reviews (Telegraph for long content)
-/movie_rec 299536          # Movie recommendations
-/movie_watch 299536        # Viewing platforms with JustWatch data
-/movie_trending            # Trakt trending movies
-/streaming_movie_ranking   # Comprehensive streaming movie ranking
-/streaming_movie_ranking US # US streaming movie ranking
-/movie_related 299536      # Trakt related movies
-/tv Game of Thrones        # Search TV shows (button selection)
-/tvs Game of Thrones       # Search TV shows (text list)
-/tv_hot                    # Multi-platform popular TV shows (TMDB + JustWatch + Trakt)
-/tv_hot tmdb               # TMDB popular TV shows only  
-/tv_hot justwatch          # JustWatch streaming charts only
-/tv_hot justwatch GB       # JustWatch UK streaming charts
-/tv_detail 1399            # TV details with JustWatch ranking info
-/tv_season 1399 1          # Season details
-/tv_episode 1399 1 1       # Episode details
-/tv_videos 1399            # TV trailers and videos
-/tv_reviews 1399           # User reviews (Telegraph for long content)
-/tv_rec 1399               # TV show recommendations
-/tv_watch 1399             # Viewing platforms with JustWatch data
-/tv_trending               # Trakt trending TV shows  
-/streaming_tv_ranking      # Comprehensive streaming TV ranking
-/streaming_tv_ranking GB   # UK streaming TV ranking
-/tv_related 1399           # Trakt related TV shows
-
-# Trending content
-/trending                  # Today's trending movies, TV shows, and people
-/trending_week             # This week's trending content
-/now_playing               # Currently playing movies
-/upcoming                  # Upcoming movie releases
-/tv_airing                 # Today's airing TV shows
-/tv_on_air                 # Currently airing TV shows
-
-# People search
-/person Tom Hanks          # Search for actors, directors, etc. (button selection)
-/persons Tom Hanks         # Search for actors, directors, etc. (text list)
-/person_detail 31          # Get person details and filmography
+# Movies and TV shows (Unified Button Interface)
+/movie Avengers            # Search movies with interactive buttons
+/tv Game of Thrones        # Search TV shows with interactive buttons  
+/chart                     # Unified charts - trending, popular, upcoming content
+/person Tom Hanks          # Search actors/directors with button interface
 
 # Steam game prices and bundles
 /steam Cyberpunk          # Game price lookup
@@ -589,22 +548,20 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 - **Admin Management Tools:** Comprehensive user/group whitelist management via `/add`, `/addgroup`, and interactive `/admin` panel
 - **Whitelist Policy Update:** Applications currently closed, future paid service plans under consideration
 
-#### Movie & TV Features
+#### Movie & TV Features  
+- **Unified Button Interface System:** Complete redesign with interactive buttons for intuitive navigation
 - **3-Platform Data Integration:** Combines TMDB, JustWatch, and Trakt APIs for comprehensive movie/TV information
-- **JustWatch Streaming Charts:** Real-time streaming platform rankings with trend analysis and achievements
-- **Multi-Source Popular Content:** `/movie_hot` and `/tv_hot` commands support 3 data sources (mixed display by default)
-- **Flexible Data Source Selection:** Choose specific platforms with `/movie_hot tmdb|justwatch|trakt [country]`
-- **Enhanced Ranking Display:** Current rank, trend indicators (📈📉➡️), historical achievements, and chart statistics
-- **Platform Availability:** Shows up to 3 streaming platforms where content is available
-- **Trend Analysis:** Rising/falling/stable status with ranking change indicators
-- **Enhanced Search:** Interactive button-based movie/TV show selection
-- **Rich Details:** Posters, ratings, cast, crew, trailers, and viewing platforms with JustWatch ranking info
+- **JustWatch Streaming Charts:** Real-time streaming platform rankings integrated into unified `/chart` system
+- **Interactive Content Access:** One-click access to recommendations, reviews, videos, platforms via button interface
+- **Smart Session Management:** Multi-step interactions for season/episode selection with user input
+- **Enhanced Search:** Intelligent movie/TV/person search with comprehensive result display
+- **Rich Details:** Posters, ratings, cast, crew, trailers, and viewing platforms with full integration
 - **Community Statistics:** Trakt integration provides watch counts, collector stats, and community engagement data
-- **User Reviews:** Multi-source review system (TMDB + Trakt) with Telegraph integration for long content
-- **Recommendation System:** Intelligent movie and TV show recommendations with Trakt-powered related content
-- **Trending Discovery:** Real-time Trakt trending data with daily refresh for accuracy
-- **Season/Episode Info:** Detailed TV show breakdowns with intelligent content truncation
-- **People Search:** Actor, director, and crew information with filmography
+- **Telegraph Integration:** Seamless long content display for reviews, cast lists, and detailed information
+- **Unified Chart System:** All trending, popular, and upcoming content consolidated in `/chart` command
+- **Simplified Commands:** Just 4 main commands (`/movie`, `/tv`, `/person`, `/chart`) replace 25+ old commands
+- **Season/Episode Navigation:** Interactive season and episode browsing with contextual information
+- **Platform Availability:** Shows streaming platforms with intelligent geographic relevance
 - **Source Transparency:** Clear indicators showing data sources (📊 TMDB, 📺 JustWatch, 🎯 Trakt) in all displays
 - **Multilingual Support:** Chinese/English content fallback for better coverage
 - **Real-time Updates:** JustWatch data includes timestamps and data freshness indicators

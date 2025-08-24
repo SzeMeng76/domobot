@@ -59,8 +59,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 🎬 *影视查询*
 搜索: `/movie <片名>` `/tv <剧名>` `/person <演员>`
-热门: `/movie_hot` `/tv_hot` `/trending`
-排行: `/streaming_movie_ranking` `/streaming_tv_ranking`
+排行: `/chart` - 统一影视排行榜中心
+功能: 完全按钮化界面，一键获取详情、推荐、评论、预告、观看平台
+季集: 智能交互式季数/集数查询，支持用户输入选择
 平台: TMDB+JustWatch+Trakt 三源整合
 
 🎮 *Steam* `/steam <游戏> [国家]` | `/steamb <包名>`
@@ -73,7 +74,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 🌍 *支持地区* US CN TR IN MY JP GB DE 等40+国家
 💡 *特色* 支持中文地名 | 自动CNY转换 | 智能缓存 | 表达式计算
 
-⚡ 快速试用: `/nf` `/crypto btc` `/tq 北京` `/movie_hot` `/news` `/time 北京` `/whois google.com` `/dns github.com` `/recipe 红烧肉` `/what_to_eat` `/meme 3` `/finance AAPL` `/map 天安门` `/flight 北京 洛杉矶 2024-12-25` `/hotel 东京 2024-12-25 2024-12-28`"""
+⚡ 快速试用: `/nf` `/crypto btc` `/tq 北京` `/movie 复仇者` `/tv 权力的游戏` `/chart` `/news` `/time 北京` `/whois google.com` `/dns github.com` `/recipe 红烧肉` `/what_to_eat` `/meme 3` `/finance AAPL` `/map 天安门` `/flight 北京 洛杉矶 2024-12-25` `/hotel 东京 2024-12-25 2024-12-28`"""
 
     admin_help_text = """
 
@@ -207,7 +208,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 💱 汇率 🪙 币价 💳 BIN 🌦️ 天气 🎬 影视 🎮 游戏 📺 流媒体 📱 应用 ⏰ 时间 📰 新闻 🍳 烹饪 🎭 表情包 📊 股票金融 🗺️ 地图服务 ✈️ 航班服务 🏨 酒店服务
 
 🚀 *快速开始*
-`/rate USD 100` `/crypto btc` `/tq 北京` `/movie_hot`
+`/rate USD 100` `/crypto btc` `/tq 北京` `/movie 复仇者` `/tv 权力的游戏` `/chart`
 `/steam 赛博朋克` `/nf` `/time 北京` `/whois google.com` `/dns github.com` `/news` `/recipe 红烧肉` `/meme 3` `/finance AAPL` `/map 天安门` `/flight 北京 洛杉矶 2024-12-25` `/hotel 东京 2024-12-25 2024-12-28` `/help`
 
 🌟 40+国家 | CNY转换 | 智能缓存 | 表达式计算 | 时区转换 | 新闻聚合 | 1000+中文菜谱 | 股市数据"""
