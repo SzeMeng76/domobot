@@ -239,7 +239,7 @@ async def _handle_legacy_person_search_callback(query, context, callback_data):
                 person_id = selected_person["id"]
                 
                 # 先编辑为"正在获取人物详情..."消息
-                await query.edit_message_text(f"🔍 正在获取人物详情 \(ID: {person_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+                await query.edit_message_text(f"🔍 正在获取人物详情 \\(ID: {person_id}\\)\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
                 message = query.message  # 用于后续统一处理
                 
                 # 获取人物详情
@@ -281,9 +281,9 @@ async def _handle_legacy_person_search_callback(query, context, callback_data):
                 from utils.message_manager import _schedule_deletion
                 config = get_config()
                 await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
-                    
-                    # 清除用户会话
-                    del person_search_sessions[user_id]
+                
+                # 清除用户会话
+                del person_search_sessions[user_id]
                 else:
                     await query.edit_message_text("❌ 获取人物详情失败")
             else:
@@ -7917,24 +7917,33 @@ async def _execute_tv_hot_chart(query, context) -> None:
         await query.edit_message_text("❌ 获取综合热门剧集时发生错误")
 
 async def _execute_trending_chart(query, context) -> None:
-    """执行今日热门"""
+    """执行今日热门 - 完全按照movieold的trending_command逻辑"""
     if not movie_service:
         await query.edit_message_text("❌ 电影查询服务未初始化")
         return
+    
+    # 先编辑为"正在获取..."消息（对应movieold第6335-6339行）
+    await query.edit_message_text("🔍 正在获取今日热门内容\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
+    message = query.message  # 用于后续统一处理
     
     try:
         trending_data = await movie_service.get_trending_content("all", "day")
         if trending_data:
             result_text = movie_service.format_trending_content(trending_data, "day")
-            await query.edit_message_text(
-                text=foldable_text_with_markdown_v2(result_text),
-                parse_mode="MarkdownV2"
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
             )
         else:
-            await query.edit_message_text("❌ 未获取到今日热门内容")
+            await message.edit_text("❌ 获取热门内容失败，请稍后重试")
     except Exception as e:
-        logger.error(f"获取今日热门失败: {e}")
-        await query.edit_message_text("❌ 获取今日热门时发生错误")
+        logger.error(f"获取热门内容失败: {e}")
+        await message.edit_text("❌ 获取热门内容时发生错误")
+    
+    # 调度删除机器人回复消息（对应movieold第6355-6359行）
+    from utils.message_manager import _schedule_deletion
+    config = get_config()
+    await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
 
 async def _execute_trending_week_chart(query, context) -> None:
     """执行本周热门"""
