@@ -6864,6 +6864,55 @@ async def tv_on_air_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
+async def chart_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """统一的影视排行榜服务主命令 /chart"""
+    if not update.message or not update.effective_chat:
+        return
+    
+    user_id = update.effective_user.id
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+    
+    # 显示统一的排行榜主菜单
+    keyboard = [
+        [
+            InlineKeyboardButton("🔥 综合热门榜 (多源)", callback_data="chart_section_mixed")
+        ],
+        [
+            InlineKeyboardButton("📊 TMDB 官方榜", callback_data="chart_section_tmdb"),
+            InlineKeyboardButton("🎬 JustWatch 流媒体榜", callback_data="chart_section_justwatch")
+        ],
+        [
+            InlineKeyboardButton("👥 Trakt 用户榜", callback_data="chart_section_trakt"),
+            InlineKeyboardButton("❌ 关闭", callback_data="chart_close")
+        ]
+    ]
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    help_text = """📊 影视排行榜中心
+
+🌍 数据来源:
+• **综合榜**: TMDB + JustWatch + Trakt 三源数据整合
+• **TMDB官方**: 全球权威电影数据库官方排行
+• **JustWatch**: 全球流媒体平台实时热度数据  
+• **Trakt用户**: 真实用户观影数据统计
+
+📈 排行榜类型:
+• **热门内容**: 实时热度和趋势数据
+• **上映信息**: 正在/即将上映的最新内容
+• **流媒体**: Netflix、Disney+等平台热度
+• **用户偏好**: 基于真实用户行为的推荐
+
+🔍 选择上方按钮开始浏览排行榜"""
+
+    await send_message_with_auto_delete(
+        context=context,
+        chat_id=update.effective_chat.id,
+        text=foldable_text_v2(help_text),
+        parse_mode="MarkdownV2",
+        reply_markup=reply_markup
+    )
+
 async def person_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """统一的人物服务主命令 /person - 参考flight/hotel的设计模式"""
     if not update.message or not update.effective_chat:
@@ -7570,6 +7619,503 @@ async def tv_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.error(f"处理电视剧搜索回调失败: {e}")
         await query.edit_message_text("❌ 处理选择时发生错误")
 
+async def chart_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理chart排行榜回调"""
+    query = update.callback_query
+    if not query:
+        return
+    
+    try:
+        await query.answer()
+        callback_data = query.data
+        
+        if callback_data == "chart_close":
+            await query.delete_message()
+            return
+        
+        if callback_data == "chart_section_mixed":
+            # 综合热门榜子菜单
+            keyboard = [
+                [
+                    InlineKeyboardButton("🎬 综合热门电影", callback_data="chart_movie_hot"),
+                    InlineKeyboardButton("📺 综合热门剧集", callback_data="chart_tv_hot")
+                ],
+                [
+                    InlineKeyboardButton("🔙 返回主菜单", callback_data="chart_back_main"),
+                    InlineKeyboardButton("❌ 关闭", callback_data="chart_close")
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                text=foldable_text_v2("🔥 *综合热门榜 \\(多源\\)*\n\n整合 TMDB、JustWatch、Trakt 三个数据源的热门内容\n\n请选择类型:"),
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup
+            )
+        
+        elif callback_data == "chart_section_tmdb":
+            # TMDB官方榜子菜单
+            keyboard = [
+                [
+                    InlineKeyboardButton("🔥 今日热门", callback_data="chart_trending_today"),
+                    InlineKeyboardButton("📅 本周热门", callback_data="chart_trending_week")
+                ],
+                [
+                    InlineKeyboardButton("🎭 正在上映", callback_data="chart_now_playing"),
+                    InlineKeyboardButton("📈 即将上映", callback_data="chart_upcoming")
+                ],
+                [
+                    InlineKeyboardButton("📺 今日播出", callback_data="chart_tv_airing"),
+                    InlineKeyboardButton("📺 正在播出", callback_data="chart_tv_on_air")
+                ],
+                [
+                    InlineKeyboardButton("🔙 返回主菜单", callback_data="chart_back_main"),
+                    InlineKeyboardButton("❌ 关闭", callback_data="chart_close")
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                text=foldable_text_v2("📊 *TMDB 官方榜*\n\n全球权威电影数据库官方排行榜\n\n请选择类型:"),
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup
+            )
+        
+        elif callback_data == "chart_section_justwatch":
+            # JustWatch流媒体榜子菜单
+            keyboard = [
+                [
+                    InlineKeyboardButton("🎬 电影流媒体热度", callback_data="chart_streaming_movie"),
+                    InlineKeyboardButton("📺 剧集流媒体热度", callback_data="chart_streaming_tv")
+                ],
+                [
+                    InlineKeyboardButton("🔙 返回主菜单", callback_data="chart_back_main"),
+                    InlineKeyboardButton("❌ 关闭", callback_data="chart_close")
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                text=foldable_text_v2("🎬 *JustWatch 流媒体榜*\n\n全球流媒体平台实时热度数据\n\n请选择类型:"),
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup
+            )
+        
+        elif callback_data == "chart_section_trakt":
+            # Trakt用户榜子菜单
+            keyboard = [
+                [
+                    InlineKeyboardButton("🎬 Trakt热门电影", callback_data="chart_movie_trending"),
+                    InlineKeyboardButton("📺 Trakt热门剧集", callback_data="chart_tv_trending")
+                ],
+                [
+                    InlineKeyboardButton("🔙 返回主菜单", callback_data="chart_back_main"),
+                    InlineKeyboardButton("❌ 关闭", callback_data="chart_close")
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                text=foldable_text_v2("👥 *Trakt 用户榜*\n\n基于真实用户观影数据的推荐排行\n\n请选择类型:"),
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup
+            )
+        
+        elif callback_data == "chart_back_main":
+            # 返回主菜单
+            keyboard = [
+                [
+                    InlineKeyboardButton("🔥 综合热门榜 (多源)", callback_data="chart_section_mixed")
+                ],
+                [
+                    InlineKeyboardButton("📊 TMDB 官方榜", callback_data="chart_section_tmdb"),
+                    InlineKeyboardButton("🎬 JustWatch 流媒体榜", callback_data="chart_section_justwatch")
+                ],
+                [
+                    InlineKeyboardButton("👥 Trakt 用户榜", callback_data="chart_section_trakt"),
+                    InlineKeyboardButton("❌ 关闭", callback_data="chart_close")
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            help_text = """📊 影视排行榜中心
+
+🌍 数据来源:
+• **综合榜**: TMDB + JustWatch + Trakt 三源数据整合
+• **TMDB官方**: 全球权威电影数据库官方排行
+• **JustWatch**: 全球流媒体平台实时热度数据  
+• **Trakt用户**: 真实用户观影数据统计
+
+📈 排行榜类型:
+• **热门内容**: 实时热度和趋势数据
+• **上映信息**: 正在/即将上映的最新内容
+• **流媒体**: Netflix、Disney+等平台热度
+• **用户偏好**: 基于真实用户行为的推荐
+
+🔍 选择上方按钮开始浏览排行榜"""
+
+            await query.edit_message_text(
+                text=foldable_text_v2(help_text),
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup
+            )
+        
+        # 处理具体的排行榜请求
+        elif callback_data.startswith("chart_"):
+            await _handle_chart_request(query, context, callback_data)
+    
+    except Exception as e:
+        logger.error(f"处理chart回调失败: {e}")
+        try:
+            await query.edit_message_text("❌ 处理请求失败，请重试")
+        except:
+            pass
+
+async def _handle_chart_request(query, context, callback_data: str) -> None:
+    """处理具体的排行榜请求"""
+    chat_id = query.message.chat_id
+    
+    # 映射回调数据到对应的命令函数
+    chart_map = {
+        "chart_movie_hot": ("movie_hot", "综合热门电影"),
+        "chart_tv_hot": ("tv_hot", "综合热门剧集"), 
+        "chart_trending_today": ("trending", "今日热门"),
+        "chart_trending_week": ("trending_week", "本周热门"),
+        "chart_now_playing": ("now_playing", "正在上映"),
+        "chart_upcoming": ("upcoming", "即将上映"),
+        "chart_tv_airing": ("tv_airing", "今日播出"),
+        "chart_tv_on_air": ("tv_on_air", "正在播出"),
+        "chart_streaming_movie": ("streaming_movie_ranking", "电影流媒体热度"),
+        "chart_streaming_tv": ("streaming_tv_ranking", "剧集流媒体热度"),
+        "chart_movie_trending": ("movie_trending", "Trakt热门电影"),
+        "chart_tv_trending": ("tv_trending", "Trakt热门剧集")
+    }
+    
+    if callback_data not in chart_map:
+        await query.edit_message_text("❌ 未知的排行榜类型")
+        return
+    
+    command_name, display_name = chart_map[callback_data]
+    
+    # 显示加载消息
+    loading_message = f"🔍 正在获取{display_name}... ⏳"
+    await query.edit_message_text(foldable_text_v2(loading_message), parse_mode="MarkdownV2")
+    
+    # 调用相应的命令函数 (需要创建一个统一的执行函数)
+    await _execute_chart_command(query, context, command_name, display_name)
+
+async def _execute_chart_command(query, context, command_name: str, display_name: str) -> None:
+    """执行具体的排行榜命令"""
+    try:
+        # 调用对应的原始命令函数的核心逻辑
+        if command_name == "movie_hot":
+            await _execute_movie_hot_chart(query, context)
+        elif command_name == "tv_hot":
+            await _execute_tv_hot_chart(query, context)
+        elif command_name == "trending":
+            await _execute_trending_chart(query, context)
+        elif command_name == "trending_week":
+            await _execute_trending_week_chart(query, context)
+        elif command_name == "now_playing":
+            await _execute_now_playing_chart(query, context)
+        elif command_name == "upcoming":
+            await _execute_upcoming_chart(query, context)
+        elif command_name == "tv_airing":
+            await _execute_tv_airing_chart(query, context)
+        elif command_name == "tv_on_air":
+            await _execute_tv_on_air_chart(query, context)
+        elif command_name == "streaming_movie_ranking":
+            await _execute_streaming_movie_chart(query, context)
+        elif command_name == "streaming_tv_ranking":
+            await _execute_streaming_tv_chart(query, context)
+        elif command_name == "movie_trending":
+            await _execute_movie_trending_chart(query, context)
+        elif command_name == "tv_trending":
+            await _execute_tv_trending_chart(query, context)
+        else:
+            await query.edit_message_text(f"❌ 未实现的排行榜类型: {command_name}")
+        
+    except Exception as e:
+        logger.error(f"执行排行榜命令失败: {e}")
+        await query.edit_message_text(f"❌ 获取{display_name}失败: {str(e)}")
+
+# 具体的排行榜执行函数
+async def _execute_movie_hot_chart(query, context) -> None:
+    """执行综合热门电影"""
+    if not movie_service:
+        await query.edit_message_text("❌ 电影查询服务未初始化")
+        return
+    
+    try:
+        # 使用默认的mixed模式（综合显示）
+        result_text, poster_url = await movie_service.get_popular_movies("mixed")
+        
+        if poster_url:
+            try:
+                # 删除当前消息，发送图片
+                await query.delete_message()
+                photo_message = await context.bot.send_photo(
+                    chat_id=query.message.chat_id,
+                    photo=poster_url,
+                    caption=foldable_text_with_markdown_v2(result_text),
+                    parse_mode="MarkdownV2"
+                )
+                # 调度自动删除
+                from utils.message_manager import _schedule_deletion
+                from utils.config_manager import get_config
+                config = get_config()
+                await _schedule_deletion(context, photo_message.chat_id, photo_message.message_id, config.auto_delete_delay)
+            except Exception as photo_error:
+                logger.warning(f"发送海报失败: {photo_error}")
+                await query.edit_message_text(
+                    text=foldable_text_with_markdown_v2(result_text),
+                    parse_mode="MarkdownV2"
+                )
+        else:
+            await query.edit_message_text(
+                text=foldable_text_with_markdown_v2(result_text),
+                parse_mode="MarkdownV2"
+            )
+    except Exception as e:
+        logger.error(f"获取综合热门电影失败: {e}")
+        await query.edit_message_text("❌ 获取综合热门电影时发生错误")
+
+async def _execute_tv_hot_chart(query, context) -> None:
+    """执行综合热门剧集"""
+    if not movie_service:
+        await query.edit_message_text("❌ 电视剧查询服务未初始化")
+        return
+    
+    try:
+        # 使用默认的mixed模式（综合显示）
+        result_text, poster_url = await movie_service.get_popular_tv_shows("mixed")
+        
+        if poster_url:
+            try:
+                await query.delete_message()
+                photo_message = await context.bot.send_photo(
+                    chat_id=query.message.chat_id,
+                    photo=poster_url,
+                    caption=foldable_text_with_markdown_v2(result_text),
+                    parse_mode="MarkdownV2"
+                )
+                from utils.message_manager import _schedule_deletion
+                from utils.config_manager import get_config
+                config = get_config()
+                await _schedule_deletion(context, photo_message.chat_id, photo_message.message_id, config.auto_delete_delay)
+            except Exception as photo_error:
+                logger.warning(f"发送海报失败: {photo_error}")
+                await query.edit_message_text(
+                    text=foldable_text_with_markdown_v2(result_text),
+                    parse_mode="MarkdownV2"
+                )
+        else:
+            await query.edit_message_text(
+                text=foldable_text_with_markdown_v2(result_text),
+                parse_mode="MarkdownV2"
+            )
+    except Exception as e:
+        logger.error(f"获取综合热门剧集失败: {e}")
+        await query.edit_message_text("❌ 获取综合热门剧集时发生错误")
+
+async def _execute_trending_chart(query, context) -> None:
+    """执行今日热门"""
+    if not movie_service:
+        await query.edit_message_text("❌ 电影查询服务未初始化")
+        return
+    
+    try:
+        trending_data = await movie_service.get_trending("day")
+        if trending_data:
+            result_text = movie_service.format_trending_results(trending_data, "day")
+            await query.edit_message_text(
+                text=foldable_text_with_markdown_v2(result_text),
+                parse_mode="MarkdownV2"
+            )
+        else:
+            await query.edit_message_text("❌ 未获取到今日热门内容")
+    except Exception as e:
+        logger.error(f"获取今日热门失败: {e}")
+        await query.edit_message_text("❌ 获取今日热门时发生错误")
+
+async def _execute_trending_week_chart(query, context) -> None:
+    """执行本周热门"""
+    if not movie_service:
+        await query.edit_message_text("❌ 电影查询服务未初始化")
+        return
+    
+    try:
+        trending_data = await movie_service.get_trending("week")
+        if trending_data:
+            result_text = movie_service.format_trending_results(trending_data, "week")
+            await query.edit_message_text(
+                text=foldable_text_with_markdown_v2(result_text),
+                parse_mode="MarkdownV2"
+            )
+        else:
+            await query.edit_message_text("❌ 未获取到本周热门内容")
+    except Exception as e:
+        logger.error(f"获取本周热门失败: {e}")
+        await query.edit_message_text("❌ 获取本周热门时发生错误")
+
+# 其他排行榜函数类似实现...
+async def _execute_now_playing_chart(query, context) -> None:
+    """执行正在上映"""
+    if not movie_service:
+        await query.edit_message_text("❌ 电影查询服务未初始化")
+        return
+    
+    try:
+        now_playing_data = await movie_service.get_now_playing()
+        if now_playing_data:
+            result_text = movie_service.format_now_playing(now_playing_data)
+            await query.edit_message_text(
+                text=foldable_text_with_markdown_v2(result_text),
+                parse_mode="MarkdownV2"
+            )
+        else:
+            await query.edit_message_text("❌ 未获取到正在上映的电影")
+    except Exception as e:
+        logger.error(f"获取正在上映失败: {e}")
+        await query.edit_message_text("❌ 获取正在上映时发生错误")
+
+async def _execute_upcoming_chart(query, context) -> None:
+    """执行即将上映"""
+    if not movie_service:
+        await query.edit_message_text("❌ 电影查询服务未初始化")
+        return
+    
+    try:
+        upcoming_data = await movie_service.get_upcoming()
+        if upcoming_data:
+            result_text = movie_service.format_upcoming(upcoming_data)
+            await query.edit_message_text(
+                text=foldable_text_with_markdown_v2(result_text),
+                parse_mode="MarkdownV2"
+            )
+        else:
+            await query.edit_message_text("❌ 未获取到即将上映的电影")
+    except Exception as e:
+        logger.error(f"获取即将上映失败: {e}")
+        await query.edit_message_text("❌ 获取即将上映时发生错误")
+
+async def _execute_tv_airing_chart(query, context) -> None:
+    """执行今日播出"""
+    if not movie_service:
+        await query.edit_message_text("❌ 电视剧查询服务未初始化")
+        return
+    
+    try:
+        airing_data = await movie_service.get_tv_airing_today()
+        if airing_data:
+            result_text = movie_service.format_tv_airing_today(airing_data)
+            await query.edit_message_text(
+                text=foldable_text_with_markdown_v2(result_text),
+                parse_mode="MarkdownV2"
+            )
+        else:
+            await query.edit_message_text("❌ 未获取到今日播出的电视剧")
+    except Exception as e:
+        logger.error(f"获取今日播出失败: {e}")
+        await query.edit_message_text("❌ 获取今日播出时发生错误")
+
+async def _execute_tv_on_air_chart(query, context) -> None:
+    """执行正在播出"""
+    if not movie_service:
+        await query.edit_message_text("❌ 电视剧查询服务未初始化")
+        return
+    
+    try:
+        on_air_data = await movie_service.get_tv_on_the_air()
+        if on_air_data:
+            result_text = movie_service.format_tv_on_the_air(on_air_data)
+            await query.edit_message_text(
+                text=foldable_text_with_markdown_v2(result_text),
+                parse_mode="MarkdownV2"
+            )
+        else:
+            await query.edit_message_text("❌ 未获取到正在播出的电视剧")
+    except Exception as e:
+        logger.error(f"获取正在播出失败: {e}")
+        await query.edit_message_text("❌ 获取正在播出时发生错误")
+
+async def _execute_streaming_movie_chart(query, context) -> None:
+    """执行电影流媒体热度"""
+    if not movie_service:
+        await query.edit_message_text("❌ 电影查询服务未初始化")
+        return
+    
+    try:
+        # 使用默认的多国模式
+        streaming_data = await movie_service.get_streaming_movie_rankings("multi")
+        if streaming_data:
+            result_text = movie_service.format_streaming_movie_rankings(streaming_data, "multi")
+            await query.edit_message_text(
+                text=foldable_text_with_markdown_v2(result_text),
+                parse_mode="MarkdownV2"
+            )
+        else:
+            await query.edit_message_text("❌ 未获取到流媒体电影热度")
+    except Exception as e:
+        logger.error(f"获取流媒体电影热度失败: {e}")
+        await query.edit_message_text("❌ 获取流媒体电影热度时发生错误")
+
+async def _execute_streaming_tv_chart(query, context) -> None:
+    """执行剧集流媒体热度"""
+    if not movie_service:
+        await query.edit_message_text("❌ 电视剧查询服务未初始化")
+        return
+    
+    try:
+        # 使用默认的多国模式
+        streaming_data = await movie_service.get_streaming_tv_rankings("multi")
+        if streaming_data:
+            result_text = movie_service.format_streaming_tv_rankings(streaming_data, "multi")
+            await query.edit_message_text(
+                text=foldable_text_with_markdown_v2(result_text),
+                parse_mode="MarkdownV2"
+            )
+        else:
+            await query.edit_message_text("❌ 未获取到流媒体剧集热度")
+    except Exception as e:
+        logger.error(f"获取流媒体剧集热度失败: {e}")
+        await query.edit_message_text("❌ 获取流媒体剧集热度时发生错误")
+
+async def _execute_movie_trending_chart(query, context) -> None:
+    """执行Trakt热门电影"""
+    if not movie_service:
+        await query.edit_message_text("❌ 电影查询服务未初始化")
+        return
+    
+    try:
+        trending_data = await movie_service.get_trakt_trending_movies()
+        if trending_data:
+            result_text = movie_service.format_trakt_trending_movies(trending_data)
+            await query.edit_message_text(
+                text=foldable_text_with_markdown_v2(result_text),
+                parse_mode="MarkdownV2"
+            )
+        else:
+            await query.edit_message_text("❌ 未获取到Trakt热门电影")
+    except Exception as e:
+        logger.error(f"获取Trakt热门电影失败: {e}")
+        await query.edit_message_text("❌ 获取Trakt热门电影时发生错误")
+
+async def _execute_tv_trending_chart(query, context) -> None:
+    """执行Trakt热门剧集"""
+    if not movie_service:
+        await query.edit_message_text("❌ 电视剧查询服务未初始化")
+        return
+    
+    try:
+        trending_data = await movie_service.get_trakt_trending_tv()
+        if trending_data:
+            result_text = movie_service.format_trakt_trending_tv(trending_data)
+            await query.edit_message_text(
+                text=foldable_text_with_markdown_v2(result_text),
+                parse_mode="MarkdownV2"
+            )
+        else:
+            await query.edit_message_text("❌ 未获取到Trakt热门剧集")
+    except Exception as e:
+        logger.error(f"获取Trakt热门剧集失败: {e}")
+        await query.edit_message_text("❌ 获取Trakt热门剧集时发生错误")
+
 async def person_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理人物功能的回调查询 - 与flight/hotel完全一致的结构"""
     query = update.callback_query
@@ -7755,13 +8301,10 @@ async def person_callback_handler(update: Update, context: ContextTypes.DEFAULT_
 # 注册命令
 command_factory.register_command("movie", movie_command, permission=Permission.USER, description="搜索电影信息（按钮选择）")
 command_factory.register_command("movies", movies_command, permission=Permission.USER, description="搜索电影信息（文本列表）")
-command_factory.register_command("movie_hot", movie_hot_command, permission=Permission.USER, description="获取热门电影")
 command_factory.register_command("movie_detail", movie_detail_command, permission=Permission.USER, description="获取电影详情")
 command_factory.register_command("movie_rec", movie_rec_command, permission=Permission.USER, description="获取电影推荐")
 command_factory.register_command("movie_videos", movie_videos_command, permission=Permission.USER, description="获取电影预告片")
 command_factory.register_command("movie_reviews", movie_reviews_command, permission=Permission.USER, description="获取电影用户评价")
-command_factory.register_command("movie_trending", movie_trending_command, permission=Permission.USER, description="获取Trakt热门电影")
-command_factory.register_command("streaming_movie_ranking", streaming_movie_ranking_command, permission=Permission.USER, description="获取综合流媒体电影热度排行榜")
 command_factory.register_command("movie_related", movie_related_command, permission=Permission.USER, description="获取Trakt相关电影推荐")
 # 已迁移到统一缓存管理命令 /cleancache
 # command_factory.register_command("movie_cleancache", movie_clean_cache_command, permission=Permission.ADMIN, description="清理电影和电视剧查询缓存")
@@ -7769,24 +8312,28 @@ command_factory.register_command("movie_related", movie_related_command, permiss
 # 注册电视剧命令
 command_factory.register_command("tv", tv_command, permission=Permission.USER, description="搜索电视剧信息（按钮选择）")
 command_factory.register_command("tvs", tvs_command, permission=Permission.USER, description="搜索电视剧信息（文本列表）")
-command_factory.register_command("tv_hot", tv_hot_command, permission=Permission.USER, description="获取热门电视剧")
 command_factory.register_command("tv_detail", tv_detail_command, permission=Permission.USER, description="获取电视剧详情")
 command_factory.register_command("tv_rec", tv_rec_command, permission=Permission.USER, description="获取电视剧推荐")
 command_factory.register_command("tv_videos", tv_videos_command, permission=Permission.USER, description="获取电视剧预告片")
 command_factory.register_command("tv_reviews", tv_reviews_command, permission=Permission.USER, description="获取电视剧用户评价")
-command_factory.register_command("tv_trending", tv_trending_command, permission=Permission.USER, description="获取Trakt热门电视剧")
-command_factory.register_command("streaming_tv_ranking", streaming_tv_ranking_command, permission=Permission.USER, description="获取综合流媒体电视剧热度排行榜")
 command_factory.register_command("tv_related", tv_related_command, permission=Permission.USER, description="获取Trakt相关电视剧推荐")
 command_factory.register_command("tv_season", tv_season_command, permission=Permission.USER, description="获取电视剧季详情")
 command_factory.register_command("tv_episode", tv_episode_command, permission=Permission.USER, description="获取电视剧集详情")
 
-# 注册趋势和上映相关命令
-command_factory.register_command("trending", trending_command, permission=Permission.USER, description="获取今日热门内容")
-command_factory.register_command("trending_week", trending_week_command, permission=Permission.USER, description="获取本周热门内容")
-command_factory.register_command("now_playing", now_playing_command, permission=Permission.USER, description="获取正在上映的电影")
-command_factory.register_command("upcoming", upcoming_command, permission=Permission.USER, description="获取即将上映的电影")
-command_factory.register_command("tv_airing", tv_airing_command, permission=Permission.USER, description="获取今日播出的电视剧")
-command_factory.register_command("tv_on_air", tv_on_air_command, permission=Permission.USER, description="获取正在播出的电视剧")
+# 注册趋势和上映相关命令 - 已整合到 /chart 命令中
+# command_factory.register_command("trending", trending_command, permission=Permission.USER, description="获取今日热门内容")
+# command_factory.register_command("trending_week", trending_week_command, permission=Permission.USER, description="获取本周热门内容")
+# command_factory.register_command("now_playing", now_playing_command, permission=Permission.USER, description="获取正在上映的电影")
+# command_factory.register_command("upcoming", upcoming_command, permission=Permission.USER, description="获取即将上映的电影")
+# command_factory.register_command("tv_airing", tv_airing_command, permission=Permission.USER, description="获取今日播出的电视剧")
+# command_factory.register_command("tv_on_air", tv_on_air_command, permission=Permission.USER, description="获取正在播出的电视剧")
+# 排行榜相关命令已整合到统一的 /chart 命令中
+# command_factory.register_command("movie_hot", movie_hot_command, permission=Permission.USER, description="获取热门电影")
+# command_factory.register_command("tv_hot", tv_hot_command, permission=Permission.USER, description="获取热门电视剧")
+# command_factory.register_command("movie_trending", movie_trending_command, permission=Permission.USER, description="获取Trakt热门电影")
+# command_factory.register_command("tv_trending", tv_trending_command, permission=Permission.USER, description="获取Trakt热门电视剧")
+# command_factory.register_command("streaming_movie_ranking", streaming_movie_ranking_command, permission=Permission.USER, description="获取综合流媒体电影热度排行榜")
+# command_factory.register_command("streaming_tv_ranking", streaming_tv_ranking_command, permission=Permission.USER, description="获取综合流媒体电视剧热度排行榜")
 
 # 注册人物搜索命令
 # 注册人物相关命令 - 统一的/person命令
@@ -7796,7 +8343,11 @@ command_factory.register_command("person", person_command, permission=Permission
 command_factory.register_command("movie_watch", movie_watch_command, permission=Permission.USER, description="获取电影观看平台")
 command_factory.register_command("tv_watch", tv_watch_command, permission=Permission.USER, description="获取电视剧观看平台")
 
+# 注册统一的排行榜命令
+command_factory.register_command("chart", chart_command, permission=Permission.USER, description="统一的影视排行榜中心")
+
 # 注册回调处理器
 command_factory.register_callback(r"^movie_", movie_callback_handler, permission=Permission.USER, description="电影搜索结果选择")
 command_factory.register_callback(r"^tv_", tv_callback_handler, permission=Permission.USER, description="电视剧搜索结果选择")
 command_factory.register_callback(r"^person_", person_callback_handler, permission=Permission.USER, description="人物功能回调处理 - 搜索、详情、热门等")
+command_factory.register_callback(r"^chart_", chart_callback_handler, permission=Permission.USER, description="统一排行榜功能回调处理")
