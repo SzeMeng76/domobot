@@ -4416,6 +4416,132 @@ movie_search_sessions = {}
 person_search_sessions = {}
 tv_search_sessions = {}
 
+# 电影会话管理器（类似person_session_manager）
+movie_session_manager = SessionManager()
+
+async def movie_text_handler_core(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """电影功能文本处理的核心逻辑 - 与flight/hotel相同的模式"""
+    if not update.message or not update.message.text:
+        return
+    
+    user_id = update.effective_user.id
+    text = update.message.text.strip()
+    
+    # 检查搜索会话状态
+    if user_id in movie_search_sessions:
+        session = movie_search_sessions[user_id]
+        if session.get("waiting_for_search"):
+            # 处理搜索请求
+            await delete_user_command(context, update.message.chat_id, update.message.message_id)
+            await _execute_movie_search_from_menu(update, context, text)
+            session.pop("waiting_for_search", None)
+            return
+        elif session.get("waiting_for_details"):
+            # 处理详情查询
+            await delete_user_command(context, update.message.chat_id, update.message.message_id)
+            try:
+                movie_id = int(text)
+                await _execute_movie_details_from_menu(update, context, movie_id)
+            except ValueError:
+                await send_error(context, update.message.chat_id, "❌ 电影ID必须是数字")
+            session.pop("waiting_for_details", None)
+            return
+
+async def _execute_movie_search_from_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, query: str) -> None:
+    """从菜单执行电影搜索"""
+    user_id = update.effective_user.id
+    
+    if not movie_service:
+        await send_error(context, update.message.chat_id, "❌ 电影查询服务未初始化")
+        return
+    
+    message = await context.bot.send_message(
+        chat_id=update.message.chat_id,
+        text=f"🔍 正在搜索电影: *{escape_markdown(query, version=2)}*\\.\\.\\.",
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    
+    try:
+        search_data = await movie_service.search_movies(query)
+        if search_data and search_data.get('results'):
+            search_data["query"] = query
+            
+            # 存储搜索会话
+            movie_search_sessions[user_id] = {
+                "search_data": search_data,
+                "timestamp": datetime.now()
+            }
+            
+            result_text = format_movie_search_results_for_keyboard(search_data)
+            keyboard = create_movie_search_keyboard(search_data)
+            
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=keyboard
+            )
+        else:
+            await message.edit_text(f"❌ 未找到电影: {query}")
+            
+    except Exception as e:
+        logger.error(f"电影搜索失败: {e}")
+        await message.edit_text(f"❌ 搜索失败: {str(e)}")
+    
+    from utils.message_manager import _schedule_deletion
+    config = get_config()
+    await _schedule_deletion(context, update.message.chat_id, message.message_id, config.auto_delete_delay)
+
+async def _execute_movie_details_from_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, movie_id: int) -> None:
+    """从菜单执行电影详情查询"""
+    if not movie_service:
+        await send_error(context, update.message.chat_id, "❌ 电影查询服务未初始化")
+        return
+    
+    message = await context.bot.send_message(
+        chat_id=update.message.chat_id,
+        text=f"🔍 正在获取电影详情 (ID: {movie_id})... ⏳"
+    )
+    
+    try:
+        detail_data = await movie_service.get_movie_details(movie_id)
+        if detail_data:
+            result_text, poster_url = movie_service.format_movie_details(detail_data)
+            function_keyboard = create_movie_function_keyboard(movie_id)
+            
+            if poster_url:
+                try:
+                    detail_message = await context.bot.send_photo(
+                        chat_id=update.message.chat_id,
+                        photo=poster_url,
+                        caption=foldable_text_with_markdown_v2(result_text),
+                        parse_mode=ParseMode.MARKDOWN_V2,
+                        reply_markup=function_keyboard
+                    )
+                    await message.delete()
+                    message = detail_message
+                except:
+                    await message.edit_text(
+                        foldable_text_with_markdown_v2(result_text),
+                        parse_mode=ParseMode.MARKDOWN_V2,
+                        reply_markup=function_keyboard
+                    )
+            else:
+                await message.edit_text(
+                    foldable_text_with_markdown_v2(result_text),
+                    parse_mode=ParseMode.MARKDOWN_V2,
+                    reply_markup=function_keyboard
+                )
+        else:
+            await message.edit_text(f"❌ 未找到ID为 {movie_id} 的电影")
+            
+    except Exception as e:
+        logger.error(f"获取电影详情失败: {e}")
+        await message.edit_text(f"❌ 获取详情失败: {str(e)}")
+    
+    from utils.message_manager import _schedule_deletion
+    config = get_config()
+    await _schedule_deletion(context, update.message.chat_id, message.message_id, config.auto_delete_delay)
+
 def create_movie_search_keyboard(search_data: dict) -> InlineKeyboardMarkup:
     """创建电影搜索结果的内联键盘"""
     keyboard = []
@@ -4627,41 +4753,33 @@ async def movie_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await delete_user_command(context, update.effective_chat.id, update.message.message_id)
     
     if not context.args:
+        # 显示功能菜单 - 参考flight/hotel的模式
+        keyboard = [
+            [InlineKeyboardButton("🔍 搜索电影", callback_data="movie_menu_search")],
+            [InlineKeyboardButton("📋 电影详情查询", callback_data="movie_menu_details")],
+            [InlineKeyboardButton("❓ 使用帮助", callback_data="movie_menu_help")]
+        ]
+        
         help_text = (
-            "*🎬 电影信息查询帮助*\n\n"
-            "**基础查询:**\n"
-            "`/movie <电影名>` - 搜索电影（按钮选择）\n"
-            "`/movies <电影名>` - 搜索电影（文本列表）\n"
-            "`/movie_hot` - 获取热门电影\n"
-            "`/movie_detail <电影ID>` - 获取电影详情\n"
-            "`/movie_rec <电影ID>` - 获取相似推荐\n"
-            "`/movie_videos <电影ID>` - 获取预告片和视频\n"
-            "`/movie_reviews <电影ID>` - 获取电影用户评价\n"
-            "`/movie_trending` - 获取Trakt热门电影\n"
-            "`/streaming_movie_ranking [国家码|multi]` - 获取综合流媒体电影热度排行榜\n"
-            "`/movie_related <电影ID>` - 获取Trakt相关电影推荐\n"
-            "`/movie_watch <电影ID>` - 获取观看平台\n\n"
-            "**热门趋势:**\n"
-            "`/trending` - 今日全球热门内容\n"
-            "`/trending_week` - 本周全球热门内容\n"
-            "`/now_playing` - 正在上映的电影\n"
-            "`/upcoming` - 即将上映的电影\n\n"
-            "**示例:**\n"
-            "`/movie 复仇者联盟`\n"
-            "`/movies 复仇者联盟`\n"
-            "`/movie_detail 299536`\n"
-            "`/movie_videos 299536`\n"
-            "`/movie_reviews 299536`"
+            "🎬 **电影查询中心**\n\n"
+            "请选择功能：\n\n"
+            "🔍 **搜索电影** - 按电影名搜索\n"
+            "📋 **详情查询** - 通过电影ID查询详情\n"
+            "❓ **使用帮助** - 查看详细使用说明\n\n"
+            "💡 也可以直接使用：\n"
+            "`/movie 电影名` - 直接搜索电影"
         )
-        message = await context.bot.send_message(
+        
+        sent_message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text=foldable_text_with_markdown_v2(help_text),
-            parse_mode=ParseMode.MARKDOWN_V2
+            text=foldable_text_v2(help_text),
+            parse_mode="MarkdownV2",
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
-        # 调度删除机器人回复消息
+        
+        # 调度删除菜单消息 - 给用户足够时间操作菜单
         from utils.message_manager import _schedule_deletion
-        config = get_config()
-        await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
+        await _schedule_deletion(context, update.effective_chat.id, sent_message.message_id, 300)  # 5分钟后删除菜单
         return
     
     query = " ".join(context.args)
@@ -7321,12 +7439,22 @@ async def tvs_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
 async def movie_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """处理电影搜索结果的内联键盘回调"""
+    """处理电影搜索结果和功能按钮的内联键盘回调"""
     query = update.callback_query
     await query.answer()
     
     user_id = update.effective_user.id
     callback_data = query.data
+    
+    # 处理菜单按钮（不需要搜索会话）
+    if callback_data.startswith("movie_menu_"):
+        await handle_movie_menu_callback(query, context, callback_data)
+        return
+    
+    # 处理电影功能按钮（需要电影ID）
+    if callback_data.startswith("movie_func_"):
+        await handle_movie_function_callback(query, context, callback_data)
+        return
     
     # 检查用户是否有有效的搜索会话
     if user_id not in movie_search_sessions:
@@ -7383,6 +7511,9 @@ async def movie_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                     
                     result_text, poster_url = movie_service.format_movie_details(detail_data)
                     
+                    # 创建功能按钮
+                    function_keyboard = create_movie_function_keyboard(movie_id)
+                    
                     # 如果有海报URL，发送图片消息
                     if poster_url:
                         try:
@@ -7390,7 +7521,8 @@ async def movie_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                                 chat_id=query.message.chat_id,
                                 photo=poster_url,
                                 caption=foldable_text_with_markdown_v2(result_text),
-                                parse_mode=ParseMode.MARKDOWN_V2
+                                parse_mode=ParseMode.MARKDOWN_V2,
+                                reply_markup=function_keyboard
                             )
                             # 删除原来的搜索结果消息
                             await query.delete_message()
@@ -7403,7 +7535,8 @@ async def movie_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                             logger.warning(f"发送海报失败: {photo_error}，改用文本消息")
                             await query.edit_message_text(
                                 foldable_text_with_markdown_v2(result_text),
-                                parse_mode=ParseMode.MARKDOWN_V2
+                                parse_mode=ParseMode.MARKDOWN_V2,
+                                reply_markup=function_keyboard
                             )
                             
                             # 为编辑后的消息添加自动删除
@@ -7413,7 +7546,8 @@ async def movie_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                     else:
                         await query.edit_message_text(
                             foldable_text_with_markdown_v2(result_text),
-                            parse_mode=ParseMode.MARKDOWN_V2
+                            parse_mode=ParseMode.MARKDOWN_V2,
+                            reply_markup=function_keyboard
                         )
                         
                         # 为编辑后的消息添加自动删除
@@ -7421,8 +7555,9 @@ async def movie_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                         config = get_config()
                         await _schedule_deletion(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
                     
-                    # 清除用户会话
-                    del movie_search_sessions[user_id]
+                    # 更新用户会话，保存电影ID供功能按钮使用
+                    movie_search_sessions[user_id]["current_movie_id"] = movie_id
+                    movie_search_sessions[user_id]["current_movie_data"] = detail_data
                 else:
                     await query.edit_message_text("❌ 获取电影详情失败")
             else:
@@ -8403,6 +8538,311 @@ async def person_callback_handler(update: Update, context: ContextTypes.DEFAULT_
     elif data.startswith("person_select_") or data.startswith("person_page_"):
         # 处理旧的搜索结果回调（兼容性）
         await _handle_legacy_person_search_callback(query, context, data)
+
+def create_movie_function_keyboard(movie_id: int):
+    """创建电影功能按钮键盘"""
+    keyboard = [
+        [
+            InlineKeyboardButton("🎯 电影推荐", callback_data=f"movie_func_rec_{movie_id}"),
+            InlineKeyboardButton("📺 预告片/视频", callback_data=f"movie_func_videos_{movie_id}")
+        ],
+        [
+            InlineKeyboardButton("💬 用户评价", callback_data=f"movie_func_reviews_{movie_id}"),
+            InlineKeyboardButton("🔗 相关推荐", callback_data=f"movie_func_related_{movie_id}")
+        ],
+        [
+            InlineKeyboardButton("📱 观看平台", callback_data=f"movie_func_watch_{movie_id}")
+        ]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+async def handle_movie_menu_callback(query, context, callback_data):
+    """处理电影主菜单按钮回调"""
+    user_id = query.from_user.id
+    
+    if callback_data == "movie_menu_search":
+        # 进入搜索模式
+        search_help = (
+            "🔍 **电影搜索**\n\n"
+            "请输入要搜索的电影名称：\n\n"
+            "• **中文**: 复仇者联盟\n"
+            "• **英文**: Avengers\n"
+            "• **关键词**: 马尔维尔\n"
+            "• **演员**: 陈冲\n"
+            "• **导演**: 吴宇森"
+        )
+        
+        await query.edit_message_text(
+            text=foldable_text_v2(search_help),
+            parse_mode="MarkdownV2",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 返回主菜单", callback_data="movie_menu_back")]
+            ])
+        )
+        
+        # 创建用户会话
+        if user_id not in movie_search_sessions:
+            movie_search_sessions[user_id] = {}
+        movie_search_sessions[user_id]["waiting_for_search"] = True
+        
+    elif callback_data == "movie_menu_details":
+        # 进入详情查询模式
+        details_help = (
+            "📋 **电影详情查询**\n\n"
+            "请输入电影ID数字：\n\n"
+            "例如：输入 `299536` 即可查看\n"
+            "《复仇者联盟4：终局之战》的详细信息\n\n"
+            "💡 **获取电影ID的方法：**\n"
+            "• 在搜索结果中查看\n"
+            "• 从排行榜中获取\n"
+            "• 使用 `/chart` 命令查看热门电影"
+        )
+        
+        await query.edit_message_text(
+            text=foldable_text_v2(details_help),
+            parse_mode="MarkdownV2",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 返回主菜单", callback_data="movie_menu_back")]
+            ])
+        )
+        
+        # 创建用户会话
+        if user_id not in movie_search_sessions:
+            movie_search_sessions[user_id] = {}
+        movie_search_sessions[user_id]["waiting_for_details"] = True
+        
+    elif callback_data == "movie_menu_help":
+        # 显示详细帮助
+        help_text = (
+            "*🎬 电影信息查询帮助*\n\n"
+            "**基础查询:**\n"
+            "`/movie <电影名>` - 搜索电影（按钮选择）\n"
+            "`/movies <电影名>` - 搜索电影（文本列表）\n"
+            "`/movie_detail <电影ID>` - 获取电影详情\n"
+            "`/movie_watch <电影ID>` - 获取观看平台\n\n"
+            "**热门排行:**\n"
+            "`/chart` - 统一的影视排行榜中心\n\n"
+            "**示例:**\n"
+            "`/movie 复仇者联盟`\n"
+            "`/movies 复仇者联盟`\n"
+            "`/movie_detail 299536`"
+        )
+        
+        await query.edit_message_text(
+            text=foldable_text_with_markdown_v2(help_text),
+            parse_mode=ParseMode.MARKDOWN_V2,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 返回主菜单", callback_data="movie_menu_back")]
+            ])
+        )
+        
+    elif callback_data == "movie_menu_back":
+        # 返回主菜单
+        keyboard = [
+            [InlineKeyboardButton("🔍 搜索电影", callback_data="movie_menu_search")],
+            [InlineKeyboardButton("📋 电影详情查询", callback_data="movie_menu_details")],
+            [InlineKeyboardButton("❓ 使用帮助", callback_data="movie_menu_help")]
+        ]
+        
+        help_text = (
+            "🎬 **电影查询中心**\n\n"
+            "请选择功能：\n\n"
+            "🔍 **搜索电影** - 按电影名搜索\n"
+            "📋 **详情查询** - 通过电影ID查询详情\n"
+            "❓ **使用帮助** - 查看详细使用说明\n\n"
+            "💡 也可以直接使用：\n"
+            "`/movie 电影名` - 直接搜索电影"
+        )
+        
+        await query.edit_message_text(
+            text=foldable_text_v2(help_text),
+            parse_mode="MarkdownV2",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        
+        # 清理用户会话状态
+        if user_id in movie_search_sessions:
+            movie_search_sessions[user_id].pop("waiting_for_search", None)
+            movie_search_sessions[user_id].pop("waiting_for_details", None)
+
+async def handle_movie_function_callback(query, context, callback_data):
+    """处理电影功能按钮回调 - 完全按照movieold.py逻辑"""
+    parts = callback_data.split("_")
+    function_name = parts[2]  # rec, videos, reviews, related, watch
+    movie_id = int(parts[3])
+    
+    if function_name == "rec":
+        await execute_movie_recommendations(query, context, movie_id)
+    elif function_name == "videos":
+        await execute_movie_videos(query, context, movie_id)
+    elif function_name == "reviews":
+        await execute_movie_reviews(query, context, movie_id)
+    elif function_name == "related":
+        await execute_movie_related(query, context, movie_id)
+    elif function_name == "watch":
+        await execute_movie_watch(query, context, movie_id)
+    else:
+        await query.edit_message_text(f"❌ 未实现的功能: {function_name}")
+
+async def execute_movie_recommendations(query, context, movie_id: int):
+    """执行电影推荐 - 完全按照movieold的movie_rec_command逻辑"""
+    if not movie_service:
+        await query.edit_message_text("❌ 电影查询服务未初始化")
+        return
+    
+    # 先编辑为"正在获取..."消息（对应movieold第5053-5057行）
+    await query.edit_message_text(f"🔍 正在获取电影推荐 \\\(ID: {movie_id}\\\)\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
+    message = query.message  # 用于后续统一处理
+    
+    try:
+        recommendations = await movie_service.get_movie_recommendations(movie_id)
+        if recommendations:
+            result_text = movie_service.format_movie_recommendations(recommendations)
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+        else:
+            await message.edit_text("❌ 获取电影推荐失败，请稍后重试")
+    except Exception as e:
+        logger.error(f"获取电影推荐失败: {e}")
+        await message.edit_text("❌ 获取电影推荐时发生错误")
+    
+    # 调度删除机器人回复消息（对应movieold第5073-5077行）
+    from utils.message_manager import _schedule_deletion
+    config = get_config()
+    await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
+
+async def execute_movie_videos(query, context, movie_id: int):
+    """执行电影视频 - 完全按照movieold的movie_videos_command逻辑"""
+    if not movie_service:
+        await query.edit_message_text("❌ 电影查询服务未初始化")
+        return
+    
+    # 先编辑为"正在获取..."消息（对应movieold第5820-5824行）
+    await query.edit_message_text(f"🔍 正在获取电影视频 \\\(ID: {movie_id}\\\)\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
+    message = query.message  # 用于后续统一处理
+    
+    try:
+        videos_data = await movie_service._get_videos_data("movie", movie_id)
+        if videos_data and videos_data.get("results"):
+            result_text = movie_service.format_videos_data(videos_data, "movie")
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+        else:
+            await message.edit_text("❌ 该电影暂无可用的预告片或视频")
+    except Exception as e:
+        logger.error(f"获取电影视频失败: {e}")
+        await message.edit_text("❌ 获取电影视频时发生错误")
+    
+    # 调度删除机器人回复消息（对应movieold第5840-5844行）
+    from utils.message_manager import _schedule_deletion
+    config = get_config()
+    await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
+
+async def execute_movie_reviews(query, context, movie_id: int):
+    """执行电影评价 - 完全按照movieold的movie_reviews_command逻辑"""
+    if not movie_service:
+        await query.edit_message_text("❌ 电影查询服务未初始化")
+        return
+    
+    # 先编辑为"正在获取..."消息（对应movieold第6277-6281行）
+    await query.edit_message_text(f"🔍 正在获取电影评价 \\\(ID: {movie_id}\\\)\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
+    message = query.message  # 用于后续统一处理
+    
+    try:
+        reviews_data = await movie_service._get_reviews_data("movie", movie_id)
+        if reviews_data and reviews_data.get("results"):
+            result_text = movie_service.format_reviews_data(reviews_data, "movie")
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+        else:
+            await message.edit_text("❌ 该电影暂无用户评价")
+    except Exception as e:
+        logger.error(f"获取电影评价失败: {e}")
+        await message.edit_text("❌ 获取电影评价时发生错误")
+    
+    # 调度删除机器人回复消息（对应movieold第6297-6301行）
+    from utils.message_manager import _schedule_deletion
+    config = get_config()
+    await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
+
+async def execute_movie_related(query, context, movie_id: int):
+    """执行相关电影 - 完全按照movieold的movie_related_command逻辑"""
+    if not movie_service:
+        await query.edit_message_text("❌ 电影查询服务未初始化")
+        return
+    
+    # 先编辑为"正在获取..."消息（对应movieold第6133-6137行）
+    await query.edit_message_text(f"🔍 正在获取相关电影推荐 \\\(ID: {movie_id}\\\)\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
+    message = query.message  # 用于后续统一处理
+    
+    try:
+        related_data = await movie_service._get_trakt_movie_related(movie_id)
+        if related_data:
+            result_text = movie_service.format_trakt_related_content(related_data, "movie")
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+        else:
+            await message.edit_text("❌ 获取相关电影推荐失败，请稍后重试")
+    except Exception as e:
+        logger.error(f"获取相关电影推荐失败: {e}")
+        await message.edit_text("❌ 获取相关电影推荐时发生错误")
+    
+    # 调度删除机器人回复消息（对应movieold第6153-6157行）
+    from utils.message_manager import _schedule_deletion
+    config = get_config()
+    await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
+
+async def execute_movie_watch(query, context, movie_id: int):
+    """执行观看平台 - 完全按照movieold的movie_watch_command逻辑"""
+    if not movie_service:
+        await query.edit_message_text("❌ 电影查询服务未初始化")
+        return
+    
+    # 先编辑为"正在获取..."消息（对应movieold第7018-7022行）
+    await query.edit_message_text(f"🔍 正在获取观看平台信息 \\\(ID: {movie_id}\\\)\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
+    message = query.message  # 用于后续统一处理
+    
+    try:
+        # 获取基本电影信息用于JustWatch搜索
+        movie_info = await movie_service.get_movie_details(movie_id)
+        if not movie_info:
+            await message.edit_text("❌ 未找到电影信息")
+            return
+        
+        movie_title = movie_info.get("title", "") or movie_info.get("original_title", "")
+        logger.info(f"Movie title for watch providers: {movie_title}")
+        
+        # 获取观看平台信息
+        providers_data = await movie_service.get_enhanced_watch_providers(
+            movie_id, "movie", movie_title
+        )
+        
+        if providers_data:
+            result_text = movie_service.format_enhanced_watch_providers(
+                providers_data, movie_info.get("title", "电影"), "movie"
+            )
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+        else:
+            await message.edit_text("❌ 获取观看平台信息失败，请稍后重试")
+    except Exception as e:
+        logger.error(f"获取电影观看平台失败: {e}")
+        await message.edit_text("❌ 获取观看平台信息时发生错误")
+    
+    # 调度删除机器人回复消息（对应movieold第7058-7062行）
+    from utils.message_manager import _schedule_deletion
+    config = get_config()
+    await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
 
 # 注册命令
 command_factory.register_command("movie", movie_command, permission=Permission.USER, description="搜索电影信息（按钮选择）")
