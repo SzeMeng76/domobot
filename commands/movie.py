@@ -8604,7 +8604,7 @@ async def handle_movie_menu_callback(query, context, callback_data):
         )
         
         # 创建用户会话
-        movie_session_manager.create_session(user_id, {
+        movie_session_manager.set_session(user_id, {
             "action": "movie_search",
             "waiting_for": "movie_name"
         })
@@ -8631,7 +8631,7 @@ async def handle_movie_menu_callback(query, context, callback_data):
         )
         
         # 创建用户会话
-        movie_session_manager.create_session(user_id, {
+        movie_session_manager.set_session(user_id, {
             "action": "movie_details",
             "waiting_for": "movie_id"
         })
