@@ -5365,34 +5365,6 @@ async def movie_detail_command(update: Update, context: ContextTypes.DEFAULT_TYP
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
-async def movie_clean_cache_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """处理 /movie_cleancache 命令"""
-    if not update.message:
-        return
-    
-    try:
-        # 清理所有电影和电视剧相关缓存
-        prefixes = [
-            "movie_search_", "movie_popular_", "movie_detail_", "movie_rec_",
-            "movie_watch_providers_",
-            "tv_search_", "tv_popular_", "tv_detail_", "tv_rec_", 
-            "tv_season_", "tv_episode_", "tv_watch_providers_",
-            "trending_",
-            "person_search_", "person_detail_",
-            "justwatch_search_", "justwatch_offers_"
-        ]
-        for prefix in prefixes:
-            await cache_manager.clear_cache(subdirectory="movie", key_prefix=prefix)
-        
-        success_message = "✅ 所有影视内容查询缓存已清理（包括电影、电视剧、人物、观看平台、JustWatch数据）。"
-        await send_success(context, update.effective_chat.id, foldable_text_v2(success_message), parse_mode="MarkdownV2")
-        await delete_user_command(context, update.effective_chat.id, update.message.message_id)
-    except Exception as e:
-        logger.error(f"清理缓存失败: {e}")
-        error_message = f"❌ 清理缓存时发生错误: {e!s}"
-        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
-        await delete_user_command(context, update.effective_chat.id, update.message.message_id)
-
 # ========================================
 # 电视剧命令处理函数
 # ========================================

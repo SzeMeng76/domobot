@@ -84,8 +84,13 @@ async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
                     elif svc == 'movie':
                         # 特殊处理movie的复杂缓存结构，包括排行榜相关缓存
                         prefixes = [
-                            "movie_", "tv_", "trending_", "now_playing_", "upcoming_", 
-                            "person_", "movie_watch_", "tv_watch_"
+                            "movie_search_", "movie_popular_", "movie_detail_", "movie_rec_",
+                            "movie_watch_providers_",
+                            "tv_search_", "tv_popular_", "tv_detail_", "tv_rec_", 
+                            "tv_season_", "tv_episode_", "tv_watch_providers_",
+                            "trending_", "now_playing_", "upcoming_",
+                            "person_search_", "person_detail_",
+                            "justwatch_search_", "justwatch_offers_"
                         ]
                         for prefix in prefixes:
                             await cache_manager.clear_cache(subdirectory="movie", key_prefix=prefix)
@@ -123,8 +128,13 @@ async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
             elif service == 'movie':
                 # 特殊处理movie的复杂缓存结构，包括排行榜相关缓存
                 prefixes = [
-                    "movie_", "tv_", "trending_", "now_playing_", "upcoming_", 
-                    "person_", "movie_watch_", "tv_watch_"
+                    "movie_search_", "movie_popular_", "movie_detail_", "movie_rec_",
+                    "movie_watch_providers_",
+                    "tv_search_", "tv_popular_", "tv_detail_", "tv_rec_", 
+                    "tv_season_", "tv_episode_", "tv_watch_providers_",
+                    "trending_", "now_playing_", "upcoming_",
+                    "person_search_", "person_detail_",
+                    "justwatch_search_", "justwatch_offers_"
                 ]
                 for prefix in prefixes:
                     await cache_manager.clear_cache(subdirectory="movie", key_prefix=prefix)
