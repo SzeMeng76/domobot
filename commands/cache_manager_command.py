@@ -81,6 +81,14 @@ async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
                         ]
                         for prefix in prefixes:
                             await cache_manager.clear_cache(subdirectory="hotels", key_prefix=prefix)
+                    elif svc == 'movie':
+                        # 特殊处理movie的复杂缓存结构，包括排行榜相关缓存
+                        prefixes = [
+                            "movie_", "tv_", "trending_", "now_playing_", "upcoming_", 
+                            "person_", "movie_watch_", "tv_watch_"
+                        ]
+                        for prefix in prefixes:
+                            await cache_manager.clear_cache(subdirectory="movie", key_prefix=prefix)
                     else:
                         await cache_manager.clear_cache(subdirectory=svc)
             return True, "✅ 所有缓存已清理完成"
@@ -112,6 +120,14 @@ async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
                 ]
                 for prefix in prefixes:
                     await cache_manager.clear_cache(subdirectory="hotels", key_prefix=prefix)
+            elif service == 'movie':
+                # 特殊处理movie的复杂缓存结构，包括排行榜相关缓存
+                prefixes = [
+                    "movie_", "tv_", "trending_", "now_playing_", "upcoming_", 
+                    "person_", "movie_watch_", "tv_watch_"
+                ]
+                for prefix in prefixes:
+                    await cache_manager.clear_cache(subdirectory="movie", key_prefix=prefix)
             else:
                 await cache_manager.clear_cache(subdirectory=service)
             

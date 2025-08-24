@@ -41,6 +41,21 @@ httpx_client = None
 # 创建person会话管理器 - 与flight/hotel相同的配置
 person_session_manager = SessionManager("PersonService", max_age=1800, max_sessions=200)  # 30分钟会话
 
+async def _schedule_auto_delete(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, delay: int):
+    """调度自动删除消息 - 与flight/hotel完全一致"""
+    try:
+        if context and hasattr(context, "bot_data"):
+            scheduler = context.bot_data.get("message_delete_scheduler")
+            if scheduler and hasattr(scheduler, "schedule_deletion"):
+                await scheduler.schedule_deletion(chat_id, message_id, delay, None)
+                logger.info(f"已调度电影消息删除: chat_id={chat_id}, message_id={message_id}, delay={delay}s")
+            else:
+                logger.warning(f"消息删除调度器未正确初始化: scheduler={scheduler}")
+        else:
+            logger.warning(f"无法调度删除消息 {message_id}: context无效")
+    except Exception as e:
+        logger.error(f"调度删除消息失败: {e}")
+
 async def _execute_person_search(update: Update, context: ContextTypes.DEFAULT_TYPE, query: str) -> None:
     """执行人物搜索 - 与flight/hotel完全一致的模式"""
     if not movie_service:
@@ -187,10 +202,9 @@ async def _execute_person_details(update: Update, context: ContextTypes.DEFAULT_
         await message.edit_text(f"❌ 获取详情失败: {str(e)}")
     
     # 调度删除机器人回复消息 - 统一处理图片和文本消息的自动删除
-    from utils.message_manager import _schedule_deletion
     from utils.config_manager import get_config
     config = get_config()
-    await _schedule_deletion(context, update.message.chat_id, message.message_id, config.auto_delete_delay)
+    await _schedule_auto_delete(context, update.message.chat_id, message.message_id, config.auto_delete_delay)
 
 async def _handle_legacy_person_search_callback(query, context, callback_data):
     """处理原有的人物搜索回调逻辑 - 保持向后兼容"""
