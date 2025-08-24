@@ -2274,7 +2274,7 @@ class MovieService:
                 
             lines.append(f"{i}. *{title_text}* ({year})")
             lines.append(f"   ⭐ 评分: {vote_average:.1f}/10")
-            lines.append(f"   🆔 ID: `{movie_id}`")
+            lines.append(f"   `movie_detail {movie_id}`")
             if poster_path:
                 lines.append(f"   🖼️ 海报: [查看]({self.tmdb_image_base_url}{poster_path})")
             lines.append("")
@@ -2319,7 +2319,7 @@ class MovieService:
                 
             lines.append(f"{i}. *{title_text}* ({year})")
             lines.append(f"   ⭐ 评分: {vote_average:.1f}/10")
-            lines.append(f"   🆔 ID: `{tv_id}`")
+            lines.append(f"   `tv_detail {tv_id}`")
             if poster_path:
                 lines.append(f"   🖼️ 海报: [查看]({self.tmdb_image_base_url}{poster_path})")
             lines.append("")
@@ -2553,7 +2553,8 @@ class MovieService:
             
             year_text = f" ({year})" if year else ""
             lines.append(f"{i}. *{name}*{year_text}")
-            lines.append(f"   ⭐ {vote_average:.1f}/10 | 🆔 `{tv_id}`")
+            lines.append(f"   ⭐ {vote_average:.1f}/10")
+            lines.append(f"   `tv_detail {tv_id}`")
             lines.append("")
         
         lines.append("💡 使用 `/tv_detail <ID>` 查看详细信息")
@@ -3364,14 +3365,9 @@ class MovieService:
                 lines.append(reviews_section)
         
         # 添加操作提示
-        movie_id = detail_data.get("id")
         lines.extend([
             f"",
-            f"💡 使用 `/movie_rec {movie_id}` 获取相似推荐",
-            f"💡 使用 `/movie_related {movie_id}` 获取Trakt相关推荐",
-            f"💡 使用 `/movie_videos {movie_id}` 查看预告片",
-            f"💡 使用 `/movie_reviews {movie_id}` 查看用户评价",
-            f"💡 使用 `/movie_watch {movie_id}` 查看完整观看平台"
+            f"💡 使用下方按钮查看电影推荐、预告片、用户评价等功能"
         ])
         
         return "\n".join(filter(None, lines)), poster_url  # 过滤空行
@@ -3393,7 +3389,8 @@ class MovieService:
             
             year_text = f" ({year})" if year else ""
             lines.append(f"{i}. *{title}*{year_text}")
-            lines.append(f"   ⭐ {vote_average:.1f}/10 | 🆔 `{movie_id}`")
+            lines.append(f"   ⭐ {vote_average:.1f}/10")
+            lines.append(f"   `movie_detail {movie_id}`")
             lines.append("")
         
         lines.append("💡 使用 `/movie_detail <ID>` 查看详细信息")
@@ -3600,7 +3597,7 @@ class MovieService:
                 if works:
                     lines.append(f"   🎯 代表作品: {', '.join(works[:2])}")  # 最多显示2部
             
-            lines.append(f"   🆔 ID: `{person_id}`")
+            lines.append(f"   查看详情: 👤 人物详情 输入 `{person_id}`")
             lines.append("")
         
         lines.append("💡 使用人物ID查看详细信息:")
@@ -3758,7 +3755,7 @@ class MovieService:
             lines.append(f"{i}. *{name}*")
             if department_cn:
                 lines.append(f"   🎭 职业: {department_cn}")
-            lines.append(f"   🆔 ID: `{person_id}`")
+            lines.append(f"   查看详情: 👤 人物详情 输入 `{person_id}`")
             
             if profile_path:
                 lines.append(f"   📸 头像: [查看]({self.tmdb_image_base_url}{profile_path})")
@@ -9047,15 +9044,28 @@ async def execute_movie_watch(query, context, movie_id: int):
     await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
 
 async def show_movie_details_with_functions(query, context, movie_id: int):
-    """显示电影详情和功能按钮 - 用于返回按钮"""
+    """显示电影详情和功能按钮 - 用于返回按钮，优先使用缓存数据"""
     if not movie_service:
         await query.edit_message_text("❌ 电影查询服务未初始化")
         return
     
-    await query.edit_message_text(f"🔍 正在获取电影详情 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    user_id = query.from_user.id
+    detail_data = None
+    
+    # 优先使用会话中缓存的电影数据
+    if user_id in movie_search_sessions:
+        session_data = movie_search_sessions[user_id]
+        if (session_data.get("current_movie_id") == movie_id and 
+            session_data.get("current_movie_data")):
+            detail_data = session_data["current_movie_data"]
+            logger.info(f"使用缓存的电影详情数据: {movie_id}")
+    
+    # 如果没有缓存数据，重新获取
+    if not detail_data:
+        await query.edit_message_text(f"🔍 正在获取电影详情 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+        detail_data = await movie_service.get_movie_details(movie_id)
     
     try:
-        detail_data = await movie_service.get_movie_details(movie_id)
         if detail_data:
             # 获取增强的观影平台数据
             movie_title = detail_data.get("original_title") or detail_data.get("title", "")
