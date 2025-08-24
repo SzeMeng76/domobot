@@ -8749,7 +8749,7 @@ async def execute_movie_videos(query, context, movie_id: int):
     try:
         videos_data = await movie_service._get_videos_data("movie", movie_id)
         if videos_data and videos_data.get("results"):
-            result_text = movie_service.format_videos_data(videos_data, "movie")
+            result_text = movie_service.format_movie_videos(videos_data)
             await message.edit_text(
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2
@@ -8778,7 +8778,7 @@ async def execute_movie_reviews(query, context, movie_id: int):
     try:
         reviews_data = await movie_service._get_reviews_data("movie", movie_id)
         if reviews_data and reviews_data.get("results"):
-            result_text = movie_service.format_reviews_data(reviews_data, "movie")
+            result_text = movie_service.format_reviews_list(reviews_data)
             await message.edit_text(
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2
@@ -8807,7 +8807,10 @@ async def execute_movie_related(query, context, movie_id: int):
     try:
         related_data = await movie_service._get_trakt_movie_related(movie_id)
         if related_data:
-            result_text = movie_service.format_trakt_related_content(related_data, "movie")
+            # 需要电影标题作为参数
+            movie_info = await movie_service.get_movie_details(movie_id)
+            movie_title = movie_info.get("title", "电影") if movie_info else "电影"
+            result_text = movie_service.format_trakt_related_movies(related_data, movie_title)
             await message.edit_text(
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2
