@@ -202,7 +202,6 @@ async def _execute_person_details(update: Update, context: ContextTypes.DEFAULT_
         await message.edit_text(f"❌ 获取详情失败: {str(e)}")
     
     # 调度删除机器人回复消息 - 统一处理图片和文本消息的自动删除
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_auto_delete(context, update.message.chat_id, message.message_id, config.auto_delete_delay)
 
@@ -239,49 +238,49 @@ async def _handle_legacy_person_search_callback(query, context, callback_data):
                 selected_person = results[person_index]
                 person_id = selected_person["id"]
                 
+                # 先编辑为"正在获取人物详情..."消息
+                await query.edit_message_text(f"🔍 正在获取人物详情 \(ID: {person_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+                message = query.message  # 用于后续统一处理
+                
                 # 获取人物详情
                 detail_data = await movie_service.get_person_details(person_id)
                 if detail_data:
                     result_text, profile_url = movie_service.format_person_details(detail_data)
                     
-                    # 如果有头像URL，发送图片消息
+                    # 如果有头像URL，先发送图片再删除原消息（完全按照movieold逻辑）
                     if profile_url:
                         try:
-                            detail_message = await context.bot.send_photo(
+                            # 发送头像图片
+                            photo_message = await context.bot.send_photo(
                                 chat_id=query.message.chat_id,
                                 photo=profile_url,
                                 caption=foldable_text_with_markdown_v2(result_text),
                                 parse_mode=ParseMode.MARKDOWN_V2
                             )
-                            # 删除原来的搜索结果消息
-                            await query.delete_message()
-                            
-                            # 为详情消息添加自动删除
-                            from utils.message_manager import _schedule_deletion
-                            config = get_config()
-                            await _schedule_deletion(context, query.message.chat_id, detail_message.message_id, config.auto_delete_delay)
+                            # 删除原来的加载消息
+                            await message.delete()
+                            # 更新message为新发送的图片消息，用于后续删除调度
+                            message = photo_message
                         except Exception as photo_error:
                             logger.warning(f"发送头像失败: {photo_error}，改用文本消息")
-                            await query.edit_message_text(
+                            # 如果图片发送失败，改用文本消息
+                            await message.edit_text(
                                 foldable_text_with_markdown_v2(result_text),
                                 parse_mode=ParseMode.MARKDOWN_V2
                             )
-                            
-                            # 为编辑后的消息添加自动删除
-                            from utils.message_manager import _schedule_deletion
-                            config = get_config()
-                            await _schedule_deletion(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
                     else:
-                        await query.edit_message_text(
+                        # 没有头像，直接编辑文本
+                        await message.edit_text(
                             foldable_text_with_markdown_v2(result_text),
                             parse_mode=ParseMode.MARKDOWN_V2
                         )
-                        
-                        # 为编辑后的消息添加自动删除
-                        from utils.message_manager import _schedule_deletion
-                        from utils.config_manager import get_config
-                        config = get_config()
-                        await _schedule_deletion(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
+                else:
+                    await message.edit_text(f"❌ 未找到ID为 {person_id} 的人物")
+                
+                # 调度删除机器人回复消息（统一处理，和movieold完全一样）
+                from utils.message_manager import _schedule_deletion
+                config = get_config()
+                await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
                     
                     # 清除用户会话
                     del person_search_sessions[user_id]
@@ -4663,8 +4662,7 @@ async def movie_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
         # 调度删除机器人回复消息
         from utils.message_manager import _schedule_deletion
-        from utils.config_manager import get_config
-        config = get_config()
+            config = get_config()
         await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
         return
     
@@ -4742,7 +4740,6 @@ async def movie_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -4910,7 +4907,6 @@ async def movie_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -5012,7 +5008,6 @@ async def movie_detail_command(update: Update, context: ContextTypes.DEFAULT_TYP
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -5081,7 +5076,6 @@ async def movie_rec_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -5162,8 +5156,7 @@ async def tv_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         )
         # 调度删除机器人回复消息
         from utils.message_manager import _schedule_deletion
-        from utils.config_manager import get_config
-        config = get_config()
+            config = get_config()
         await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
         return
     
@@ -5240,7 +5233,6 @@ async def tv_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -5408,7 +5400,6 @@ async def tv_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -5510,7 +5501,6 @@ async def tv_detail_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -5579,7 +5569,6 @@ async def tv_rec_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -5727,7 +5716,6 @@ async def tv_season_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -5787,7 +5775,6 @@ async def tv_episode_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -5857,7 +5844,6 @@ async def movie_videos_command(update: Update, context: ContextTypes.DEFAULT_TYP
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -5896,7 +5882,6 @@ async def movie_trending_command(update: Update, context: ContextTypes.DEFAULT_T
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -5935,7 +5920,6 @@ async def tv_trending_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -6025,7 +6009,6 @@ async def streaming_movie_ranking_command(update: Update, context: ContextTypes.
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -6115,7 +6098,6 @@ async def streaming_tv_ranking_command(update: Update, context: ContextTypes.DEF
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -6183,7 +6165,6 @@ async def movie_related_command(update: Update, context: ContextTypes.DEFAULT_TY
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -6251,7 +6232,6 @@ async def tv_related_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -6319,8 +6299,7 @@ async def movie_reviews_command(update: Update, context: ContextTypes.DEFAULT_TY
             await message.edit_text(f"❌ 未找到电影《{movie_title}》的评价信息")
             # 调度删除机器人回复消息
             from utils.message_manager import _schedule_deletion
-            from utils.config_manager import get_config
-            config = get_config()
+                    config = get_config()
             await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
             return
         
@@ -6417,7 +6396,6 @@ async def movie_reviews_command(update: Update, context: ContextTypes.DEFAULT_TY
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -6487,7 +6465,6 @@ async def tv_videos_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -6555,8 +6532,7 @@ async def tv_reviews_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await message.edit_text(f"❌ 未找到电视剧《{tv_title}》的评价信息")
             # 调度删除机器人回复消息
             from utils.message_manager import _schedule_deletion
-            from utils.config_manager import get_config
-            config = get_config()
+                    config = get_config()
             await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
             return
         
@@ -6653,7 +6629,6 @@ async def tv_reviews_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -6702,7 +6677,6 @@ async def trending_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -6740,7 +6714,6 @@ async def trending_week_command(update: Update, context: ContextTypes.DEFAULT_TY
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -6778,7 +6751,6 @@ async def now_playing_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -6816,7 +6788,6 @@ async def upcoming_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -6854,7 +6825,6 @@ async def tv_airing_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -6892,7 +6862,6 @@ async def tv_on_air_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -7094,7 +7063,6 @@ async def movie_watch_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -7184,7 +7152,6 @@ async def tv_watch_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -7209,8 +7176,7 @@ async def movies_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             parse_mode=ParseMode.MARKDOWN_V2
         )
         from utils.message_manager import _schedule_deletion
-        from utils.config_manager import get_config
-        config = get_config()
+            config = get_config()
         await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
         return
     
@@ -7270,7 +7236,6 @@ async def movies_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -7295,8 +7260,7 @@ async def tvs_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             parse_mode=ParseMode.MARKDOWN_V2
         )
         from utils.message_manager import _schedule_deletion
-        from utils.config_manager import get_config
-        config = get_config()
+            config = get_config()
         await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
         return
     
@@ -7355,7 +7319,6 @@ async def tvs_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
@@ -7457,7 +7420,6 @@ async def movie_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                         
                         # 为编辑后的消息添加自动删除
                         from utils.message_manager import _schedule_deletion
-                        from utils.config_manager import get_config
                         config = get_config()
                         await _schedule_deletion(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
                     
@@ -7601,7 +7563,6 @@ async def tv_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                         
                         # 为编辑后的消息添加自动删除
                         from utils.message_manager import _schedule_deletion
-                        from utils.config_manager import get_config
                         config = get_config()
                         await _schedule_deletion(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
                     
@@ -7898,6 +7859,10 @@ async def _execute_movie_hot_chart(query, context) -> None:
                 text=foldable_text_with_markdown_v2(result_text),
                 parse_mode="MarkdownV2"
             )
+            # 调度删除机器人回复消息
+            from utils.message_manager import _schedule_deletion
+            config = get_config()
+            await _schedule_deletion(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
         else:
             await query.edit_message_text("❌ 获取热门电影数据失败，请稍后重试")
             
@@ -7940,6 +7905,10 @@ async def _execute_tv_hot_chart(query, context) -> None:
                 text=foldable_text_with_markdown_v2(result_text),
                 parse_mode="MarkdownV2"
             )
+            # 调度删除机器人回复消息
+            from utils.message_manager import _schedule_deletion
+            config = get_config()
+            await _schedule_deletion(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
         else:
             await query.edit_message_text("❌ 获取热门电视剧数据失败，请稍后重试")
             
