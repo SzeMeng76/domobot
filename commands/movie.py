@@ -6194,82 +6194,6 @@ async def movie_videos_command(update: Update, context: ContextTypes.DEFAULT_TYP
     config = get_config()
     await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
-async def movie_trending_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """处理 /movie_trending 命令 - 获取Trakt热门电影"""
-    if not update.message or not update.effective_chat:
-        return
-    
-    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
-    
-    if not movie_service:
-        error_message = "❌ 电影查询服务未初始化"
-        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
-        return
-    
-    message = await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text="🔥 正在获取Trakt热门电影\.\.\.",
-        parse_mode=ParseMode.MARKDOWN_V2
-    )
-    
-    try:
-        # 获取Trakt热门电影
-        trending_data = await movie_service._get_trakt_trending_movies(10)
-        if trending_data:
-            result_text = movie_service.format_trakt_trending_movies(trending_data)
-            await message.edit_text(
-                foldable_text_with_markdown_v2(result_text),
-                parse_mode=ParseMode.MARKDOWN_V2
-            )
-        else:
-            await message.edit_text("❌ 无法获取Trakt热门电影数据")
-    except Exception as e:
-        logger.error(f"获取Trakt热门电影失败: {e}")
-        await message.edit_text("❌ 获取热门电影时发生错误")
-    
-    # 调度删除机器人回复消息
-    from utils.message_manager import _schedule_deletion
-    config = get_config()
-    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
-
-async def tv_trending_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """处理 /tv_trending 命令 - 获取Trakt热门电视剧"""
-    if not update.message or not update.effective_chat:
-        return
-    
-    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
-    
-    if not movie_service:
-        error_message = "❌ 电视剧查询服务未初始化"
-        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
-        return
-    
-    message = await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text="🔥 正在获取Trakt热门电视剧\.\.\.",
-        parse_mode=ParseMode.MARKDOWN_V2
-    )
-    
-    try:
-        # 获取Trakt热门电视剧
-        trending_data = await movie_service._get_trakt_trending_tv(10)
-        if trending_data:
-            result_text = movie_service.format_trakt_trending_tv(trending_data)
-            await message.edit_text(
-                foldable_text_with_markdown_v2(result_text),
-                parse_mode=ParseMode.MARKDOWN_V2
-            )
-        else:
-            await message.edit_text("❌ 无法获取Trakt热门电视剧数据")
-    except Exception as e:
-        logger.error(f"获取Trakt热门电视剧失败: {e}")
-        await message.edit_text("❌ 获取热门电视剧时发生错误")
-    
-    # 调度删除机器人回复消息
-    from utils.message_manager import _schedule_deletion
-    config = get_config()
-    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
-
 async def streaming_movie_ranking_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理 /streaming_movie_ranking 命令 - 获取综合流媒体电影热度排行榜"""
     if not update.message or not update.effective_chat:
@@ -6973,91 +6897,6 @@ async def tv_reviews_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except Exception as e:
         logger.error(f"获取电视剧评价失败: {e}")
         await message.edit_text("❌ 获取电视剧评价时发生错误")
-    
-    # 调度删除机器人回复消息
-    from utils.message_manager import _schedule_deletion
-    config = get_config()
-    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
-
-async def trending_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """处理 /trending 命令 - 获取今日热门内容"""
-    if not update.message or not update.effective_chat:
-        return
-    
-    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
-    
-    if not movie_service:
-        error_message = "❌ 电影查询服务未初始化"
-        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
-        return
-    
-    # 获取参数，默认为今日全部内容
-    time_window = "day"
-    media_type = "all"
-    
-    if context.args:
-        if context.args[0].lower() in ["day", "week"]:
-            time_window = context.args[0].lower()
-        if len(context.args) > 1 and context.args[1].lower() in ["movie", "tv", "person"]:
-            media_type = context.args[1].lower()
-    
-    time_text = "今日" if time_window == "day" else "本周"
-    message = await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=f"🔍 正在获取{time_text}热门内容\.\.\.",
-        parse_mode=ParseMode.MARKDOWN_V2
-    )
-    
-    try:
-        trending_data = await movie_service.get_trending_content(media_type, time_window)
-        if trending_data:
-            result_text = movie_service.format_trending_content(trending_data, time_window)
-            await message.edit_text(
-                foldable_text_with_markdown_v2(result_text),
-                parse_mode=ParseMode.MARKDOWN_V2
-            )
-        else:
-            await message.edit_text("❌ 获取热门内容失败，请稍后重试")
-    except Exception as e:
-        logger.error(f"获取热门内容失败: {e}")
-        await message.edit_text("❌ 获取热门内容时发生错误")
-    
-    # 调度删除机器人回复消息
-    from utils.message_manager import _schedule_deletion
-    config = get_config()
-    await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
-
-async def trending_week_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """处理 /trending_week 命令 - 获取本周热门内容"""
-    if not update.message or not update.effective_chat:
-        return
-    
-    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
-    
-    if not movie_service:
-        error_message = "❌ 电影查询服务未初始化"
-        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
-        return
-    
-    message = await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text="🔍 正在获取本周热门内容\.\.\.",
-        parse_mode=ParseMode.MARKDOWN_V2
-    )
-    
-    try:
-        trending_data = await movie_service.get_trending_content("all", "week")
-        if trending_data:
-            result_text = movie_service.format_trending_content(trending_data, "week")
-            await message.edit_text(
-                foldable_text_with_markdown_v2(result_text),
-                parse_mode=ParseMode.MARKDOWN_V2
-            )
-        else:
-            await message.edit_text("❌ 获取本周热门内容失败，请稍后重试")
-    except Exception as e:
-        logger.error(f"获取本周热门内容失败: {e}")
-        await message.edit_text("❌ 获取本周热门内容时发生错误")
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
@@ -10179,12 +10018,9 @@ command_factory.register_command("movie_detail", movie_detail_command, permissio
 
 # 注册电视剧命令
 command_factory.register_command("tv", tv_command, permission=Permission.USER, description="搜索电视剧信息（按钮选择）")
-command_factory.register_command("tvs", tvs_command, permission=Permission.USER, description="搜索电视剧信息（文本列表）")
 command_factory.register_command("tv_detail", tv_detail_command, permission=Permission.USER, description="获取电视剧详情")
 # 以下TV功能命令已整合到按钮界面，不再需要：
-# tv_rec, tv_videos, tv_reviews, tv_related - 现在通过TV详情页按钮访问
-command_factory.register_command("tv_season", tv_season_command, permission=Permission.USER, description="获取电视剧季详情")
-command_factory.register_command("tv_episode", tv_episode_command, permission=Permission.USER, description="获取电视剧集详情")
+# tvs, tv_season, tv_episode, tv_rec, tv_videos, tv_reviews, tv_related - 现在通过按钮界面访问
 
 # 注册趋势和上映相关命令 - 已整合到 /chart 命令中
 # command_factory.register_command("trending", trending_command, permission=Permission.USER, description="获取今日热门内容")
