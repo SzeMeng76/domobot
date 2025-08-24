@@ -7949,111 +7949,160 @@ async def _execute_trending_chart(query, context) -> None:
     await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
 
 async def _execute_trending_week_chart(query, context) -> None:
-    """执行本周热门"""
+    """执行本周热门 - 完全按照movieold的trending_week_command逻辑"""
     if not movie_service:
         await query.edit_message_text("❌ 电影查询服务未初始化")
         return
+    
+    # 先编辑为"正在获取..."消息（对应movieold第6374-6378行）
+    await query.edit_message_text("🔍 正在获取本周热门内容\.\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    message = query.message  # 用于后续统一处理
     
     try:
         trending_data = await movie_service.get_trending_content("all", "week")
         if trending_data:
             result_text = movie_service.format_trending_content(trending_data, "week")
-            await query.edit_message_text(
-                text=foldable_text_with_markdown_v2(result_text),
-                parse_mode="MarkdownV2"
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
             )
         else:
-            await query.edit_message_text("❌ 未获取到本周热门内容")
+            await message.edit_text("❌ 获取本周热门内容失败，请稍后重试")
     except Exception as e:
-        logger.error(f"获取本周热门失败: {e}")
-        await query.edit_message_text("❌ 获取本周热门时发生错误")
+        logger.error(f"获取本周热门内容失败: {e}")
+        await message.edit_text("❌ 获取本周热门内容时发生错误")
+    
+    # 调度删除机器人回复消息（对应movieold第6394-6398行）
+    from utils.message_manager import _schedule_deletion
+    config = get_config()
+    await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
 
 # 其他排行榜函数类似实现...
 async def _execute_now_playing_chart(query, context) -> None:
-    """执行正在上映"""
+    """执行正在上映 - 完全按照movieold的now_playing_command逻辑"""
     if not movie_service:
         await query.edit_message_text("❌ 电影查询服务未初始化")
         return
+    
+    # 先编辑为"正在获取..."消息（对应movieold第6411-6415行）
+    await query.edit_message_text("🔍 正在获取正在上映的电影\.\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    message = query.message  # 用于后续统一处理
     
     try:
         now_playing_data = await movie_service.get_now_playing_movies()
         if now_playing_data:
             result_text = movie_service.format_now_playing_movies(now_playing_data)
-            await query.edit_message_text(
-                text=foldable_text_with_markdown_v2(result_text),
-                parse_mode="MarkdownV2"
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
             )
         else:
-            await query.edit_message_text("❌ 未获取到正在上映的电影")
+            await message.edit_text("❌ 获取正在上映电影失败，请稍后重试")
     except Exception as e:
-        logger.error(f"获取正在上映失败: {e}")
-        await query.edit_message_text("❌ 获取正在上映时发生错误")
+        logger.error(f"获取正在上映电影失败: {e}")
+        await message.edit_text("❌ 获取正在上映电影时发生错误")
+    
+    # 调度删除机器人回复消息（对应movieold第6432-6435行）
+    from utils.message_manager import _schedule_deletion
+    config = get_config()
+    await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
 
 async def _execute_upcoming_chart(query, context) -> None:
-    """执行即将上映"""
+    """执行即将上映 - 完全按照movieold的upcoming_command逻辑"""
     if not movie_service:
         await query.edit_message_text("❌ 电影查询服务未初始化")
         return
+    
+    # 先编辑为"正在获取..."消息（对应movieold第6449-6453行）
+    await query.edit_message_text("🔍 正在获取即将上映的电影\.\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    message = query.message  # 用于后续统一处理
     
     try:
         upcoming_data = await movie_service.get_upcoming_movies()
         if upcoming_data:
             result_text = movie_service.format_upcoming_movies(upcoming_data)
-            await query.edit_message_text(
-                text=foldable_text_with_markdown_v2(result_text),
-                parse_mode="MarkdownV2"
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
             )
         else:
-            await query.edit_message_text("❌ 未获取到即将上映的电影")
+            await message.edit_text("❌ 获取即将上映电影失败，请稍后重试")
     except Exception as e:
-        logger.error(f"获取即将上映失败: {e}")
-        await query.edit_message_text("❌ 获取即将上映时发生错误")
+        logger.error(f"获取即将上映电影失败: {e}")
+        await message.edit_text("❌ 获取即将上映电影时发生错误")
+    
+    # 调度删除机器人回复消息（对应movieold第6470-6473行）
+    from utils.message_manager import _schedule_deletion
+    config = get_config()
+    await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
 
 async def _execute_tv_airing_chart(query, context) -> None:
-    """执行今日播出"""
+    """执行今日播出 - 完全按照movieold的tv_airing_command逻辑"""
     if not movie_service:
         await query.edit_message_text("❌ 电视剧查询服务未初始化")
         return
+    
+    # 先编辑为"正在获取..."消息（对应movieold第6487-6491行）
+    await query.edit_message_text("🔍 正在获取今日播出的电视剧\.\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    message = query.message  # 用于后续统一处理
     
     try:
         airing_data = await movie_service.get_tv_airing_today()
         if airing_data:
             result_text = movie_service.format_tv_airing_today(airing_data)
-            await query.edit_message_text(
-                text=foldable_text_with_markdown_v2(result_text),
-                parse_mode="MarkdownV2"
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
             )
         else:
-            await query.edit_message_text("❌ 未获取到今日播出的电视剧")
+            await message.edit_text("❌ 获取今日播出电视剧失败，请稍后重试")
     except Exception as e:
-        logger.error(f"获取今日播出失败: {e}")
-        await query.edit_message_text("❌ 获取今日播出时发生错误")
+        logger.error(f"获取今日播出电视剧失败: {e}")
+        await message.edit_text("❌ 获取今日播出电视剧时发生错误")
+    
+    # 调度删除机器人回复消息（对应movieold第6508-6511行）
+    from utils.message_manager import _schedule_deletion
+    config = get_config()
+    await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
 
 async def _execute_tv_on_air_chart(query, context) -> None:
-    """执行正在播出"""
+    """执行正在播出 - 完全按照movieold的tv_on_air_command逻辑"""
     if not movie_service:
         await query.edit_message_text("❌ 电视剧查询服务未初始化")
         return
+    
+    # 先编辑为"正在获取..."消息（对应movieold第6525-6529行）
+    await query.edit_message_text("🔍 正在获取正在播出的电视剧\.\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    message = query.message  # 用于后续统一处理
     
     try:
         on_air_data = await movie_service.get_tv_on_the_air()
         if on_air_data:
             result_text = movie_service.format_tv_on_the_air(on_air_data)
-            await query.edit_message_text(
-                text=foldable_text_with_markdown_v2(result_text),
-                parse_mode="MarkdownV2"
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
             )
         else:
-            await query.edit_message_text("❌ 未获取到正在播出的电视剧")
+            await message.edit_text("❌ 获取正在播出电视剧失败，请稍后重试")
     except Exception as e:
-        logger.error(f"获取正在播出失败: {e}")
-        await query.edit_message_text("❌ 获取正在播出时发生错误")
+        logger.error(f"获取正在播出电视剧失败: {e}")
+        await message.edit_text("❌ 获取正在播出电视剧时发生错误")
+    
+    # 调度删除机器人回复消息（对应movieold第6546-6549行）
+    from utils.message_manager import _schedule_deletion
+    config = get_config()
+    await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
 
 async def _execute_streaming_movie_chart(query, context) -> None:
-    """执行电影流媒体热度"""
+    """执行电影流媒体热度 - 完全按照movieold的streaming_movie_ranking_command逻辑"""
     if not movie_service:
         await query.edit_message_text("❌ 电影查询服务未初始化")
         return
+    
+    # 先编辑为"正在获取..."消息
+    await query.edit_message_text("🔍 正在获取流媒体电影热度排行榜\.\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    message = query.message  # 用于后续统一处理
     
     try:
         # 使用原来streaming_movie_ranking_command的默认多国模式
@@ -8065,21 +8114,30 @@ async def _execute_streaming_movie_chart(query, context) -> None:
             result_text = movie_service.format_multi_country_streaming_ranking(
                 streaming_data, content_type="movie", countries=countries_display
             )
-            await query.edit_message_text(
-                text=foldable_text_with_markdown_v2(result_text),
-                parse_mode="MarkdownV2"
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
             )
         else:
-            await query.edit_message_text("❌ 获取多国综合流媒体电影热度排行榜失败，请稍后重试")
+            await message.edit_text("❌ 获取多国综合流媒体电影热度排行榜失败，请稍后重试")
     except Exception as e:
         logger.error(f"获取流媒体电影热度失败: {e}")
-        await query.edit_message_text("❌ 获取流媒体电影热度时发生错误")
+        await message.edit_text("❌ 获取流媒体电影热度时发生错误")
+    
+    # 调度删除机器人回复消息
+    from utils.message_manager import _schedule_deletion
+    config = get_config()
+    await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
 
 async def _execute_streaming_tv_chart(query, context) -> None:
-    """执行剧集流媒体热度"""
+    """执行剧集流媒体热度 - 完全按照movieold的streaming_tv_ranking_command逻辑"""
     if not movie_service:
         await query.edit_message_text("❌ 电视剧查询服务未初始化")
         return
+    
+    # 先编辑为"正在获取..."消息
+    await query.edit_message_text("🔍 正在获取流媒体剧集热度排行榜\.\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    message = query.message  # 用于后续统一处理
     
     try:
         # 使用原来streaming_tv_ranking_command的默认多国模式
@@ -8091,55 +8149,78 @@ async def _execute_streaming_tv_chart(query, context) -> None:
             result_text = movie_service.format_multi_country_streaming_ranking(
                 streaming_data, content_type="tv", countries=countries_display
             )
-            await query.edit_message_text(
-                text=foldable_text_with_markdown_v2(result_text),
-                parse_mode="MarkdownV2"
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
             )
         else:
-            await query.edit_message_text("❌ 获取多国综合流媒体剧集热度排行榜失败，请稍后重试")
+            await message.edit_text("❌ 获取多国综合流媒体剧集热度排行榜失败，请稍后重试")
     except Exception as e:
         logger.error(f"获取流媒体剧集热度失败: {e}")
-        await query.edit_message_text("❌ 获取流媒体剧集热度时发生错误")
+        await message.edit_text("❌ 获取流媒体剧集热度时发生错误")
+    
+    # 调度删除机器人回复消息
+    from utils.message_manager import _schedule_deletion
+    config = get_config()
+    await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
 
 async def _execute_movie_trending_chart(query, context) -> None:
-    """执行Trakt热门电影"""
+    """执行Trakt热门电影 - 完全按照movieold逻辑"""
     if not movie_service:
         await query.edit_message_text("❌ 电影查询服务未初始化")
         return
+    
+    # 先编辑为"正在获取..."消息
+    await query.edit_message_text("🔥 正在获取Trakt热门电影\.\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    message = query.message  # 用于后续统一处理
     
     try:
         trending_data = await movie_service._get_trakt_trending_movies()
         if trending_data:
             result_text = movie_service.format_trakt_trending_movies(trending_data)
-            await query.edit_message_text(
-                text=foldable_text_with_markdown_v2(result_text),
-                parse_mode="MarkdownV2"
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
             )
         else:
-            await query.edit_message_text("❌ 未获取到Trakt热门电影")
+            await message.edit_text("❌ 获取Trakt热门电影失败，请稍后重试")
     except Exception as e:
         logger.error(f"获取Trakt热门电影失败: {e}")
-        await query.edit_message_text("❌ 获取Trakt热门电影时发生错误")
+        await message.edit_text("❌ 获取Trakt热门电影时发生错误")
+    
+    # 调度删除机器人回复消息
+    from utils.message_manager import _schedule_deletion
+    config = get_config()
+    await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
 
 async def _execute_tv_trending_chart(query, context) -> None:
-    """执行Trakt热门剧集"""
+    """执行Trakt热门剧集 - 完全按照movieold逻辑"""
     if not movie_service:
         await query.edit_message_text("❌ 电视剧查询服务未初始化")
         return
+    
+    # 先编辑为"正在获取..."消息
+    await query.edit_message_text("🔥 正在获取Trakt热门剧集\.\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    message = query.message  # 用于后续统一处理
     
     try:
         trending_data = await movie_service._get_trakt_trending_tv()
         if trending_data:
             result_text = movie_service.format_trakt_trending_tv(trending_data)
-            await query.edit_message_text(
-                text=foldable_text_with_markdown_v2(result_text),
-                parse_mode="MarkdownV2"
+            await message.edit_text(
+                foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2
             )
         else:
-            await query.edit_message_text("❌ 未获取到Trakt热门剧集")
+            await message.edit_text("❌ 获取Trakt热门剧集失败，请稍后重试")
     except Exception as e:
         logger.error(f"获取Trakt热门剧集失败: {e}")
-        await query.edit_message_text("❌ 获取Trakt热门剧集时发生错误")
+        await message.edit_text("❌ 获取Trakt热门剧集时发生错误")
+    
+    # 调度删除机器人回复消息
+    from utils.message_manager import _schedule_deletion
+    config = get_config()
+    await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
 
 async def person_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理人物功能的回调查询 - 与flight/hotel完全一致的结构"""
