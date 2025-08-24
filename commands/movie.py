@@ -163,12 +163,8 @@ async def _execute_person_details(update: Update, context: ContextTypes.DEFAULT_
                     )
                     # 删除loading消息
                     await message.delete()
-                    # 调度自动删除图片消息
-                    from utils.message_manager import _schedule_deletion
-                    from utils.config_manager import get_config
-                    config = get_config()
-                    await _schedule_deletion(context, detail_message.chat_id, detail_message.message_id, config.auto_delete_delay)
-                    return
+                    # 更新message为新发送的图片消息，用于后续删除调度
+                    message = detail_message
                     
                 except Exception as photo_error:
                     logger.warning(f"发送头像失败: {photo_error}，改用文本消息")
@@ -177,7 +173,6 @@ async def _execute_person_details(update: Update, context: ContextTypes.DEFAULT_
                         text=foldable_text_with_markdown_v2(result_text),
                         parse_mode="MarkdownV2"
                     )
-                    return
             else:
                 # 没有头像，更新为文本消息
                 await message.edit_text(
@@ -190,6 +185,12 @@ async def _execute_person_details(update: Update, context: ContextTypes.DEFAULT_
     except Exception as e:
         logger.error(f"获取人物详情失败: {e}")
         await message.edit_text(f"❌ 获取详情失败: {str(e)}")
+    
+    # 调度删除机器人回复消息 - 统一处理图片和文本消息的自动删除
+    from utils.message_manager import _schedule_deletion
+    from utils.config_manager import get_config
+    config = get_config()
+    await _schedule_deletion(context, update.message.chat_id, message.message_id, config.auto_delete_delay)
 
 async def _handle_legacy_person_search_callback(query, context, callback_data):
     """处理原有的人物搜索回调逻辑 - 保持向后兼容"""
