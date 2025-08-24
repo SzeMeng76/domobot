@@ -153,27 +153,36 @@ async def _execute_person_details(update: Update, context: ContextTypes.DEFAULT_
         if detail_data:
             result_text, profile_url = movie_service.format_person_details(detail_data)
             
-            # 如果有头像URL，先发送图片再发送文本 - 与flight/hotel的图片处理方式一致
+            # 如果有头像URL，发送图片消息 - 使用原来工作的方式
             if profile_url:
                 try:
                     # 删除loading消息
                     await message.delete()
-                    # 使用统一的消息发送API发送图片，保持自动删除机制
-                    await send_message_with_auto_delete(
-                        context=context,
+                    # 发送图片消息，与原来的person_detail一致
+                    detail_message = await context.bot.send_photo(
                         chat_id=update.message.chat_id,
-                        text="", # 图片消息，文本为空
-                        parse_mode="MarkdownV2",
                         photo=profile_url,
-                        caption=foldable_text_with_markdown_v2(result_text)
+                        caption=foldable_text_with_markdown_v2(result_text),
+                        parse_mode="MarkdownV2"
                     )
+                    # 调度自动删除
+                    from utils.config_manager import get_config
+                    config = get_config()
+                    await _schedule_auto_delete(context, detail_message.chat_id, detail_message.message_id, 
+                                              getattr(config, 'auto_delete_delay', 600))
                 except Exception as e:
                     logger.warning(f"发送头像失败: {e}")
-                    # 如果图片发送失败，更新为文本消息
-                    await message.edit_text(
+                    # 如果图片发送失败，发送文本消息
+                    text_message = await context.bot.send_message(
+                        chat_id=update.message.chat_id,
                         text=foldable_text_with_markdown_v2(result_text),
                         parse_mode="MarkdownV2"
                     )
+                    # 调度自动删除
+                    from utils.config_manager import get_config
+                    config = get_config()
+                    await _schedule_auto_delete(context, text_message.chat_id, text_message.message_id, 
+                                              getattr(config, 'auto_delete_delay', 600))
             else:
                 # 没有头像，更新为文本消息
                 await message.edit_text(
