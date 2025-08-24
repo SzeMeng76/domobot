@@ -256,16 +256,41 @@ async def _handle_legacy_person_search_callback(query, context, callback_data):
                             # 删除原来的搜索结果消息
                             await query.delete_message()
                             
+                            # 调度自动删除detail消息
+                            config = get_config()
+                            await _schedule_auto_delete(
+                                context, 
+                                query.message.chat_id, 
+                                detail_message.message_id, 
+                                config.auto_delete_delay
+                            )
+                            
                         except Exception as photo_error:
                             logger.warning(f"发送头像失败: {photo_error}，改用文本消息")
                             await query.edit_message_text(
                                 foldable_text_with_markdown_v2(result_text),
                                 parse_mode=ParseMode.MARKDOWN_V2
                             )
+                            # 调度自动删除text消息
+                            config = get_config()
+                            await _schedule_auto_delete(
+                                context, 
+                                query.message.chat_id, 
+                                query.message.message_id, 
+                                config.auto_delete_delay
+                            )
                     else:
                         await query.edit_message_text(
                             foldable_text_with_markdown_v2(result_text),
                             parse_mode=ParseMode.MARKDOWN_V2
+                        )
+                        # 调度自动删除text消息
+                        config = get_config()
+                        await _schedule_auto_delete(
+                            context, 
+                            query.message.chat_id, 
+                            query.message.message_id, 
+                            config.auto_delete_delay
                         )
                     
                     # 清除用户会话
