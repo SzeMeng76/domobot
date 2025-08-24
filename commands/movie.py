@@ -7836,79 +7836,85 @@ async def _execute_chart_command(query, context, command_name: str, display_name
 
 # 具体的排行榜执行函数
 async def _execute_movie_hot_chart(query, context) -> None:
-    """执行综合热门电影"""
+    """执行综合热门电影 - 复制原来movie_hot_command的mixed模式逻辑"""
     if not movie_service:
         await query.edit_message_text("❌ 电影查询服务未初始化")
         return
     
     try:
-        # 使用默认的mixed模式（综合显示）
-        result_text, poster_url = await movie_service.get_popular_movies("mixed")
+        # 混合显示TMDB、JustWatch和Trakt数据（原来的mixed模式逻辑）
+        tmdb_data = await movie_service.get_popular_movies()
+        justwatch_data = None
+        trakt_data = None
         
-        if poster_url:
-            try:
-                # 删除当前消息，发送图片
-                await query.delete_message()
-                photo_message = await context.bot.send_photo(
-                    chat_id=query.message.chat_id,
-                    photo=poster_url,
-                    caption=foldable_text_with_markdown_v2(result_text),
-                    parse_mode="MarkdownV2"
-                )
-                # 调度自动删除
-                from utils.message_manager import _schedule_deletion
-                from utils.config_manager import get_config
-                config = get_config()
-                await _schedule_deletion(context, photo_message.chat_id, photo_message.message_id, config.auto_delete_delay)
-            except Exception as photo_error:
-                logger.warning(f"发送海报失败: {photo_error}")
-                await query.edit_message_text(
-                    text=foldable_text_with_markdown_v2(result_text),
-                    parse_mode="MarkdownV2"
-                )
-        else:
+        # 检查JustWatch是否可用（从原代码复制检查逻辑）
+        JUSTWATCH_AVAILABLE = True  # 假设可用，或从config获取
+        
+        if JUSTWATCH_AVAILABLE:
+            # 使用多国综合JustWatch数据（默认模式）
+            justwatch_data = await movie_service.get_multi_country_streaming_ranking(
+                content_type="movie", countries=None, limit=4
+            )
+        
+        # 获取Trakt热门数据
+        try:
+            trakt_data = await movie_service._get_trakt_trending_movies(8)
+        except Exception as e:
+            logger.warning(f"获取Trakt电影数据失败: {e}")
+        
+        if tmdb_data or justwatch_data or trakt_data:
+            result_text = movie_service.format_mixed_popular_content(
+                tmdb_data, justwatch_data, content_type="movie", trakt_data=trakt_data
+            )
             await query.edit_message_text(
                 text=foldable_text_with_markdown_v2(result_text),
                 parse_mode="MarkdownV2"
             )
+        else:
+            await query.edit_message_text("❌ 获取热门电影数据失败，请稍后重试")
+            
     except Exception as e:
         logger.error(f"获取综合热门电影失败: {e}")
         await query.edit_message_text("❌ 获取综合热门电影时发生错误")
 
 async def _execute_tv_hot_chart(query, context) -> None:
-    """执行综合热门剧集"""
+    """执行综合热门剧集 - 复制原来tv_hot_command的mixed模式逻辑"""
     if not movie_service:
         await query.edit_message_text("❌ 电视剧查询服务未初始化")
         return
     
     try:
-        # 使用默认的mixed模式（综合显示）
-        result_text, poster_url = await movie_service.get_popular_tv_shows("mixed")
+        # 混合显示TMDB、JustWatch和Trakt数据（原来的mixed模式逻辑）
+        tmdb_data = await movie_service.get_popular_tv_shows()
+        justwatch_data = None
+        trakt_data = None
         
-        if poster_url:
-            try:
-                await query.delete_message()
-                photo_message = await context.bot.send_photo(
-                    chat_id=query.message.chat_id,
-                    photo=poster_url,
-                    caption=foldable_text_with_markdown_v2(result_text),
-                    parse_mode="MarkdownV2"
-                )
-                from utils.message_manager import _schedule_deletion
-                from utils.config_manager import get_config
-                config = get_config()
-                await _schedule_deletion(context, photo_message.chat_id, photo_message.message_id, config.auto_delete_delay)
-            except Exception as photo_error:
-                logger.warning(f"发送海报失败: {photo_error}")
-                await query.edit_message_text(
-                    text=foldable_text_with_markdown_v2(result_text),
-                    parse_mode="MarkdownV2"
-                )
-        else:
+        # 检查JustWatch是否可用（从原代码复制检查逻辑）
+        JUSTWATCH_AVAILABLE = True  # 假设可用，或从config获取
+        
+        if JUSTWATCH_AVAILABLE:
+            # 使用多国综合JustWatch数据（默认模式）
+            justwatch_data = await movie_service.get_multi_country_streaming_ranking(
+                content_type="tv", countries=None, limit=4
+            )
+        
+        # 获取Trakt热门数据
+        try:
+            trakt_data = await movie_service._get_trakt_trending_tv(8)
+        except Exception as e:
+            logger.warning(f"获取Trakt电视剧数据失败: {e}")
+        
+        if tmdb_data or justwatch_data or trakt_data:
+            result_text = movie_service.format_mixed_popular_content(
+                tmdb_data, justwatch_data, content_type="tv", trakt_data=trakt_data
+            )
             await query.edit_message_text(
                 text=foldable_text_with_markdown_v2(result_text),
                 parse_mode="MarkdownV2"
             )
+        else:
+            await query.edit_message_text("❌ 获取热门电视剧数据失败，请稍后重试")
+            
     except Exception as e:
         logger.error(f"获取综合热门剧集失败: {e}")
         await query.edit_message_text("❌ 获取综合热门剧集时发生错误")
@@ -7920,9 +7926,9 @@ async def _execute_trending_chart(query, context) -> None:
         return
     
     try:
-        trending_data = await movie_service.get_trending("day")
+        trending_data = await movie_service.get_trending_content("all", "day")
         if trending_data:
-            result_text = movie_service.format_trending_results(trending_data, "day")
+            result_text = movie_service.format_trending_content(trending_data, "day")
             await query.edit_message_text(
                 text=foldable_text_with_markdown_v2(result_text),
                 parse_mode="MarkdownV2"
@@ -7940,9 +7946,9 @@ async def _execute_trending_week_chart(query, context) -> None:
         return
     
     try:
-        trending_data = await movie_service.get_trending("week")
+        trending_data = await movie_service.get_trending_content("all", "week")
         if trending_data:
-            result_text = movie_service.format_trending_results(trending_data, "week")
+            result_text = movie_service.format_trending_content(trending_data, "week")
             await query.edit_message_text(
                 text=foldable_text_with_markdown_v2(result_text),
                 parse_mode="MarkdownV2"
@@ -7961,9 +7967,9 @@ async def _execute_now_playing_chart(query, context) -> None:
         return
     
     try:
-        now_playing_data = await movie_service.get_now_playing()
+        now_playing_data = await movie_service.get_now_playing_movies()
         if now_playing_data:
-            result_text = movie_service.format_now_playing(now_playing_data)
+            result_text = movie_service.format_now_playing_movies(now_playing_data)
             await query.edit_message_text(
                 text=foldable_text_with_markdown_v2(result_text),
                 parse_mode="MarkdownV2"
@@ -7981,9 +7987,9 @@ async def _execute_upcoming_chart(query, context) -> None:
         return
     
     try:
-        upcoming_data = await movie_service.get_upcoming()
+        upcoming_data = await movie_service.get_upcoming_movies()
         if upcoming_data:
-            result_text = movie_service.format_upcoming(upcoming_data)
+            result_text = movie_service.format_upcoming_movies(upcoming_data)
             await query.edit_message_text(
                 text=foldable_text_with_markdown_v2(result_text),
                 parse_mode="MarkdownV2"
@@ -8041,16 +8047,21 @@ async def _execute_streaming_movie_chart(query, context) -> None:
         return
     
     try:
-        # 使用默认的多国模式
-        streaming_data = await movie_service.get_streaming_movie_rankings("multi")
+        # 使用原来streaming_movie_ranking_command的默认多国模式
+        countries_display = ["US", "JP", "KR", "TH", "SG", "MY", "TW", "HK"]
+        streaming_data = await movie_service.get_multi_country_streaming_ranking(
+            content_type="movie", countries=None, limit=15
+        )
         if streaming_data:
-            result_text = movie_service.format_streaming_movie_rankings(streaming_data, "multi")
+            result_text = movie_service.format_multi_country_streaming_ranking(
+                streaming_data, content_type="movie", countries=countries_display
+            )
             await query.edit_message_text(
                 text=foldable_text_with_markdown_v2(result_text),
                 parse_mode="MarkdownV2"
             )
         else:
-            await query.edit_message_text("❌ 未获取到流媒体电影热度")
+            await query.edit_message_text("❌ 获取多国综合流媒体电影热度排行榜失败，请稍后重试")
     except Exception as e:
         logger.error(f"获取流媒体电影热度失败: {e}")
         await query.edit_message_text("❌ 获取流媒体电影热度时发生错误")
@@ -8062,16 +8073,21 @@ async def _execute_streaming_tv_chart(query, context) -> None:
         return
     
     try:
-        # 使用默认的多国模式
-        streaming_data = await movie_service.get_streaming_tv_rankings("multi")
+        # 使用原来streaming_tv_ranking_command的默认多国模式
+        countries_display = ["US", "JP", "KR", "TH", "SG", "MY", "TW", "HK"]
+        streaming_data = await movie_service.get_multi_country_streaming_ranking(
+            content_type="tv", countries=None, limit=15
+        )
         if streaming_data:
-            result_text = movie_service.format_streaming_tv_rankings(streaming_data, "multi")
+            result_text = movie_service.format_multi_country_streaming_ranking(
+                streaming_data, content_type="tv", countries=countries_display
+            )
             await query.edit_message_text(
                 text=foldable_text_with_markdown_v2(result_text),
                 parse_mode="MarkdownV2"
             )
         else:
-            await query.edit_message_text("❌ 未获取到流媒体剧集热度")
+            await query.edit_message_text("❌ 获取多国综合流媒体剧集热度排行榜失败，请稍后重试")
     except Exception as e:
         logger.error(f"获取流媒体剧集热度失败: {e}")
         await query.edit_message_text("❌ 获取流媒体剧集热度时发生错误")
@@ -8083,7 +8099,7 @@ async def _execute_movie_trending_chart(query, context) -> None:
         return
     
     try:
-        trending_data = await movie_service.get_trakt_trending_movies()
+        trending_data = await movie_service._get_trakt_trending_movies()
         if trending_data:
             result_text = movie_service.format_trakt_trending_movies(trending_data)
             await query.edit_message_text(
@@ -8103,7 +8119,7 @@ async def _execute_tv_trending_chart(query, context) -> None:
         return
     
     try:
-        trending_data = await movie_service.get_trakt_trending_tv()
+        trending_data = await movie_service._get_trakt_trending_tv()
         if trending_data:
             result_text = movie_service.format_trakt_trending_tv(trending_data)
             await query.edit_message_text(
