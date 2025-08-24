@@ -63,6 +63,13 @@ async def _execute_person_search(update: Update, context: ContextTypes.DEFAULT_T
             # 添加查询词到搜索数据中
             search_data["query"] = query
             
+            # 兼容旧系统：将搜索数据保存到旧的session中，以便旧的回调处理器能找到
+            user_id = update.effective_user.id
+            person_search_sessions[user_id] = {
+                "search_data": search_data,
+                "timestamp": datetime.now()
+            }
+            
             # 格式化搜索结果消息
             result_text = format_person_search_results_for_keyboard(search_data)
             keyboard = create_person_search_keyboard(search_data)
@@ -3501,6 +3508,69 @@ class MovieService:
         lines.append("   🎬 电影: `/movie_detail <ID>`")
         lines.append("   📺 电视剧: `/tv_detail <ID>`")
         lines.append("   👤 人物: `/person_detail <ID>`")
+        
+        return "\n".join(lines)
+    
+    def format_trending_persons(self, trending_data: Dict, time_window: str = "day") -> str:
+        """格式化热门人物数据 - 专门针对人物优化的格式"""
+        if not trending_data or not trending_data.get("results"):
+            return "❌ 获取热门人物数据失败"
+        
+        results = trending_data["results"][:10]  # 显示前10个结果
+        time_text = "今日" if time_window == "day" else "本周"
+        lines = [f"🌟 *{time_text}热门人物*\n"]
+        
+        for i, person in enumerate(results, 1):
+            name = person.get("name", "未知人物")
+            person_id = person.get("id")
+            known_for_department = person.get("known_for_department", "")
+            
+            # 添加部门信息
+            department_emoji = {
+                "Acting": "🎭",
+                "Directing": "🎬", 
+                "Writing": "✍️",
+                "Production": "🎪",
+                "Camera": "📹",
+                "Sound": "🎵",
+                "Art": "🎨"
+            }.get(known_for_department, "👤")
+            
+            lines.append(f"{i}. {department_emoji} *{name}*")
+            if known_for_department:
+                department_cn = {
+                    "Acting": "演员",
+                    "Directing": "导演", 
+                    "Writing": "编剧",
+                    "Production": "制片人",
+                    "Camera": "摄影师",
+                    "Sound": "音效师",
+                    "Art": "美术师"
+                }.get(known_for_department, known_for_department)
+                lines.append(f"   🏷️ {department_cn}")
+            
+            # 显示代表作品（known_for）
+            known_for = person.get("known_for", [])
+            if known_for:
+                works = []
+                for work in known_for[:3]:  # 最多显示3部作品
+                    if work.get("media_type") == "movie":
+                        title = work.get("title", work.get("original_title", ""))
+                        if title:
+                            works.append(f"🎬 {title}")
+                    elif work.get("media_type") == "tv":
+                        title = work.get("name", work.get("original_name", ""))
+                        if title:
+                            works.append(f"📺 {title}")
+                
+                if works:
+                    lines.append(f"   🎯 代表作品: {', '.join(works[:2])}")  # 最多显示2部
+            
+            lines.append(f"   🆔 ID: `{person_id}`")
+            lines.append("")
+        
+        lines.append("💡 使用人物ID查看详细信息:")
+        lines.append("通过 **👤 人物详情** 功能输入ID即可查看完整资料")
         
         return "\n".join(lines)
     
@@ -7632,21 +7702,45 @@ async def person_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         )
     
     elif data == "person_trending":
-        # 热门人物功能
-        await query.edit_message_text(
-            text="🌟 *热门人物功能*\n\n"
-                 "📊 显示当前最受关注的影视人物。\n\n"
-                 "💡 *内容包含*:\n"
-                 "• 🔥 当前热门演员和导演\n"
-                 "• 📈 人气排行榜\n"
-                 "• 🎬 最新作品动态\n"
-                 "• ⭐ 获奖和提名信息\n\n"
-                 "🚧 该功能正在开发中...",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔍 搜索人物", callback_data="person_search")],
-                [InlineKeyboardButton("🔙 返回主菜单", callback_data="person_main_menu")]
-            ])
+        # 热门人物功能 - 使用TMDB API获取真实数据
+        loading_message = await query.edit_message_text(
+            text="🔍 正在获取热门人物数据... ⏳"
         )
+        
+        try:
+            # 调用TMDB trending person API
+            trending_data = await movie_service.get_trending_content("person", "day")
+            
+            if trending_data and trending_data.get("results"):
+                # 格式化热门人物结果
+                result_text = movie_service.format_trending_persons(trending_data)
+                
+                await query.edit_message_text(
+                    text=foldable_text_with_markdown_v2(result_text),
+                    parse_mode="MarkdownV2",
+                    reply_markup=InlineKeyboardMarkup([
+                        [
+                            InlineKeyboardButton("🔍 搜索人物", callback_data="person_search"),
+                            InlineKeyboardButton("👤 人物详情", callback_data="person_details")
+                        ],
+                        [InlineKeyboardButton("🔙 返回主菜单", callback_data="person_main_menu")]
+                    ])
+                )
+            else:
+                await query.edit_message_text(
+                    text="❌ 获取热门人物数据失败，请稍后重试",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔙 返回主菜单", callback_data="person_main_menu")]
+                    ])
+                )
+        except Exception as e:
+            logger.error(f"获取热门人物失败: {e}")
+            await query.edit_message_text(
+                text="❌ 获取热门人物时发生错误",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 返回主菜单", callback_data="person_main_menu")]
+                ])
+            )
     
     # 保留原有的搜索结果处理逻辑
     elif data.startswith("person_select_") or data.startswith("person_page_"):
