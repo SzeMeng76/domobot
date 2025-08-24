@@ -9154,8 +9154,7 @@ command_factory.register_command("tv_episode", tv_episode_command, permission=Pe
 # 注册人物相关命令 - 统一的/person命令
 command_factory.register_command("person", person_command, permission=Permission.USER, description="智能人物信息服务 - 搜索、详情、热门")
 
-# 注册观看平台命令
-command_factory.register_command("movie_watch", movie_watch_command, permission=Permission.USER, description="获取电影观看平台")
+# 注册观看平台命令 - movie_watch已整合到按钮界面
 command_factory.register_command("tv_watch", tv_watch_command, permission=Permission.USER, description="获取电视剧观看平台")
 
 # 注册统一的排行榜命令
