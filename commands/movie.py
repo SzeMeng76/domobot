@@ -9100,15 +9100,17 @@ async def show_movie_details_with_functions(query, context, movie_id: int):
     except Exception as e:
         logger.error(f"显示电影详情失败: {e}")
         await query.edit_message_text("❌ 获取电影详情时发生错误")
+    
+    # 调度删除机器人回复消息（和movieold的详情显示一样）
+    from utils.message_manager import _schedule_deletion
+    config = get_config()
+    await _schedule_deletion(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
 
-# 注册命令
-command_factory.register_command("movie", movie_command, permission=Permission.USER, description="搜索电影信息（按钮选择）")
-command_factory.register_command("movies", movies_command, permission=Permission.USER, description="搜索电影信息（文本列表）")
+# 注册命令 - 只保留核心的搜索和详情命令
+command_factory.register_command("movie", movie_command, permission=Permission.USER, description="搜索电影信息（统一按钮界面）")
 command_factory.register_command("movie_detail", movie_detail_command, permission=Permission.USER, description="获取电影详情")
-command_factory.register_command("movie_rec", movie_rec_command, permission=Permission.USER, description="获取电影推荐")
-command_factory.register_command("movie_videos", movie_videos_command, permission=Permission.USER, description="获取电影预告片")
-command_factory.register_command("movie_reviews", movie_reviews_command, permission=Permission.USER, description="获取电影用户评价")
-command_factory.register_command("movie_related", movie_related_command, permission=Permission.USER, description="获取Trakt相关电影推荐")
+# 以下命令已整合到按钮界面，不再需要：
+# movies, movie_rec, movie_videos, movie_reviews, movie_related, movie_watch
 # 已迁移到统一缓存管理命令 /cleancache
 # command_factory.register_command("movie_cleancache", movie_clean_cache_command, permission=Permission.ADMIN, description="清理电影和电视剧查询缓存")
 
