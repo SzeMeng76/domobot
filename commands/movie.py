@@ -4427,25 +4427,42 @@ async def movie_text_handler_core(update: Update, context: ContextTypes.DEFAULT_
     user_id = update.effective_user.id
     text = update.message.text.strip()
     
-    # 检查搜索会话状态
-    if user_id in movie_search_sessions:
-        session = movie_search_sessions[user_id]
-        if session.get("waiting_for_search"):
-            # 处理搜索请求
-            await delete_user_command(context, update.message.chat_id, update.message.message_id)
+    # 获取用户会话
+    session_data = movie_session_manager.get_session(user_id)
+    if not session_data:
+        logger.debug(f"MovieService: 用户 {user_id} 没有活动会话")
+        return
+    
+    logger.info(f"MovieService: 用户 {user_id} 活动会话 - action: {session_data.get('action')}, waiting_for: {session_data.get('waiting_for')}, 输入: {text[:50]}")
+    
+    action = session_data.get("action")
+    waiting_for = session_data.get("waiting_for")
+    
+    try:
+        # 删除用户输入的命令 - 与flight/hotel完全一致
+        await delete_user_command(context, update.message.chat_id, update.message.message_id)
+        
+        if action == "movie_search" and waiting_for == "movie_name":
+            # 处理电影搜索
             await _execute_movie_search_from_menu(update, context, text)
-            session.pop("waiting_for_search", None)
-            return
-        elif session.get("waiting_for_details"):
-            # 处理详情查询
-            await delete_user_command(context, update.message.chat_id, update.message.message_id)
+            movie_session_manager.remove_session(user_id)
+            
+        elif action == "movie_details" and waiting_for == "movie_id":
+            # 处理电影详情查询
             try:
                 movie_id = int(text)
                 await _execute_movie_details_from_menu(update, context, movie_id)
             except ValueError:
                 await send_error(context, update.message.chat_id, "❌ 电影ID必须是数字")
-            session.pop("waiting_for_details", None)
-            return
+            movie_session_manager.remove_session(user_id)
+            
+    except Exception as e:
+        logger.error(f"处理电影文本输入失败: {e}")
+        await send_error(context, update.message.chat_id, f"处理失败: {str(e)}")
+        movie_session_manager.remove_session(user_id)
+    
+    # 消息已处理完成
+    return
 
 async def _execute_movie_search_from_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, query: str) -> None:
     """从菜单执行电影搜索"""
@@ -8587,9 +8604,10 @@ async def handle_movie_menu_callback(query, context, callback_data):
         )
         
         # 创建用户会话
-        if user_id not in movie_search_sessions:
-            movie_search_sessions[user_id] = {}
-        movie_search_sessions[user_id]["waiting_for_search"] = True
+        movie_session_manager.create_session(user_id, {
+            "action": "movie_search",
+            "waiting_for": "movie_name"
+        })
         
     elif callback_data == "movie_menu_details":
         # 进入详情查询模式
@@ -8613,9 +8631,10 @@ async def handle_movie_menu_callback(query, context, callback_data):
         )
         
         # 创建用户会话
-        if user_id not in movie_search_sessions:
-            movie_search_sessions[user_id] = {}
-        movie_search_sessions[user_id]["waiting_for_details"] = True
+        movie_session_manager.create_session(user_id, {
+            "action": "movie_details",
+            "waiting_for": "movie_id"
+        })
         
     elif callback_data == "movie_menu_help":
         # 显示详细帮助
@@ -8667,9 +8686,7 @@ async def handle_movie_menu_callback(query, context, callback_data):
         )
         
         # 清理用户会话状态
-        if user_id in movie_search_sessions:
-            movie_search_sessions[user_id].pop("waiting_for_search", None)
-            movie_search_sessions[user_id].pop("waiting_for_details", None)
+        movie_session_manager.remove_session(user_id)
 
 async def handle_movie_function_callback(query, context, callback_data):
     """处理电影功能按钮回调 - 完全按照movieold.py逻辑"""
