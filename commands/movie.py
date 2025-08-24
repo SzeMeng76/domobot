@@ -8721,15 +8721,28 @@ async def execute_movie_recommendations(query, context, movie_id: int):
         recommendations = await movie_service.get_movie_recommendations(movie_id)
         if recommendations:
             result_text = movie_service.format_movie_recommendations(recommendations, movie_id)
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
+            ])
             await message.edit_text(
                 foldable_text_with_markdown_v2(result_text),
-                parse_mode=ParseMode.MARKDOWN_V2
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=return_keyboard
             )
         else:
-            await message.edit_text("❌ 获取电影推荐失败，请稍后重试")
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
+            ])
+            await message.edit_text(
+                "❌ 获取电影推荐失败，请稍后重试",
+                reply_markup=return_keyboard
+            )
     except Exception as e:
         logger.error(f"获取电影推荐失败: {e}")
-        await message.edit_text("❌ 获取电影推荐时发生错误")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
+        ])
+        await message.edit_text("❌ 获取电影推荐时发生错误", reply_markup=return_keyboard)
     
     # 调度删除机器人回复消息（对应movieold第5073-5077行）
     from utils.message_manager import _schedule_deletion
@@ -8750,12 +8763,22 @@ async def execute_movie_videos(query, context, movie_id: int):
         videos_data = await movie_service._get_videos_data("movie", movie_id)
         if videos_data and videos_data.get("results"):
             result_text = movie_service.format_movie_videos(videos_data)
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
+            ])
             await message.edit_text(
                 foldable_text_with_markdown_v2(result_text),
-                parse_mode=ParseMode.MARKDOWN_V2
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=return_keyboard
             )
         else:
-            await message.edit_text("❌ 该电影暂无可用的预告片或视频")
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
+            ])
+            await message.edit_text(
+                "❌ 该电影暂无可用的预告片或视频",
+                reply_markup=return_keyboard
+            )
     except Exception as e:
         logger.error(f"获取电影视频失败: {e}")
         await message.edit_text("❌ 获取电影视频时发生错误")
@@ -8910,18 +8933,40 @@ async def execute_movie_related(query, context, movie_id: int):
     message = query.message  # 用于后续统一处理
     
     try:
-        related_data = await movie_service._get_trakt_movie_related(movie_id)
-        if related_data:
-            # 需要电影标题作为参数
-            movie_info = await movie_service.get_movie_details(movie_id)
-            movie_title = movie_info.get("title", "电影") if movie_info else "电影"
-            result_text = movie_service.format_trakt_related_movies(related_data, movie_title)
-            await message.edit_text(
-                foldable_text_with_markdown_v2(result_text),
-                parse_mode=ParseMode.MARKDOWN_V2
-            )
+        # 先获取电影基本信息用于显示标题
+        movie_detail = await movie_service.get_movie_details(movie_id)
+        movie_title = movie_detail.get("title", f"ID {movie_id}") if movie_detail else f"ID {movie_id}"
+        
+        # 获取Trakt相关推荐 - 先找到trakt_id再获取相关数据
+        trakt_id = await movie_service._find_trakt_movie_id(movie_id)
+        if trakt_id:
+            related_data = await movie_service._get_trakt_movie_related(trakt_id)
+            if related_data:
+                result_text = movie_service.format_trakt_related_movies(related_data, movie_title)
+                return_keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
+                ])
+                await message.edit_text(
+                    foldable_text_with_markdown_v2(result_text),
+                    parse_mode=ParseMode.MARKDOWN_V2,
+                    reply_markup=return_keyboard
+                )
+            else:
+                return_keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
+                ])
+                await message.edit_text(
+                    f"❌ 未找到电影《{movie_title}》的相关推荐",
+                    reply_markup=return_keyboard
+                )
         else:
-            await message.edit_text("❌ 获取相关电影推荐失败，请稍后重试")
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
+            ])
+            await message.edit_text(
+                f"❌ 在Trakt上未找到电影《{movie_title}》",
+                reply_markup=return_keyboard
+            )
     except Exception as e:
         logger.error(f"获取相关电影推荐失败: {e}")
         await message.edit_text("❌ 获取相关电影推荐时发生错误")
@@ -8958,12 +9003,22 @@ async def execute_movie_watch(query, context, movie_id: int):
         
         if providers_data:
             result_text = movie_service.format_watch_providers(providers_data, "movie")
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
+            ])
             await message.edit_text(
                 foldable_text_with_markdown_v2(result_text),
-                parse_mode=ParseMode.MARKDOWN_V2
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=return_keyboard
             )
         else:
-            await message.edit_text("❌ 获取观看平台信息失败，请稍后重试")
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
+            ])
+            await message.edit_text(
+                "❌ 获取观看平台信息失败，请稍后重试",
+                reply_markup=return_keyboard
+            )
     except Exception as e:
         logger.error(f"获取电影观看平台失败: {e}")
         await message.edit_text("❌ 获取观看平台信息时发生错误")
