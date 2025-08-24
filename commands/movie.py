@@ -6417,7 +6417,10 @@ async def _execute_chart_command(query, context, command_name: str, display_name
 async def _execute_movie_hot_chart(query, context) -> None:
     """执行综合热门电影 - 完全按照movieold的movie_hot_command逻辑"""
     if not movie_service:
-        await query.edit_message_text("❌ 电影查询服务未初始化")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await query.edit_message_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第4467-4471行）
@@ -6449,16 +6452,26 @@ async def _execute_movie_hot_chart(query, context) -> None:
             result_text = movie_service.format_mixed_popular_content(
                 tmdb_data, justwatch_data, content_type="movie", trakt_data=trakt_data
             )
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+            ])
             await message.edit_text(
                 foldable_text_with_markdown_v2(result_text),
-                parse_mode=ParseMode.MARKDOWN_V2
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=return_keyboard
             )
         else:
-            await message.edit_text("❌ 获取热门电影数据失败，请稍后重试")
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+            ])
+            await message.edit_text("❌ 获取热门电影数据失败，请稍后重试", reply_markup=return_keyboard)
             
     except Exception as e:
         logger.error(f"获取综合热门电影失败: {e}")
-        await message.edit_text("❌ 获取综合热门电影时发生错误")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await message.edit_text("❌ 获取综合热门电影时发生错误", reply_markup=return_keyboard)
     
     # 调度删除机器人回复消息（对应movieold统一删除逻辑）
     from utils.message_manager import _schedule_deletion  
@@ -6468,7 +6481,10 @@ async def _execute_movie_hot_chart(query, context) -> None:
 async def _execute_tv_hot_chart(query, context) -> None:
     """执行综合热门剧集 - 复制原来tv_hot_command的mixed模式逻辑"""
     if not movie_service:
-        await query.edit_message_text("❌ 电视剧查询服务未初始化")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await query.edit_message_text("❌ 电视剧查询服务未初始化", reply_markup=return_keyboard)
         return
     
     try:
@@ -6496,25 +6512,38 @@ async def _execute_tv_hot_chart(query, context) -> None:
             result_text = movie_service.format_mixed_popular_content(
                 tmdb_data, justwatch_data, content_type="tv", trakt_data=trakt_data
             )
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+            ])
             await query.edit_message_text(
                 text=foldable_text_with_markdown_v2(result_text),
-                parse_mode="MarkdownV2"
+                parse_mode="MarkdownV2",
+                reply_markup=return_keyboard
             )
             # 调度删除机器人回复消息
             from utils.message_manager import _schedule_deletion
             config = get_config()
             await _schedule_deletion(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
         else:
-            await query.edit_message_text("❌ 获取热门电视剧数据失败，请稍后重试")
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+            ])
+            await query.edit_message_text("❌ 获取热门电视剧数据失败，请稍后重试", reply_markup=return_keyboard)
             
     except Exception as e:
         logger.error(f"获取综合热门剧集失败: {e}")
-        await query.edit_message_text("❌ 获取综合热门剧集时发生错误")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await query.edit_message_text("❌ 获取综合热门剧集时发生错误", reply_markup=return_keyboard)
 
 async def _execute_trending_chart(query, context) -> None:
     """执行今日热门 - 完全按照movieold的trending_command逻辑"""
     if not movie_service:
-        await query.edit_message_text("❌ 电影查询服务未初始化")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await query.edit_message_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第6335-6339行）
@@ -6525,15 +6554,25 @@ async def _execute_trending_chart(query, context) -> None:
         trending_data = await movie_service.get_trending_content("all", "day")
         if trending_data:
             result_text = movie_service.format_trending_content(trending_data, "day")
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+            ])
             await message.edit_text(
                 foldable_text_with_markdown_v2(result_text),
-                parse_mode=ParseMode.MARKDOWN_V2
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=return_keyboard
             )
         else:
-            await message.edit_text("❌ 获取热门内容失败，请稍后重试")
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+            ])
+            await message.edit_text("❌ 获取热门内容失败，请稍后重试", reply_markup=return_keyboard)
     except Exception as e:
         logger.error(f"获取热门内容失败: {e}")
-        await message.edit_text("❌ 获取热门内容时发生错误")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await message.edit_text("❌ 获取热门内容时发生错误", reply_markup=return_keyboard)
     
     # 调度删除机器人回复消息（对应movieold第6355-6359行）
     from utils.message_manager import _schedule_deletion
@@ -6543,7 +6582,10 @@ async def _execute_trending_chart(query, context) -> None:
 async def _execute_trending_week_chart(query, context) -> None:
     """执行本周热门 - 完全按照movieold的trending_week_command逻辑"""
     if not movie_service:
-        await query.edit_message_text("❌ 电影查询服务未初始化")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await query.edit_message_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第6374-6378行）
@@ -6554,15 +6596,25 @@ async def _execute_trending_week_chart(query, context) -> None:
         trending_data = await movie_service.get_trending_content("all", "week")
         if trending_data:
             result_text = movie_service.format_trending_content(trending_data, "week")
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+            ])
             await message.edit_text(
                 foldable_text_with_markdown_v2(result_text),
-                parse_mode=ParseMode.MARKDOWN_V2
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=return_keyboard
             )
         else:
-            await message.edit_text("❌ 获取本周热门内容失败，请稍后重试")
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+            ])
+            await message.edit_text("❌ 获取本周热门内容失败，请稍后重试", reply_markup=return_keyboard)
     except Exception as e:
         logger.error(f"获取本周热门内容失败: {e}")
-        await message.edit_text("❌ 获取本周热门内容时发生错误")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await message.edit_text("❌ 获取本周热门内容时发生错误", reply_markup=return_keyboard)
     
     # 调度删除机器人回复消息（对应movieold第6394-6398行）
     from utils.message_manager import _schedule_deletion
@@ -6573,7 +6625,10 @@ async def _execute_trending_week_chart(query, context) -> None:
 async def _execute_now_playing_chart(query, context) -> None:
     """执行正在上映 - 完全按照movieold的now_playing_command逻辑"""
     if not movie_service:
-        await query.edit_message_text("❌ 电影查询服务未初始化")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await query.edit_message_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第6411-6415行）
@@ -6584,15 +6639,25 @@ async def _execute_now_playing_chart(query, context) -> None:
         now_playing_data = await movie_service.get_now_playing_movies()
         if now_playing_data:
             result_text = movie_service.format_now_playing_movies(now_playing_data)
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+            ])
             await message.edit_text(
                 foldable_text_with_markdown_v2(result_text),
-                parse_mode=ParseMode.MARKDOWN_V2
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=return_keyboard
             )
         else:
-            await message.edit_text("❌ 获取正在上映电影失败，请稍后重试")
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+            ])
+            await message.edit_text("❌ 获取正在上映电影失败，请稍后重试", reply_markup=return_keyboard)
     except Exception as e:
         logger.error(f"获取正在上映电影失败: {e}")
-        await message.edit_text("❌ 获取正在上映电影时发生错误")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await message.edit_text("❌ 获取正在上映电影时发生错误", reply_markup=return_keyboard)
     
     # 调度删除机器人回复消息（对应movieold第6432-6435行）
     from utils.message_manager import _schedule_deletion
@@ -6602,7 +6667,10 @@ async def _execute_now_playing_chart(query, context) -> None:
 async def _execute_upcoming_chart(query, context) -> None:
     """执行即将上映 - 完全按照movieold的upcoming_command逻辑"""
     if not movie_service:
-        await query.edit_message_text("❌ 电影查询服务未初始化")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await query.edit_message_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第6449-6453行）
@@ -6613,15 +6681,25 @@ async def _execute_upcoming_chart(query, context) -> None:
         upcoming_data = await movie_service.get_upcoming_movies()
         if upcoming_data:
             result_text = movie_service.format_upcoming_movies(upcoming_data)
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+            ])
             await message.edit_text(
                 foldable_text_with_markdown_v2(result_text),
-                parse_mode=ParseMode.MARKDOWN_V2
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=return_keyboard
             )
         else:
-            await message.edit_text("❌ 获取即将上映电影失败，请稍后重试")
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+            ])
+            await message.edit_text("❌ 获取即将上映电影失败，请稍后重试", reply_markup=return_keyboard)
     except Exception as e:
         logger.error(f"获取即将上映电影失败: {e}")
-        await message.edit_text("❌ 获取即将上映电影时发生错误")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await message.edit_text("❌ 获取即将上映电影时发生错误", reply_markup=return_keyboard)
     
     # 调度删除机器人回复消息（对应movieold第6470-6473行）
     from utils.message_manager import _schedule_deletion
@@ -6631,7 +6709,10 @@ async def _execute_upcoming_chart(query, context) -> None:
 async def _execute_tv_airing_chart(query, context) -> None:
     """执行今日播出 - 完全按照movieold的tv_airing_command逻辑"""
     if not movie_service:
-        await query.edit_message_text("❌ 电视剧查询服务未初始化")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await query.edit_message_text("❌ 电视剧查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第6487-6491行）
@@ -6642,15 +6723,25 @@ async def _execute_tv_airing_chart(query, context) -> None:
         airing_data = await movie_service.get_tv_airing_today()
         if airing_data:
             result_text = movie_service.format_tv_airing_today(airing_data)
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+            ])
             await message.edit_text(
                 foldable_text_with_markdown_v2(result_text),
-                parse_mode=ParseMode.MARKDOWN_V2
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=return_keyboard
             )
         else:
-            await message.edit_text("❌ 获取今日播出电视剧失败，请稍后重试")
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+            ])
+            await message.edit_text("❌ 获取今日播出电视剧失败，请稍后重试", reply_markup=return_keyboard)
     except Exception as e:
         logger.error(f"获取今日播出电视剧失败: {e}")
-        await message.edit_text("❌ 获取今日播出电视剧时发生错误")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await message.edit_text("❌ 获取今日播出电视剧时发生错误", reply_markup=return_keyboard)
     
     # 调度删除机器人回复消息（对应movieold第6508-6511行）
     from utils.message_manager import _schedule_deletion
@@ -6660,7 +6751,10 @@ async def _execute_tv_airing_chart(query, context) -> None:
 async def _execute_tv_on_air_chart(query, context) -> None:
     """执行正在播出 - 完全按照movieold的tv_on_air_command逻辑"""
     if not movie_service:
-        await query.edit_message_text("❌ 电视剧查询服务未初始化")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await query.edit_message_text("❌ 电视剧查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第6525-6529行）
@@ -6671,15 +6765,25 @@ async def _execute_tv_on_air_chart(query, context) -> None:
         on_air_data = await movie_service.get_tv_on_the_air()
         if on_air_data:
             result_text = movie_service.format_tv_on_the_air(on_air_data)
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+            ])
             await message.edit_text(
                 foldable_text_with_markdown_v2(result_text),
-                parse_mode=ParseMode.MARKDOWN_V2
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=return_keyboard
             )
         else:
-            await message.edit_text("❌ 获取正在播出电视剧失败，请稍后重试")
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+            ])
+            await message.edit_text("❌ 获取正在播出电视剧失败，请稍后重试", reply_markup=return_keyboard)
     except Exception as e:
         logger.error(f"获取正在播出电视剧失败: {e}")
-        await message.edit_text("❌ 获取正在播出电视剧时发生错误")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await message.edit_text("❌ 获取正在播出电视剧时发生错误", reply_markup=return_keyboard)
     
     # 调度删除机器人回复消息（对应movieold第6546-6549行）
     from utils.message_manager import _schedule_deletion
@@ -6689,7 +6793,10 @@ async def _execute_tv_on_air_chart(query, context) -> None:
 async def _execute_streaming_movie_chart(query, context) -> None:
     """执行电影流媒体热度 - 完全按照movieold的streaming_movie_ranking_command逻辑"""
     if not movie_service:
-        await query.edit_message_text("❌ 电影查询服务未初始化")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await query.edit_message_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息
@@ -6706,15 +6813,25 @@ async def _execute_streaming_movie_chart(query, context) -> None:
             result_text = movie_service.format_multi_country_streaming_ranking(
                 streaming_data, content_type="movie", countries=countries_display
             )
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+            ])
             await message.edit_text(
                 foldable_text_with_markdown_v2(result_text),
-                parse_mode=ParseMode.MARKDOWN_V2
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=return_keyboard
             )
         else:
-            await message.edit_text("❌ 获取多国综合流媒体电影热度排行榜失败，请稍后重试")
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+            ])
+            await message.edit_text("❌ 获取多国综合流媒体电影热度排行榜失败，请稍后重试", reply_markup=return_keyboard)
     except Exception as e:
         logger.error(f"获取流媒体电影热度失败: {e}")
-        await message.edit_text("❌ 获取流媒体电影热度时发生错误")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await message.edit_text("❌ 获取流媒体电影热度时发生错误", reply_markup=return_keyboard)
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
@@ -6724,7 +6841,10 @@ async def _execute_streaming_movie_chart(query, context) -> None:
 async def _execute_streaming_tv_chart(query, context) -> None:
     """执行剧集流媒体热度 - 完全按照movieold的streaming_tv_ranking_command逻辑"""
     if not movie_service:
-        await query.edit_message_text("❌ 电视剧查询服务未初始化")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await query.edit_message_text("❌ 电视剧查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息
@@ -6741,15 +6861,25 @@ async def _execute_streaming_tv_chart(query, context) -> None:
             result_text = movie_service.format_multi_country_streaming_ranking(
                 streaming_data, content_type="tv", countries=countries_display
             )
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+            ])
             await message.edit_text(
                 foldable_text_with_markdown_v2(result_text),
-                parse_mode=ParseMode.MARKDOWN_V2
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=return_keyboard
             )
         else:
-            await message.edit_text("❌ 获取多国综合流媒体剧集热度排行榜失败，请稍后重试")
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+            ])
+            await message.edit_text("❌ 获取多国综合流媒体剧集热度排行榜失败，请稍后重试", reply_markup=return_keyboard)
     except Exception as e:
         logger.error(f"获取流媒体剧集热度失败: {e}")
-        await message.edit_text("❌ 获取流媒体剧集热度时发生错误")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await message.edit_text("❌ 获取流媒体剧集热度时发生错误", reply_markup=return_keyboard)
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
@@ -6759,7 +6889,10 @@ async def _execute_streaming_tv_chart(query, context) -> None:
 async def _execute_movie_trending_chart(query, context) -> None:
     """执行Trakt热门电影 - 完全按照movieold逻辑"""
     if not movie_service:
-        await query.edit_message_text("❌ 电影查询服务未初始化")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await query.edit_message_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息
@@ -6770,15 +6903,25 @@ async def _execute_movie_trending_chart(query, context) -> None:
         trending_data = await movie_service._get_trakt_trending_movies()
         if trending_data:
             result_text = movie_service.format_trakt_trending_movies(trending_data)
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+            ])
             await message.edit_text(
                 foldable_text_with_markdown_v2(result_text),
-                parse_mode=ParseMode.MARKDOWN_V2
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=return_keyboard
             )
         else:
-            await message.edit_text("❌ 获取Trakt热门电影失败，请稍后重试")
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+            ])
+            await message.edit_text("❌ 获取Trakt热门电影失败，请稍后重试", reply_markup=return_keyboard)
     except Exception as e:
         logger.error(f"获取Trakt热门电影失败: {e}")
-        await message.edit_text("❌ 获取Trakt热门电影时发生错误")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await message.edit_text("❌ 获取Trakt热门电影时发生错误", reply_markup=return_keyboard)
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
@@ -6788,7 +6931,10 @@ async def _execute_movie_trending_chart(query, context) -> None:
 async def _execute_tv_trending_chart(query, context) -> None:
     """执行Trakt热门剧集 - 完全按照movieold逻辑"""
     if not movie_service:
-        await query.edit_message_text("❌ 电视剧查询服务未初始化")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await query.edit_message_text("❌ 电视剧查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息
@@ -6799,15 +6945,25 @@ async def _execute_tv_trending_chart(query, context) -> None:
         trending_data = await movie_service._get_trakt_trending_tv()
         if trending_data:
             result_text = movie_service.format_trakt_trending_tv(trending_data)
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+            ])
             await message.edit_text(
                 foldable_text_with_markdown_v2(result_text),
-                parse_mode=ParseMode.MARKDOWN_V2
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=return_keyboard
             )
         else:
-            await message.edit_text("❌ 获取Trakt热门剧集失败，请稍后重试")
+            return_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+            ])
+            await message.edit_text("❌ 获取Trakt热门剧集失败，请稍后重试", reply_markup=return_keyboard)
     except Exception as e:
         logger.error(f"获取Trakt热门剧集失败: {e}")
-        await message.edit_text("❌ 获取Trakt热门剧集时发生错误")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await message.edit_text("❌ 获取Trakt热门剧集时发生错误", reply_markup=return_keyboard)
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
@@ -7273,7 +7429,10 @@ async def handle_movie_function_callback(query, context, callback_data):
 async def execute_movie_recommendations(query, context, movie_id: int):
     """执行电影推荐 - 完全按照movieold的movie_rec_command逻辑"""
     if not movie_service:
-        await query.edit_message_text("❌ 电影查询服务未初始化")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await query.edit_message_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第5053-5057行）
@@ -7315,7 +7474,10 @@ async def execute_movie_recommendations(query, context, movie_id: int):
 async def execute_movie_videos(query, context, movie_id: int):
     """执行电影视频 - 完全按照movieold的movie_videos_command逻辑"""
     if not movie_service:
-        await query.edit_message_text("❌ 电影查询服务未初始化")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await query.edit_message_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第5820-5824行）
@@ -7354,7 +7516,10 @@ async def execute_movie_videos(query, context, movie_id: int):
 async def execute_movie_reviews(query, context, movie_id: int):
     """执行电影评价 - 完全按照movieold的movie_reviews_command逻辑"""
     if not movie_service:
-        await query.edit_message_text("❌ 电影查询服务未初始化")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await query.edit_message_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第6277-6281行）
@@ -7488,7 +7653,10 @@ async def execute_movie_reviews(query, context, movie_id: int):
 async def execute_movie_related(query, context, movie_id: int):
     """执行相关电影 - 完全按照movieold的movie_related_command逻辑"""
     if not movie_service:
-        await query.edit_message_text("❌ 电影查询服务未初始化")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await query.edit_message_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第6133-6137行）
@@ -7542,7 +7710,10 @@ async def execute_movie_related(query, context, movie_id: int):
 async def execute_movie_watch(query, context, movie_id: int):
     """执行观看平台 - 完全按照movieold的movie_watch_command逻辑"""
     if not movie_service:
-        await query.edit_message_text("❌ 电影查询服务未初始化")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await query.edit_message_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第7018-7022行）
@@ -7606,7 +7777,10 @@ async def execute_movie_watch(query, context, movie_id: int):
 async def show_movie_details_with_functions(query, context, movie_id: int):
     """显示电影详情和功能按钮 - 用于返回按钮，优先使用缓存数据"""
     if not movie_service:
-        await query.edit_message_text("❌ 电影查询服务未初始化")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await query.edit_message_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     user_id = query.from_user.id
@@ -7702,7 +7876,10 @@ async def handle_tv_function_callback(query, context, callback_data):
 async def execute_tv_recommendations(query, context, tv_id: int):
     """执行TV推荐 - 完全按照movieold的tv_rec_command逻辑"""
     if not movie_service:
-        await query.edit_message_text("❌ 电视剧查询服务未初始化")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await query.edit_message_text("❌ 电视剧查询服务未初始化", reply_markup=return_keyboard)
         return
         
     message = query.message
@@ -7740,7 +7917,10 @@ async def execute_tv_recommendations(query, context, tv_id: int):
 async def execute_tv_videos(query, context, tv_id: int):
     """执行TV视频 - 完全按照movieold的tv_videos_command逻辑"""
     if not movie_service:
-        await query.edit_message_text("❌ 电视剧查询服务未初始化")
+        return_keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
+        ])
+        await query.edit_message_text("❌ 电视剧查询服务未初始化", reply_markup=return_keyboard)
         return
         
     message = query.message
