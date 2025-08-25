@@ -7800,13 +7800,18 @@ async def show_movie_details_with_functions(query, context, movie_id: int):
     user_id = query.from_user.id
     detail_data = None
     
-    # 优先使用会话中缓存的电影数据
+    # 优先使用会话中缓存的电影数据（包含完整处理后的数据）
     if user_id in movie_search_sessions:
         session_data = movie_search_sessions[user_id]
         if (session_data.get("current_movie_id") == movie_id and 
-            session_data.get("current_movie_data")):
+            session_data.get("current_movie_data") and
+            session_data.get("current_movie_processed_data")):
+            detail_data = session_data["current_movie_processed_data"]
+            logger.info(f"使用缓存的完整电影详情数据（含JustWatch）: {movie_id}")
+        elif (session_data.get("current_movie_id") == movie_id and 
+              session_data.get("current_movie_data")):
             detail_data = session_data["current_movie_data"]
-            logger.info(f"使用缓存的电影详情数据: {movie_id}")
+            logger.info(f"使用缓存的基础电影详情数据: {movie_id}")
     
     # 如果没有缓存数据，重新获取
     if not detail_data:
@@ -7816,21 +7821,30 @@ async def show_movie_details_with_functions(query, context, movie_id: int):
     
     try:
         if detail_data:
-            # 获取增强的观影平台数据
-            movie_title = detail_data.get("original_title") or detail_data.get("title", "")
-            logger.info(f"Movie title for JustWatch search: {movie_title}")
-            enhanced_providers = await movie_service.get_enhanced_watch_providers(
-                movie_id, "movie", movie_title
-            )
-            
-            # 将增强的观影平台数据合并到详情数据中
-            if enhanced_providers:
-                combined_providers = enhanced_providers.get("combined") or enhanced_providers.get("tmdb")
-                if combined_providers:
-                    detail_data["watch/providers"] = combined_providers
+            # 检查是否已经是处理完的数据（包含enhanced_providers）
+            if not detail_data.get("enhanced_providers"):
+                # 获取增强的观影平台数据
+                movie_title = detail_data.get("original_title") or detail_data.get("title", "")
+                logger.info(f"Movie title for JustWatch search: {movie_title}")
+                enhanced_providers = await movie_service.get_enhanced_watch_providers(
+                    movie_id, "movie", movie_title
+                )
                 
-                # 传递完整的增强数据
-                detail_data["enhanced_providers"] = enhanced_providers
+                # 将增强的观影平台数据合并到详情数据中
+                if enhanced_providers:
+                    combined_providers = enhanced_providers.get("combined") or enhanced_providers.get("tmdb")
+                    if combined_providers:
+                        detail_data["watch/providers"] = combined_providers
+                    
+                    # 传递完整的增强数据
+                    detail_data["enhanced_providers"] = enhanced_providers
+                
+                # 保存处理完的完整数据到session缓存
+                if user_id in movie_search_sessions:
+                    movie_search_sessions[user_id]["current_movie_processed_data"] = detail_data
+                    logger.info(f"已缓存完整电影详情数据（含JustWatch）: {movie_id}")
+            else:
+                logger.info(f"使用已处理的完整电影数据: {movie_id}")
             
             result_text, poster_url = movie_service.format_movie_details(detail_data)
             function_keyboard = create_movie_function_keyboard(movie_id)
@@ -8490,46 +8504,62 @@ async def _get_tv_episode_details_with_buttons(update: Update, context: ContextT
 async def show_tv_details_with_functions(query, context, tv_id: int):
     """显示TV详情和功能按钮 - 用于返回按钮，优先使用缓存数据"""
     if not movie_service:
-        await query.edit_message_text("❌ TV查询服务未初始化")
+        message = query.message
+        await message.edit_text("❌ TV查询服务未初始化")
         return
     
     user_id = query.from_user.id
     detail_data = None
     
-    # 优先使用会话中缓存的TV数据
+    # 优先使用会话中缓存的TV数据（包含完整处理后的数据）
     if user_id in tv_search_sessions:
         session_data = tv_search_sessions[user_id]
         if (session_data.get("current_tv_id") == tv_id and 
-            session_data.get("current_tv_data")):
+            session_data.get("current_tv_data") and
+            session_data.get("current_tv_processed_data")):
+            detail_data = session_data["current_tv_processed_data"]
+            logger.info(f"使用缓存的完整TV详情数据（含JustWatch）: {tv_id}")
+        elif (session_data.get("current_tv_id") == tv_id and 
+              session_data.get("current_tv_data")):
             detail_data = session_data["current_tv_data"]
-            logger.info(f"使用缓存的TV详情数据: {tv_id}")
+            logger.info(f"使用缓存的基础TV详情数据: {tv_id}")
     
     # 如果没有缓存数据，重新获取
     if not detail_data:
-        await query.edit_message_text(f"🔍 正在获取TV详情 \(ID: {tv_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+        message = query.message
+        await message.edit_text(f"🔍 正在获取TV详情 \(ID: {tv_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
         detail_data = await movie_service.get_tv_details(tv_id)
     
     try:
         if detail_data:
-            # 获取增强的观影平台数据
-            tv_title = detail_data.get("original_name") or detail_data.get("name", "")
-            logger.info(f"TV title for JustWatch search: {tv_title}")
-            enhanced_providers = await movie_service.get_enhanced_watch_providers(
-                tv_id, "tv", tv_title
-            )
-            
-            # 将增强的观影平台数据合并到详情数据中
-            if enhanced_providers:
-                combined_providers = enhanced_providers.get("combined") or enhanced_providers.get("tmdb")
-                if combined_providers:
-                    detail_data["watch/providers"] = combined_providers
+            # 检查是否已经是处理完的数据（包含enhanced_providers）
+            if not detail_data.get("enhanced_providers"):
+                # 获取增强的观影平台数据
+                tv_title = detail_data.get("original_name") or detail_data.get("name", "")
+                logger.info(f"TV title for JustWatch search: {tv_title}")
+                enhanced_providers = await movie_service.get_enhanced_watch_providers(
+                    tv_id, "tv", tv_title
+                )
                 
-                # 传递完整的增强数据
-                detail_data["enhanced_providers"] = enhanced_providers
+                # 将增强的观影平台数据合并到详情数据中
+                if enhanced_providers:
+                    combined_providers = enhanced_providers.get("combined") or enhanced_providers.get("tmdb")
+                    if combined_providers:
+                        detail_data["watch/providers"] = combined_providers
+                    
+                    # 传递完整的增强数据
+                    detail_data["enhanced_providers"] = enhanced_providers
+                    
+                    # 传递JustWatch MediaEntry数据
+                    if enhanced_providers.get("justwatch_media_entry"):
+                        detail_data["justwatch_media_entry"] = enhanced_providers["justwatch_media_entry"]
                 
-                # 传递JustWatch MediaEntry数据
-                if enhanced_providers.get("justwatch_media_entry"):
-                    detail_data["justwatch_media_entry"] = enhanced_providers["justwatch_media_entry"]
+                # 保存处理完的完整数据到session缓存
+                if user_id in tv_search_sessions:
+                    tv_search_sessions[user_id]["current_tv_processed_data"] = detail_data
+                    logger.info(f"已缓存完整TV详情数据（含JustWatch）: {tv_id}")
+            else:
+                logger.info(f"使用已处理的完整TV数据: {tv_id}")
             
             result_text, poster_url = movie_service.format_tv_details(detail_data)
             function_keyboard = create_tv_function_keyboard(tv_id)
