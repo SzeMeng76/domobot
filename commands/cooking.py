@@ -2089,12 +2089,13 @@ async def recipe_category_back_callback(update: Update, context: ContextTypes.DE
 # 注册命令和回调
 # =============================================================================
 
-# 注册命令
-command_factory.register_command("recipe", recipe_search_command, permission=Permission.NONE, description="菜谱搜索")
-command_factory.register_command("recipe_category", recipe_category_command, permission=Permission.NONE, description="按分类查看菜谱")
-command_factory.register_command("recipe_random", recipe_random_command, permission=Permission.NONE, description="随机菜谱推荐")
-command_factory.register_command("what_to_eat", what_to_eat_command, permission=Permission.NONE, description="今天吃什么")
-command_factory.register_command("meal_plan", meal_plan_command, permission=Permission.NONE, description="智能膳食推荐")
+# 注册命令 - 统一使用 /recipe 命令
+command_factory.register_command("recipe", recipe_search_command, permission=Permission.NONE, description="菜谱助手 - 搜索、分类、推荐菜谱")
+# 以下命令已整合到 /recipe 主菜单中，不再单独注册
+# command_factory.register_command("recipe_category", recipe_category_command, permission=Permission.NONE, description="按分类查看菜谱")
+# command_factory.register_command("recipe_random", recipe_random_command, permission=Permission.NONE, description="随机菜谱推荐")  
+# command_factory.register_command("what_to_eat", what_to_eat_command, permission=Permission.NONE, description="今天吃什么")
+# command_factory.register_command("meal_plan", meal_plan_command, permission=Permission.NONE, description="智能膳食推荐")
 # 已迁移到统一缓存管理命令 /cleancache
 # command_factory.register_command("cooking_cleancache", cooking_clean_cache_command, permission=Permission.ADMIN, description="清理烹饪模块缓存")
 
