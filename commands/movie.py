@@ -1874,7 +1874,7 @@ class MovieService:
         return None
     
     def _format_reviews_section(self, reviews_data: Dict, title: str = "未知") -> str:
-        """格式化评价部分 - 直接使用Telegraph逻辑"""
+        """格式化评价部分 - 统一Telegraph逻辑"""
         if not reviews_data or not reviews_data.get("results"):
             return ""
         
@@ -1894,7 +1894,59 @@ class MovieService:
         )
         
         if should_use_telegraph:
-            # 创建简短的预览版本（只显示前1条评价的更短预览）
+            # 创建Telegraph页面
+            try:
+                telegraph_content = self.format_reviews_for_telegraph({"results": reviews}, title)
+                telegraph_url = self._create_telegraph_page_sync(f"{title} - 用户评价", telegraph_content)
+                
+                if telegraph_url:
+                    # 创建包含Telegraph链接和简短预览的内容
+                    preview_lines = ["", "📝 *用户评价*"]
+                    
+                    if reviews:
+                        review = reviews[0]
+                        author = review.get("author", "匿名用户")
+                        content = review.get("content", "")
+                        rating = review.get("author_details", {}).get("rating")
+                        source = review.get("source", "tmdb")
+                        
+                        # 语言检测
+                        chinese_chars = len([c for c in content if '\u4e00' <= c <= '\u9fff'])
+                        is_chinese = chinese_chars > len(content) * 0.3
+                        lang_flag = "🇨🇳" if is_chinese else "🇺🇸"
+                        
+                        # 来源标识
+                        source_flag = "📺" if source == "trakt" else "🎬"
+                        source_text = "Trakt" if source == "trakt" else "TMDB"
+                        
+                        # 短预览，最多100字符
+                        content_preview = content[:100] + "..." if len(content) > 100 else content
+                        content_preview = content_preview.replace('\n', ' ').replace('\r', ' ')
+                        
+                        rating_text = f" ({rating}/10)" if rating else ""
+                        preview_lines.extend([
+                            "",
+                            f"👤 *{author}*{rating_text} {lang_flag}{source_flag} _({source_text})_:",
+                            f"   _{content_preview}_",
+                        ])
+                    
+                    if reviews_count > 1:
+                        preview_lines.append(f"... 还有 {reviews_count - 1} 条评价")
+                    
+                    # 添加实际的Telegraph链接
+                    preview_lines.extend([
+                        "",
+                        f"📊 *共 {reviews_count} 条评价*",
+                        f"🔗 **完整评价**: [Telegraph完整版本]({telegraph_url})"
+                    ])
+                    
+                    return "\n".join(preview_lines)
+            except Exception as e:
+                logger.warning(f"创建Telegraph页面失败: {e}")
+                # 如果Telegraph创建失败，使用原来的逻辑
+                pass
+            
+            # Telegraph创建失败时的回退逻辑
             preview_lines = ["", "📝 *用户评价预览*"]
             
             if reviews:
@@ -1928,10 +1980,11 @@ class MovieService:
             if reviews_count > 1:
                 preview_lines.append(f"... 还有 {reviews_count - 1} 条评价")
             
+            # 添加Telegraph链接提示（点击按钮时会真正创建Telegraph）
             preview_lines.extend([
                 "",
-                f"📊 *总共 {reviews_count} 条评价*",
-                f"🔗 **完整评价内容**: 由于内容较长，请点击下方'用户评价'按钮查看",
+                f"📊 *共 {reviews_count} 条评价*",
+                f"🔗 **完整评价**: 点击下方'用户评价'按钮查看Telegraph完整版本"
             ])
             
             return "\n".join(preview_lines)
@@ -2238,6 +2291,57 @@ class MovieService:
         
         return content
     
+    def _create_telegraph_page_sync(self, title: str, content: str) -> Optional[str]:
+        """创建Telegraph页面的同步版本"""
+        try:
+            import requests  # 使用requests进行同步HTTP请求
+            
+            # 创建Telegraph账户
+            account_data = {
+                "short_name": "MengBot",
+                "author_name": "MengBot Movie Reviews",
+                "author_url": "https://t.me/mengpricebot"
+            }
+            
+            response = requests.post(f"{TELEGRAPH_API_URL}/createAccount", data=account_data, timeout=10)
+            if response.status_code != 200:
+                return None
+                
+            account_info = response.json()
+            if not account_info.get("ok"):
+                return None
+                
+            access_token = account_info["result"]["access_token"]
+            
+            # 创建页面内容
+            page_content = [
+                {
+                    "tag": "p",
+                    "children": [content]
+                }
+            ]
+            
+            page_data = {
+                "access_token": access_token,
+                "title": title,
+                "content": json.dumps(page_content),
+                "return_content": "true"
+            }
+            
+            response = requests.post(f"{TELEGRAPH_API_URL}/createPage", data=page_data, timeout=10)
+            if response.status_code != 200:
+                return None
+                
+            page_info = response.json()
+            if not page_info.get("ok"):
+                return None
+                
+            return page_info["result"]["url"]
+        
+        except Exception as e:
+            logger.error(f"创建Telegraph页面失败 (sync): {e}")
+            return None
+    
     def format_reviews_list(self, reviews_data: Dict) -> str:
         """格式化评价列表（智能长度版本）"""
         if not reviews_data or not reviews_data.get("results"):
@@ -2410,7 +2514,7 @@ class MovieService:
         
         return "\n".join(lines)
     
-    def format_tv_details(self, detail_data: Dict) -> tuple:
+    async def format_tv_details(self, detail_data: Dict) -> tuple:
         """格式化电视剧详情，返回(文本内容, 海报URL)"""
         if not detail_data:
             return "❌ 获取电视剧详情失败", None
@@ -3274,7 +3378,7 @@ class MovieService:
         
         return "\n".join(lines)
     
-    def format_movie_details(self, detail_data: Dict) -> tuple:
+    async def format_movie_details(self, detail_data: Dict) -> tuple:
         """格式化电影详情，返回(文本内容, 海报URL)"""
         if not detail_data:
             return "❌ 获取电影详情失败", None
@@ -7627,21 +7731,13 @@ async def execute_movie_reviews(query, context, movie_id: int):
             await message.edit_text(f"❌ 未找到电影《{movie_title}》的评价信息")
             return
         
-        # 格式化评价列表
-        result_text = movie_service.format_reviews_list(reviews_data)
-        
-        # 检查是否需要使用Telegraph（更积极的触发条件）
+        # 直接判断是否需要Telegraph，不使用format_reviews_list
         reviews_count = len(reviews_data.get("results", []))
         avg_review_length = sum(len(r.get("content", "")) for r in reviews_data.get("results", [])) / max(reviews_count, 1)
-        
-        # 更积极的Telegraph触发条件：
-        # 1. 消息长度超过2500字符
-        # 2. 有2条以上评价且平均长度超过400字符
-        # 3. 有任何单条评价超过800字符
         max_single_review = max((len(r.get("content", "")) for r in reviews_data.get("results", [])), default=0)
         
+        # Telegraph触发条件：有2条以上评价且平均长度超过400字符 或 有任何单条评价超过800字符
         should_use_telegraph = (
-            len(result_text) > 2500 or 
             (reviews_count >= 2 and avg_review_length > 400) or
             max_single_review > 800
         )
@@ -7653,15 +7749,12 @@ async def execute_movie_reviews(query, context, movie_id: int):
             
             if telegraph_url:
                 # 发送包含Telegraph链接和简短预览的消息
-                reviews_count = len(reviews_data.get("results", []))
-                
-                # 创建简短的预览版本（只显示前2条评价的更短预览）
                 preview_lines = ["📝 *用户评价预览*\n"]
                 for i, review in enumerate(reviews_data.get("results", [])[:2], 1):
                     author = review.get("author", "匿名用户")
                     content = review.get("content", "")
                     rating = review.get("author_details", {}).get("rating")
-                    source = review.get("source", "tmdb")  # 获取来源信息
+                    source = review.get("source", "tmdb")
                     
                     # 语言检测
                     chinese_chars = len([c for c in content if '\u4e00' <= c <= '\u9fff'])
@@ -7686,39 +7779,37 @@ async def execute_movie_reviews(query, context, movie_id: int):
                 if reviews_count > 2:
                     preview_lines.append(f"... 还有 {reviews_count - 2} 条评价")
                 
-                # 添加返回按钮
-                return_keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
-                ])
-                
                 preview_lines.extend([
                     "",
                     f"📊 *总共 {reviews_count} 条评价*",
-                    f"📄 **完整评价内容**: 由于内容较长，已生成Telegraph页面",
-                    f"🔗 **查看完整评价**: {telegraph_url}",
+                    f"🔗 **完整评价内容**: {telegraph_url}",
                     "",
                     f"💡 点击选择查看电影详情"
                 ])
                 
                 summary_text = "\n".join(preview_lines)
+                return_keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
+                ])
                 await message.edit_text(
                     foldable_text_with_markdown_v2(summary_text),
                     parse_mode=ParseMode.MARKDOWN_V2,
                     reply_markup=return_keyboard
                 )
             else:
-                # Telegraph发布失败，发送截断的消息
-                truncated_text = result_text[:TELEGRAM_MESSAGE_LIMIT - 200] + "\n\n⚠️ 内容过长已截断，完整评价请查看详情页面"
+                # Telegraph创建失败，使用format_reviews_list
+                result_text = movie_service.format_reviews_list(reviews_data)
                 return_keyboard = InlineKeyboardMarkup([
                     [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
                 ])
                 await message.edit_text(
-                    foldable_text_with_markdown_v2(truncated_text),
+                    foldable_text_with_markdown_v2(result_text),
                     parse_mode=ParseMode.MARKDOWN_V2,
                     reply_markup=return_keyboard
                 )
         else:
-            # 直接发送格式化的评价列表
+            # 直接使用format_reviews_list（内容不长）
+            result_text = movie_service.format_reviews_list(reviews_data)
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
             ])
