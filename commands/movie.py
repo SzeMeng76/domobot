@@ -6420,7 +6420,8 @@ async def _execute_movie_hot_chart(query, context) -> None:
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await query.edit_message_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
+        message = query.message
+        await message.edit_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第4467-4471行）
@@ -6543,7 +6544,8 @@ async def _execute_trending_chart(query, context) -> None:
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await query.edit_message_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
+        message = query.message
+        await message.edit_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第6335-6339行）
@@ -6585,7 +6587,8 @@ async def _execute_trending_week_chart(query, context) -> None:
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await query.edit_message_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
+        message = query.message
+        await message.edit_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第6374-6378行）
@@ -6628,7 +6631,8 @@ async def _execute_now_playing_chart(query, context) -> None:
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await query.edit_message_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
+        message = query.message
+        await message.edit_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第6411-6415行）
@@ -6670,7 +6674,8 @@ async def _execute_upcoming_chart(query, context) -> None:
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await query.edit_message_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
+        message = query.message
+        await message.edit_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第6449-6453行）
@@ -6796,7 +6801,8 @@ async def _execute_streaming_movie_chart(query, context) -> None:
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await query.edit_message_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
+        message = query.message
+        await message.edit_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息
@@ -6892,7 +6898,8 @@ async def _execute_movie_trending_chart(query, context) -> None:
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await query.edit_message_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
+        message = query.message
+        await message.edit_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息
@@ -7424,7 +7431,8 @@ async def handle_movie_function_callback(query, context, callback_data):
     elif function_name == "watch":
         await execute_movie_watch(query, context, movie_id)
     else:
-        await query.edit_message_text(f"❌ 未实现的功能: {function_name}")
+        message = query.message
+        await message.edit_text(f"❌ 未实现的功能: {function_name}")
 
 async def execute_movie_recommendations(query, context, movie_id: int):
     """执行电影推荐 - 完全按照movieold的movie_rec_command逻辑"""
@@ -7432,12 +7440,13 @@ async def execute_movie_recommendations(query, context, movie_id: int):
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await query.edit_message_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
+        message = query.message
+        await message.edit_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第5053-5057行）
-    await query.edit_message_text(f"🔍 正在获取电影推荐 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
-    message = query.message  # 用于后续统一处理
+    message = query.message
+    await message.edit_text(f"🔍 正在获取电影推荐 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
     
     try:
         recommendations = await movie_service.get_movie_recommendations(movie_id)
@@ -7477,12 +7486,13 @@ async def execute_movie_videos(query, context, movie_id: int):
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await query.edit_message_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
+        message = query.message
+        await message.edit_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第5820-5824行）
-    await query.edit_message_text(f"🔍 正在获取电影视频 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
-    message = query.message  # 用于后续统一处理
+    message = query.message
+    await message.edit_text(f"🔍 正在获取电影视频 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
     
     try:
         videos_data = await movie_service._get_videos_data("movie", movie_id)
@@ -7519,18 +7529,19 @@ async def execute_movie_reviews(query, context, movie_id: int):
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await query.edit_message_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
+        message = query.message
+        await message.edit_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第6277-6281行）
-    await query.edit_message_text(f"🔍 正在获取电影评价 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
-    message = query.message  # 用于后续统一处理
+    message = query.message
+    await message.edit_text(f"🔍 正在获取电影评价 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
     
     try:
         # 获取电影基本信息
         detail_data = await movie_service.get_movie_details(movie_id)
         if not detail_data:
-            await query.edit_message_text(f"❌ 未找到ID为 {movie_id} 的电影")
+            await message.edit_text(f"❌ 未找到ID为 {movie_id} 的电影")
             return
         
         movie_title = detail_data.get("title", "未知电影")
@@ -7538,7 +7549,7 @@ async def execute_movie_reviews(query, context, movie_id: int):
         # 获取评价数据
         reviews_data = await movie_service._get_reviews_data("movie", movie_id)
         if not reviews_data:
-            await query.edit_message_text(f"❌ 未找到电影《{movie_title}》的评价信息")
+            await message.edit_text(f"❌ 未找到电影《{movie_title}》的评价信息")
             return
         
         # 格式化评价列表
@@ -7656,12 +7667,13 @@ async def execute_movie_related(query, context, movie_id: int):
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await query.edit_message_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
+        message = query.message
+        await message.edit_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第6133-6137行）
-    await query.edit_message_text(f"🔍 正在获取相关电影推荐 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
-    message = query.message  # 用于后续统一处理
+    message = query.message
+    await message.edit_text(f"🔍 正在获取相关电影推荐 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
     
     try:
         # 先获取电影基本信息用于显示标题
@@ -7713,12 +7725,13 @@ async def execute_movie_watch(query, context, movie_id: int):
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await query.edit_message_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
+        message = query.message
+        await message.edit_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第7018-7022行）
-    await query.edit_message_text(f"🔍 正在获取观看平台信息 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
-    message = query.message  # 用于后续统一处理
+    message = query.message
+    await message.edit_text(f"🔍 正在获取观看平台信息 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
     
     try:
         # 先获取电影基本信息以便获取标题
@@ -7780,7 +7793,8 @@ async def show_movie_details_with_functions(query, context, movie_id: int):
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await query.edit_message_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
+        message = query.message
+        await message.edit_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     user_id = query.from_user.id
@@ -7796,7 +7810,8 @@ async def show_movie_details_with_functions(query, context, movie_id: int):
     
     # 如果没有缓存数据，重新获取
     if not detail_data:
-        await query.edit_message_text(f"🔍 正在获取电影详情 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+        message = query.message
+        await message.edit_text(f"🔍 正在获取电影详情 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
         detail_data = await movie_service.get_movie_details(movie_id)
     
     try:
@@ -7840,10 +7855,12 @@ async def show_movie_details_with_functions(query, context, movie_id: int):
                     reply_markup=function_keyboard
                 )
         else:
-            await query.edit_message_text(f"❌ 未找到ID为 {movie_id} 的电影")
+            message = query.message
+            await message.edit_text(f"❌ 未找到ID为 {movie_id} 的电影")
     except Exception as e:
         logger.error(f"显示电影详情失败: {e}")
-        await query.edit_message_text("❌ 获取电影详情时发生错误")
+        message = query.message
+        await message.edit_text("❌ 获取电影详情时发生错误")
     
     # 调度删除机器人回复消息（和movieold的详情显示一样）
     from utils.message_manager import _schedule_deletion
@@ -7871,7 +7888,8 @@ async def handle_tv_function_callback(query, context, callback_data):
     elif function_name == "episode":
         await execute_tv_episode(query, context, tv_id)
     else:
-        await query.edit_message_text(f"❌ 未实现的功能: {function_name}")
+        message = query.message
+        await message.edit_text(f"❌ 未实现的功能: {function_name}")
 
 async def execute_tv_recommendations(query, context, tv_id: int):
     """执行TV推荐 - 完全按照movieold的tv_rec_command逻辑"""
