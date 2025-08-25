@@ -5345,7 +5345,7 @@ async def movie_detail_command(update: Update, context: ContextTypes.DEFAULT_TYP
     
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=f"🔍 正在获取电影详情 \(ID: {movie_id}\)\.\.\.",
+        text=f"🔍 正在获取电影详情 \\(ID: {movie_id}\\)\\.\\.\\.",
         parse_mode=ParseMode.MARKDOWN_V2
     )
     
@@ -5746,7 +5746,7 @@ async def tv_detail_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=f"🔍 正在获取电视剧详情 \(ID: {tv_id}\)\.\.\.",
+        text=f"🔍 正在获取电视剧详情 \\(ID: {tv_id}\\)\\.\\.\\.",
         parse_mode=ParseMode.MARKDOWN_V2
     )
     
@@ -7521,7 +7521,7 @@ async def execute_movie_recommendations(query, context, movie_id: int):
     
     # 先编辑为"正在获取..."消息（对应movieold第5053-5057行）
     message = query.message
-    await message.edit_text(f"🔍 正在获取电影推荐 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await message.edit_text(f"🔍 正在获取电影推荐 \\(ID: {movie_id}\\)\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
     
     try:
         recommendations = await movie_service.get_movie_recommendations(movie_id)
@@ -7567,7 +7567,7 @@ async def execute_movie_videos(query, context, movie_id: int):
     
     # 先编辑为"正在获取..."消息（对应movieold第5820-5824行）
     message = query.message
-    await message.edit_text(f"🔍 正在获取电影视频 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await message.edit_text(f"🔍 正在获取电影视频 \\(ID: {movie_id}\\)\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
     
     try:
         videos_data = await movie_service._get_videos_data("movie", movie_id)
@@ -7610,7 +7610,11 @@ async def execute_movie_reviews(query, context, movie_id: int):
     
     # 先编辑为"正在获取..."消息（对应movieold第6277-6281行）
     message = query.message
-    await message.edit_text(f"🔍 正在获取电影评价 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    try:
+        await message.edit_text(f"🔍 正在获取电影评价 \\(ID: {movie_id}\\)\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
+    except Exception:
+        # 如果是图片消息，使用edit_caption
+        await message.edit_caption(caption=f"🔍 正在获取电影评价 \\(ID: {movie_id}\\)\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
     
     try:
         # 获取电影基本信息
