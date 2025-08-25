@@ -7580,17 +7580,16 @@ async def execute_movie_reviews(query, context, movie_id: int):
         # 检查是否需要使用Telegraph（更积极的触发条件）
         reviews_count = len(reviews_data.get("results", []))
         avg_review_length = sum(len(r.get("content", "")) for r in reviews_data.get("results", [])) / max(reviews_count, 1)
-        
-        # 更积极的Telegraph触发条件：
-        # 1. 消息长度超过2500字符
-        # 2. 有2条以上评价且平均长度超过400字符
-        # 3. 有任何单条评价超过800字符
         max_single_review = max((len(r.get("content", "")) for r in reviews_data.get("results", [])), default=0)
         
+        # 更积极的Telegraph触发条件：
+        # 1. 有3条以上评价就触发Telegraph
+        # 2. 有任何单条评价超过400字符就触发Telegraph
+        # 3. 消息长度超过2000字符就触发Telegraph
         should_use_telegraph = (
-            len(result_text) > 2500 or 
-            (reviews_count >= 2 and avg_review_length > 400) or
-            max_single_review > 800
+            reviews_count >= 3 or
+            max_single_review > 400 or
+            len(result_text) > 2000
         )
         
         if should_use_telegraph:
@@ -8067,17 +8066,16 @@ async def execute_tv_reviews(query, context, tv_id: int):
         # 检查是否需要使用Telegraph（更积极的触发条件）
         reviews_count = len(reviews_data.get("results", []))
         avg_review_length = sum(len(r.get("content", "")) for r in reviews_data.get("results", [])) / max(reviews_count, 1)
-        
-        # 更积极的Telegraph触发条件：
-        # 1. 消息长度超过2500字符
-        # 2. 有2条以上评价且平均长度超过400字符
-        # 3. 有任何单条评价超过800字符
         max_single_review = max((len(r.get("content", "")) for r in reviews_data.get("results", [])), default=0)
         
+        # 更积极的Telegraph触发条件：
+        # 1. 有3条以上评价就触发Telegraph
+        # 2. 有任何单条评价超过400字符就触发Telegraph
+        # 3. 消息长度超过2000字符就触发Telegraph
         should_use_telegraph = (
-            len(result_text) > 2500 or 
-            (reviews_count >= 2 and avg_review_length > 400) or
-            max_single_review > 800
+            reviews_count >= 3 or
+            max_single_review > 400 or
+            len(result_text) > 2000
         )
         
         if should_use_telegraph:
