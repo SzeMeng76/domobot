@@ -1873,8 +1873,8 @@ class MovieService:
         
         return None
     
-    def _format_reviews_section(self, reviews_data: Dict) -> str:
-        """格式化评价部分"""
+    async def _format_reviews_section(self, reviews_data: Dict, title: str = "未知") -> str:
+        """格式化评价部分 - 统一Telegraph逻辑，跟execute一样"""
         if not reviews_data or not reviews_data.get("results"):
             return ""
         
@@ -1882,23 +1882,77 @@ class MovieService:
         if not reviews:
             return ""
         
-        # 分别筛选TMDB和Trakt评论
-        tmdb_reviews = [r for r in reviews if r.get("source", "tmdb") == "tmdb"]
-        trakt_reviews = [r for r in reviews if r.get("source") == "trakt"]
+        # 检查是否需要使用Telegraph（跟execute一样的触发条件）
+        reviews_count = len(reviews)
+        avg_review_length = sum(len(r.get("content", "")) for r in reviews) / max(reviews_count, 1)
+        max_single_review = max((len(r.get("content", "")) for r in reviews), default=0)
         
-        # 选择显示的评论：1个TMDB + 1个Trakt
-        selected_reviews = []
-        if tmdb_reviews:
-            selected_reviews.append(tmdb_reviews[0])
-        if trakt_reviews:
-            selected_reviews.append(trakt_reviews[0])
+        # Telegraph触发条件（跟execute一样）：
+        # 1. 有2条以上评价且平均长度超过400字符
+        # 2. 有任何单条评价超过800字符
+        should_use_telegraph = (
+            (reviews_count >= 2 and avg_review_length > 400) or
+            max_single_review > 800
+        )
         
-        # 如果没有足够的评论，补充其他评论
-        if len(selected_reviews) < 2:
-            for review in reviews:
-                if review not in selected_reviews and len(selected_reviews) < 2:
-                    selected_reviews.append(review)
+        if should_use_telegraph:
+            # 创建Telegraph页面 - 跟execute完全一样的逻辑
+            try:
+                telegraph_content = self.format_reviews_for_telegraph({"results": reviews}, title)
+                telegraph_url = await self.create_telegraph_page(f"{title} - 用户评价", telegraph_content)
+                
+                if telegraph_url:
+                    # 创建包含Telegraph链接和简短预览的内容 - 跟execute一样
+                    preview_lines = ["", "📝 *用户评价*"]
+                    
+                    # 显示前1条评价作为预览
+                    if reviews:
+                        review = reviews[0]
+                        author = review.get("author", "匿名用户")
+                        content = review.get("content", "")
+                        rating = review.get("author_details", {}).get("rating")
+                        source = review.get("source", "tmdb")
+                        
+                        # 语言检测
+                        chinese_chars = len([c for c in content if '\u4e00' <= c <= '\u9fff'])
+                        is_chinese = chinese_chars > len(content) * 0.3
+                        lang_flag = "🇨🇳" if is_chinese else "🇺🇸"
+                        
+                        # 来源标识
+                        source_flag = "📺" if source == "trakt" else "🎬"
+                        source_text = "Trakt" if source == "trakt" else "TMDB"
+                        
+                        # 短预览，最多100字符
+                        content_preview = content[:100] + "..." if len(content) > 100 else content
+                        content_preview = content_preview.replace('\n', ' ').replace('\r', ' ')
+                        
+                        rating_text = f" ({rating}/10)" if rating else ""
+                        preview_lines.extend([
+                            "",
+                            f"👤 *{author}*{rating_text} {lang_flag}{source_flag} _({source_text})_:",
+                            f"   _{content_preview}_",
+                        ])
+                    
+                    if reviews_count > 1:
+                        preview_lines.append(f"... 还有 {reviews_count - 1} 条评价")
+                    
+                    # 添加实际的Telegraph链接 - 跟execute完全一样
+                    preview_lines.extend([
+                        "",
+                        f"📊 *共 {reviews_count} 条评价*",
+                        f"📄 **完整评价内容**: 由于内容较长，已生成Telegraph页面",
+                        f"🔗 **查看完整评价**: {telegraph_url}"
+                    ])
+                    
+                    return "\n".join(preview_lines)
+            except Exception as e:
+                logger.warning(f"创建Telegraph页面失败: {e}")
+                # 如果Telegraph创建失败，使用简单预览
+                pass
         
+        # Telegraph创建失败时的回退逻辑，或内容较短时的直接显示
+        # 选择显示前2条评价
+        selected_reviews = reviews[:2]
         if not selected_reviews:
             return ""
         
@@ -1908,20 +1962,19 @@ class MovieService:
             author = review.get("author", "匿名用户")
             content = review.get("content", "")
             rating = review.get("author_details", {}).get("rating")
-            source = review.get("source", "tmdb")  # 默认为TMDB
+            source = review.get("source", "tmdb")
             
             if content:
                 # 截取评价内容，最多200字符
                 content_preview = content[:200] + "..." if len(content) > 200 else content
-                # 替换换行符为空格
                 content_preview = content_preview.replace('\n', ' ').replace('\r', ' ')
                 
-                # 简单检测语言（基于字符特征）
+                # 语言检测
                 chinese_chars = len([c for c in content if '\u4e00' <= c <= '\u9fff'])
-                is_chinese = chinese_chars > len(content) * 0.3  # 如果中文字符超过30%认为是中文
-                
-                # 语言标识和来源标识
+                is_chinese = chinese_chars > len(content) * 0.3
                 lang_flag = "🇨🇳" if is_chinese else "🇺🇸"
+                
+                # 来源标识
                 source_flag = "📺" if source == "trakt" else "🎬"
                 source_text = "Trakt" if source == "trakt" else "TMDB"
                 
@@ -2518,7 +2571,7 @@ class MovieService:
         # 添加用户评价
         reviews_data = detail_data.get("reviews")
         if reviews_data:
-            reviews_section = self._format_reviews_section(reviews_data)
+            reviews_section = await self._format_reviews_section(reviews_data, name)
             if reviews_section:
                 lines.append(reviews_section)
         
@@ -3354,7 +3407,7 @@ class MovieService:
         # 添加用户评价
         reviews_data = detail_data.get("reviews")
         if reviews_data:
-            reviews_section = self._format_reviews_section(reviews_data)
+            reviews_section = await self._format_reviews_section(reviews_data, title)
             if reviews_section:
                 lines.append(reviews_section)
         
