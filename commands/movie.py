@@ -7731,21 +7731,13 @@ async def execute_movie_reviews(query, context, movie_id: int):
             await message.edit_text(f"❌ 未找到电影《{movie_title}》的评价信息")
             return
         
-        # 格式化评价列表
-        result_text = movie_service.format_reviews_list(reviews_data)
-        
-        # 检查是否需要使用Telegraph（更积极的触发条件）
+        # 直接判断是否需要Telegraph，不使用format_reviews_list
         reviews_count = len(reviews_data.get("results", []))
         avg_review_length = sum(len(r.get("content", "")) for r in reviews_data.get("results", [])) / max(reviews_count, 1)
-        
-        # 更积极的Telegraph触发条件：
-        # 1. 消息长度超过2500字符
-        # 2. 有2条以上评价且平均长度超过400字符
-        # 3. 有任何单条评价超过800字符
         max_single_review = max((len(r.get("content", "")) for r in reviews_data.get("results", [])), default=0)
         
+        # Telegraph触发条件：有2条以上评价且平均长度超过400字符 或 有任何单条评价超过800字符
         should_use_telegraph = (
-            len(result_text) > 2500 or 
             (reviews_count >= 2 and avg_review_length > 400) or
             max_single_review > 800
         )
@@ -7757,15 +7749,12 @@ async def execute_movie_reviews(query, context, movie_id: int):
             
             if telegraph_url:
                 # 发送包含Telegraph链接和简短预览的消息
-                reviews_count = len(reviews_data.get("results", []))
-                
-                # 创建简短的预览版本（只显示前2条评价的更短预览）
                 preview_lines = ["📝 *用户评价预览*\n"]
                 for i, review in enumerate(reviews_data.get("results", [])[:2], 1):
                     author = review.get("author", "匿名用户")
                     content = review.get("content", "")
                     rating = review.get("author_details", {}).get("rating")
-                    source = review.get("source", "tmdb")  # 获取来源信息
+                    source = review.get("source", "tmdb")
                     
                     # 语言检测
                     chinese_chars = len([c for c in content if '\u4e00' <= c <= '\u9fff'])
@@ -7790,39 +7779,37 @@ async def execute_movie_reviews(query, context, movie_id: int):
                 if reviews_count > 2:
                     preview_lines.append(f"... 还有 {reviews_count - 2} 条评价")
                 
-                # 添加返回按钮
-                return_keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
-                ])
-                
                 preview_lines.extend([
                     "",
                     f"📊 *总共 {reviews_count} 条评价*",
-                    f"📄 **完整评价内容**: 由于内容较长，已生成Telegraph页面",
-                    f"🔗 **查看完整评价**: {telegraph_url}",
+                    f"🔗 **完整评价内容**: {telegraph_url}",
                     "",
                     f"💡 点击选择查看电影详情"
                 ])
                 
                 summary_text = "\n".join(preview_lines)
+                return_keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
+                ])
                 await message.edit_text(
                     foldable_text_with_markdown_v2(summary_text),
                     parse_mode=ParseMode.MARKDOWN_V2,
                     reply_markup=return_keyboard
                 )
             else:
-                # Telegraph发布失败，发送截断的消息
-                truncated_text = result_text[:TELEGRAM_MESSAGE_LIMIT - 200] + "\n\n⚠️ 内容过长已截断，完整评价请查看详情页面"
+                # Telegraph创建失败，使用format_reviews_list
+                result_text = movie_service.format_reviews_list(reviews_data)
                 return_keyboard = InlineKeyboardMarkup([
                     [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
                 ])
                 await message.edit_text(
-                    foldable_text_with_markdown_v2(truncated_text),
+                    foldable_text_with_markdown_v2(result_text),
                     parse_mode=ParseMode.MARKDOWN_V2,
                     reply_markup=return_keyboard
                 )
         else:
-            # 直接发送格式化的评价列表
+            # 直接使用format_reviews_list（内容不长）
+            result_text = movie_service.format_reviews_list(reviews_data)
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
             ])
