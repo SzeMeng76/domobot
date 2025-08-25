@@ -108,16 +108,24 @@ async def unified_text_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     # 快速检查是否有任何活动会话
     # 延迟导入避免循环导入
     global map_session_manager, flight_session_manager, person_session_manager, movie_session_manager, tv_session_manager
+    global map_text_handler_core, flight_text_handler_core, person_text_handler_core, movie_text_handler_core, tv_text_handler_core
     
     if map_session_manager is None:
-        from commands.map import map_session_manager as _map_sm
-        from commands.flight import flight_session_manager as _flight_sm
-        from commands.movie import person_session_manager as _person_sm, movie_session_manager as _movie_sm, tv_session_manager as _tv_sm
+        from commands.map import map_session_manager as _map_sm, map_text_handler_core as _map_core
+        from commands.flight import flight_session_manager as _flight_sm, flight_text_handler_core as _flight_core
+        from commands.movie import person_session_manager as _person_sm, person_text_handler_core as _person_core
+        from commands.movie import movie_session_manager as _movie_sm, movie_text_handler_core as _movie_core
+        from commands.movie import tv_session_manager as _tv_sm, tv_text_handler_core as _tv_core
         map_session_manager = _map_sm
         flight_session_manager = _flight_sm
         person_session_manager = _person_sm
         movie_session_manager = _movie_sm
         tv_session_manager = _tv_sm
+        map_text_handler_core = _map_core
+        flight_text_handler_core = _flight_core
+        person_text_handler_core = _person_core
+        movie_text_handler_core = _movie_core
+        tv_text_handler_core = _tv_core
     
     # 检查是否有任何活动会话
     has_active_session = (
