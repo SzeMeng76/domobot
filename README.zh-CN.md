@@ -22,7 +22,7 @@
 - 🍳 **烹饪助手:** 菜谱搜索、分类浏览、智能膳食规划和每日菜单推荐
 - 🎭 **表情包娱乐:** 随机表情包获取，AI生成描述增强理解，支持自定义数量（1-20），智能重试确保优质内容，自动删除和智能缓存
 - 📊 **股票金融:** 实时股票价格查询、15类排行榜（涨跌幅、科技股、基金）、分析师评级、财务报表、多市场支持（美/港/沪/马），智能搜索支持股票代码和公司名称
-- 🆔 **快速命令:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`, `/dns`, `/recipe`, `/recipe_category`, `/recipe_random`, `/what_to_eat`, `/meal_plan`, `/meme`, `/finance`
+- 🆔 **快速命令:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`, `/dns`, `/recipe`, `/meme`, `/finance`
 - 👥 **群组友好:** 在任意 Telegram 群组中都可使用，无需白名单申请
 - 🔧 **自助服务:** 如果新命令不在输入建议中显示，请使用 `/refresh` 刷新
 
@@ -171,15 +171,10 @@ docker-compose down
 /whois .com               # TLD信息，包含IANA数据
 /dns github.com           # 仅DNS记录查询（A、AAAA、MX、NS、CNAME、TXT、SOA、PTR）
 
-# 烹饪助手（菜谱搜索与膳食规划）
-/recipe 红烧肉             # 通过菜名或食材搜索菜谱
-/recipe_category          # 按分类浏览菜谱（荤菜、素菜、主食等）
-/recipe_category 荤菜      # 查看指定分类的菜谱
-/recipe_random            # 获取随机菜谱推荐
-/what_to_eat              # 每日菜单推荐（选择用餐人数）
-/what_to_eat 4            # 为4人推荐今日菜单
-/meal_plan                # 智能膳食规划（选择用餐人数）
-/meal_plan 3 虾 香菜       # 为3人智能规划膳食，避开虾和香菜
+# 烹饪助手（统一菜谱界面）
+/recipe                   # 交互式菜单，包含所有烹饪功能
+/recipe 红烧肉             # 直接搜索菜谱（按菜名或食材）
+# 菜单功能包括：菜谱搜索、分类浏览、随机推荐、每日菜单规划、智能膳食规划
 
 # 表情包娱乐
 /meme 3                  # 获取3个随机表情包

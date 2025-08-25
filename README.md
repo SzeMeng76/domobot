@@ -22,7 +22,7 @@ Read this in other languages: [简体中文](./README.zh-CN.md)
 - 🍳 **Cooking Assistant:** Recipe search, categorized browsing, intelligent meal planning, and daily menu recommendations
 - 🎭 **Memes & Entertainment:** Random meme fetching with AI-generated descriptions, custom quantities (1-20), smart retry for quality content, auto-deletion, and intelligent caching
 - 📊 **Finance & Stocks:** Real-time stock prices, 15 ranking categories (gainers/losers, tech stocks, funds), analyst recommendations, financial statements, multi-market support (US/HK/CN/MY), intelligent search by symbol or company name
-- 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`, `/dns`, `/recipe`, `/recipe_category`, `/recipe_random`, `/what_to_eat`, `/meal_plan`, `/meme`, `/finance`
+- 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`, `/dns`, `/recipe`, `/meme`, `/finance`
 - 👥 **Group Friendly:** Works in any Telegram group without requiring whitelist approval
 - 🔧 **Self-Service:** Use `/refresh` if new commands don't appear in your input suggestions
 
@@ -171,15 +171,10 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /whois .com               # TLD information with IANA data
 /dns github.com           # DNS records only (A, AAAA, MX, NS, CNAME, TXT, SOA, PTR)
 
-# Cooking Assistant (Recipe & Meal Planning)
-/recipe 红烧肉             # Search recipes by name or ingredients
-/recipe_category          # Browse recipes by category (荤菜, 素菜, 主食, etc.)
-/recipe_category 荤菜      # View recipes in specific category
-/recipe_random            # Get random recipe recommendations
-/what_to_eat              # Daily menu recommendations (select people count)
-/what_to_eat 4            # Daily menu for 4 people
-/meal_plan                # Intelligent meal planning (select people count)
-/meal_plan 3 虾 香菜       # Smart meal planning for 3 people, avoiding shrimp and cilantro
+# Cooking Assistant (Unified Recipe Interface)
+/recipe                   # Interactive menu with all cooking features
+/recipe 红烧肉             # Direct search for recipes by name or ingredients
+# Menu includes: Recipe search, category browsing, random recommendations, daily menu planning, smart meal planning
 
 # Memes & Entertainment
 /meme 3                  # Get 3 random memes
