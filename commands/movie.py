@@ -2410,7 +2410,7 @@ class MovieService:
         
         return "\n".join(lines)
     
-    def format_tv_details(self, detail_data: Dict) -> tuple:
+    async def format_tv_details(self, detail_data: Dict) -> tuple:
         """格式化电视剧详情，返回(文本内容, 海报URL)"""
         if not detail_data:
             return "❌ 获取电视剧详情失败", None
@@ -3274,7 +3274,7 @@ class MovieService:
         
         return "\n".join(lines)
     
-    def format_movie_details(self, detail_data: Dict) -> tuple:
+    async def format_movie_details(self, detail_data: Dict) -> tuple:
         """格式化电影详情，返回(文本内容, 海报URL)"""
         if not detail_data:
             return "❌ 获取电影详情失败", None
