@@ -4715,7 +4715,7 @@ async def _execute_movie_details_from_menu(update: Update, context: ContextTypes
     try:
         detail_data = await movie_service.get_movie_details(movie_id)
         if detail_data:
-            result_text, poster_url = movie_service.format_movie_details(detail_data)
+            result_text, poster_url = await movie_service.format_movie_details(detail_data)
             function_keyboard = create_movie_function_keyboard(movie_id)
             
             if poster_url:
@@ -4786,7 +4786,7 @@ async def _execute_tv_details_from_menu(update: Update, context: ContextTypes.DE
                 if enhanced_providers.get("justwatch_media_entry"):
                     detail_data["justwatch_media_entry"] = enhanced_providers["justwatch_media_entry"]
             
-            result_text, poster_url = movie_service.format_tv_details(detail_data)
+            result_text, poster_url = await movie_service.format_tv_details(detail_data)
             function_keyboard = create_tv_function_keyboard(tv_id)
             
             if poster_url:
@@ -5383,7 +5383,7 @@ async def movie_detail_command(update: Update, context: ContextTypes.DEFAULT_TYP
             # 保存处理完的完整数据到session缓存
             movie_search_sessions[user_id]["current_movie_processed_data"] = detail_data
             
-            result_text, poster_url = movie_service.format_movie_details(detail_data)
+            result_text, poster_url = await movie_service.format_movie_details(detail_data)
             
             # 创建功能按钮
             function_keyboard = create_movie_function_keyboard(movie_id)
@@ -5784,7 +5784,7 @@ async def tv_detail_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             # 保存处理完的完整数据到session缓存
             tv_search_sessions[user_id]["current_tv_processed_data"] = detail_data
             
-            result_text, poster_url = movie_service.format_tv_details(detail_data)
+            result_text, poster_url = await movie_service.format_tv_details(detail_data)
             
             # 创建功能按钮
             function_keyboard = create_tv_function_keyboard(tv_id)
@@ -6018,7 +6018,7 @@ async def movie_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                         if enhanced_providers.get("justwatch_media_entry"):
                             detail_data["justwatch_media_entry"] = enhanced_providers["justwatch_media_entry"]
                     
-                    result_text, poster_url = movie_service.format_movie_details(detail_data)
+                    result_text, poster_url = await movie_service.format_movie_details(detail_data)
                     
                     # 创建功能按钮
                     function_keyboard = create_movie_function_keyboard(movie_id)
@@ -6184,7 +6184,7 @@ async def tv_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                         if enhanced_providers.get("justwatch_media_entry"):
                             detail_data["justwatch_media_entry"] = enhanced_providers["justwatch_media_entry"]
                     
-                    result_text, poster_url = movie_service.format_tv_details(detail_data)
+                    result_text, poster_url = await movie_service.format_tv_details(detail_data)
                     
                     # 创建功能按钮
                     function_keyboard = create_tv_function_keyboard(tv_id)
@@ -7933,7 +7933,7 @@ async def show_movie_details_with_functions(query, context, movie_id: int):
             else:
                 logger.info(f"使用已处理的完整电影数据: {movie_id}")
             
-            result_text, poster_url = movie_service.format_movie_details(detail_data)
+            result_text, poster_url = await movie_service.format_movie_details(detail_data)
             function_keyboard = create_movie_function_keyboard(movie_id)
             
             if poster_url:
@@ -8648,7 +8648,7 @@ async def show_tv_details_with_functions(query, context, tv_id: int):
             else:
                 logger.info(f"使用已处理的完整TV数据: {tv_id}")
             
-            result_text, poster_url = movie_service.format_tv_details(detail_data)
+            result_text, poster_url = await movie_service.format_tv_details(detail_data)
             function_keyboard = create_tv_function_keyboard(tv_id)
             
             if poster_url:
