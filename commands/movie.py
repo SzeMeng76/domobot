@@ -1873,8 +1873,8 @@ class MovieService:
         
         return None
     
-    async def _format_reviews_section(self, reviews_data: Dict, title: str = "未知") -> str:
-        """格式化评价部分 - 统一Telegraph逻辑，跟execute一样"""
+    def _format_reviews_section(self, reviews_data: Dict) -> str:
+        """格式化评价部分"""
         if not reviews_data or not reviews_data.get("results"):
             return ""
         
@@ -1882,77 +1882,23 @@ class MovieService:
         if not reviews:
             return ""
         
-        # 检查是否需要使用Telegraph（跟execute一样的触发条件）
-        reviews_count = len(reviews)
-        avg_review_length = sum(len(r.get("content", "")) for r in reviews) / max(reviews_count, 1)
-        max_single_review = max((len(r.get("content", "")) for r in reviews), default=0)
+        # 分别筛选TMDB和Trakt评论
+        tmdb_reviews = [r for r in reviews if r.get("source", "tmdb") == "tmdb"]
+        trakt_reviews = [r for r in reviews if r.get("source") == "trakt"]
         
-        # Telegraph触发条件（跟execute一样）：
-        # 1. 有2条以上评价且平均长度超过400字符
-        # 2. 有任何单条评价超过800字符
-        should_use_telegraph = (
-            (reviews_count >= 2 and avg_review_length > 400) or
-            max_single_review > 800
-        )
+        # 选择显示的评论：1个TMDB + 1个Trakt
+        selected_reviews = []
+        if tmdb_reviews:
+            selected_reviews.append(tmdb_reviews[0])
+        if trakt_reviews:
+            selected_reviews.append(trakt_reviews[0])
         
-        if should_use_telegraph:
-            # 创建Telegraph页面 - 跟execute完全一样的逻辑
-            try:
-                telegraph_content = self.format_reviews_for_telegraph({"results": reviews}, title)
-                telegraph_url = await self.create_telegraph_page(f"{title} - 用户评价", telegraph_content)
-                
-                if telegraph_url:
-                    # 创建包含Telegraph链接和简短预览的内容 - 跟execute一样
-                    preview_lines = ["", "📝 *用户评价*"]
-                    
-                    # 显示前1条评价作为预览
-                    if reviews:
-                        review = reviews[0]
-                        author = review.get("author", "匿名用户")
-                        content = review.get("content", "")
-                        rating = review.get("author_details", {}).get("rating")
-                        source = review.get("source", "tmdb")
-                        
-                        # 语言检测
-                        chinese_chars = len([c for c in content if '\u4e00' <= c <= '\u9fff'])
-                        is_chinese = chinese_chars > len(content) * 0.3
-                        lang_flag = "🇨🇳" if is_chinese else "🇺🇸"
-                        
-                        # 来源标识
-                        source_flag = "📺" if source == "trakt" else "🎬"
-                        source_text = "Trakt" if source == "trakt" else "TMDB"
-                        
-                        # 短预览，最多100字符
-                        content_preview = content[:100] + "..." if len(content) > 100 else content
-                        content_preview = content_preview.replace('\n', ' ').replace('\r', ' ')
-                        
-                        rating_text = f" ({rating}/10)" if rating else ""
-                        preview_lines.extend([
-                            "",
-                            f"👤 *{author}*{rating_text} {lang_flag}{source_flag} _({source_text})_:",
-                            f"   _{content_preview}_",
-                        ])
-                    
-                    if reviews_count > 1:
-                        preview_lines.append(f"... 还有 {reviews_count - 1} 条评价")
-                    
-                    # 添加实际的Telegraph链接 - 跟execute完全一样
-                    preview_lines.extend([
-                        "",
-                        f"📊 *共 {reviews_count} 条评价*",
-                        f"📄 **完整评价内容**: 由于内容较长，已生成Telegraph页面",
-                        f"🔗 **查看完整评价**: {telegraph_url}"
-                    ])
-                    
-                    return "\n".join(preview_lines)
-            except Exception as e:
-                logger.warning(f"创建Telegraph页面失败: {e}")
-                # 如果Telegraph创建失败，使用简单预览
-                pass
+        # 如果没有足够的评论，补充其他评论
+        if len(selected_reviews) < 2:
+            for review in reviews:
+                if review not in selected_reviews and len(selected_reviews) < 2:
+                    selected_reviews.append(review)
         
-        # Telegraph创建失败时的回退逻辑，或内容较短时的直接显示
-        # 选择显示前2条评价
-        selected_reviews = reviews[:2]
         if not selected_reviews:
             return ""
         
@@ -1962,19 +1908,20 @@ class MovieService:
             author = review.get("author", "匿名用户")
             content = review.get("content", "")
             rating = review.get("author_details", {}).get("rating")
-            source = review.get("source", "tmdb")
+            source = review.get("source", "tmdb")  # 默认为TMDB
             
             if content:
                 # 截取评价内容，最多200字符
                 content_preview = content[:200] + "..." if len(content) > 200 else content
+                # 替换换行符为空格
                 content_preview = content_preview.replace('\n', ' ').replace('\r', ' ')
                 
-                # 语言检测
+                # 简单检测语言（基于字符特征）
                 chinese_chars = len([c for c in content if '\u4e00' <= c <= '\u9fff'])
-                is_chinese = chinese_chars > len(content) * 0.3
-                lang_flag = "🇨🇳" if is_chinese else "🇺🇸"
+                is_chinese = chinese_chars > len(content) * 0.3  # 如果中文字符超过30%认为是中文
                 
-                # 来源标识
+                # 语言标识和来源标识
+                lang_flag = "🇨🇳" if is_chinese else "🇺🇸"
                 source_flag = "📺" if source == "trakt" else "🎬"
                 source_text = "Trakt" if source == "trakt" else "TMDB"
                 
@@ -2410,7 +2357,7 @@ class MovieService:
         
         return "\n".join(lines)
     
-    async def format_tv_details(self, detail_data: Dict) -> tuple:
+    def format_tv_details(self, detail_data: Dict) -> tuple:
         """格式化电视剧详情，返回(文本内容, 海报URL)"""
         if not detail_data:
             return "❌ 获取电视剧详情失败", None
@@ -2571,7 +2518,7 @@ class MovieService:
         # 添加用户评价
         reviews_data = detail_data.get("reviews")
         if reviews_data:
-            reviews_section = await self._format_reviews_section(reviews_data, name)
+            reviews_section = self._format_reviews_section(reviews_data)
             if reviews_section:
                 lines.append(reviews_section)
         
@@ -3274,7 +3221,7 @@ class MovieService:
         
         return "\n".join(lines)
     
-    async def format_movie_details(self, detail_data: Dict) -> tuple:
+    def format_movie_details(self, detail_data: Dict) -> tuple:
         """格式化电影详情，返回(文本内容, 海报URL)"""
         if not detail_data:
             return "❌ 获取电影详情失败", None
@@ -3407,7 +3354,7 @@ class MovieService:
         # 添加用户评价
         reviews_data = detail_data.get("reviews")
         if reviews_data:
-            reviews_section = await self._format_reviews_section(reviews_data, title)
+            reviews_section = self._format_reviews_section(reviews_data)
             if reviews_section:
                 lines.append(reviews_section)
         
@@ -4715,7 +4662,7 @@ async def _execute_movie_details_from_menu(update: Update, context: ContextTypes
     try:
         detail_data = await movie_service.get_movie_details(movie_id)
         if detail_data:
-            result_text, poster_url = await movie_service.format_movie_details(detail_data)
+            result_text, poster_url = movie_service.format_movie_details(detail_data)
             function_keyboard = create_movie_function_keyboard(movie_id)
             
             if poster_url:
@@ -4786,7 +4733,7 @@ async def _execute_tv_details_from_menu(update: Update, context: ContextTypes.DE
                 if enhanced_providers.get("justwatch_media_entry"):
                     detail_data["justwatch_media_entry"] = enhanced_providers["justwatch_media_entry"]
             
-            result_text, poster_url = await movie_service.format_tv_details(detail_data)
+            result_text, poster_url = movie_service.format_tv_details(detail_data)
             function_keyboard = create_tv_function_keyboard(tv_id)
             
             if poster_url:
@@ -5345,7 +5292,7 @@ async def movie_detail_command(update: Update, context: ContextTypes.DEFAULT_TYP
     
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=f"🔍 正在获取电影详情 \\(ID: {movie_id}\\)\\.\\.\\.",
+        text=f"🔍 正在获取电影详情 \(ID: {movie_id}\)\.\.\.",
         parse_mode=ParseMode.MARKDOWN_V2
     )
     
@@ -5383,7 +5330,7 @@ async def movie_detail_command(update: Update, context: ContextTypes.DEFAULT_TYP
             # 保存处理完的完整数据到session缓存
             movie_search_sessions[user_id]["current_movie_processed_data"] = detail_data
             
-            result_text, poster_url = await movie_service.format_movie_details(detail_data)
+            result_text, poster_url = movie_service.format_movie_details(detail_data)
             
             # 创建功能按钮
             function_keyboard = create_movie_function_keyboard(movie_id)
@@ -5746,7 +5693,7 @@ async def tv_detail_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text=f"🔍 正在获取电视剧详情 \\(ID: {tv_id}\\)\\.\\.\\.",
+        text=f"🔍 正在获取电视剧详情 \(ID: {tv_id}\)\.\.\.",
         parse_mode=ParseMode.MARKDOWN_V2
     )
     
@@ -5784,7 +5731,7 @@ async def tv_detail_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             # 保存处理完的完整数据到session缓存
             tv_search_sessions[user_id]["current_tv_processed_data"] = detail_data
             
-            result_text, poster_url = await movie_service.format_tv_details(detail_data)
+            result_text, poster_url = movie_service.format_tv_details(detail_data)
             
             # 创建功能按钮
             function_keyboard = create_tv_function_keyboard(tv_id)
@@ -6018,7 +5965,7 @@ async def movie_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                         if enhanced_providers.get("justwatch_media_entry"):
                             detail_data["justwatch_media_entry"] = enhanced_providers["justwatch_media_entry"]
                     
-                    result_text, poster_url = await movie_service.format_movie_details(detail_data)
+                    result_text, poster_url = movie_service.format_movie_details(detail_data)
                     
                     # 创建功能按钮
                     function_keyboard = create_movie_function_keyboard(movie_id)
@@ -6184,7 +6131,7 @@ async def tv_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                         if enhanced_providers.get("justwatch_media_entry"):
                             detail_data["justwatch_media_entry"] = enhanced_providers["justwatch_media_entry"]
                     
-                    result_text, poster_url = await movie_service.format_tv_details(detail_data)
+                    result_text, poster_url = movie_service.format_tv_details(detail_data)
                     
                     # 创建功能按钮
                     function_keyboard = create_tv_function_keyboard(tv_id)
@@ -7521,7 +7468,7 @@ async def execute_movie_recommendations(query, context, movie_id: int):
     
     # 先编辑为"正在获取..."消息（对应movieold第5053-5057行）
     message = query.message
-    await message.edit_text(f"🔍 正在获取电影推荐 \\(ID: {movie_id}\\)\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await message.edit_text(f"🔍 正在获取电影推荐 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
     
     try:
         recommendations = await movie_service.get_movie_recommendations(movie_id)
@@ -7567,7 +7514,7 @@ async def execute_movie_videos(query, context, movie_id: int):
     
     # 先编辑为"正在获取..."消息（对应movieold第5820-5824行）
     message = query.message
-    await message.edit_text(f"🔍 正在获取电影视频 \\(ID: {movie_id}\\)\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await message.edit_text(f"🔍 正在获取电影视频 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
     
     try:
         videos_data = await movie_service._get_videos_data("movie", movie_id)
@@ -7610,11 +7557,7 @@ async def execute_movie_reviews(query, context, movie_id: int):
     
     # 先编辑为"正在获取..."消息（对应movieold第6277-6281行）
     message = query.message
-    try:
-        await message.edit_text(f"🔍 正在获取电影评价 \\(ID: {movie_id}\\)\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
-    except Exception:
-        # 如果是图片消息，使用edit_caption
-        await message.edit_caption(caption=f"🔍 正在获取电影评价 \\(ID: {movie_id}\\)\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await message.edit_text(f"🔍 正在获取电影评价 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
     
     try:
         # 获取电影基本信息
@@ -7937,7 +7880,7 @@ async def show_movie_details_with_functions(query, context, movie_id: int):
             else:
                 logger.info(f"使用已处理的完整电影数据: {movie_id}")
             
-            result_text, poster_url = await movie_service.format_movie_details(detail_data)
+            result_text, poster_url = movie_service.format_movie_details(detail_data)
             function_keyboard = create_movie_function_keyboard(movie_id)
             
             if poster_url:
@@ -8652,7 +8595,7 @@ async def show_tv_details_with_functions(query, context, tv_id: int):
             else:
                 logger.info(f"使用已处理的完整TV数据: {tv_id}")
             
-            result_text, poster_url = await movie_service.format_tv_details(detail_data)
+            result_text, poster_url = movie_service.format_tv_details(detail_data)
             function_keyboard = create_tv_function_keyboard(tv_id)
             
             if poster_url:
