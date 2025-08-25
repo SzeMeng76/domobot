@@ -1873,8 +1873,8 @@ class MovieService:
         
         return None
     
-    def _format_reviews_section(self, reviews_data: Dict, title: str = "未知") -> str:
-        """格式化评价部分 - 直接使用Telegraph逻辑"""
+    def _format_reviews_section(self, reviews_data: Dict) -> str:
+        """格式化评价部分"""
         if not reviews_data or not reviews_data.get("results"):
             return ""
         
@@ -1882,61 +1882,6 @@ class MovieService:
         if not reviews:
             return ""
         
-        # 检查是否需要使用Telegraph（更积极的触发条件）
-        reviews_count = len(reviews)
-        avg_review_length = sum(len(r.get("content", "")) for r in reviews) / max(reviews_count, 1)
-        max_single_review = max((len(r.get("content", "")) for r in reviews), default=0)
-        
-        # Telegraph触发条件：有2条以上评价且平均长度超过400字符 或 有任何单条评价超过800字符
-        should_use_telegraph = (
-            (reviews_count >= 2 and avg_review_length > 400) or
-            max_single_review > 800
-        )
-        
-        if should_use_telegraph:
-            # 创建简短的预览版本（只显示前1条评价的更短预览）
-            preview_lines = ["", "📝 *用户评价预览*"]
-            
-            if reviews:
-                review = reviews[0]
-                author = review.get("author", "匿名用户")
-                content = review.get("content", "")
-                rating = review.get("author_details", {}).get("rating")
-                source = review.get("source", "tmdb")
-                
-                # 语言检测
-                chinese_chars = len([c for c in content if '\u4e00' <= c <= '\u9fff'])
-                is_chinese = chinese_chars > len(content) * 0.3
-                lang_flag = "🇨🇳" if is_chinese else "🇺🇸"
-                
-                # 来源标识
-                source_flag = "📺" if source == "trakt" else "🎬"
-                source_text = "Trakt" if source == "trakt" else "TMDB"
-                
-                # 短预览，最多100字符
-                content_preview = content[:100] + "..." if len(content) > 100 else content
-                content_preview = content_preview.replace('\n', ' ').replace('\r', ' ')
-                
-                rating_text = f" ({rating}/10)" if rating else ""
-                preview_lines.extend([
-                    "",
-                    f"👤 *{author}*{rating_text} {lang_flag}{source_flag} _({source_text})_:",
-                    f"   _{content_preview}_",
-                    ""
-                ])
-            
-            if reviews_count > 1:
-                preview_lines.append(f"... 还有 {reviews_count - 1} 条评价")
-            
-            preview_lines.extend([
-                "",
-                f"📊 *总共 {reviews_count} 条评价*",
-                f"🔗 **完整评价内容**: 由于内容较长，请点击下方'用户评价'按钮查看",
-            ])
-            
-            return "\n".join(preview_lines)
-        
-        # 内容较短，直接显示（和原来一样）
         # 分别筛选TMDB和Trakt评论
         tmdb_reviews = [r for r in reviews if r.get("source", "tmdb") == "tmdb"]
         trakt_reviews = [r for r in reviews if r.get("source") == "trakt"]
@@ -1963,15 +1908,17 @@ class MovieService:
             author = review.get("author", "匿名用户")
             content = review.get("content", "")
             rating = review.get("author_details", {}).get("rating")
-            source = review.get("source", "tmdb")
+            source = review.get("source", "tmdb")  # 默认为TMDB
             
             if content:
-                # 内容不长，不截断
-                content_display = content.replace('\n', ' ').replace('\r', ' ')
+                # 截取评价内容，最多200字符
+                content_preview = content[:200] + "..." if len(content) > 200 else content
+                # 替换换行符为空格
+                content_preview = content_preview.replace('\n', ' ').replace('\r', ' ')
                 
-                # 简单检测语言
+                # 简单检测语言（基于字符特征）
                 chinese_chars = len([c for c in content if '\u4e00' <= c <= '\u9fff'])
-                is_chinese = chinese_chars > len(content) * 0.3
+                is_chinese = chinese_chars > len(content) * 0.3  # 如果中文字符超过30%认为是中文
                 
                 # 语言标识和来源标识
                 lang_flag = "🇨🇳" if is_chinese else "🇺🇸"
@@ -1982,7 +1929,7 @@ class MovieService:
                 
                 lines.append(f"")
                 lines.append(f"👤 *{author}*{rating_text} {lang_flag}{source_flag} _({source_text})_:")
-                lines.append(f"_{content_display}_")
+                lines.append(f"_{content_preview}_")
         
         return "\n".join(lines) if len(lines) > 2 else ""
     
@@ -2289,10 +2236,10 @@ class MovieService:
             lines.append(f"   _{content_preview}_")
             lines.append("")
         
-        # 如果有内容被截断，说明需要Telegraph，添加提示信息
+        # 如果有内容被截断，添加提示信息
         if has_truncated:
-            lines.append("📊 *评价内容较长*")
-            lines.append("🔗 **完整评价内容**: 请点击详情页面'用户评价'按钮查看Telegraph完整版本")
+            lines.append("📄 *部分评价内容已截断*")
+            lines.append("💡 点击电影/电视剧详情页面的'用户评价'按钮查看完整评价内容")
         
         return "\n".join(lines)
     
@@ -2571,7 +2518,7 @@ class MovieService:
         # 添加用户评价
         reviews_data = detail_data.get("reviews")
         if reviews_data:
-            reviews_section = self._format_reviews_section(reviews_data, name)
+            reviews_section = self._format_reviews_section(reviews_data)
             if reviews_section:
                 lines.append(reviews_section)
         
@@ -3407,7 +3354,7 @@ class MovieService:
         # 添加用户评价
         reviews_data = detail_data.get("reviews")
         if reviews_data:
-            reviews_section = self._format_reviews_section(reviews_data, title)
+            reviews_section = self._format_reviews_section(reviews_data)
             if reviews_section:
                 lines.append(reviews_section)
         
