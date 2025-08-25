@@ -14,7 +14,7 @@ from telegram.ext import ContextTypes
 from utils.command_factory import command_factory
 from utils.config_manager import get_config
 from utils.formatter import foldable_text_v2, foldable_text_with_markdown_v2
-from utils.message_manager import delete_user_command, send_error, send_success
+from utils.message_manager import delete_user_command, send_error, send_success, send_message_with_auto_delete
 from utils.permissions import Permission
 from utils.session_manager import app_search_sessions as recipe_search_sessions
 
@@ -264,25 +264,48 @@ async def recipe_search_command(update: Update, context: ContextTypes.DEFAULT_TY
         
     # 检查参数
     if not context.args:
-        help_text = """🍳 菜谱搜索帮助
+        # 显示主菜单按钮而不是帮助文本
+        keyboard = [
+            [
+                InlineKeyboardButton("🔍 搜索菜谱", callback_data="recipe_menu_search"),
+                InlineKeyboardButton("📋 分类查看", callback_data="recipe_menu_category")
+            ],
+            [
+                InlineKeyboardButton("🎲 随机推荐", callback_data="recipe_menu_random"),
+                InlineKeyboardButton("🍽️ 今天吃什么", callback_data="recipe_menu_what_to_eat")
+            ],
+            [
+                InlineKeyboardButton("🧩 智能推荐", callback_data="recipe_menu_meal_plan")
+            ],
+            [
+                InlineKeyboardButton("❌ 关闭", callback_data="cooking_close")
+            ]
+        ]
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        main_text = """🍳 菜谱助手
 
-使用方法:
-• /recipe 红烧肉 - 搜索菜谱
-• /recipe_category 荤菜 - 按分类查看
-• /recipe_random - 随机菜谱  
-• /what_to_eat 4 - 今天吃什么
-• /meal_plan 3 虾 香菜 - 智能推荐
+🔍 功能介绍:
+• **搜索菜谱**: 按名称、食材搜索
+• **分类查看**: 按荤菜、素菜等分类浏览
+• **随机推荐**: 随机获取菜谱灵感
+• **今天吃什么**: 根据人数智能推荐
+• **智能推荐**: 考虑过敏忌口的个性化推荐
 
-📋 可用分类: 荤菜、素菜、主食、汤羹、水产、早餐、甜品等
-        """
-        message = await context.bot.send_message(
+💡 快速使用:
+`/recipe 红烧肉` - 直接搜索菜谱
+
+请选择功能:"""
+        
+        await send_message_with_auto_delete(
+            context=context,
             chat_id=update.message.chat_id,
-            text=f"✅ {help_text}"
+            text=foldable_text_with_markdown_v2(main_text),
+            parse_mode="MarkdownV2",
+            reply_markup=reply_markup
         )
-        # 调度自动删除帮助信息
-        from utils.config_manager import get_config
-        config = get_config()
-        await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
+        
         await delete_user_command(context, update.message.chat_id, update.message.message_id)
         return
         
@@ -1137,6 +1160,292 @@ def format_recipe_for_telegraph(recipe: Dict[str, Any]) -> str:
     return content
 
 # =============================================================================
+# 主菜单回调处理器
+# =============================================================================
+
+async def recipe_menu_search_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理搜索菜谱按钮"""
+    query = update.callback_query
+    await query.answer("请在命令后输入菜谱名称，如: /recipe 红烧肉")
+    
+    help_text = """🔍 菜谱搜索说明
+
+请使用以下格式搜索菜谱:
+`/recipe [菜谱名称或食材]`
+
+**示例:**
+• `/recipe 红烧肉` - 搜索红烧肉做法
+• `/recipe 鸡蛋` - 搜索含鸡蛋的菜谱
+• `/recipe 番茄` - 搜索番茄相关菜谱
+• `/recipe 汤` - 搜索各种汤类
+
+**搜索范围:**
+• 菜谱名称匹配
+• 主要食材匹配
+• 标签匹配
+
+请发送新消息进行搜索"""
+
+    keyboard = [[InlineKeyboardButton("🔙 返回主菜单", callback_data="recipe_main_menu")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(
+        text=foldable_text_with_markdown_v2(help_text),
+        parse_mode="MarkdownV2",
+        reply_markup=reply_markup
+    )
+
+async def recipe_menu_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理分类查看按钮"""
+    query = update.callback_query
+    await query.answer("正在加载分类...")
+    
+    # 直接调用原有的分类命令逻辑，但需要修改消息处理方式
+    loading_message = "📋 正在加载分类信息... ⏳"
+    await query.edit_message_text(
+        text=foldable_text_v2(loading_message),
+        parse_mode="MarkdownV2"
+    )
+    
+    try:
+        if not await cooking_service.load_recipes_data():
+            await query.edit_message_text(
+                foldable_text_v2("❌ 无法获取分类信息"),
+                parse_mode="MarkdownV2"
+            )
+            return
+            
+        # 创建分类按钮
+        categories = sorted(cooking_service.categories)
+        keyboard = []
+        
+        category_emojis = {
+            "主食": "🍚", "荤菜": "🥩", "素菜": "🥬", "水产": "🐟",
+            "汤": "🍲", "早餐": "🥐", "甜品": "🍰", "饮品": "🥤",
+            "调料": "🧂", "半成品加工": "📦"
+        }
+        
+        for i in range(0, len(categories), 3):
+            row = []
+            for j in range(3):
+                if i + j < len(categories):
+                    cat = categories[i + j]
+                    emoji = category_emojis.get(cat, "📋")
+                    button = InlineKeyboardButton(
+                        text=f"{emoji} {cat}",
+                        callback_data=f"recipe_category_select:{cat}"
+                    )
+                    row.append(button)
+            keyboard.append(row)
+        
+        keyboard.append([InlineKeyboardButton("🔙 返回主菜单", callback_data="recipe_main_menu")])
+        keyboard.append([InlineKeyboardButton("❌ 关闭", callback_data="cooking_close")])
+            
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        help_text = "📋 菜谱分类\n\n请选择要查看的分类:"
+        
+        await query.edit_message_text(
+            text=foldable_text_with_markdown_v2(help_text),
+            parse_mode="MarkdownV2",
+            reply_markup=reply_markup
+        )
+        
+    except Exception as e:
+        logger.error(f"加载分类信息时发生错误: {e}", exc_info=True)
+        await query.edit_message_text(
+            foldable_text_v2(f"❌ 加载时发生错误: {str(e)}"),
+            parse_mode="MarkdownV2"
+        )
+
+async def recipe_menu_random_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理随机推荐按钮"""
+    query = update.callback_query
+    await query.answer("正在随机推荐菜谱...")
+    
+    loading_message = "🎲 正在为您随机挑选菜谱... ⏳"
+    await query.edit_message_text(
+        text=foldable_text_v2(loading_message),
+        parse_mode="MarkdownV2"
+    )
+    
+    try:
+        if not await cooking_service.load_recipes_data():
+            await query.edit_message_text(
+                foldable_text_v2("❌ 无法获取菜谱数据"), 
+                parse_mode="MarkdownV2"
+            )
+            return
+            
+        results = cooking_service.get_random_recipes(count=6)
+        
+        if not results:
+            await query.edit_message_text(
+                foldable_text_v2("❌ 暂无菜谱数据"),
+                parse_mode="MarkdownV2"
+            )
+            return
+            
+        # 创建按钮
+        keyboard = []
+        for recipe in results:
+            recipe_name = recipe.get("name", "未知菜谱")
+            recipe_id = recipe.get("id", "")
+            short_id = get_short_recipe_id(recipe_id)
+            button = InlineKeyboardButton(
+                text=f"🍽️ {recipe_name}",
+                callback_data=f"recipe_detail:{short_id}"
+            )
+            keyboard.append([button])
+            
+        keyboard.append([InlineKeyboardButton("🎲 重新随机", callback_data="recipe_random_again")])
+        keyboard.append([InlineKeyboardButton("🔙 返回主菜单", callback_data="recipe_main_menu")])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        result_text = f"🎲 随机推荐 ({len(results)} 个菜谱)\n\n请点击下方按钮查看详细信息:"
+        
+        await query.edit_message_text(
+            text=foldable_text_with_markdown_v2(result_text),
+            parse_mode="MarkdownV2",
+            reply_markup=reply_markup
+        )
+        
+    except Exception as e:
+        logger.error(f"随机推荐菜谱时发生错误: {e}", exc_info=True)
+        await query.edit_message_text(
+            foldable_text_v2(f"❌ 推荐时发生错误: {str(e)}"),
+            parse_mode="MarkdownV2"
+        )
+
+async def recipe_menu_what_to_eat_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理今天吃什么按钮"""
+    query = update.callback_query
+    await query.answer("正在准备推荐...")
+    
+    # 显示人数选择按钮
+    keyboard = []
+    # 第一行：1-3人
+    row1 = [
+        InlineKeyboardButton("1️⃣ 1人", callback_data="what_to_eat_select:1"),
+        InlineKeyboardButton("2️⃣ 2人", callback_data="what_to_eat_select:2"),
+        InlineKeyboardButton("3️⃣ 3人", callback_data="what_to_eat_select:3")
+    ]
+    keyboard.append(row1)
+    
+    # 第二行：4-6人
+    row2 = [
+        InlineKeyboardButton("4️⃣ 4人", callback_data="what_to_eat_select:4"),
+        InlineKeyboardButton("5️⃣ 5人", callback_data="what_to_eat_select:5"),
+        InlineKeyboardButton("6️⃣ 6人", callback_data="what_to_eat_select:6")
+    ]
+    keyboard.append(row2)
+    
+    # 第三行：7-10人
+    row3 = [
+        InlineKeyboardButton("7️⃣ 7人", callback_data="what_to_eat_select:7"),
+        InlineKeyboardButton("8️⃣ 8人", callback_data="what_to_eat_select:8"),
+        InlineKeyboardButton("🔟 更多", callback_data="what_to_eat_select:10")
+    ]
+    keyboard.append(row3)
+    
+    keyboard.append([InlineKeyboardButton("🔙 返回主菜单", callback_data="recipe_main_menu")])
+    keyboard.append([InlineKeyboardButton("❌ 关闭", callback_data="cooking_close")])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    help_text = "🍽️ 今天吃什么？\n\n请选择用餐人数:"
+    
+    await query.edit_message_text(
+        text=foldable_text_with_markdown_v2(help_text),
+        parse_mode="MarkdownV2",
+        reply_markup=reply_markup
+    )
+
+async def recipe_menu_meal_plan_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理智能推荐按钮"""
+    query = update.callback_query
+    await query.answer("正在准备智能推荐...")
+    
+    # 显示人数选择按钮
+    buttons = [
+        [
+            InlineKeyboardButton("1️⃣ 1人", callback_data="meal_plan_select:1"),
+            InlineKeyboardButton("2️⃣ 2人", callback_data="meal_plan_select:2"),
+            InlineKeyboardButton("3️⃣ 3人", callback_data="meal_plan_select:3")
+        ],
+        [
+            InlineKeyboardButton("4️⃣ 4人", callback_data="meal_plan_select:4"),
+            InlineKeyboardButton("5️⃣ 5人", callback_data="meal_plan_select:5"),
+            InlineKeyboardButton("6️⃣ 6人", callback_data="meal_plan_select:6")
+        ],
+        [
+            InlineKeyboardButton("7️⃣ 7人", callback_data="meal_plan_select:7"),
+            InlineKeyboardButton("8️⃣ 8人", callback_data="meal_plan_select:8"),
+            InlineKeyboardButton("🔟 更多", callback_data="meal_plan_select:10")
+        ],
+        [
+            InlineKeyboardButton("🔙 返回主菜单", callback_data="recipe_main_menu")
+        ],
+        [
+            InlineKeyboardButton("❌ 关闭", callback_data="cooking_close")
+        ]
+    ]
+    
+    reply_markup = InlineKeyboardMarkup(buttons)
+    text = "🧩 智能膳食推荐\n\n请选择用餐人数:"
+    
+    await query.edit_message_text(
+        text=foldable_text_v2(text),
+        parse_mode="MarkdownV2",
+        reply_markup=reply_markup
+    )
+
+async def recipe_main_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """返回主菜单"""
+    query = update.callback_query
+    await query.answer()
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("🔍 搜索菜谱", callback_data="recipe_menu_search"),
+            InlineKeyboardButton("📋 分类查看", callback_data="recipe_menu_category")
+        ],
+        [
+            InlineKeyboardButton("🎲 随机推荐", callback_data="recipe_menu_random"),
+            InlineKeyboardButton("🍽️ 今天吃什么", callback_data="recipe_menu_what_to_eat")
+        ],
+        [
+            InlineKeyboardButton("🧩 智能推荐", callback_data="recipe_menu_meal_plan")
+        ],
+        [
+            InlineKeyboardButton("❌ 关闭", callback_data="cooking_close")
+        ]
+    ]
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    main_text = """🍳 菜谱助手
+
+🔍 功能介绍:
+• **搜索菜谱**: 按名称、食材搜索
+• **分类查看**: 按荤菜、素菜等分类浏览
+• **随机推荐**: 随机获取菜谱灵感
+• **今天吃什么**: 根据人数智能推荐
+• **智能推荐**: 考虑过敏忌口的个性化推荐
+
+💡 快速使用:
+`/recipe 红烧肉` - 直接搜索菜谱
+
+请选择功能:"""
+    
+    await query.edit_message_text(
+        text=foldable_text_with_markdown_v2(main_text),
+        parse_mode="MarkdownV2",
+        reply_markup=reply_markup
+    )
+
+# =============================================================================
 # Callback 处理器
 # =============================================================================
 
@@ -1788,6 +2097,14 @@ command_factory.register_command("what_to_eat", what_to_eat_command, permission=
 command_factory.register_command("meal_plan", meal_plan_command, permission=Permission.NONE, description="智能膳食推荐")
 # 已迁移到统一缓存管理命令 /cleancache
 # command_factory.register_command("cooking_cleancache", cooking_clean_cache_command, permission=Permission.ADMIN, description="清理烹饪模块缓存")
+
+# 注册主菜单回调处理器
+command_factory.register_callback(r"^recipe_menu_search$", recipe_menu_search_callback, permission=Permission.NONE, description="搜索菜谱说明")
+command_factory.register_callback(r"^recipe_menu_category$", recipe_menu_category_callback, permission=Permission.NONE, description="分类查看菜谱")
+command_factory.register_callback(r"^recipe_menu_random$", recipe_menu_random_callback, permission=Permission.NONE, description="随机推荐菜谱")
+command_factory.register_callback(r"^recipe_menu_what_to_eat$", recipe_menu_what_to_eat_callback, permission=Permission.NONE, description="今天吃什么")
+command_factory.register_callback(r"^recipe_menu_meal_plan$", recipe_menu_meal_plan_callback, permission=Permission.NONE, description="智能膳食推荐")
+command_factory.register_callback(r"^recipe_main_menu$", recipe_main_menu_callback, permission=Permission.NONE, description="返回菜谱主菜单")
 
 # 注册回调处理器
 command_factory.register_callback(r"^recipe_detail:", recipe_detail_callback, permission=Permission.NONE, description="菜谱详情")
