@@ -39,7 +39,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 🎮 `/steam 赛博朋克` - 游戏价格 | 👤 `/when 123` - 用户信息
 ⏰ `/time 北京` - 时间查询 | 📰 `/news` - 新闻聚合
 🌐 `/whois google.com` - WHOIS查询 | 🔍 `/dns domain.com` - DNS记录
-🍳 `/recipe 红烧肉` - 菜谱搜索 | 🎭 `/meme 3` - 表情包
+🍳 `/recipe` - 菜谱助手 | 🎭 `/meme 3` - 表情包
 📊 `/finance AAPL` - 股票查询 | 🗺️ `/map 天安门` - 地图服务
 ✈️ `/flight 北京 洛杉矶 2024-12-25` - 智能航班搜索
 🏨 `/hotel 东京 2024-12-25 2024-12-28` - 智能酒店搜索
@@ -51,7 +51,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 ⏰ *时间* `/time <时区>` - 时间查询 | `/convert_time <源> <时间> <目标>` - 时区转换
 📰 *新闻* `/news` - 交互式选择 | `/newslist [源] [数量]` - 列表查询
 🌐 *WHOIS&DNS* `/whois <查询>` - 域名/IP/ASN/TLD信息(含DNS) | `/dns <域名>` - 仅DNS记录
-🍳 *烹饪助手* `/recipe <菜名>` - 菜谱搜索 | `/what_to_eat` - 今天吃什么 | `/meal_plan` - 智能膳食
+🍳 *烹饪助手* `/recipe` - 统一菜谱界面(搜索/分类/推荐/规划)
 📊 *股票金融* `/finance <代号/公司名>` - 实时股价查询 | `/finance` - 15类股票&基金排行榜
 🗺️ *地图服务* `/map <地点/坐标>` - 智能语言检测(中文用高德,英文用谷歌) | 位置搜索 | 附近推荐 | 路线规划
 ✈️ *智能航班* `/flight <出发地> <到达地> <日期> [返程]` - 多语言机场识别 | 实时价格 | 预订信息 | 支持中英混合输入
@@ -74,7 +74,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 🌍 *支持地区* US CN TR IN MY JP GB DE 等40+国家
 💡 *特色* 支持中文地名 | 自动CNY转换 | 智能缓存 | 表达式计算
 
-⚡ 快速试用: `/nf` `/crypto btc` `/tq 北京` `/movie 复仇者` `/tv 权力的游戏` `/chart` `/news` `/time 北京` `/whois google.com` `/dns github.com` `/recipe 红烧肉` `/what_to_eat` `/meme 3` `/finance AAPL` `/map 天安门` `/flight 北京 洛杉矶 2024-12-25` `/hotel 东京 2024-12-25 2024-12-28`"""
+⚡ 快速试用: `/nf` `/crypto btc` `/tq 北京` `/movie 复仇者` `/tv 权力的游戏` `/chart` `/news` `/time 北京` `/whois google.com` `/dns github.com` `/recipe` `/meme 3` `/finance AAPL` `/map 天安门` `/flight 北京 洛杉矶 2024-12-25` `/hotel 东京 2024-12-25 2024-12-28`"""
 
     admin_help_text = """
 
@@ -103,9 +103,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 📊 *股票金融* `/finance <代号/公司名>` - 实时股价 | `/finance` - 15类排行榜
 
 🍳 *烹饪助手*
-搜索: `/recipe <菜名>` - 智能菜谱搜索 | `/recipe_category` - 分类浏览
-推荐: `/what_to_eat` - 今天吃什么 | `/meal_plan` - 智能膳食规划
-发现: `/recipe_random` - 随机菜谱 | 支持过敏&忌口设置
+统一入口: `/recipe` - 交互式菜单，包含所有烹饪功能
+搜索: 菜谱搜索 | 分类浏览 | 随机推荐 | 今天吃什么 | 智能膳食规划
+特色: 1000+中文菜谱 | 支持过敏&忌口设置 | Telegraph完整显示
 
 🎭 *表情包娱乐*
 随机: `/meme <数量>` - 获取1-20个随机表情包 | 自动删除 | 智能缓存
@@ -113,7 +113,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 🌍 *支持地区* US CN TR IN MY JP GB DE 等40+国家
 💡 *特色* 支持中文地名 | 自动CNY转换 | 时区智能识别 | 新闻分类 | 1000+中文菜谱 | 多市场股票
 
-⚡ *快速试用* `/nf` `/ds` `/sp` `/max` `/when` `/id` `/time 北京` `/news` `/recipe 红烧肉` `/what_to_eat` `/meme 3` `/finance AAPL`
+⚡ *快速试用* `/nf` `/ds` `/sp` `/max` `/when` `/id` `/time 北京` `/news` `/recipe` `/meme 3` `/finance AAPL`
 
 🔧 *命令问题?* 如果新功能不显示，请使用 `/refresh` 刷新命令列表
 
@@ -170,7 +170,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 ⏰ 时间查询 `/time` `/convert_time` `/timezone`
 📰 新闻聚合 `/news` `/newslist` `/hotnews`
 🌐 WHOIS&DNS查询 `/whois` `/dns` - 域名/IP/ASN/TLD+DNS记录
-🍳 烹饪助手 `/recipe` `/what_to_eat` `/meal_plan`
+🍳 烹饪助手 `/recipe` - 统一菜谱界面
 🎭 表情包娱乐 `/meme` - 随机表情包获取
 📊 股票金融 `/finance` - 实时股价&15类排行榜
 
@@ -186,8 +186,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 `/convert_time 中国 14:30 美国` - 时区转换
 `/whois google.com` - WHOIS+DNS查询
 `/dns github.com` - DNS记录查询
-`/recipe 红烧肉` - 菜谱搜索
-`/what_to_eat` - 今天吃什么
+`/recipe` - 菜谱助手主菜单
+`/recipe 红烧肉` - 直接搜索菜谱
 `/finance AAPL` - 苹果股票查询
 `/finance Tesla` - 特斯拉股票搜索
 `/help` - 查看详细功能
@@ -209,7 +209,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 🚀 *快速开始*
 `/rate USD 100` `/crypto btc` `/tq 北京` `/movie 复仇者` `/tv 权力的游戏` `/chart`
-`/steam 赛博朋克` `/nf` `/time 北京` `/whois google.com` `/dns github.com` `/news` `/recipe 红烧肉` `/meme 3` `/finance AAPL` `/map 天安门` `/flight 北京 洛杉矶 2024-12-25` `/hotel 东京 2024-12-25 2024-12-28` `/help`
+`/steam 赛博朋克` `/nf` `/time 北京` `/whois google.com` `/dns github.com` `/news` `/recipe` `/meme 3` `/finance AAPL` `/map 天安门` `/flight 北京 洛杉矶 2024-12-25` `/hotel 东京 2024-12-25 2024-12-28` `/help`
 
 🌟 40+国家 | CNY转换 | 智能缓存 | 表达式计算 | 时区转换 | 新闻聚合 | 1000+中文菜谱 | 股市数据"""
 
