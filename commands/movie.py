@@ -5301,7 +5301,6 @@ async def movie_detail_command(update: Update, context: ContextTypes.DEFAULT_TYP
         if detail_data:
             # 为直接命令访问创建session数据，保存基础数据
             user_id = update.effective_user.id
-            logger.info(f"为用户 {user_id} 创建新的电影会话（直接命令访问）")
             movie_search_sessions[user_id] = {
                 "current_movie_id": movie_id,
                 "current_movie_data": detail_data.copy(),  # 保存基础数据
@@ -5330,7 +5329,6 @@ async def movie_detail_command(update: Update, context: ContextTypes.DEFAULT_TYP
             
             # 保存处理完的完整数据到session缓存
             movie_search_sessions[user_id]["current_movie_processed_data"] = detail_data
-            logger.info(f"已缓存完整电影详情数据（含JustWatch）: {movie_id}")
             
             result_text, poster_url = movie_service.format_movie_details(detail_data)
             
@@ -5704,7 +5702,6 @@ async def tv_detail_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         if detail_data:
             # 为直接命令访问创建session数据，保存基础数据
             user_id = update.effective_user.id
-            logger.info(f"为用户 {user_id} 创建新的TV会话（直接命令访问）")
             tv_search_sessions[user_id] = {
                 "current_tv_id": tv_id,
                 "current_tv_data": detail_data.copy(),  # 保存基础数据
@@ -5733,7 +5730,6 @@ async def tv_detail_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             
             # 保存处理完的完整数据到session缓存
             tv_search_sessions[user_id]["current_tv_processed_data"] = detail_data
-            logger.info(f"已缓存完整TV详情数据（含JustWatch）: {tv_id}")
             
             result_text, poster_url = movie_service.format_tv_details(detail_data)
             

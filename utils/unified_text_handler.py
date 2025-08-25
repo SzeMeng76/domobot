@@ -23,8 +23,7 @@ person_text_handler_core = None
 movie_text_handler_core = None
 tv_text_handler_core = None
 
-@with_error_handling
-async def unified_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def unified_text_handler_core(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     统一文本处理器 - 根据活动会话智能分发到对应服务
     """
@@ -95,6 +94,73 @@ async def unified_text_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     # 没有活动会话，忽略消息
     logger.debug(f"UnifiedTextHandler: No active session for user {user_id}, ignoring message")
 
+
+@with_error_handling
+async def unified_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    统一文本处理器包装器 - 只在有活动会话时进行处理
+    """
+    if not update.message or not update.message.text:
+        return
+    
+    user_id = update.effective_user.id
+    
+    # 快速检查是否有任何活动会话
+    # 延迟导入避免循环导入
+    global map_session_manager, flight_session_manager, person_session_manager, movie_session_manager, tv_session_manager
+    
+    if map_session_manager is None:
+        from commands.map import map_session_manager as _map_sm
+        from commands.flight import flight_session_manager as _flight_sm
+        from commands.movie import person_session_manager as _person_sm, movie_session_manager as _movie_sm, tv_session_manager as _tv_sm
+        map_session_manager = _map_sm
+        flight_session_manager = _flight_sm
+        person_session_manager = _person_sm
+        movie_session_manager = _movie_sm
+        tv_session_manager = _tv_sm
+    
+    # 检查是否有任何活动会话
+    has_active_session = (
+        map_session_manager.get_session(user_id) is not None or
+        flight_session_manager.get_session(user_id) is not None or
+        person_session_manager.get_session(user_id) is not None or
+        movie_session_manager.get_session(user_id) is not None or
+        tv_session_manager.get_session(user_id) is not None
+    )
+    
+    if not has_active_session:
+        logger.debug(f"UnifiedTextHandler: No active session for user {user_id}, ignoring message")
+        return
+    
+    # 有活动会话时才调用核心处理器，应用速率限制
+    logger.debug(f"UnifiedTextHandler: Processing message from user {user_id} (has active session)")
+    
+    # 手动应用速率限制
+    from utils.error_handling import rate_limiter_manager, send_error, delete_user_command
+    
+    rate_limiter = rate_limiter_manager.get_rate_limiter("unified_text_handler", max_calls=10, time_window=60)
+    
+    if await rate_limiter.acquire(user_id):
+        await unified_text_handler_core(update, context)
+    else:
+        # 发送频率限制错误消息
+        await send_error(
+            context=context,
+            chat_id=update.effective_chat.id,
+            text="⚠️ 请求频率过高，请稍后重试。"
+        )
+        
+        # 删除用户命令消息
+        if (
+            hasattr(update, "effective_message")
+            and getattr(update.effective_message, "message_id", None)
+        ):
+            await delete_user_command(
+                context=context,
+                chat_id=update.effective_chat.id,
+                message_id=update.effective_message.message_id
+            )
+
 # 注册统一文本处理器
 from utils.command_factory import command_factory
 from utils.permissions import Permission
@@ -102,5 +168,6 @@ from utils.permissions import Permission
 command_factory.register_text_handler(
     unified_text_handler, 
     permission=Permission.USER, 
-    description="统一文本处理器 - 智能分发地图、航班、人物、电影和TV服务"
+    description="统一文本处理器 - 智能分发地图、航班、人物、电影和TV服务",
+    use_rate_limit=False  # 在包装器层面不使用速率限制，避免普通群聊消息触发限制
 )
