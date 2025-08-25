@@ -7800,6 +7800,15 @@ async def show_movie_details_with_functions(query, context, movie_id: int):
     user_id = query.from_user.id
     detail_data = None
     
+    # DEBUG: 检查session状态
+    logger.info(f"DEBUG: user_id={user_id}, movie_id={movie_id}")
+    logger.info(f"DEBUG: movie_search_sessions中是否有该用户: {user_id in movie_search_sessions}")
+    if user_id in movie_search_sessions:
+        session_data = movie_search_sessions[user_id]
+        logger.info(f"DEBUG: session中的current_movie_id: {session_data.get('current_movie_id')}")
+        logger.info(f"DEBUG: session中是否有current_movie_data: {'current_movie_data' in session_data}")
+        logger.info(f"DEBUG: session中是否有current_movie_processed_data: {'current_movie_processed_data' in session_data}")
+    
     # 优先使用会话中缓存的电影数据（包含完整处理后的数据）
     if user_id in movie_search_sessions:
         session_data = movie_search_sessions[user_id]
@@ -7843,6 +7852,9 @@ async def show_movie_details_with_functions(query, context, movie_id: int):
                 if user_id in movie_search_sessions:
                     movie_search_sessions[user_id]["current_movie_processed_data"] = detail_data
                     logger.info(f"已缓存完整电影详情数据（含JustWatch）: {movie_id}")
+                    logger.info(f"DEBUG: 缓存保存后，session keys: {list(movie_search_sessions[user_id].keys())}")
+                else:
+                    logger.warning(f"DEBUG: 无法保存processed_data，用户{user_id}不在movie_search_sessions中")
             else:
                 logger.info(f"使用已处理的完整电影数据: {movie_id}")
             
