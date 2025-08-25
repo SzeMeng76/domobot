@@ -2239,7 +2239,7 @@ class MovieService:
         # 如果有内容被截断，添加提示信息
         if has_truncated:
             lines.append("📄 *部分评价内容已截断*")
-            lines.append("💡 使用相应的 `/movie_reviews <ID>` 或 `/tv_reviews <ID>` 命令可能生成完整的Telegraph页面查看所有评价")
+            lines.append("💡 点击电影/电视剧详情页面的'用户评价'按钮查看完整评价内容")
         
         return "\n".join(lines)
     
@@ -2279,8 +2279,8 @@ class MovieService:
                 lines.append(f"   🖼️ 海报: [查看]({self.tmdb_image_base_url}{poster_path})")
             lines.append("")
         
-        lines.append("💡 使用 `/movie_detail <ID>` 查看详细信息")
-        lines.append("💡 使用 `/movie_rec <ID>` 获取相似推荐")
+        lines.append("💡 点击选择电影查看详细信息")
+        lines.append("💡 电影详情页面提供推荐、预告、评价等按钮功能")
         
         return "\n".join(lines), poster_url
 
@@ -2324,7 +2324,7 @@ class MovieService:
                 lines.append(f"   🖼️ 海报: [查看]({self.tmdb_image_base_url}{poster_path})")
             lines.append("")
         
-        lines.append("💡 使用 `/tv_detail <ID>` 查看详细信息")
+        lines.append("💡 点击选择电视剧查看详细信息")
         lines.append("💡 使用 `/tv_rec <ID>` 获取相似推荐")
         
         return "\n".join(lines), poster_url
@@ -2351,7 +2351,7 @@ class MovieService:
             lines.append(f"   `/tv_detail {tv_id}`")
             lines.append("")
         
-        lines.append("💡 使用 `/tv_detail <ID>` 查看详细信息")
+        lines.append("💡 点击选择电视剧查看详细信息")
         lines.append("💡 使用 `/tv_rec <ID>` 获取相似推荐")
         lines.append("💡 使用 `/tv_videos <ID>` 查看预告片")
         
@@ -2551,7 +2551,7 @@ class MovieService:
             lines.append(f"   `tv_detail {tv_id}`")
             lines.append("")
         
-        lines.append("💡 使用 `/tv_detail <ID>` 查看详细信息")
+        lines.append("💡 点击选择电视剧查看详细信息")
         
         return "\n".join(lines)
     
@@ -2586,7 +2586,7 @@ class MovieService:
             
             # 计算基础内容长度（标题+简介等固定部分）
             base_length = len("\n".join(lines))
-            base_length += len(f"\n\n💡 使用 `/tv_episode {tv_id} {season_number} <集数>` 查看集详情")
+            base_length += len("\n\n💡 点击电视剧详情页面的'集详情'按钮查看集详情")
             
             # 计算每集可用的平均字符数
             available_chars = 3200 - base_length  # 留800字符余量
@@ -2631,12 +2631,12 @@ class MovieService:
             if has_truncated:
                 lines.extend([
                     "📄 *部分剧集简介已截断*",
-                    f"💡 使用 `/tv_season_full {tv_id} {season_number}` 查看完整剧集列表"
+                    f"💡 通过Telegraph链接查看完整剧集列表"
                 ])
         
         lines.extend([
             f"",
-            f"💡 使用 `/tv_episode {tv_id} {season_number} <集数>` 查看集详情"
+            f"💡 点击电视剧详情页面的'集详情'按钮查看集详情"
         ])
         
         return "\n".join(filter(None, lines))
@@ -2676,7 +2676,7 @@ class MovieService:
             
             content += "\n" + "=" * 50 + "\n\n"
         
-        content += f"💡 使用 /tv_episode {tv_id} {season_number} <集数> 查看更多集详情"
+        content += f"💡 通过电视剧详情页面的按钮功能查看更多集详情"
         return content
     
     def format_tv_episode_details(self, episode_data: Dict, tv_id: int, season_number: int) -> str:
@@ -2715,7 +2715,7 @@ class MovieService:
         
         lines.extend([
             f"",
-            f"💡 使用 `/tv_season {tv_id} {season_number}` 查看整季信息"
+            f"💡 点击电视剧详情页面的'季详情'按钮查看整季信息"
         ])
         
         return "\n".join(filter(None, lines))
@@ -2742,9 +2742,9 @@ class MovieService:
             lines.append(f"   `/movie_detail {movie_id}`")
             lines.append("")
         
-        lines.append("💡 使用 `/movie_detail <ID>` 查看详细信息")
+        lines.append("💡 点击选择电影查看详细信息")
         lines.append("💡 使用 `/movie_rec <ID>` 获取相似推荐")
-        lines.append("💡 使用 `/movie_videos <ID>` 查看预告片")
+        lines.append("💡 电影详情页面提供预告片按钮功能")
         
         return "\n".join(lines)
     
@@ -2846,7 +2846,7 @@ class MovieService:
             "• 📈📉➡️ 排名趋势: 上升/下降/稳定", 
             "• 🎬 平台数据基于用户观看行为统计",
             "",
-            f"💡 使用 `/movie_detail <标题>` 或 `/tv_detail <标题>` 查看详情"
+            f"💡 点击选择电影/电视剧查看详情"
         ])
         
         return "\n".join(lines)
@@ -3387,7 +3387,7 @@ class MovieService:
             lines.append(f"   `movie_detail {movie_id}`")
             lines.append("")
         
-        lines.append("💡 使用 `/movie_detail <ID>` 查看详细信息")
+        lines.append("💡 点击选择电影查看详细信息")
         
         return "\n".join(lines)
     
@@ -3621,8 +3621,8 @@ class MovieService:
             lines.append(f"   `/movie_detail {movie_id}`")
             lines.append("")
         
-        lines.append("💡 使用 `/movie_detail <ID>` 查看详细信息")
-        lines.append("💡 使用 `/movie_videos <ID>` 查看预告片")
+        lines.append("💡 点击选择电影查看详细信息")
+        lines.append("💡 电影详情页面提供预告片按钮功能")
         
         return "\n".join(lines)
     
@@ -3647,8 +3647,8 @@ class MovieService:
             lines.append(f"   `/movie_detail {movie_id}`")
             lines.append("")
         
-        lines.append("💡 使用 `/movie_detail <ID>` 查看详细信息")
-        lines.append("💡 使用 `/movie_videos <ID>` 查看预告片")
+        lines.append("💡 点击选择电影查看详细信息")
+        lines.append("💡 电影详情页面提供预告片按钮功能")
         
         return "\n".join(lines)
     
@@ -3674,7 +3674,7 @@ class MovieService:
             lines.append(f"   `/tv_detail {tv_id}`")
             lines.append("")
         
-        lines.append("💡 使用 `/tv_detail <ID>` 查看详细信息")
+        lines.append("💡 点击选择电视剧查看详细信息")
         lines.append("💡 使用 `/tv_videos <ID>` 查看预告片")
         
         return "\n".join(lines)
@@ -3701,7 +3701,7 @@ class MovieService:
             lines.append(f"   `/tv_detail {tv_id}`")
             lines.append("")
         
-        lines.append("💡 使用 `/tv_detail <ID>` 查看详细信息")
+        lines.append("💡 点击选择电视剧查看详细信息")
         lines.append("💡 使用 `/tv_videos <ID>` 查看预告片")
         
         return "\n".join(lines)
@@ -7611,7 +7611,7 @@ async def execute_movie_reviews(query, context, movie_id: int):
                     f"📄 **完整评价内容**: 由于内容较长，已生成Telegraph页面",
                     f"🔗 **查看完整评价**: {telegraph_url}",
                     "",
-                    f"💡 使用 `/movie_detail {movie_id}` 查看电影详情"
+                    f"💡 点击选择查看电影详情"
                 ])
                 
                 summary_text = "\n".join(preview_lines)
@@ -8345,7 +8345,7 @@ async def _get_tv_season_details_with_buttons(update: Update, context: ContextTy
                     f"📄 **完整剧集列表**: 由于内容较长，已生成Telegraph页面",
                     f"🔗 **查看完整列表**: {telegraph_url}",
                     "",
-                    f"💡 使用 `/tv_episode {tv_id} {season_number} <集数>` 查看集详情"
+                    f"💡 点击电视剧详情页面的'集详情'按钮查看集详情"
                 ])
                 
                 summary_text = "\n".join(preview_lines)
