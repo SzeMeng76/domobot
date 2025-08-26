@@ -1085,6 +1085,9 @@ async def _execute_route_planning_with_coords(update: Update, context: ContextTy
         await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
 
 async def _execute_route_planning(update: Update, context: ContextTypes.DEFAULT_TYPE, origin: str, destination: str) -> None:
+    # 检测用户语言
+    user_locale = update.effective_user.language_code if update.effective_user else None
+    language = detect_user_language(f"{origin} {destination}", user_locale)
     
     loading_message = f"🛣️ 正在规划路线: {origin} → {destination}... ⏳"
     
