@@ -52,7 +52,7 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 -   ✈️ **Flight Services:** Intelligent flight search and booking information powered by Google Flights API. Features **multi-language airport recognition** (Chinese, English, IATA codes), **global airport coverage** (Asia, Europe, Americas, Oceania), **smart airport matching** with automatic selection of optimal airports, **real-time flight data** with price analysis and booking options, **intelligent route planning** with time zone calculations and flight distance information, **comprehensive airline coverage** with multiple booking channels, and **Telegraph integration** for detailed flight lists. Supports mixed-language input like `北京 New York` or `吉隆坡 Bangkok` with automatic conversion to optimal airport pairs (PEK↔JFK, KUL↔BKK). *(Whitelist required)*
 -   🏨 **Hotel Services:** Intelligent hotel search and booking information powered by Google Hotels API. Features **multi-language location recognition** (Chinese, English, specific areas), **global hotel coverage** with support for major cities worldwide, **smart location matching** with automatic area selection, **real-time hotel data** with price analysis and booking options, **comprehensive accommodation information** including ratings, amenities, and descriptions, **flexible date handling** with automatic check-in/out date parsing, **interactive sorting and filtering** with price/rating options, **Telegraph integration** for detailed hotel lists, and **intelligent stay duration analysis**. Supports mixed-language input like `北京`, `Tokyo`, `Kepong`, `Times Square NYC` with automatic location resolution. *(Whitelist required)*
 -   🎬 **Movie & TV Information:** Completely redesigned with **unified button interface system** for intuitive interaction. Features **triple-platform integration** (TMDB + JustWatch + Trakt) with comprehensive search capabilities, detailed movie/TV information with posters and ratings, **interactive season/episode browsing** with user-input selection, **one-click access** to recommendations, reviews, videos, related content, and streaming platforms. Enhanced with **Telegraph integration** for long content, **unified chart system** for trending/popular/upcoming content, **intelligent session management** for multi-step interactions, and **comprehensive caching** with automatic cleanup. All functionality accessed through simple `/movie`, `/tv`, `/person`, and `/chart` commands with no need to remember complex sub-commands. *(Whitelist required)*
--   🪙 **Crypto Prices:** Look up real-time cryptocurrency prices with support for custom amounts and currency conversion, including 24h and 7d percentage changes. *(Whitelist required)*
+-   🪙 **Crypto Prices:** Look up real-time cryptocurrency prices with support for custom amounts and currency conversion, including 24h and 7d percentage changes. **NEW:** Interactive ranking system with hot trending coins, top gainers/losers, market cap rankings, and trading volume charts - all powered by CoinGecko's free API (no API key required). Features include smart caching, refresh functionality, and unified menu interface. *(Whitelist required)*
 -   💳 **BIN Lookup:** Query credit card BIN (Bank Identification Number) information including card brand, type, issuing bank, and country details. *(Whitelist required)*
 -   🌦️ **Weather Forecasts:** Detailed, multi-format weather forecasts (real-time, daily, hourly, minutely precipitation, and lifestyle indices). *(Whitelist required)*
 -   💱 **Currency Conversion:** Real-time exchange rate lookups with mathematical expression support (e.g., `/rate USD 1+2*3`). *(Whitelist required)*
@@ -215,9 +215,11 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /bin 123456
 /bin 12345678
 
-# Cryptocurrency prices
-/crypto btc
-/crypto eth 0.5 usd
+# Cryptocurrency prices (Enhanced with Rankings)
+/crypto                        # Interactive crypto menu with rankings
+/crypto btc                    # Direct price query
+/crypto eth 2 usd             # Custom amount and currency
+# Interactive features: Hot trending coins, gainers/losers, market cap, volume rankings
 
 # Currency conversion (supports mathematical expressions)
 /rate USD 100
@@ -463,7 +465,15 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 
 ### 🆕 Recent Updates
 
-#### Finance & Stock Market Integration (Latest)
+#### Cryptocurrency Rankings Enhancement (Latest)
+- **CoinGecko Integration:** Migrated ranking features to CoinGecko's free API, removing API key requirements for ranking functionality
+- **Interactive Menu System:** New unified interface similar to finance module with button navigation and real-time data
+- **Multiple Ranking Categories:** Hot trending coins, 24h gainers/losers, market cap rankings, and trading volume charts
+- **Smart Dual API Strategy:** CoinGecko for rankings (free), CoinMarketCap for individual price queries (premium)
+- **Enhanced Data Display:** Comprehensive coin information with prices, changes, market cap ranks, and real-time timestamps
+- **Caching Integration:** Intelligent caching system with separate TTL for different data types and unified cache management
+- **User Experience:** Clean markdown formatting, refresh functionality, and auto-deletion for chat cleanliness
+- **No Setup Required:** Ranking features work out-of-the-box without API configuration
 - **New `/finance` Command:** Comprehensive financial market data powered by Yahoo Finance API with real-time stock prices
 - **15 Ranking Categories:** Complete stock and fund rankings including day gainers/losers, most actives, growth tech stocks, undervalued stocks, and 6 mutual fund categories
 - **Multi-Market Support:** US, Hong Kong (HK), China (CN), Malaysia (MY) stocks with flexible ticker format support
@@ -589,7 +599,8 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 
 ### 📚 API Dependencies
 
-- **CoinMarketCap API:** For cryptocurrency price data
+- **CoinMarketCap API:** For cryptocurrency price data  
+- **CoinGecko API:** For cryptocurrency rankings, trending coins, and market data (free tier, no API key required)
 - **DY.AX BIN API:** For credit card BIN information lookup
 - **TMDB API:** For movie and TV show information with Telegraph integration
 - **Trakt API:** For enhanced movie/TV statistics, trending data, and community insights
