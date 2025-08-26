@@ -169,26 +169,41 @@ def format_crypto_ranking(coins: List[Dict], title: str, vs_currency: str = "usd
     currency_symbol = {"usd": "$", "cny": "¥", "eur": "€"}.get(vs_currency.lower(), vs_currency.upper())
     result = f"📊 *{title}*\n\n"
     
+    # 检查是否为交易量榜
+    is_volume_ranking = "交易量" in title
+    
     for i, coin in enumerate(coins[:10], 1):
         name = coin.get("name", "")
         symbol = coin.get("symbol", "").upper()
         price = coin.get("current_price", 0)
         change_24h = coin.get("price_change_percentage_24h", 0)
         market_cap_rank = coin.get("market_cap_rank", i)
+        total_volume = coin.get("total_volume", 0)
         
         trend_emoji = "📈" if change_24h >= 0 else "📉"
         change_sign = "+" if change_24h >= 0 else ""
         
-        # 价格格式化
-        if price < 0.01:
-            price_str = f"{price:.6f}"
-        elif price < 1:
-            price_str = f"{price:.4f}"
-        else:
-            price_str = f"{price:,.2f}"
-            
         result += f"`{i:2d}.` {trend_emoji} *{symbol}* - {name}\n"
-        result += f"     `{currency_symbol}{price_str}` `({change_sign}{change_24h:.2f}%)`"
+        
+        if is_volume_ranking and total_volume > 0:
+            # 交易量榜显示交易量
+            if total_volume >= 1e9:
+                volume_str = f"{total_volume/1e9:.1f}B"
+            elif total_volume >= 1e6:
+                volume_str = f"{total_volume/1e6:.1f}M"
+            else:
+                volume_str = f"{total_volume:,.0f}"
+            result += f"     交易量: `{currency_symbol}{volume_str}` | 价格: `({change_sign}{change_24h:.2f}%)`"
+        else:
+            # 其他榜单显示价格
+            if price < 0.01:
+                price_str = f"{price:.6f}"
+            elif price < 1:
+                price_str = f"{price:.4f}"
+            else:
+                price_str = f"{price:,.2f}"
+            result += f"     `{currency_symbol}{price_str}` `({change_sign}{change_24h:.2f}%)`"
+            
         if market_cap_rank:
             result += f" `#{market_cap_rank}`"
         result += "\n\n"
