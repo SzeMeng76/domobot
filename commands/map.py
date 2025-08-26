@@ -1380,6 +1380,23 @@ def format_reverse_geocoding_result(reverse_data: Dict, service_type: str, lat: 
     
     return result
 
+async def _safe_edit_message(query, text, reply_markup=None, parse_mode=None):
+    """安全地编辑消息，处理内容相同的情况"""
+    try:
+        await query.edit_message_text(
+            text=text,
+            reply_markup=reply_markup,
+            parse_mode=parse_mode
+        )
+    except Exception as e:
+        if "Message is not modified" in str(e):
+            # 消息内容相同，忽略这个错误
+            logger.debug(f"消息内容相同，跳过编辑: {text[:50]}...")
+        else:
+            logger.error(f"编辑消息失败: {e}")
+            raise
+
+@with_error_handling
 async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理地图功能的回调查询"""
     query = update.callback_query
@@ -1435,7 +1452,8 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 
 请选择功能:"""
         
-        await query.edit_message_text(
+        await _safe_edit_message(
+            query,
             text=foldable_text_with_markdown_v2(help_text),
             parse_mode="MarkdownV2",
             reply_markup=reply_markup
@@ -1451,7 +1469,8 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         })
         
         # 位置搜索指引
-        await query.edit_message_text(
+        await _safe_edit_message(
+            query,
             text="🔍 请输入要搜索的位置名称:\n\n例如:\n• 北京天安门\n• Eiffel Tower\n• 上海外滩\n• Times Square",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
@@ -1614,7 +1633,8 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 "waiting_for": "origin"
             })
             
-            await query.edit_message_text(
+            await _safe_edit_message(
+                query,
                 text=f"🛣️ 路线规划到: {destination_name}\n\n请输入起点地址或发送位置信息",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
@@ -1658,7 +1678,8 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             "waiting_for": "origin"
         })
         
-        await query.edit_message_text(
+        await _safe_edit_message(
+            query,
             text=f"🛣️ 路线规划到: {destination_name}\n\n请输入起点地址或发送位置信息",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
