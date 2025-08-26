@@ -10,6 +10,8 @@ from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 from telegram.helpers import escape_markdown
 
+from utils.error_handling import with_error_handling
+
 # JustWatch API
 try:
     from simplejustwatchapi.justwatch import search as justwatch_search
@@ -5888,6 +5890,7 @@ async def person_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         reply_markup=reply_markup
     )
 
+@with_error_handling
 async def movie_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理电影搜索结果和功能按钮的内联键盘回调"""
     query = update.callback_query
@@ -6054,6 +6057,7 @@ async def movie_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         logger.error(f"处理电影搜索回调失败: {e}")
         await query.edit_message_text("❌ 处理选择时发生错误")
 
+@with_error_handling
 async def tv_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理电视剧搜索结果的内联键盘回调"""
     query = update.callback_query
@@ -8312,11 +8316,31 @@ async def execute_tv_season(query, context, tv_id: int):
             "waiting_for": "season_number"
         })
         
-        await query.edit_message_text(prompt_text, parse_mode=ParseMode.MARKDOWN_V2)
+        # 安全地编辑消息
+        try:
+            await query.edit_message_text(prompt_text, parse_mode=ParseMode.MARKDOWN_V2)
+        except Exception as edit_error:
+            # 如果编辑失败，尝试发送新消息
+            from utils.message_manager import send_message_with_auto_delete
+            await send_message_with_auto_delete(
+                context=context,
+                chat_id=query.message.chat_id,
+                text=prompt_text,
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
         
     except Exception as e:
         logger.error(f"设置TV季详情session失败: {e}")
-        await query.edit_message_text("❌ 设置查询失败")
+        try:
+            await query.edit_message_text("❌ 设置查询失败")
+        except Exception:
+            # 如果编辑失败，发送新消息
+            from utils.message_manager import send_error
+            await send_error(
+                context=context,
+                chat_id=query.message.chat_id,
+                text="设置查询失败"
+            )
 async def _get_tv_season_details_with_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE, tv_id: int, season_number: int):
     """获取TV季详情的完整逻辑 - 100% movieold逻辑 + 返回按钮"""
     if not movie_service:
