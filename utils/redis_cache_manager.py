@@ -103,6 +103,16 @@ class RedisCacheManager:
             elif "trending_" in key:
                 return self.config.finance_ranking_cache_duration
         
+        # crypto子目录的特殊处理 - 区分CMC和CoinGecko
+        if subdirectory == "crypto" and key:
+            if "coingecko_markets_" in key:
+                return self.config.coingecko_markets_cache_duration
+            elif "coingecko_trending" in key:
+                return self.config.coingecko_trending_cache_duration  
+            elif "coingecko_single_" in key:
+                return self.config.coingecko_single_cache_duration
+            # 默认使用crypto_cache_duration (CMC API)
+        
         if subdirectory == "map" and key:
             if "geocode_" in key or "reverse_" in key:
                 return self.config.map_geocode_cache_duration

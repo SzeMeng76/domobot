@@ -61,7 +61,10 @@ class BotConfig:
         self.google_play_search_cache_duration = 43200  # 12小时
         self.steam_cache_duration = 259200  # 3天
         self.netflix_cache_duration = 86400  # 24小时
-        self.crypto_cache_duration = 60  # 1分钟
+        self.crypto_cache_duration = 60  # 1分钟 (CMC单币查询)
+        self.coingecko_markets_cache_duration = 60  # 1分钟 (CoinGecko市场数据/排行榜)
+        self.coingecko_trending_cache_duration = 60  # 1分钟 (CoinGecko热门币种)
+        self.coingecko_single_cache_duration = 60  # 1分钟 (CoinGecko单币查询)
         self.spotify_cache_duration = 86400 * 8  # 8天，配合周日清理
         self.disney_cache_duration = 86400 * 8  # 8天，配合周日清理
         self.max_cache_duration = 86400 * 8  # 8天，配合周日清理
@@ -242,6 +245,9 @@ class ConfigManager:
         self.config.steam_cache_duration = get_int_env("STEAM_CACHE_DURATION", "259200")
         self.config.netflix_cache_duration = get_int_env("NETFLIX_CACHE_DURATION", "86400")
         self.config.crypto_cache_duration = get_int_env("CRYPTO_CACHE_DURATION", "60")
+        self.config.coingecko_markets_cache_duration = get_int_env("COINGECKO_MARKETS_CACHE_DURATION", "60")
+        self.config.coingecko_trending_cache_duration = get_int_env("COINGECKO_TRENDING_CACHE_DURATION", "60") 
+        self.config.coingecko_single_cache_duration = get_int_env("COINGECKO_SINGLE_CACHE_DURATION", "60")
         self.config.movie_cache_duration = get_int_env("MOVIE_CACHE_DURATION", "7200")
         self.config.news_cache_duration = get_int_env("NEWS_CACHE_DURATION", "300")
         self.config.whois_cache_duration = get_int_env("WHOIS_CACHE_DURATION", str(3600 * 6))
