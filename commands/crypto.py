@@ -1,8 +1,8 @@
 import logging
 import datetime
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 from telegram.helpers import escape_markdown
@@ -22,7 +22,13 @@ def set_dependencies(c_manager, h_client):
     cache_manager = c_manager
     httpx_client = h_client
 
+# CoinMarketCap URLs (需要API key)
 CMC_URL = "https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest"
+
+# CoinGecko URLs (免费，无需API key)
+COINGECKO_MARKETS_URL = "https://api.coingecko.com/api/v3/coins/markets"
+COINGECKO_TRENDING_URL = "https://api.coingecko.com/api/v3/search/trending"
+COINGECKO_GLOBAL_URL = "https://api.coingecko.com/api/v3/global"
 
 async def get_crypto_price(symbol: str, convert_currency: str) -> Optional[Dict]:
     """从API获取加密货币价格，并缓存结果"""
@@ -54,6 +60,151 @@ async def get_crypto_price(symbol: str, convert_currency: str) -> Optional[Dict]
     except Exception as e:
         logging.error(f"CMC API 请求异常: {e}")
     return None
+
+async def get_coingecko_markets(vs_currency: str = "usd", order: str = "market_cap_desc", per_page: int = 10, page: int = 1) -> Optional[List[Dict]]:
+    """从CoinGecko获取市场数据"""
+    cache_key = f"coingecko_markets_{vs_currency}_{order}_{per_page}_{page}"
+    cached_data = await cache_manager.load_cache(cache_key, subdirectory="crypto")
+    if cached_data:
+        logging.info(f"使用缓存的CoinGecko市场数据: {order}")
+        return cached_data
+
+    params = {
+        "vs_currency": vs_currency,
+        "order": order,
+        "per_page": per_page,
+        "page": page,
+        "sparkline": "false",
+        "price_change_percentage": "24h"
+    }
+
+    try:
+        response = await httpx_client.get(COINGECKO_MARKETS_URL, params=params, timeout=20)
+        if response.status_code == 200:
+            data = response.json()
+            if data:
+                await cache_manager.save_cache(cache_key, data, subdirectory="crypto")
+                return data
+        else:
+            logging.warning(f"CoinGecko Markets API 请求失败: HTTP {response.status_code}")
+    except Exception as e:
+        logging.error(f"CoinGecko Markets API 请求异常: {e}")
+    return None
+
+async def get_coingecko_trending() -> Optional[Dict]:
+    """从CoinGecko获取热门搜索数据"""
+    cache_key = "coingecko_trending"
+    cached_data = await cache_manager.load_cache(cache_key, subdirectory="crypto")
+    if cached_data:
+        logging.info("使用缓存的CoinGecko热门搜索数据")
+        return cached_data
+
+    try:
+        response = await httpx_client.get(COINGECKO_TRENDING_URL, timeout=20)
+        if response.status_code == 200:
+            data = response.json()
+            if data:
+                await cache_manager.save_cache(cache_key, data, subdirectory="crypto")
+                return data
+        else:
+            logging.warning(f"CoinGecko Trending API 请求失败: HTTP {response.status_code}")
+    except Exception as e:
+        logging.error(f"CoinGecko Trending API 请求异常: {e}")
+    return None
+
+async def get_coingecko_single_coin(coin_id: str, vs_currency: str = "usd") -> Optional[Dict]:
+    """从CoinGecko获取单个币种价格"""
+    cache_key = f"coingecko_single_{coin_id}_{vs_currency}"
+    cached_data = await cache_manager.load_cache(cache_key, subdirectory="crypto")
+    if cached_data:
+        logging.info(f"使用缓存的CoinGecko单币数据: {coin_id}")
+        return cached_data
+
+    params = {
+        "ids": coin_id,
+        "vs_currency": vs_currency,
+        "order": "market_cap_desc",
+        "per_page": 1,
+        "page": 1,
+        "sparkline": "false",
+        "price_change_percentage": "24h,7d"
+    }
+
+    try:
+        response = await httpx_client.get(COINGECKO_MARKETS_URL, params=params, timeout=20)
+        if response.status_code == 200:
+            data = response.json()
+            if data and len(data) > 0:
+                coin_data = data[0]
+                await cache_manager.save_cache(cache_key, coin_data, subdirectory="crypto")
+                return coin_data
+        else:
+            logging.warning(f"CoinGecko Single Coin API 请求失败: HTTP {response.status_code}")
+    except Exception as e:
+        logging.error(f"CoinGecko Single Coin API 请求异常: {e}")
+    return None
+
+def format_crypto_ranking(coins: List[Dict], title: str, vs_currency: str = "usd") -> str:
+    """格式化加密货币排行榜"""
+    if not coins:
+        return f"❌ {title} 数据获取失败"
+    
+    currency_symbol = {"usd": "$", "cny": "¥", "eur": "€"}.get(vs_currency.lower(), vs_currency.upper())
+    result = f"📊 *{title}*\n\n"
+    
+    for i, coin in enumerate(coins[:10], 1):
+        name = coin.get("name", "")
+        symbol = coin.get("symbol", "").upper()
+        price = coin.get("current_price", 0)
+        change_24h = coin.get("price_change_percentage_24h", 0)
+        market_cap_rank = coin.get("market_cap_rank", i)
+        
+        trend_emoji = "📈" if change_24h >= 0 else "📉"
+        change_sign = "+" if change_24h >= 0 else ""
+        
+        # 价格格式化
+        if price < 0.01:
+            price_str = f"{price:.6f}"
+        elif price < 1:
+            price_str = f"{price:.4f}"
+        else:
+            price_str = f"{price:,.2f}"
+            
+        result += f"`{i:2d}.` {trend_emoji} *{symbol}* - {name}\n"
+        result += f"     `{currency_symbol}{price_str}` `({change_sign}{change_24h:.2f}%)`"
+        if market_cap_rank:
+            result += f" `#{market_cap_rank}`"
+        result += "\n\n"
+    
+    result += f"_数据来源: CoinGecko ({datetime.datetime.now().strftime('%H:%M:%S')})_"
+    return result
+
+def format_trending_coins(trending_data: Dict) -> str:
+    """格式化热门搜索币种"""
+    if not trending_data or "coins" not in trending_data:
+        return "❌ 热门搜索数据获取失败"
+    
+    result = "🔥 *热门搜索币种*\n\n"
+    
+    for i, coin_wrapper in enumerate(trending_data["coins"][:10], 1):
+        coin = coin_wrapper.get("item", {})
+        name = coin.get("name", "")
+        symbol = coin.get("symbol", "").upper()
+        market_cap_rank = coin.get("market_cap_rank")
+        
+        # 获取价格变化数据
+        price_data = coin.get("data", {})
+        price_btc = price_data.get("price_btc", "")
+        
+        result += f"`{i:2d}.` 🔥 *{symbol}* - {name}"
+        if market_cap_rank:
+            result += f" `#{market_cap_rank}`"
+        if price_btc:
+            result += f"\n     `{float(price_btc):.8f} BTC`"
+        result += "\n\n"
+    
+    result += f"_数据来源: CoinGecko ({datetime.datetime.now().strftime('%H:%M:%S')})_"
+    return result
 
 def format_crypto_data(data: Dict, symbol: str, amount: float, convert_currency: str) -> str:
     """格式化加密货币数据（更健壮的版本）"""
@@ -139,16 +290,47 @@ async def crypto_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await delete_user_command(context, update.effective_chat.id, update.message.message_id)
 
     if not context.args:
-        help_text = (
-            "*加密货币查询帮助*\n\n"
-            "`/crypto [币种] [数量] [目标货币]`\n\n"
-            "**示例:**\n"
-            "• `/crypto btc` \\- 查询1个BTC对CNY的价格\n"
-            "• `/crypto btc 0\\.5` \\- 查询0\\.5个BTC对CNY的价格\n"
-            "• `/crypto eth usd` \\- 查询1个ETH对USD的价格\n"
-            "• `/crypto eth 0\\.5 usd` \\- 查询0\\.5个ETH对USD的价格"
+        # 显示主菜单
+        keyboard = [
+            [
+                InlineKeyboardButton("💰 查询币价", callback_data="crypto_price_help"),
+                InlineKeyboardButton("🔥 热门币种", callback_data="crypto_trending")
+            ],
+            [
+                InlineKeyboardButton("📈 涨幅榜", callback_data="crypto_gainers"),
+                InlineKeyboardButton("📉 跌幅榜", callback_data="crypto_losers")
+            ],
+            [
+                InlineKeyboardButton("💎 市值榜", callback_data="crypto_market_cap"),
+                InlineKeyboardButton("📊 交易量榜", callback_data="crypto_volume")
+            ],
+            [
+                InlineKeyboardButton("❌ 关闭", callback_data="crypto_close")
+            ]
+        ]
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        help_text = """🚀 *加密货币数据查询*
+
+🔍 功能介绍:
+• **查询币价**: 输入币种代码查看价格信息
+• **热门币种**: 查看当前热门搜索的币种
+• **各种排行榜**: 涨跌幅、市值、交易量等
+
+💡 快速使用:
+`/crypto btc` \\- 查询比特币价格
+`/crypto eth 0\\.5 usd` \\- 查询0\\.5个ETH对USD价格
+
+请选择功能:"""
+        
+        await send_message_with_auto_delete(
+            context=context,
+            chat_id=update.effective_chat.id,
+            text=foldable_text_with_markdown_v2(help_text),
+            parse_mode=ParseMode.MARKDOWN_V2,
+            reply_markup=reply_markup
         )
-        await send_message_with_auto_delete(context, update.effective_chat.id, help_text, parse_mode=ParseMode.MARKDOWN_V2)
         return
 
     # ✨ 修改点：更智能的参数解析，支持数量
@@ -188,6 +370,225 @@ async def crypto_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if config.auto_delete_delay > 0:
         await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
 
+# =============================================================================
+# Callback 处理器
+# =============================================================================
+
+async def crypto_price_help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """显示币价查询帮助"""
+    query = update.callback_query
+    await query.answer("请在命令后输入币种代码，如: /crypto btc")
+    
+    help_text = """💰 *币价查询说明*
+
+请使用以下格式查询加密货币价格:
+`/crypto [币种] [数量] [目标货币]`
+
+**示例:**
+• `/crypto btc` \\- 查询1个BTC对CNY的价格
+• `/crypto btc 0\\.5` \\- 查询0\\.5个BTC对CNY的价格
+• `/crypto eth usd` \\- 查询1个ETH对USD的价格
+• `/crypto eth 0\\.5 usd` \\- 查询0\\.5个ETH对USD的价格
+
+**支持的目标货币:**
+• CNY, USD, EUR, JPY 等
+
+请发送新消息进行查询"""
+
+    keyboard = [[InlineKeyboardButton("🔙 返回主菜单", callback_data="crypto_main_menu")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(
+        text=foldable_text_with_markdown_v2(help_text),
+        parse_mode=ParseMode.MARKDOWN_V2,
+        reply_markup=reply_markup
+    )
+
+async def crypto_main_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """返回主菜单"""
+    query = update.callback_query
+    await query.answer()
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("💰 查询币价", callback_data="crypto_price_help"),
+            InlineKeyboardButton("🔥 热门币种", callback_data="crypto_trending")
+        ],
+        [
+            InlineKeyboardButton("📈 涨幅榜", callback_data="crypto_gainers"),
+            InlineKeyboardButton("📉 跌幅榜", callback_data="crypto_losers")
+        ],
+        [
+            InlineKeyboardButton("💎 市值榜", callback_data="crypto_market_cap"),
+            InlineKeyboardButton("📊 交易量榜", callback_data="crypto_volume")
+        ],
+        [
+            InlineKeyboardButton("❌ 关闭", callback_data="crypto_close")
+        ]
+    ]
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    help_text = """🚀 *加密货币数据查询*
+
+🔍 功能介绍:
+• **查询币价**: 输入币种代码查看价格信息
+• **热门币种**: 查看当前热门搜索的币种
+• **各种排行榜**: 涨跌幅、市值、交易量等
+
+💡 快速使用:
+`/crypto btc` \\- 查询比特币价格
+`/crypto eth 0\\.5 usd` \\- 查询0\\.5个ETH对USD价格
+
+请选择功能:"""
+    
+    await query.edit_message_text(
+        text=foldable_text_with_markdown_v2(help_text),
+        parse_mode=ParseMode.MARKDOWN_V2,
+        reply_markup=reply_markup
+    )
+
+async def crypto_trending_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """显示热门币种"""
+    query = update.callback_query
+    await query.answer("正在获取热门币种...")
+    
+    loading_message = "🔥 正在获取热门搜索币种... ⏳"
+    await query.edit_message_text(
+        text=foldable_text_v2(loading_message),
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    
+    try:
+        trending_data = await get_coingecko_trending()
+        
+        if trending_data:
+            result_text = format_trending_coins(trending_data)
+            
+            keyboard = [
+                [
+                    InlineKeyboardButton("🔄 刷新", callback_data="crypto_trending"),
+                    InlineKeyboardButton("🔙 返回", callback_data="crypto_main_menu")
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(
+                text=foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=reply_markup
+            )
+        else:
+            error_text = "❌ 获取热门币种失败，请稍后重试"
+            keyboard = [[InlineKeyboardButton("🔙 返回主菜单", callback_data="crypto_main_menu")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(
+                text=foldable_text_v2(error_text),
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=reply_markup
+            )
+            
+    except Exception as e:
+        logging.error(f"获取热门币种时发生错误: {e}")
+        error_text = f"❌ 获取热门币种时发生错误: {str(e)}"
+        
+        await query.edit_message_text(
+            text=foldable_text_v2(error_text),
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+
+async def crypto_ranking_callback(ranking_type: str, title: str, order: str, query: CallbackQuery) -> None:
+    """通用排行榜回调处理"""
+    loading_message = f"📊 正在获取{title}... ⏳"
+    await query.edit_message_text(
+        text=foldable_text_v2(loading_message),
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    
+    try:
+        coins_data = await get_coingecko_markets(vs_currency="usd", order=order, per_page=10)
+        
+        if coins_data:
+            result_text = format_crypto_ranking(coins_data, title, "usd")
+            
+            keyboard = [
+                [
+                    InlineKeyboardButton(f"🔄 刷新", callback_data=ranking_type),
+                    InlineKeyboardButton("🔙 返回", callback_data="crypto_main_menu")
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(
+                text=foldable_text_with_markdown_v2(result_text),
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=reply_markup
+            )
+        else:
+            error_text = f"❌ 获取{title}失败，请稍后重试"
+            keyboard = [[InlineKeyboardButton("🔙 返回主菜单", callback_data="crypto_main_menu")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(
+                text=foldable_text_v2(error_text),
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=reply_markup
+            )
+            
+    except Exception as e:
+        logging.error(f"获取{title}时发生错误: {e}")
+        error_text = f"❌ 获取{title}时发生错误: {str(e)}"
+        
+        await query.edit_message_text(
+            text=foldable_text_v2(error_text),
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+
+async def crypto_gainers_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """涨幅榜"""
+    query = update.callback_query
+    await query.answer("正在获取涨幅榜...")
+    await crypto_ranking_callback("crypto_gainers", "24小时涨幅榜", "price_change_percentage_24h_desc", query)
+
+async def crypto_losers_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """跌幅榜"""
+    query = update.callback_query  
+    await query.answer("正在获取跌幅榜...")
+    await crypto_ranking_callback("crypto_losers", "24小时跌幅榜", "price_change_percentage_24h_asc", query)
+
+async def crypto_market_cap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """市值榜"""
+    query = update.callback_query
+    await query.answer("正在获取市值榜...")
+    await crypto_ranking_callback("crypto_market_cap", "市值排行榜", "market_cap_desc", query)
+
+async def crypto_volume_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """交易量榜"""
+    query = update.callback_query
+    await query.answer("正在获取交易量榜...")
+    await crypto_ranking_callback("crypto_volume", "24小时交易量榜", "volume_desc", query)
+
+async def crypto_close_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理关闭按钮点击"""
+    query = update.callback_query
+    await query.answer("消息已关闭")
+    
+    if not query:
+        return
+        
+    try:
+        await query.delete_message()
+    except Exception as e:
+        logging.error(f"删除消息时发生错误: {e}")
+        try:
+            await query.edit_message_text(
+                text=foldable_text_v2("✅ 消息已关闭"),
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+        except:
+            pass
+
 async def crypto_clean_cache_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles the /crypto_cleancache command to clear Apple Services related caches."""
     if not update.message or not update.effective_chat:
@@ -195,23 +596,40 @@ async def crypto_clean_cache_command(update: Update, context: ContextTypes.DEFAU
     try:
         await context.bot_data["cache_manager"].clear_cache(subdirectory="crypto", 
         key_prefix="crypto_")
+        await context.bot_data["cache_manager"].clear_cache(subdirectory="crypto", 
+        key_prefix="coingecko_")
         success_message = "✅ 加密货币价格缓存已清理。"
         await send_success(context, update.effective_chat.id, foldable_text_v2(success_message), parse_mode="MarkdownV2")
         await delete_user_command(context, update.effective_chat.id, update.message.message_id)
         return
     except Exception as e:
-        logger.error(f"Error clearing Crypto cache: {e}")
+        logging.error(f"Error clearing Crypto cache: {e}")
         error_message = f"❌ 清理加密货币缓存时发生错误: {e!s}"
         await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
         await delete_user_command(context, update.effective_chat.id, update.message.message_id)
         return
 
+# =============================================================================
+# 注册命令和回调
+# =============================================================================
+
 command_factory.register_command(
     "crypto",
     crypto_command,
     permission=Permission.USER,
-    description="查询加密货币价格，例如 /crypto btc 0.5 usd"
+    description="查询加密货币价格和排行榜，例如 /crypto btc 0.5 usd"
 )
+
+# 注册回调处理器
+command_factory.register_callback(r"^crypto_main_menu$", crypto_main_menu_callback, permission=Permission.USER, description="加密货币主菜单")
+command_factory.register_callback(r"^crypto_price_help$", crypto_price_help_callback, permission=Permission.USER, description="币价查询帮助") 
+command_factory.register_callback(r"^crypto_trending$", crypto_trending_callback, permission=Permission.USER, description="热门币种")
+command_factory.register_callback(r"^crypto_gainers$", crypto_gainers_callback, permission=Permission.USER, description="涨幅榜")
+command_factory.register_callback(r"^crypto_losers$", crypto_losers_callback, permission=Permission.USER, description="跌幅榜")
+command_factory.register_callback(r"^crypto_market_cap$", crypto_market_cap_callback, permission=Permission.USER, description="市值榜")
+command_factory.register_callback(r"^crypto_volume$", crypto_volume_callback, permission=Permission.USER, description="交易量榜")
+command_factory.register_callback(r"^crypto_close$", crypto_close_callback, permission=Permission.USER, description="关闭加密货币消息")
+
 # 已迁移到统一缓存管理命令 /cleancache
 # command_factory.register_command(
 #     "crypto_cleancache", crypto_clean_cache_command, permission=Permission.ADMIN, description="清理加密货币缓存"

@@ -81,6 +81,13 @@ async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
                         ]
                         for prefix in prefixes:
                             await cache_manager.clear_cache(subdirectory="hotels", key_prefix=prefix)
+                    elif svc == 'crypto':
+                        # 特殊处理crypto的复杂缓存结构，包括排行榜相关缓存
+                        prefixes = [
+                            "crypto_", "coingecko_markets_", "coingecko_trending", "coingecko_single_"
+                        ]
+                        for prefix in prefixes:
+                            await cache_manager.clear_cache(subdirectory="crypto", key_prefix=prefix)
                     elif svc == 'movie':
                         # 特殊处理movie的复杂缓存结构，包括排行榜相关缓存
                         prefixes = [
@@ -125,6 +132,13 @@ async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
                 ]
                 for prefix in prefixes:
                     await cache_manager.clear_cache(subdirectory="hotels", key_prefix=prefix)
+            elif service == 'crypto':
+                # 特殊处理crypto的复杂缓存结构，包括排行榜相关缓存
+                prefixes = [
+                    "crypto_", "coingecko_markets_", "coingecko_trending", "coingecko_single_"
+                ]
+                for prefix in prefixes:
+                    await cache_manager.clear_cache(subdirectory="crypto", key_prefix=prefix)
             elif service == 'movie':
                 # 特殊处理movie的复杂缓存结构，包括排行榜相关缓存
                 prefixes = [
