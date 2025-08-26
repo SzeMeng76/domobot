@@ -61,9 +61,12 @@ async def get_crypto_price(symbol: str, convert_currency: str) -> Optional[Dict]
         logging.error(f"CMC API 请求异常: {e}")
     return None
 
-async def get_coingecko_markets(vs_currency: str = "usd", order: str = "market_cap_desc", per_page: int = 10, page: int = 1) -> Optional[List[Dict]]:
+async def get_coingecko_markets(vs_currency: str = "usd", order: str = "market_cap_desc", per_page: int = 10, page: int = 1, sort_by_change: str = None) -> Optional[List[Dict]]:
     """从CoinGecko获取市场数据"""
-    cache_key = f"coingecko_markets_{vs_currency}_{order}_{per_page}_{page}"
+    # 为了获取涨跌幅排行，我们需要获取更多数据然后客户端排序
+    actual_per_page = per_page if not sort_by_change else 100  # 获取更多数据用于排序
+    cache_key = f"coingecko_markets_{vs_currency}_{order}_{sort_by_change or 'none'}_{per_page}_{page}"
+    
     cached_data = await cache_manager.load_cache(cache_key, subdirectory="crypto")
     if cached_data:
         logging.info(f"使用缓存的CoinGecko市场数据: {order}")
@@ -72,7 +75,7 @@ async def get_coingecko_markets(vs_currency: str = "usd", order: str = "market_c
     params = {
         "vs_currency": vs_currency,
         "order": order,
-        "per_page": per_page,
+        "per_page": actual_per_page,
         "page": page,
         "sparkline": "false",
         "price_change_percentage": "24h"
@@ -83,8 +86,22 @@ async def get_coingecko_markets(vs_currency: str = "usd", order: str = "market_c
         if response.status_code == 200:
             data = response.json()
             if data:
-                await cache_manager.save_cache(cache_key, data, subdirectory="crypto")
-                return data
+                # 如果需要按价格变化排序，在客户端进行排序
+                if sort_by_change:
+                    # 过滤掉没有价格变化数据的币种
+                    valid_coins = [coin for coin in data if coin.get('price_change_percentage_24h') is not None]
+                    
+                    if sort_by_change == "gainers":
+                        # 涨幅榜：按24小时价格变化降序排列
+                        data = sorted(valid_coins, key=lambda x: x['price_change_percentage_24h'], reverse=True)
+                    elif sort_by_change == "losers":
+                        # 跌幅榜：按24小时价格变化升序排列  
+                        data = sorted(valid_coins, key=lambda x: x['price_change_percentage_24h'])
+                
+                # 取前per_page个结果
+                result = data[:per_page]
+                await cache_manager.save_cache(cache_key, result, subdirectory="crypto")
+                return result
         else:
             logging.warning(f"CoinGecko Markets API 请求失败: HTTP {response.status_code}")
     except Exception as e:
@@ -498,7 +515,7 @@ async def crypto_trending_callback(update: Update, context: ContextTypes.DEFAULT
             parse_mode=ParseMode.MARKDOWN_V2
         )
 
-async def crypto_ranking_callback(ranking_type: str, title: str, order: str, query: CallbackQuery) -> None:
+async def crypto_ranking_callback(ranking_type: str, title: str, sort_param: str, query: CallbackQuery) -> None:
     """通用排行榜回调处理"""
     loading_message = f"📊 正在获取{title}... ⏳"
     await query.edit_message_text(
@@ -507,7 +524,16 @@ async def crypto_ranking_callback(ranking_type: str, title: str, order: str, que
     )
     
     try:
-        coins_data = await get_coingecko_markets(vs_currency="usd", order=order, per_page=10)
+        # 根据排行榜类型决定如何获取数据
+        if sort_param in ["gainers", "losers"]:
+            # 涨跌幅榜需要客户端排序
+            coins_data = await get_coingecko_markets(vs_currency="usd", order="market_cap_desc", per_page=10, sort_by_change=sort_param)
+        elif sort_param == "volume_desc":
+            # 交易量榜
+            coins_data = await get_coingecko_markets(vs_currency="usd", order="volume_desc", per_page=10)
+        else:
+            # 市值榜和其他
+            coins_data = await get_coingecko_markets(vs_currency="usd", order=sort_param, per_page=10)
         
         if coins_data:
             result_text = format_crypto_ranking(coins_data, title, "usd")
@@ -549,13 +575,13 @@ async def crypto_gainers_callback(update: Update, context: ContextTypes.DEFAULT_
     """涨幅榜"""
     query = update.callback_query
     await query.answer("正在获取涨幅榜...")
-    await crypto_ranking_callback("crypto_gainers", "24小时涨幅榜", "price_change_percentage_24h_desc", query)
+    await crypto_ranking_callback("crypto_gainers", "24小时涨幅榜", "gainers", query)
 
 async def crypto_losers_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """跌幅榜"""
     query = update.callback_query  
     await query.answer("正在获取跌幅榜...")
-    await crypto_ranking_callback("crypto_losers", "24小时跌幅榜", "price_change_percentage_24h_asc", query)
+    await crypto_ranking_callback("crypto_losers", "24小时跌幅榜", "losers", query)
 
 async def crypto_market_cap_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """市值榜"""
