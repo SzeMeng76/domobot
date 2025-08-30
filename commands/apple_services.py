@@ -131,7 +131,7 @@ def parse_countries_from_args(args: list[str]) -> list[str]:
 
 
 def get_icloud_prices_from_html(content: str) -> dict:
-    """Extracts iCloud prices from Apple Support HTML content (legacy Chinese support page)."""
+    """Extracts iCloud prices from Apple Support HTML content."""
     soup = BeautifulSoup(content, "html.parser")
     prices = {}
 
@@ -143,53 +143,56 @@ def get_icloud_prices_from_html(content: str) -> dict:
     for p in paragraphs:
         text = p.get_text(strip=True)
 
-        # Check if it's a country line
-        if ("（" in text and "）" in text) or text.endswith("（港元）"):
-            if current_country:
+        # Check if it's a country line - handle both Chinese format and potential HTML tags like <sup>
+        # Pattern: "国家名<sup>footnote</sup>（货币名称）" or "国家名（货币名称）"
+        if "（" in text and "）" in text and not p.find("b"):  # Country line should not have <b> tags
+            if current_country and size_price_dict:
                 prices[current_country] = {"currency": currency, "prices": size_price_dict}
 
-            # Process country info
-            if text.endswith("（港元）"):
-                current_country = "香港"
-                currency = "港元"
+            # Remove HTML tags like <sup> from country name  
+            clean_text = re.sub(r'<[^>]+>', '', text)
+            
+            # Extract country and currency from format like "俄罗斯（俄罗斯卢布）"
+            country_match = re.match(r"^(.*?)（(.*?)）", clean_text)
+            if country_match:
+                current_country = country_match.group(1).strip()
+                currency = country_match.group(2).strip()
                 size_price_dict = {}
-            elif "（" in text and "）" in text:
-                country_match = re.match(r"^(.*?)（(.*?)）", text)
-                if country_match:
-                    current_country = country_match.group(1)
-                    currency = country_match.group(2)
-                    size_price_dict = {}
+                logger.info(f"Found country: {current_country}, currency: {currency}")
 
-        # Check if it's a price line
-        else:
-            # Find size and price
-            size = p.find("b")
-            if size:
-                # Get full size text
-                size_text = size.get_text(strip=True)
-                # Remove colons (full-width and half-width)
-                size_text = size_text.replace("：", "").replace(":", "").strip()
-
-                # Get full price text
-                price_text = text
-                if "：" in price_text:
-                    price = price_text.split("：")[-1].strip()
-                elif ":" in price_text:
-                    price = price_text.split(":")[-1].strip()
+        # Check if it's a price line - must have <b> tag for storage size and be under a country
+        elif current_country:
+            size_elem = p.find("b")
+            if size_elem:
+                # Get storage size
+                size_text = size_elem.get_text(strip=True)
+                
+                # Extract price after the Chinese colon "："
+                if "：" in text:
+                    price = text.split("：", 1)[1].strip()
+                elif ":" in text:
+                    price = text.split(":", 1)[1].strip()
                 else:
-                    # If no colon, extract number part
-                    match = re.search(r"HK\$\s*(\d+)", price_text)
-                    if match:
-                        price = f"HK$ {match.group(1)}"
+                    # Fallback: try to extract everything after the bold part
+                    full_text = p.get_text(strip=True)
+                    bold_text = size_elem.get_text(strip=True)
+                    if bold_text in full_text:
+                        price = full_text.replace(bold_text, "").strip()
+                        # Remove leading colon if present
+                        price = re.sub(r"^[：:]\s*", "", price).strip()
                     else:
                         continue
-
-                size_price_dict[size_text] = price
+                
+                if price and size_text:
+                    size_price_dict[size_text] = price
+                    logger.debug(f"Added price for {current_country}: {size_text} = {price}")
 
     # Save data for the last country
-    if current_country:
+    if current_country and size_price_dict:
         prices[current_country] = {"currency": currency, "prices": size_price_dict}
+        logger.info(f"Completed parsing for {current_country} with {len(size_price_dict)} storage tiers")
 
+    logger.info(f"Total countries parsed from Apple Support HTML: {len(prices)}")
     return prices
 
 
