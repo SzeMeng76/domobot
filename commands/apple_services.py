@@ -420,12 +420,20 @@ async def get_service_info(url: str, country_code: str, service: str, context: C
             for name in prices.keys():
                 # Remove footnote numbers and superscript for better matching
                 clean_name = re.sub(r'[0-9,\s]+$', '', name).strip()
+                # Use exact matching first, then fallback to substring matching
                 if (country_name == clean_name or 
-                    country_name in name or 
-                    name in country_name or 
                     clean_name == country_name):
                     matched_country = name
-                    logger.info(f"Matched country: '{country_name}' -> '{name}'")
+                    logger.info(f"Exact matched country: '{country_name}' -> '{name}'")
+                    break
+                elif (country_name in name and 
+                      len(country_name) > 2 and  # Avoid short matches like "美" matching "美国" 
+                      not any(other_clean for other_clean in [re.sub(r'[0-9,\s]+$', '', other_name).strip() 
+                                                              for other_name in prices.keys() 
+                                                              if other_name != name] 
+                             if country_name in other_clean and other_clean != clean_name)):
+                    matched_country = name
+                    logger.info(f"Substring matched country: '{country_name}' -> '{name}'")
                     break
             
             if not matched_country:
@@ -444,12 +452,20 @@ async def get_service_info(url: str, country_code: str, service: str, context: C
                                 # Re-check for matching country
                                 for name in prices.keys():
                                     clean_name = re.sub(r'[0-9,\s]+$', '', name).strip()
+                                    # Use exact matching first
                                     if (country_name == clean_name or 
-                                        country_name in name or 
-                                        name in country_name or 
                                         clean_name == country_name):
                                         matched_country = name
-                                        logger.info(f"Fallback matched country: '{country_name}' -> '{name}'")
+                                        logger.info(f"Fallback exact matched country: '{country_name}' -> '{name}'")
+                                        break
+                                    elif (country_name in name and 
+                                          len(country_name) > 2 and
+                                          not any(other_clean for other_clean in [re.sub(r'[0-9,\s]+$', '', other_name).strip() 
+                                                                                  for other_name in prices.keys() 
+                                                                                  if other_name != name] 
+                                                 if country_name in other_clean and other_clean != clean_name)):
+                                        matched_country = name
+                                        logger.info(f"Fallback substring matched country: '{country_name}' -> '{name}'")
                                         break
                     except Exception as support_error:
                         logger.error(f"Final fallback failed: {support_error}")
