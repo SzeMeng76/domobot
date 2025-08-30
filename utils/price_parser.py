@@ -59,6 +59,7 @@ CURRENCY_SYMBOL_TO_CODE = {
     "Kč": "CZK",
     "лев": "BGN",
     "lei": "RON",
+    "p.": "RUB",  # Russian ruble abbreviation used in Apple Support pages
 }
 
 # Currency multipliers for parsing
