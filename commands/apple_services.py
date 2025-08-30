@@ -418,8 +418,14 @@ async def get_service_info(url: str, country_code: str, service: str, context: C
             # Find matching country data
             matched_country = None
             for name in prices.keys():
-                if country_name in name or name in country_name or name == country_name:
+                # Remove footnote numbers and superscript for better matching
+                clean_name = re.sub(r'[0-9,\s]+$', '', name).strip()
+                if (country_name == clean_name or 
+                    country_name in name or 
+                    name in country_name or 
+                    clean_name == country_name):
                     matched_country = name
+                    logger.info(f"Matched country: '{country_name}' -> '{name}'")
                     break
             
             if not matched_country:
@@ -437,8 +443,13 @@ async def get_service_info(url: str, country_code: str, service: str, context: C
                                 prices = support_prices
                                 # Re-check for matching country
                                 for name in prices.keys():
-                                    if country_name in name or name in country_name or name == country_name:
+                                    clean_name = re.sub(r'[0-9,\s]+$', '', name).strip()
+                                    if (country_name == clean_name or 
+                                        country_name in name or 
+                                        name in country_name or 
+                                        clean_name == country_name):
                                         matched_country = name
+                                        logger.info(f"Fallback matched country: '{country_name}' -> '{name}'")
                                         break
                     except Exception as support_error:
                         logger.error(f"Final fallback failed: {support_error}")
