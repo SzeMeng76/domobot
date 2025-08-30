@@ -351,8 +351,8 @@ async def crypto_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 • **各种排行榜**: 涨跌幅、市值、交易量等
 
 💡 快速使用:
-`/crypto btc` \\- 查询比特币价格
-`/crypto eth 2 usd` \\- 查询2个ETH对USD价格
+`/crypto btc` \- 查询比特币价格
+`/crypto eth 2 usd` \- 查询2个ETH对USD价格
 
 请选择功能:"""
         
@@ -417,10 +417,10 @@ async def crypto_price_help_callback(update: Update, context: ContextTypes.DEFAU
 `/crypto [币种] [数量] [目标货币]`
 
 **示例:**
-• `/crypto btc` \\- 查询1个BTC对CNY的价格  
-• `/crypto btc 2` \\- 查询2个BTC对CNY的价格
-• `/crypto eth usd` \\- 查询1个ETH对USD的价格
-• `/crypto eth 2 usd` \\- 查询2个ETH对USD的价格
+• `/crypto btc` \- 查询1个BTC对CNY的价格  
+• `/crypto btc 2` \- 查询2个BTC对CNY的价格
+• `/crypto eth usd` \- 查询1个ETH对USD的价格
+• `/crypto eth 2 usd` \- 查询2个ETH对USD的价格
 
 **支持的目标货币:**
 • CNY, USD, EUR, JPY 等
@@ -469,8 +469,8 @@ async def crypto_main_menu_callback(update: Update, context: ContextTypes.DEFAUL
 • **各种排行榜**: 涨跌幅、市值、交易量等
 
 💡 快速使用:
-`/crypto btc` \\- 查询比特币价格
-`/crypto eth 2 usd` \\- 查询2个ETH对USD价格
+`/crypto btc` \- 查询比特币价格
+`/crypto eth 2 usd` \- 查询2个ETH对USD价格
 
 请选择功能:"""
     
