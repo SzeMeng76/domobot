@@ -80,7 +80,7 @@ _PATTERN_AMOUNT_FIRST = re.compile(rf"^(?P<amount>.*?)\s*(?P<currency>{_currency
 
 
 def detect_currency_from_context(currency_symbol: str, price_str: str, country_code: str | None = None) -> str:
-    """Smartly detects currency, especially for the ambiguous ¥ symbol."""
+    """Smartly detects currency, especially for ambiguous symbols like ¥ and $."""
     if currency_symbol == "¥":
         if country_code:
             if country_code in ["CN", "HK", "TW", "MO"]:
@@ -102,6 +102,21 @@ def detect_currency_from_context(currency_symbol: str, price_str: str, country_c
             if max_num <= 100:
                 return "CNY"
         return "CNY"
+    
+    # Handle ambiguous $ symbol based on country context
+    if currency_symbol == "$" and country_code:
+        # Map country codes to their respective currencies that use $ symbol
+        country_currency_map = {
+            "TW": "TWD",  # Taiwan uses TWD, not USD
+            "AU": "AUD",  # Australia Dollar
+            "CA": "CAD",  # Canadian Dollar
+            "HK": "HKD",  # Hong Kong Dollar
+            "SG": "SGD",  # Singapore Dollar
+            "NZ": "NZD",  # New Zealand Dollar
+            # Add more countries as needed
+        }
+        if country_code in country_currency_map:
+            return country_currency_map[country_code]
 
     return CURRENCY_SYMBOL_TO_CODE.get(currency_symbol, "USD")
 
