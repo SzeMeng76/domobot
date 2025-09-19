@@ -95,6 +95,28 @@ def get_full_stock_id(short_stock_id: str) -> Optional[str]:
     """根据短ID获取完整股票ID"""
     return stock_id_mapping.get(short_stock_id)
 
+def align_timezone(target_time: pd.Timestamp, reference_index: pd.DatetimeIndex) -> pd.Timestamp:
+    """统一时区处理函数，避免时区比较错误"""
+    try:
+        if reference_index.tz is not None:
+            # 如果参考索引有时区信息，将目标时间转换为相同时区
+            if target_time.tz is None:
+                target_time = target_time.tz_localize(reference_index.tz)
+            else:
+                target_time = target_time.tz_convert(reference_index.tz)
+        else:
+            # 如果参考索引没有时区信息，确保目标时间也没有时区
+            if target_time.tz is not None:
+                target_time = target_time.tz_localize(None)
+        return target_time
+    except Exception as e:
+        logger.warning(f"时区处理失败，使用原始时间: {e}")
+        # 如果时区处理失败，尝试去除时区信息
+        try:
+            return target_time.tz_localize(None) if target_time.tz is not None else target_time
+        except:
+            return target_time
+
 class FinanceService:
     """金融服务类"""
     
@@ -357,8 +379,12 @@ class FinanceService:
             earnings_dates = ticker.earnings_dates
 
             if earnings_dates is not None and not earnings_dates.empty:
-                # 获取未来几个财报日期
-                current_time = datetime.now()
+                # 获取未来几个财报日期，处理时区问题
+                current_time = pd.Timestamp.now()
+
+                # 统一时区处理
+                current_time = align_timezone(current_time, earnings_dates.index)
+
                 future_earnings = earnings_dates[earnings_dates.index >= current_time]
                 past_earnings = earnings_dates[earnings_dates.index < current_time]
 
@@ -443,9 +469,12 @@ class FinanceService:
 
             # 处理分红数据
             if dividends is not None and not dividends.empty:
-                # 获取最近12个月的分红
-                current_time = datetime.now()
+                # 获取最近12个月的分红，处理时区问题
+                current_time = pd.Timestamp.now()
                 one_year_ago = current_time - pd.DateOffset(months=12)
+
+                # 统一时区处理
+                one_year_ago = align_timezone(one_year_ago, dividends.index)
 
                 recent_dividends = dividends[dividends.index >= one_year_ago]
 
@@ -469,8 +498,13 @@ class FinanceService:
 
             # 处理拆股数据
             if splits is not None and not splits.empty:
-                # 获取最近5年的拆股
-                five_years_ago = datetime.now() - pd.DateOffset(years=5)
+                # 获取最近5年的拆股，处理时区问题
+                current_time = pd.Timestamp.now()
+                five_years_ago = current_time - pd.DateOffset(years=5)
+
+                # 统一时区处理
+                five_years_ago = align_timezone(five_years_ago, splits.index)
+
                 recent_splits = splits[splits.index >= five_years_ago]
 
                 for date, split_ratio in recent_splits.tail(10).items():  # 最近10次拆股
@@ -1398,6 +1432,106 @@ async def finance_undervalued_growth_callback(update: Update, context: ContextTy
     await query.answer("正在获取低估值成长股...")
     await _execute_ranking(update, context, "undervalued_growth_stocks", "低估值成长股", query)
 
+async def finance_swiss_markets_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """瑞士市场菜单"""
+    query = update.callback_query
+    await query.answer()
+
+    help_text = """🇨🇭 瑞士股市 (SIX Swiss Exchange)
+
+**示例股票代码:**
+• `NESN.SW` - 雀巢
+• `NOVN.SW` - 诺华制药
+• `ROG.SW` - 罗氏控股
+• `UHR.SW` - 斯沃琪集团
+• `ABBN.SW` - ABB集团
+
+请使用 `/finance [股票代码]` 查询瑞士股票"""
+
+    keyboard = [
+        [
+            InlineKeyboardButton("🔍 查询 NESN.SW", callback_data="finance_search_NESN.SW"),
+            InlineKeyboardButton("🔍 查询 NOVN.SW", callback_data="finance_search_NOVN.SW")
+        ],
+        [
+            InlineKeyboardButton("🔍 查询 ROG.SW", callback_data="finance_search_ROG.SW"),
+            InlineKeyboardButton("🔍 查询 UHR.SW", callback_data="finance_search_UHR.SW")
+        ],
+        [
+            InlineKeyboardButton("🔙 返回排行榜", callback_data="finance_stock_rankings")
+        ]
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text(
+        text=foldable_text_with_markdown_v2(help_text),
+        parse_mode="MarkdownV2",
+        reply_markup=reply_markup
+    )
+
+async def finance_international_markets_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """国际市场菜单"""
+    query = update.callback_query
+    await query.answer()
+
+    help_text = """🌍 国际股市
+
+**主要市场示例:**
+🇬🇧 **英国 (LSE):** `SHEL.L`, `AZN.L`, `BP.L`
+🇩🇪 **德国 (XETRA):** `SAP.DE`, `SIE.DE`, `VOW3.DE`
+🇫🇷 **法国 (EPA):** `MC.PA`, `OR.PA`, `AI.PA`
+🇯🇵 **日本 (TSE):** `7203.T`, `6758.T`, `9984.T`
+
+请使用 `/finance [股票代码]` 查询国际股票"""
+
+    keyboard = [
+        [
+            InlineKeyboardButton("🇬🇧 查询 SHEL.L", callback_data="finance_search_SHEL.L"),
+            InlineKeyboardButton("🇩🇪 查询 SAP.DE", callback_data="finance_search_SAP.DE")
+        ],
+        [
+            InlineKeyboardButton("🇫🇷 查询 MC.PA", callback_data="finance_search_MC.PA"),
+            InlineKeyboardButton("🇯🇵 查询 7203.T", callback_data="finance_search_7203.T")
+        ],
+        [
+            InlineKeyboardButton("🔙 返回排行榜", callback_data="finance_stock_rankings")
+        ]
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text(
+        text=foldable_text_with_markdown_v2(help_text),
+        parse_mode="MarkdownV2",
+        reply_markup=reply_markup
+    )
+
+async def finance_search_symbol_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理快速查询按钮"""
+    query = update.callback_query
+    await query.answer()
+
+    if not query or not query.data:
+        return
+
+    try:
+        callback_data = query.data
+        if callback_data.startswith("finance_search_"):
+            symbol = callback_data.replace("finance_search_", "")
+            # 执行股票查询
+            await _execute_stock_search(update, context, symbol, query)
+
+    except Exception as e:
+        logger.error(f"处理快速查询回调时发生错误: {e}", exc_info=True)
+        try:
+            await query.edit_message_text(
+                foldable_text_v2(f"❌ 处理请求时发生错误: {str(e)}"),
+                parse_mode="MarkdownV2"
+            )
+        except:
+            pass
+
 # 基金排行榜回调处理器
 async def finance_conservative_foreign_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """保守外国基金"""
@@ -1796,6 +1930,11 @@ command_factory.register_callback(r"^finance_most_shorted$", finance_most_shorte
 command_factory.register_callback(r"^finance_growth_tech$", finance_growth_tech_callback, permission=Permission.NONE, description="成长科技股")
 command_factory.register_callback(r"^finance_undervalued_large$", finance_undervalued_large_callback, permission=Permission.NONE, description="低估值大盘股")
 command_factory.register_callback(r"^finance_undervalued_growth$", finance_undervalued_growth_callback, permission=Permission.NONE, description="低估值成长股")
+
+# 国际市场支持
+command_factory.register_callback(r"^finance_swiss_markets$", finance_swiss_markets_callback, permission=Permission.NONE, description="瑞士市场")
+command_factory.register_callback(r"^finance_international_markets$", finance_international_markets_callback, permission=Permission.NONE, description="国际市场")
+command_factory.register_callback(r"^finance_search_", finance_search_symbol_callback, permission=Permission.NONE, description="快速查询股票")
 
 # 基金排行榜
 command_factory.register_callback(r"^finance_conservative_foreign$", finance_conservative_foreign_callback, permission=Permission.NONE, description="保守外国基金")
