@@ -40,17 +40,17 @@ whois21==1.4.6
 python-whois==0.9.5
 
 # DNS Query Library
-dnspython==2.7.0
+dnspython==2.8.0
 
 # Data Validation and Settings Management
-pydantic~=2.11.7
+pydantic~=2.11.9
 
 # RSS Feed Parser
-feedparser==6.0.11
+feedparser==6.0.12
 
 # Translation API
 googletrans==4.0.2
 
 # Yahoo Finance API
-yfinance>=0.2.65
+yfinance>=0.2.66
 pandas>=2.3.2

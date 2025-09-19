@@ -119,7 +119,8 @@ class FinanceService:
         try:
             ticker = yf.Ticker(symbol)
             info = ticker.info
-            history = ticker.history(period="1d")
+            # 利用0.2.66修复的actions数据，明确包含分红和拆股信息
+            history = ticker.history(period="1d", actions=True)
             
             if info:
                 # 获取最新价格 - 优先使用历史数据，其次使用info数据
@@ -158,7 +159,24 @@ class FinanceService:
                 return data
                 
         except Exception as e:
-            logger.error(f"获取股票信息失败 {symbol}: {e}")
+            logger.error(f"获取股票信息失败 {symbol}: {e}", exc_info=True)
+            # 利用0.2.66改进的异常信息提供更具体的错误提示
+            error_msg = str(e).lower()
+            if "rate limit" in error_msg or "too many requests" in error_msg:
+                logger.warning(f"股票 {symbol} 查询触发频率限制")
+                return {"error": "rate_limit", "message": "访问频率过高，请稍后重试"}
+            elif "not found" in error_msg or "no data found" in error_msg:
+                logger.warning(f"股票 {symbol} 数据不存在")
+                return {"error": "not_found", "message": "股票代码不存在或已退市"}
+            elif "unauthorized" in error_msg or "403" in error_msg:
+                logger.warning(f"股票 {symbol} 访问被拒绝")
+                return {"error": "unauthorized", "message": "访问被拒绝，请稍后重试"}
+            elif "timeout" in error_msg or "connection" in error_msg:
+                logger.warning(f"股票 {symbol} 网络超时")
+                return {"error": "timeout", "message": "网络超时，请检查网络连接"}
+            else:
+                logger.error(f"股票 {symbol} 未知错误: {e}")
+                return {"error": "unknown", "message": f"获取数据时发生错误: {str(e)[:100]}"}
             return None
         
         return None
@@ -179,13 +197,13 @@ class FinanceService:
                 return cached_data
         
         try:
-            # 使用yfinance的预定义筛选器
+            # 使用yfinance的预定义筛选器，利用0.2.66新增的瑞士交易所支持
             from yfinance.screener.screener import PREDEFINED_SCREENER_QUERIES, screen
-            
+
             if screener_type not in PREDEFINED_SCREENER_QUERIES:
                 return []
-            
-            # 获取筛选结果
+
+            # 获取筛选结果，支持更多交易所包括瑞士
             screener_data = screen(screener_type, count=10)
             results = []
             
@@ -316,7 +334,168 @@ class FinanceService:
             return None
         
         return None
-    
+
+    async def get_earnings_dates(self, symbol: str) -> Optional[Dict]:
+        """获取财报日期 - 利用0.2.66修复的earnings_dates功能"""
+        cache_key = f"earnings_dates_{symbol.upper()}"
+
+        if cache_manager:
+            config = get_config()
+            cached_data = await cache_manager.load_cache(
+                cache_key,
+                max_age_seconds=config.finance_cache_duration * 6,  # 财报日期缓存30分钟
+                subdirectory="finance"
+            )
+            if cached_data:
+                logger.info(f"使用缓存的财报日期数据: {symbol}")
+                return cached_data
+
+        try:
+            ticker = yf.Ticker(symbol)
+
+            # 获取财报日期 - 利用0.2.66的修复
+            earnings_dates = ticker.earnings_dates
+
+            if earnings_dates is not None and not earnings_dates.empty:
+                # 获取未来几个财报日期
+                current_time = datetime.now()
+                future_earnings = earnings_dates[earnings_dates.index >= current_time]
+                past_earnings = earnings_dates[earnings_dates.index < current_time]
+
+                data = {
+                    'symbol': symbol.upper(),
+                    'next_earnings': None,
+                    'upcoming_earnings': [],
+                    'recent_earnings': [],
+                    'timestamp': datetime.now().isoformat()
+                }
+
+                # 下一个财报日期
+                if not future_earnings.empty:
+                    next_date = future_earnings.index[0]
+                    data['next_earnings'] = {
+                        'date': next_date.strftime('%Y-%m-%d'),
+                        'eps_estimate': float(future_earnings.iloc[0].get('EPS Estimate', 0)) if 'EPS Estimate' in future_earnings.columns else None,
+                        'reported_eps': float(future_earnings.iloc[0].get('Reported EPS', 0)) if 'Reported EPS' in future_earnings.columns else None
+                    }
+
+                # 即将到来的财报（未来4个）
+                for i, (date, row) in enumerate(future_earnings.head(4).iterrows()):
+                    earning_info = {
+                        'date': date.strftime('%Y-%m-%d'),
+                        'eps_estimate': float(row.get('EPS Estimate', 0)) if 'EPS Estimate' in row and pd.notna(row.get('EPS Estimate')) else None,
+                        'reported_eps': float(row.get('Reported EPS', 0)) if 'Reported EPS' in row and pd.notna(row.get('Reported EPS')) else None
+                    }
+                    data['upcoming_earnings'].append(earning_info)
+
+                # 最近的财报（过去4个）
+                for i, (date, row) in enumerate(past_earnings.head(4).iterrows()):
+                    earning_info = {
+                        'date': date.strftime('%Y-%m-%d'),
+                        'eps_estimate': float(row.get('EPS Estimate', 0)) if 'EPS Estimate' in row and pd.notna(row.get('EPS Estimate')) else None,
+                        'reported_eps': float(row.get('Reported EPS', 0)) if 'Reported EPS' in row and pd.notna(row.get('Reported EPS')) else None,
+                        'surprise': float(row.get('Surprise(%)', 0)) if 'Surprise(%)' in row and pd.notna(row.get('Surprise(%)')) else None
+                    }
+                    data['recent_earnings'].append(earning_info)
+
+                if cache_manager:
+                    await cache_manager.save_cache(cache_key, data, subdirectory="finance")
+
+                return data
+
+        except Exception as e:
+            logger.error(f"获取财报日期失败 {symbol}: {e}", exc_info=True)
+            return None
+
+        return None
+
+    async def get_dividends_splits(self, symbol: str) -> Optional[Dict]:
+        """获取分红和拆股信息 - 利用0.2.66修复的actions数据"""
+        cache_key = f"dividends_splits_{symbol.upper()}"
+
+        if cache_manager:
+            config = get_config()
+            cached_data = await cache_manager.load_cache(
+                cache_key,
+                max_age_seconds=config.finance_cache_duration * 4,  # 分红拆股数据缓存20分钟
+                subdirectory="finance"
+            )
+            if cached_data:
+                logger.info(f"使用缓存的分红拆股数据: {symbol}")
+                return cached_data
+
+        try:
+            ticker = yf.Ticker(symbol)
+
+            # 获取分红数据
+            dividends = ticker.dividends
+            # 获取拆股数据
+            splits = ticker.splits
+
+            data = {
+                'symbol': symbol.upper(),
+                'recent_dividends': [],
+                'recent_splits': [],
+                'dividend_yield': 0,
+                'annual_dividend': 0,
+                'timestamp': datetime.now().isoformat()
+            }
+
+            # 处理分红数据
+            if dividends is not None and not dividends.empty:
+                # 获取最近12个月的分红
+                current_time = datetime.now()
+                one_year_ago = current_time - pd.DateOffset(months=12)
+
+                recent_dividends = dividends[dividends.index >= one_year_ago]
+
+                for date, dividend in recent_dividends.tail(10).items():  # 最近10次分红
+                    dividend_info = {
+                        'date': date.strftime('%Y-%m-%d'),
+                        'amount': float(dividend),
+                        'type': 'regular'  # 可以根据需要扩展为特殊分红类型
+                    }
+                    data['recent_dividends'].append(dividend_info)
+
+                # 计算年度分红和分红收益率
+                if not recent_dividends.empty:
+                    annual_dividend = float(recent_dividends.sum())
+                    data['annual_dividend'] = annual_dividend
+
+                    # 从ticker.info获取分红收益率
+                    info = ticker.info
+                    if info and 'dividendYield' in info and info['dividendYield']:
+                        data['dividend_yield'] = float(info['dividendYield'] * 100)  # 转换为百分比
+
+            # 处理拆股数据
+            if splits is not None and not splits.empty:
+                # 获取最近5年的拆股
+                five_years_ago = datetime.now() - pd.DateOffset(years=5)
+                recent_splits = splits[splits.index >= five_years_ago]
+
+                for date, split_ratio in recent_splits.tail(10).items():  # 最近10次拆股
+                    split_info = {
+                        'date': date.strftime('%Y-%m-%d'),
+                        'ratio': float(split_ratio),
+                        'ratio_text': f"1:{int(split_ratio)}" if split_ratio > 1 else f"{int(1/split_ratio)}:1"
+                    }
+                    data['recent_splits'].append(split_info)
+
+            # 如果没有任何数据，返回None
+            if not data['recent_dividends'] and not data['recent_splits']:
+                return None
+
+            if cache_manager:
+                await cache_manager.save_cache(cache_key, data, subdirectory="finance")
+
+            return data
+
+        except Exception as e:
+            logger.error(f"获取分红拆股信息失败 {symbol}: {e}", exc_info=True)
+            return None
+
+        return None
+
     async def get_financial_statements(self, symbol: str, statement_type: str = "income") -> Optional[Dict]:
         """获取财务报表"""
         cache_key = f"financial_{statement_type}_{symbol.upper()}"
@@ -408,6 +587,22 @@ finance_service = FinanceService()
 
 def format_stock_info(stock_data: Dict) -> str:
     """格式化股票信息"""
+    # 检查是否为错误信息
+    if stock_data.get('error'):
+        error_type = stock_data['error']
+        message = stock_data.get('message', '未知错误')
+
+        error_emojis = {
+            'rate_limit': '⏰',
+            'not_found': '❌',
+            'unauthorized': '🔒',
+            'timeout': '🌐',
+            'unknown': '⚠️'
+        }
+
+        emoji = error_emojis.get(error_type, '❌')
+        return f"{emoji} **错误:** {message}"
+
     name = stock_data.get('name', stock_data['symbol'])
     symbol = stock_data['symbol']
     price = stock_data['current_price']
@@ -416,7 +611,7 @@ def format_stock_info(stock_data: Dict) -> str:
     volume = stock_data['volume']
     currency = stock_data.get('currency', 'USD')
     exchange = stock_data.get('exchange', '')
-    
+
     # 涨跌emoji
     trend_emoji = "📈" if change >= 0 else "📉"
     change_sign = "+" if change >= 0 else ""
@@ -563,6 +758,94 @@ def format_financial_statement(financial_data: Dict) -> str:
     result += f"\n_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
     return result
 
+def format_earnings_dates(earnings_data: Dict) -> str:
+    """格式化财报日期"""
+    symbol = earnings_data['symbol']
+    next_earnings = earnings_data.get('next_earnings')
+    upcoming_earnings = earnings_data.get('upcoming_earnings', [])
+    recent_earnings = earnings_data.get('recent_earnings', [])
+
+    result = f"📅 *{symbol} 财报日期*\n\n"
+
+    # 下一个财报日期
+    if next_earnings:
+        result += "🔥 *下次财报:*\n"
+        result += f"📆 日期: `{next_earnings['date']}`\n"
+        if next_earnings.get('eps_estimate'):
+            result += f"📊 EPS预期: `${next_earnings['eps_estimate']:.2f}`\n"
+        result += "\n"
+
+    # 即将到来的财报
+    if upcoming_earnings:
+        result += "📈 *即将发布 (未来4次):*\n"
+        for i, earning in enumerate(upcoming_earnings, 1):
+            result += f"`{i}.` {earning['date']}"
+            if earning.get('eps_estimate'):
+                result += f" (EPS预期: ${earning['eps_estimate']:.2f})"
+            result += "\n"
+        result += "\n"
+
+    # 最近的财报
+    if recent_earnings:
+        result += "📊 *最近发布 (过去4次):*\n"
+        for i, earning in enumerate(recent_earnings, 1):
+            result += f"`{i}.` {earning['date']}"
+            if earning.get('reported_eps'):
+                result += f" (实际EPS: ${earning['reported_eps']:.2f}"
+                if earning.get('surprise') is not None:
+                    surprise_emoji = "🎯" if earning['surprise'] >= 0 else "❌"
+                    result += f", 超预期: {surprise_emoji}{earning['surprise']:+.1f}%"
+                result += ")"
+            result += "\n"
+
+    if not next_earnings and not upcoming_earnings and not recent_earnings:
+        result += "❌ 暂无财报日期数据"
+
+    result += f"\n_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
+    return result
+
+def format_dividends_splits(dividends_data: Dict) -> str:
+    """格式化分红拆股信息"""
+    symbol = dividends_data['symbol']
+    recent_dividends = dividends_data.get('recent_dividends', [])
+    recent_splits = dividends_data.get('recent_splits', [])
+    dividend_yield = dividends_data.get('dividend_yield', 0)
+    annual_dividend = dividends_data.get('annual_dividend', 0)
+
+    result = f"💰 *{symbol} 分红拆股信息*\n\n"
+
+    # 分红信息
+    if recent_dividends:
+        result += "💵 *分红信息:*\n"
+        if annual_dividend > 0:
+            result += f"📊 年度分红: `${annual_dividend:.2f}`\n"
+        if dividend_yield > 0:
+            result += f"📈 分红收益率: `{dividend_yield:.2f}%`\n"
+        result += "\n"
+
+        result += "📋 *最近分红记录:*\n"
+        for i, dividend in enumerate(recent_dividends[-8:], 1):  # 显示最近8次
+            result += f"`{i}.` {dividend['date']} - `${dividend['amount']:.2f}`\n"
+        result += "\n"
+    else:
+        result += "💵 *分红信息:* 暂无分红记录\n\n"
+
+    # 拆股信息
+    if recent_splits:
+        result += "🔀 *拆股信息:*\n"
+        result += "📋 *最近拆股记录:*\n"
+        for i, split in enumerate(recent_splits[-5:], 1):  # 显示最近5次
+            result += f"`{i}.` {split['date']} - 拆股比例 `{split['ratio_text']}`\n"
+        result += "\n"
+    else:
+        result += "🔀 *拆股信息:* 暂无拆股记录\n\n"
+
+    if not recent_dividends and not recent_splits:
+        result += "❌ 暂无分红拆股数据"
+
+    result += f"_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
+    return result
+
 def format_ranking_list(stocks: List[Dict], title: str) -> str:
     """格式化排行榜"""
     if not stocks:
@@ -663,9 +946,33 @@ async def _execute_stock_search(update: Update, context: ContextTypes.DEFAULT_TY
         stock_data = await finance_service.get_stock_info(query)
         
         if stock_data:
-            # 找到股票信息，直接显示
+            # 检查是否为错误信息
+            if stock_data.get('error'):
+                # 处理错误情况
+                result_text = format_stock_info(stock_data)
+                keyboard = [[InlineKeyboardButton("🔙 返回主菜单", callback_data="finance_main_menu")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
+                if callback_query:
+                    await callback_query.edit_message_text(
+                        text=foldable_text_v2(result_text),
+                        parse_mode="MarkdownV2",
+                        reply_markup=reply_markup
+                    )
+                else:
+                    await message.edit_text(
+                        text=foldable_text_v2(result_text),
+                        parse_mode="MarkdownV2",
+                        reply_markup=reply_markup
+                    )
+
+                # 错误消息10秒后删除
+                await _schedule_auto_delete(context, message.chat_id, message.message_id, 10)
+                return
+
+            # 找到正常股票信息，直接显示
             result_text = format_stock_info(stock_data)
-            
+
             # 添加分析师评级和财务报表按钮
             symbol = stock_data['symbol']
             short_id = get_short_stock_id(symbol)
@@ -677,6 +984,10 @@ async def _execute_stock_search(update: Update, context: ContextTypes.DEFAULT_TY
                 [
                     InlineKeyboardButton("🏛️资产负债表", callback_data=f"finance_balance:{short_id}"),
                     InlineKeyboardButton("💰 现金流量表", callback_data=f"finance_cashflow:{short_id}")
+                ],
+                [
+                    InlineKeyboardButton("📅 财报日期", callback_data=f"finance_earnings:{short_id}"),
+                    InlineKeyboardButton("💰 分红拆股", callback_data=f"finance_dividends:{short_id}")
                 ],
                 [
                     InlineKeyboardButton("🔙 返回主菜单", callback_data="finance_main_menu")
@@ -866,6 +1177,10 @@ async def finance_stock_rankings_callback(update: Update, context: ContextTypes.
             InlineKeyboardButton("📊 低估成长", callback_data="finance_undervalued_growth")
         ],
         [
+            InlineKeyboardButton("🇨🇭 瑞士市场", callback_data="finance_swiss_markets"),
+            InlineKeyboardButton("🌍 国际市场", callback_data="finance_international_markets")
+        ],
+        [
             InlineKeyboardButton("🔙 返回主菜单", callback_data="finance_main_menu")
         ]
     ]
@@ -974,9 +1289,14 @@ async def finance_search_callback(update: Update, context: ContextTypes.DEFAULT_
 • `/finance BABA` - 查询阿里巴巴
 
 **支持的市场:**
-• 美股 (NASDAQ, NYSE)
-• 港股 (如 0700.HK)  
-• A股 (如 000001.SZ)
+• 美股 (NASDAQ, NYSE) - 如 AAPL, GOOGL
+• 港股 (HKEX) - 如 0700.HK, 9988.HK
+• A股 (上交所/深交所) - 如 000001.SZ, 600000.SS
+• 🇨🇭 瑞士股市 (SIX) - 如 NESN.SW, NOVN.SW
+• 🇬🇧 英国股市 (LSE) - 如 SHEL.L, AZN.L
+• 🇩🇪 德国股市 (XETRA) - 如 SAP.DE, SIE.DE
+• 🇫🇷 法国股市 (EPA) - 如 MC.PA, OR.PA
+• 🇯🇵 日本股市 (TSE) - 如 7203.T, 6758.T
 
 请发送新消息进行查询"""
 
@@ -1265,6 +1585,144 @@ async def finance_financial_callback(update: Update, context: ContextTypes.DEFAU
         except:
             pass
 
+async def finance_earnings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理财报日期按钮点击"""
+    query = update.callback_query
+    await query.answer("正在获取财报日期...")
+
+    if not query or not query.data:
+        return
+
+    try:
+        callback_data = query.data
+        if callback_data.startswith("finance_earnings:"):
+            short_id = callback_data.replace("finance_earnings:", "")
+            symbol = get_full_stock_id(short_id)
+            if not symbol:
+                await query.edit_message_text(
+                    foldable_text_v2("❌ 股票信息已过期，请重新查询"),
+                    parse_mode="MarkdownV2"
+                )
+                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+                return
+
+            # 获取财报日期数据
+            earnings_data = await finance_service.get_earnings_dates(symbol)
+
+            if earnings_data:
+                result_text = format_earnings_dates(earnings_data)
+
+                keyboard = [
+                    [
+                        InlineKeyboardButton("📊 股票信息", callback_data=f"finance_stock_detail:{short_id}"),
+                        InlineKeyboardButton("🎯 分析师评级", callback_data=f"finance_analyst:{short_id}")
+                    ],
+                    [
+                        InlineKeyboardButton("📋 损益表", callback_data=f"finance_income:{short_id}"),
+                        InlineKeyboardButton("💰 分红拆股", callback_data=f"finance_dividends:{short_id}")
+                    ],
+                    [
+                        InlineKeyboardButton("🔙 返回主菜单", callback_data="finance_main_menu")
+                    ]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
+                await query.edit_message_text(
+                    text=foldable_text_with_markdown_v2(result_text),
+                    parse_mode="MarkdownV2",
+                    reply_markup=reply_markup
+                )
+            else:
+                error_text = f"❌ 暂无 {symbol} 的财报日期数据"
+                keyboard = [[InlineKeyboardButton("🔙 返回主菜单", callback_data="finance_main_menu")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
+                await query.edit_message_text(
+                    text=foldable_text_v2(error_text),
+                    parse_mode="MarkdownV2",
+                    reply_markup=reply_markup
+                )
+                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+
+    except Exception as e:
+        logger.error(f"处理财报日期回调时发生错误: {e}", exc_info=True)
+        try:
+            await query.edit_message_text(
+                foldable_text_v2(f"❌ 处理请求时发生错误: {str(e)}"),
+                parse_mode="MarkdownV2"
+            )
+        except:
+            pass
+
+async def finance_dividends_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理分红拆股按钮点击"""
+    query = update.callback_query
+    await query.answer("正在获取分红拆股信息...")
+
+    if not query or not query.data:
+        return
+
+    try:
+        callback_data = query.data
+        if callback_data.startswith("finance_dividends:"):
+            short_id = callback_data.replace("finance_dividends:", "")
+            symbol = get_full_stock_id(short_id)
+            if not symbol:
+                await query.edit_message_text(
+                    foldable_text_v2("❌ 股票信息已过期，请重新查询"),
+                    parse_mode="MarkdownV2"
+                )
+                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+                return
+
+            # 获取分红拆股数据
+            dividends_data = await finance_service.get_dividends_splits(symbol)
+
+            if dividends_data:
+                result_text = format_dividends_splits(dividends_data)
+
+                keyboard = [
+                    [
+                        InlineKeyboardButton("📊 股票信息", callback_data=f"finance_stock_detail:{short_id}"),
+                        InlineKeyboardButton("🎯 分析师评级", callback_data=f"finance_analyst:{short_id}")
+                    ],
+                    [
+                        InlineKeyboardButton("📅 财报日期", callback_data=f"finance_earnings:{short_id}"),
+                        InlineKeyboardButton("📋 损益表", callback_data=f"finance_income:{short_id}")
+                    ],
+                    [
+                        InlineKeyboardButton("🔙 返回主菜单", callback_data="finance_main_menu")
+                    ]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
+                await query.edit_message_text(
+                    text=foldable_text_with_markdown_v2(result_text),
+                    parse_mode="MarkdownV2",
+                    reply_markup=reply_markup
+                )
+            else:
+                error_text = f"❌ 暂无 {symbol} 的分红拆股数据"
+                keyboard = [[InlineKeyboardButton("🔙 返回主菜单", callback_data="finance_main_menu")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
+                await query.edit_message_text(
+                    text=foldable_text_v2(error_text),
+                    parse_mode="MarkdownV2",
+                    reply_markup=reply_markup
+                )
+                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+
+    except Exception as e:
+        logger.error(f"处理分红拆股回调时发生错误: {e}", exc_info=True)
+        try:
+            await query.edit_message_text(
+                foldable_text_v2(f"❌ 处理请求时发生错误: {str(e)}"),
+                parse_mode="MarkdownV2"
+            )
+        except:
+            pass
+
 async def finance_close_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理关闭按钮点击"""
     query = update.callback_query
@@ -1352,6 +1810,10 @@ command_factory.register_callback(r"^finance_analyst:", finance_analyst_callback
 command_factory.register_callback(r"^finance_income:", finance_financial_callback, permission=Permission.NONE, description="损益表")
 command_factory.register_callback(r"^finance_balance:", finance_financial_callback, permission=Permission.NONE, description="资产负债表")
 command_factory.register_callback(r"^finance_cashflow:", finance_financial_callback, permission=Permission.NONE, description="现金流量表")
+
+# 新增功能
+command_factory.register_callback(r"^finance_earnings:", finance_earnings_callback, permission=Permission.NONE, description="财报日期")
+command_factory.register_callback(r"^finance_dividends:", finance_dividends_callback, permission=Permission.NONE, description="分红拆股")
 
 command_factory.register_callback(r"^finance_close$", finance_close_callback, permission=Permission.NONE, description="关闭金融消息")
 
