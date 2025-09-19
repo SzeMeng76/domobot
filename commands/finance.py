@@ -503,19 +503,7 @@ class FinanceService:
 
                     # 从已获取的info中获取分红收益率
                     if info and 'dividendYield' in info and info['dividendYield']:
-                        dividend_yield = float(info['dividendYield'])
-
-                        # Yahoo Finance返回的dividendYield是乘以10000的值
-                        # 例如: 6.07%返回为60700, 0.44%返回为4400
-                        dividend_yield_percentage = dividend_yield / 10000
-
-                        # 验证合理性 (正常分红收益率在0%-20%之间)
-                        if 0 <= dividend_yield_percentage <= 20.0:
-                            data['dividend_yield'] = dividend_yield_percentage
-                        else:
-                            # 异常数据，记录警告并设为0
-                            logger.warning(f"股票 {symbol} 分红收益率数据异常: {dividend_yield_percentage:.2f}%，已忽略")
-                            data['dividend_yield'] = 0
+                        data['dividend_yield'] = float(info['dividendYield'] / 100)  # 修正为正确的百分比
 
             # 处理拆股数据
             if splits is not None and not splits.empty:
