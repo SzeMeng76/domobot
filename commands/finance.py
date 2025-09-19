@@ -503,7 +503,7 @@ class FinanceService:
 
                     # 从已获取的info中获取分红收益率
                     if info and 'dividendYield' in info and info['dividendYield']:
-                        data['dividend_yield'] = float(info['dividendYield'] / 100)  # 修正为正确的百分比
+                        data['dividend_yield'] = float(info['dividendYield'])  # 直接使用原始值
 
             # 处理拆股数据
             if splits is not None and not splits.empty:
