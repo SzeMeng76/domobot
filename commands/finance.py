@@ -388,8 +388,13 @@ class FinanceService:
                 future_earnings = earnings_dates[earnings_dates.index >= current_time]
                 past_earnings = earnings_dates[earnings_dates.index < current_time]
 
+                # 获取货币信息
+                info = ticker.info
+                currency = info.get('currency', 'USD') if info else 'USD'
+
                 data = {
                     'symbol': symbol.upper(),
+                    'currency': currency,
                     'next_earnings': None,
                     'upcoming_earnings': [],
                     'recent_earnings': [],
@@ -458,8 +463,13 @@ class FinanceService:
             # 获取拆股数据
             splits = ticker.splits
 
+            # 获取货币信息
+            info = ticker.info
+            currency = info.get('currency', 'USD') if info else 'USD'
+
             data = {
                 'symbol': symbol.upper(),
+                'currency': currency,
                 'recent_dividends': [],
                 'recent_splits': [],
                 'dividend_yield': 0,
@@ -491,8 +501,7 @@ class FinanceService:
                     annual_dividend = float(recent_dividends.sum())
                     data['annual_dividend'] = annual_dividend
 
-                    # 从ticker.info获取分红收益率
-                    info = ticker.info
+                    # 从已获取的info中获取分红收益率
                     if info and 'dividendYield' in info and info['dividendYield']:
                         data['dividend_yield'] = float(info['dividendYield'] * 100)  # 转换为百分比
 
@@ -795,6 +804,8 @@ def format_financial_statement(financial_data: Dict) -> str:
 def format_earnings_dates(earnings_data: Dict) -> str:
     """格式化财报日期"""
     symbol = earnings_data['symbol']
+    currency = earnings_data.get('currency', 'USD')
+    currency_symbol = get_currency_symbol(currency)
     next_earnings = earnings_data.get('next_earnings')
     upcoming_earnings = earnings_data.get('upcoming_earnings', [])
     recent_earnings = earnings_data.get('recent_earnings', [])
@@ -806,7 +817,7 @@ def format_earnings_dates(earnings_data: Dict) -> str:
         result += "🔥 *下次财报:*\n"
         result += f"📆 日期: `{next_earnings['date']}`\n"
         if next_earnings.get('eps_estimate'):
-            result += f"📊 EPS预期: `${next_earnings['eps_estimate']:.2f}`\n"
+            result += f"📊 EPS预期: `{currency_symbol}{next_earnings['eps_estimate']:.2f}`\n"
         result += "\n"
 
     # 即将到来的财报
@@ -815,7 +826,7 @@ def format_earnings_dates(earnings_data: Dict) -> str:
         for i, earning in enumerate(upcoming_earnings, 1):
             result += f"`{i}.` {earning['date']}"
             if earning.get('eps_estimate'):
-                result += f" (EPS预期: ${earning['eps_estimate']:.2f})"
+                result += f" (EPS预期: {currency_symbol}{earning['eps_estimate']:.2f})"
             result += "\n"
         result += "\n"
 
@@ -825,7 +836,7 @@ def format_earnings_dates(earnings_data: Dict) -> str:
         for i, earning in enumerate(recent_earnings, 1):
             result += f"`{i}.` {earning['date']}"
             if earning.get('reported_eps'):
-                result += f" (实际EPS: ${earning['reported_eps']:.2f}"
+                result += f" (实际EPS: {currency_symbol}{earning['reported_eps']:.2f}"
                 if earning.get('surprise') is not None:
                     surprise_emoji = "🎯" if earning['surprise'] >= 0 else "❌"
                     result += f", 超预期: {surprise_emoji}{earning['surprise']:+.1f}%"
@@ -841,6 +852,8 @@ def format_earnings_dates(earnings_data: Dict) -> str:
 def format_dividends_splits(dividends_data: Dict) -> str:
     """格式化分红拆股信息"""
     symbol = dividends_data['symbol']
+    currency = dividends_data.get('currency', 'USD')
+    currency_symbol = get_currency_symbol(currency)
     recent_dividends = dividends_data.get('recent_dividends', [])
     recent_splits = dividends_data.get('recent_splits', [])
     dividend_yield = dividends_data.get('dividend_yield', 0)
@@ -852,14 +865,14 @@ def format_dividends_splits(dividends_data: Dict) -> str:
     if recent_dividends:
         result += "💵 *分红信息:*\n"
         if annual_dividend > 0:
-            result += f"📊 年度分红: `${annual_dividend:.2f}`\n"
+            result += f"📊 年度分红: `{currency_symbol}{annual_dividend:.2f}`\n"
         if dividend_yield > 0:
             result += f"📈 分红收益率: `{dividend_yield:.2f}%`\n"
         result += "\n"
 
         result += "📋 *最近分红记录:*\n"
         for i, dividend in enumerate(recent_dividends[-8:], 1):  # 显示最近8次
-            result += f"`{i}.` {dividend['date']} - `${dividend['amount']:.2f}`\n"
+            result += f"`{i}.` {dividend['date']} - `{currency_symbol}{dividend['amount']:.2f}`\n"
         result += "\n"
     else:
         result += "💵 *分红信息:* 暂无分红记录\n\n"
