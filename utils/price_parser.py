@@ -175,14 +175,43 @@ def extract_currency_and_price(price_str: str, country_code: str | None = None) 
 
         if amount_part:
             amount_cleaned = re.sub(r"[^\d.,]", "", amount_part)
-            # This is the line that had the syntax error. It is now fixed.
-            decimal_match = re.search(r"[.,](\d{1,2})$", amount_cleaned)
-            if decimal_match:
-                decimal_part = decimal_match.group(1)
-                integer_part = amount_cleaned[: decimal_match.start()].replace(",", "").replace(".", "")
-                final_num_str = f"{integer_part}.{decimal_part}"
+
+            # Handle locale-specific number formats
+            if country_code and country_code.upper() == "ID":
+                # Indonesian format: comma as decimal separator, dot as thousands separator
+                # For App Store prices with juta suffix, handle format like "3,499" as "3.499"
+                if "," in amount_cleaned and multiplier > 1000:  # Only for large multipliers like juta
+                    # Treat comma as decimal separator for Indonesian format
+                    parts = amount_cleaned.split(",")
+                    if len(parts) == 2 and len(parts[1]) <= 3:  # Reasonable decimal part
+                        final_num_str = f"{parts[0]}.{parts[1]}"
+                    else:
+                        # Fallback to original logic
+                        decimal_match = re.search(r"[.,](\d{1,2})$", amount_cleaned)
+                        if decimal_match:
+                            decimal_part = decimal_match.group(1)
+                            integer_part = amount_cleaned[: decimal_match.start()].replace(",", "").replace(".", "")
+                            final_num_str = f"{integer_part}.{decimal_part}"
+                        else:
+                            final_num_str = amount_cleaned.replace(",", "").replace(".", "")
+                else:
+                    # Standard Indonesian format handling
+                    decimal_match = re.search(r"[.,](\d{1,2})$", amount_cleaned)
+                    if decimal_match:
+                        decimal_part = decimal_match.group(1)
+                        integer_part = amount_cleaned[: decimal_match.start()].replace(",", "").replace(".", "")
+                        final_num_str = f"{integer_part}.{decimal_part}"
+                    else:
+                        final_num_str = amount_cleaned.replace(",", "").replace(".", "")
             else:
-                final_num_str = amount_cleaned.replace(",", "").replace(".", "")
+                # Original logic for other countries
+                decimal_match = re.search(r"[.,](\d{1,2})$", amount_cleaned)
+                if decimal_match:
+                    decimal_part = decimal_match.group(1)
+                    integer_part = amount_cleaned[: decimal_match.start()].replace(",", "").replace(".", "")
+                    final_num_str = f"{integer_part}.{decimal_part}"
+                else:
+                    final_num_str = amount_cleaned.replace(",", "").replace(".", "")
 
             try:
                 price_value = float(final_num_str) * multiplier
