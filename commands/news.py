@@ -46,7 +46,7 @@ VERGE_RSS_URL = "https://www.theverge.com/rss/index.xml"
 NEWS_SOURCES = {
     'zhihu': '知乎热榜',
     'github-trending-today': 'GitHub趋势',
-    'weibo': '微博热搜', 
+    'weibo': '微博热搜',
     'v2ex-share': 'V2EX最新',
     'ithome': 'IT之家',
     'juejin': '稀土掘金',
@@ -83,6 +83,8 @@ NEWS_SOURCES = {
     '36kr-quick': '36氪快讯',
     'cls-telegraph': '财联社电报',
     'verge': 'The Verge (英文科技)',
+    'douban': '豆瓣电影',
+    'steam': 'Steam游戏排行',
     # 兼容性别名（保持原有源名称可用）
     'github': 'GitHub趋势',
     'v2ex': 'V2EX最新',
@@ -216,7 +218,7 @@ def create_news_sources_keyboard() -> InlineKeyboardMarkup:
         ("💬 社交类", ['zhihu', 'weibo', 'v2ex', 'bilibili', 'douyin', 'tieba', 'kuaishou', 'coolapk', 'hupu']),
         ("💰 财经类", ['jin10', 'wallstreetcn', 'gelonghui', 'xueqiu', '36kr', 'fastbull', 'mktnews', 'cls-telegraph']),
         ("📰 新闻类", ['toutiao', 'thepaper', 'ifeng', 'baidu', 'cankaoxiaoxi', 'zaobao', 'sputniknewscn', 'kaopu']),
-        ("🛍️ 其他", ['smzdm', 'producthunt', 'nowcoder', 'pcbeta'])
+        ("🛍️ 其他", ['smzdm', 'producthunt', 'nowcoder', 'pcbeta', 'douban', 'steam'])
     ]
     
     for category_name, sources in categories:
@@ -650,7 +652,7 @@ async def newslist_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ("💬 社交类", ['zhihu', 'weibo', 'v2ex', 'bilibili', 'douyin', 'tieba', 'kuaishou', 'coolapk', 'hupu']),
             ("💰 财经类", ['jin10', 'wallstreetcn', 'gelonghui', 'xueqiu', '36kr', 'fastbull', 'mktnews', 'cls-telegraph']),
             ("📰 新闻类", ['toutiao', 'thepaper', 'ifeng', 'baidu', 'cankaoxiaoxi', 'zaobao', 'sputniknewscn', 'kaopu']),
-            ("🛍️ 其他", ['smzdm', 'producthunt', 'nowcoder', 'pcbeta'])
+            ("🛍️ 其他", ['smzdm', 'producthunt', 'nowcoder', 'pcbeta', 'douban', 'steam'])
         ]
         
         help_lines = ["📰 **NewsNow 新闻源列表**\n"]
