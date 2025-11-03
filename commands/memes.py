@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 表情包(memes)命令模块
-从 memes.bupt.site API 获取随机表情包图片
+从 memeap.smone.us API 获取随机表情包图片
 """
 
 import logging
@@ -27,7 +27,7 @@ from utils.permissions import Permission
 logger = logging.getLogger(__name__)
 
 # API配置
-BASE_URL = "https://api.memes.bupt.site/api/"
+BASE_URL = "https://memeap.smone.us/api/"
 
 # 全局变量
 _cache_manager = None
@@ -308,7 +308,7 @@ async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "• `/meme 3` - 获取3个表情包\n"
             "• `/meme 5` - 获取5个表情包\n"
             "• `/meme 1` - 获取1个表情包\n\n"
-            "🌐 数据来源: memes.bupt.site\n"
+            "🌐 数据来源: memeap.smone.us\n"
             "🔄 支持缓存，快速响应"
         )
         
@@ -337,7 +337,7 @@ async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "• `/meme 3` - 获取3个表情包\n"
             "• `/meme 5` - 获取5个表情包\n"
             "• `/meme 1` - 获取1个表情包\n\n"
-            "🌐 数据来源: memes.bupt.site\n"
+            "🌐 数据来源: memeap.smone.us\n"
             "🔄 支持缓存，快速响应"
         )
         
