@@ -34,18 +34,22 @@ def normalize_pricing_text(price_text: str) -> str:
         "gratuito",    # Italian
         "бесплатно",   # Russian
     ]
-    
+
     price_lower = price_text.lower().strip()
     for term in free_terms:
         if term.lower() in price_lower:
             return "免费"
-    
+
     # Normalize subscription periods to Chinese
     normalized_text = price_text
-    
-    # Remove duplicate period indicators (e.g., "/monthper month")
-    normalized_text = re.sub(r'/month\s*per month', '/month', normalized_text)
-    normalized_text = re.sub(r'per month\s*/month', 'per month', normalized_text)
+
+    # Remove duplicate period indicators (e.g., "/monthper month", "/maandper maand")
+    normalized_text = re.sub(r'/month\s*per month', '/month', normalized_text, flags=re.IGNORECASE)
+    normalized_text = re.sub(r'per month\s*/month', 'per month', normalized_text, flags=re.IGNORECASE)
+    normalized_text = re.sub(r'/maand\s*per maand', '/maand', normalized_text, flags=re.IGNORECASE)
+    normalized_text = re.sub(r'per maand\s*/maand', 'per maand', normalized_text, flags=re.IGNORECASE)
+    normalized_text = re.sub(r'/jaar\s*per jaar', '/jaar', normalized_text, flags=re.IGNORECASE)
+    normalized_text = re.sub(r'per jaar\s*/jaar', 'per jaar', normalized_text, flags=re.IGNORECASE)
     
     # Replace various period indicators with Chinese equivalents
     period_replacements = [
