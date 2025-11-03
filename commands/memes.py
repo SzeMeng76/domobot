@@ -308,7 +308,7 @@ async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "• `/meme 3` - 获取3个表情包\n"
             "• `/meme 5` - 获取5个表情包\n"
             "• `/meme 1` - 获取1个表情包\n\n"
-            "🌐 数据来源: memeap.smone.us\n"
+            "🌐 数据来源: meme.smone.us\n"
             "🔄 支持缓存，快速响应"
         )
         
@@ -337,7 +337,7 @@ async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "• `/meme 3` - 获取3个表情包\n"
             "• `/meme 5` - 获取5个表情包\n"
             "• `/meme 1` - 获取1个表情包\n\n"
-            "🌐 数据来源: memeap.smone.us\n"
+            "🌐 数据来源: meme.smone.us\n"
             "🔄 支持缓存，快速响应"
         )
         
