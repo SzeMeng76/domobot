@@ -59,8 +59,10 @@ def normalize_pricing_text(price_text: str) -> str:
         (r'/mes', '每月'),      # Spanish
         (r'par mois', '每月'),  # French
         (r'pro Monat', '每月'), # German
-        
-        # Yearly patterns  
+        (r'/maand', '每月'),    # Dutch
+        (r'per maand', '每月'), # Dutch
+
+        # Yearly patterns
         (r'/year', '每年'),
         (r'per year', '每年'),
         (r'\byear\b', '每年'),
@@ -70,6 +72,8 @@ def normalize_pricing_text(price_text: str) -> str:
         (r'/año', '每年'),      # Spanish
         (r'par an', '每年'),    # French
         (r'pro Jahr', '每年'),  # German
+        (r'/jaar', '每年'),     # Dutch
+        (r'per jaar', '每年'),  # Dutch
     ]
     
     for pattern, replacement in period_replacements:
@@ -227,15 +231,17 @@ def get_icloud_prices_from_apple_website(content: str, country_code: str) -> dic
                 # Check for common currency patterns or free terms
                 is_valid_price = (
                     # Free terms in various languages
-                    "ücretsiz" in price_text.lower() or "free" in price_text.lower() or 
+                    "ücretsiz" in price_text.lower() or "free" in price_text.lower() or
                     "gratis" in price_text.lower() or "gratuit" in price_text.lower() or
                     "kostenlos" in price_text.lower() or "免费" in price_text or
                     # Currency patterns
                     re.search(r'[\d.,]+\s*(?:TL|RM|USD|\$|EUR|€|£|¥|₹|₩|₦|R\$|C\$|A\$|NZ\$|HK\$|S\$|₱|₪|₨|kr|₽|zł|Kč|Ft)', price_text) or
                     # Month/year patterns (subscription pricing)
-                    "/month" in price_text or "per month" in price_text or 
+                    "/month" in price_text or "per month" in price_text or
                     "/year" in price_text or "per year" in price_text or
-                    "ayda" in price_text.lower() or "月" in price_text
+                    "ayda" in price_text.lower() or "月" in price_text or
+                    "/maand" in price_text.lower() or "per maand" in price_text.lower() or  # Dutch
+                    "/jaar" in price_text.lower() or "per jaar" in price_text.lower()  # Dutch
                 )
                 
                 if is_valid_price:
@@ -260,13 +266,15 @@ def get_icloud_prices_from_apple_website(content: str, country_code: str) -> dic
                     if span.get("role") == "text":
                         # Check for valid pricing patterns
                         is_valid_price = (
-                            "ücretsiz" in span_text.lower() or "free" in span_text.lower() or 
+                            "ücretsiz" in span_text.lower() or "free" in span_text.lower() or
                             "gratis" in span_text.lower() or "gratuit" in span_text.lower() or
                             "kostenlos" in span_text.lower() or "免费" in span_text or
                             re.search(r'[\d.,]+\s*(?:TL|RM|USD|\$|EUR|€|£|¥|₹|₩|₦|R\$|C\$|A\$|NZ\$|HK\$|S\$|₱|₪|₨|kr|₽|zł|Kč|Ft)', span_text) or
-                            "/month" in span_text or "per month" in span_text or 
+                            "/month" in span_text or "per month" in span_text or
                             "/year" in span_text or "per year" in span_text or
-                            "ayda" in span_text.lower() or "月" in span_text
+                            "ayda" in span_text.lower() or "月" in span_text or
+                            "/maand" in span_text.lower() or "per maand" in span_text.lower() or  # Dutch
+                            "/jaar" in span_text.lower() or "per jaar" in span_text.lower()  # Dutch
                         )
                         if is_valid_price:
                             price_span = span
