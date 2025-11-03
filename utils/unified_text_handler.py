@@ -174,8 +174,8 @@ from utils.command_factory import command_factory
 from utils.permissions import Permission
 
 command_factory.register_text_handler(
-    unified_text_handler, 
-    permission=Permission.USER, 
+    unified_text_handler,
+    permission=Permission.NONE,  # 修改为NONE，避免在未授权群组中触发权限检查
     description="统一文本处理器 - 智能分发地图、航班、人物、电影和TV服务",
     use_rate_limit=False  # 在包装器层面不使用速率限制，避免普通群聊消息触发限制
 )
