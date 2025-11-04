@@ -1126,48 +1126,53 @@ async def get_app_prices(
             except (json.JSONDecodeError, TypeError, ValueError):
                 continue
 
-        in_app_items = soup.select("li.list-with-numbers__item")
+        # 新的HTML结构使用 div.text-pair 来存储内购信息
+        # 旧的选择器: li.list-with-numbers__item (已废弃)
+        # 新的选择器: div.text-pair
+        in_app_items = soup.select("div.text-pair")
         unique_items = set()
         in_app_purchases = []
 
         if in_app_items:
             for item in in_app_items:
-                name_tag = item.find("span", class_="truncate-single-line truncate-single-line--block")
-                price_tag = item.find("span", class_="list-with-numbers__item__price medium-show-tablecell")
+                # 新结构: <div class="text-pair"><span>名称</span><span>价格</span></div>
+                spans = item.find_all("span", recursive=False)
 
-                if name_tag and price_tag:
-                    name = name_tag.text.strip()
-                    price_str = price_tag.text.strip()
+                if len(spans) >= 2:
+                    name = spans[0].text.strip()
+                    price_str = spans[1].text.strip()
 
-                    if (name, price_str) not in unique_items:
-                        unique_items.add((name, price_str))
+                    # 只处理包含货币符号的项目（过滤掉非价格的 text-pair）
+                    if price_str and any(char in price_str for char in ['$', '€', '£', '¥', '₹', '₦', '₱', '₩', '₽', 'USD', 'EUR', 'GBP', 'CNY']):
+                        if (name, price_str) not in unique_items:
+                            unique_items.add((name, price_str))
 
-                        in_app_cny_price = None
-                        if country_code != "CN" and rate_converter and rate_converter.rates:
-                            # 特殊处理：如果价格字符串包含USD，直接使用USD
-                            if "USD" in price_str.upper():
-                                # 提取USD价格
-                                import re
-                                usd_match = re.search(r'USD\s*([\d.,]+)', price_str, re.IGNORECASE)
-                                if usd_match:
-                                    try:
-                                        usd_price = float(usd_match.group(1).replace(',', ''))
-                                        if "USD" in rate_converter.rates:
-                                            cny_price = await rate_converter.convert(usd_price, "USD", "CNY")
-                                            if cny_price is not None:
-                                                in_app_cny_price = cny_price
-                                    except ValueError:
-                                        pass
-                            else:
-                                # 使用原始的price_parser逻辑
-                                detected_currency, price_value = extract_currency_and_price(price_str, country_code)
-                                # Debug logging
-                                logger.info(f"内购价格解析: price_str='{price_str}', detected_currency='{detected_currency}', price_value={price_value}")
-                                if price_value is not None and detected_currency.upper() in rate_converter.rates:
-                                    cny_price = await rate_converter.convert(price_value, detected_currency, "CNY")
-                                    if cny_price is not None:
-                                        in_app_cny_price = cny_price
-                        in_app_purchases.append({"name": name, "price_str": price_str, "cny_price": in_app_cny_price})
+                            in_app_cny_price = None
+                            if country_code != "CN" and rate_converter and rate_converter.rates:
+                                # 特殊处理：如果价格字符串包含USD，直接使用USD
+                                if "USD" in price_str.upper():
+                                    # 提取USD价格
+                                    import re
+                                    usd_match = re.search(r'USD\s*([\d.,]+)', price_str, re.IGNORECASE)
+                                    if usd_match:
+                                        try:
+                                            usd_price = float(usd_match.group(1).replace(',', ''))
+                                            if "USD" in rate_converter.rates:
+                                                cny_price = await rate_converter.convert(usd_price, "USD", "CNY")
+                                                if cny_price is not None:
+                                                    in_app_cny_price = cny_price
+                                        except ValueError:
+                                            pass
+                                else:
+                                    # 使用原始的price_parser逻辑
+                                    detected_currency, price_value = extract_currency_and_price(price_str, country_code)
+                                    # Debug logging
+                                    logger.info(f"内购价格解析: price_str='{price_str}', detected_currency='{detected_currency}', price_value={price_value}")
+                                    if price_value is not None and detected_currency.upper() in rate_converter.rates:
+                                        cny_price = await rate_converter.convert(price_value, detected_currency, "CNY")
+                                        if cny_price is not None:
+                                            in_app_cny_price = cny_price
+                            in_app_purchases.append({"name": name, "price_str": price_str, "cny_price": in_app_cny_price})
 
         result_data = {
             "country_code": country_code,
