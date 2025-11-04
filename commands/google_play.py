@@ -1,8 +1,10 @@
 import asyncio
+import json
 import logging
 import re
 
-from google_play_scraper import app as gp_app
+import httpx
+from bs4 import BeautifulSoup
 from google_play_scraper import exceptions as gp_exceptions
 from google_play_scraper import search
 from telegram import Update
@@ -52,6 +54,130 @@ EMOJI_IAP = "🛒"
 EMOJI_LINK = "🔗"
 EMOJI_COUNTRY = "📍"
 EMOJI_FLAG_PLACEHOLDER = "🏳️"  # Fallback if no custom emoji found
+
+
+async def scrape_google_play_app(app_id: str, country: str = 'US', lang: str = 'en') -> dict | None:
+    """
+    自定义 Google Play 爬虫，替代已停止维护的 google_play_scraper.app
+    因为 google_play_scraper 库已经停止维护，部分地区查询失败
+    """
+    url = f"https://play.google.com/store/apps/details?id={app_id}&hl={lang}&gl={country}"
+
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': f'{lang},en;q=0.9',
+    }
+
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        # 查找嵌入的 JSON-LD 数据
+        scripts = soup.find_all('script', {'type': 'application/ld+json'})
+
+        result = {
+            'appId': app_id,
+            'url': url,
+            'title': None,
+            'developer': None,
+            'icon': None,
+            'score': None,
+            'installs': None,
+            'free': True,
+            'price': 0,
+            'currency': 'USD',
+            'offersIAP': False,
+            'inAppProductPrice': None,
+            'IAPRange': None,
+        }
+
+        # 从 JSON-LD 提取结构化数据
+        for script in scripts:
+            try:
+                data = json.loads(script.string)
+                if data.get('@type') == 'SoftwareApplication':
+                    result['title'] = data.get('name')
+
+                    # 开发者信息
+                    author = data.get('author')
+                    if isinstance(author, dict):
+                        result['developer'] = author.get('name')
+                    elif isinstance(author, str):
+                        result['developer'] = author
+
+                    # 图标
+                    result['icon'] = data.get('image')
+
+                    # 评分
+                    if 'aggregateRating' in data:
+                        rating_value = data['aggregateRating'].get('ratingValue')
+                        if rating_value:
+                            result['score'] = float(rating_value)
+
+                    # 价格信息
+                    if 'offers' in data:
+                        offers = data['offers']
+                        if isinstance(offers, list):
+                            offers = offers[0] if offers else {}
+
+                        price = offers.get('price', 0)
+                        result['price'] = float(price) if price else 0
+                        result['currency'] = offers.get('priceCurrency', 'USD')
+                        result['free'] = result['price'] == 0
+
+                    break
+            except (json.JSONDecodeError, ValueError, KeyError, TypeError):
+                continue
+
+        # 如果 JSON 没找到标题，尝试从 HTML 提取
+        if not result['title']:
+            title_tag = soup.find('h1', {'itemprop': 'name'})
+            if not title_tag:
+                # 尝试其他选择器
+                title_tag = soup.select_one('h1[data-test-id="app-title"]')
+            if title_tag:
+                result['title'] = title_tag.get_text(strip=True)
+
+        # 如果还是没有标题，说明应用不存在
+        if not result['title']:
+            return None
+
+        # 查找安装量
+        downloads_pattern = re.compile(r'([\d,]+\+?\s*downloads?)', re.IGNORECASE)
+        downloads_text = soup.find(string=downloads_pattern)
+        if downloads_text:
+            result['installs'] = downloads_text.strip()
+
+        # 检查是否有内购
+        iap_text = soup.find(string=re.compile(r'in.?app purchases?', re.IGNORECASE))
+        if iap_text:
+            result['offersIAP'] = True
+
+            # 尝试查找内购价格范围
+            # 通常在 "Contains ads·Offers in-app purchases" 附近
+            parent = iap_text.parent
+            if parent:
+                # 查找附近的价格文本
+                price_pattern = re.compile(r'[\$€£¥₹₦₩₽]\s*[\d,]+\.?\d*')
+                for sibling in parent.find_next_siblings(limit=5):
+                    price_match = price_pattern.search(sibling.get_text())
+                    if price_match:
+                        result['inAppProductPrice'] = price_match.group(0)
+                        break
+
+        return result
+
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            return None  # App not found
+        logger.warning(f"HTTP error fetching Google Play app {app_id} in {country}: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Error scraping Google Play app {app_id} in {country}: {e}")
+        raise
 
 
 async def parse_and_convert_iap_price(price_str: str, rate_converter) -> tuple[str, str | None]:
@@ -138,15 +264,17 @@ async def get_app_details_for_country(app_id: str, country: str, lang_code: str)
         return country, cached_data, None
 
     try:
-        # google_play_scraper is not async, so run in executor
-        app_details = await asyncio.to_thread(gp_app, app_id, lang=lang_code, country=country)
+        # 使用自定义爬虫替代已停止维护的 google_play_scraper.app
+        app_details = await scrape_google_play_app(app_id, country=country, lang=lang_code)
+
+        if app_details is None:
+            # 应用不存在或未找到
+            return country, None, f"在该区域 ({country}) 未找到应用"
 
         # Save to cache
         await cache_manager.save_cache(cache_key, app_details, subdirectory="google_play")
 
         return country, app_details, None
-    except gp_exceptions.NotFoundError:
-        return country, None, f"在该区域 ({country}) 未找到应用"
     except Exception as e:
         logger.warning(f"Failed to get app details for {country}: {e}")
         return country, None, f"查询 {country} 区出错: {type(e).__name__}"
