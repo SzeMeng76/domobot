@@ -64,12 +64,28 @@ async def scrape_google_play_app(app_id: str, country: str = 'US', lang: str = '
     url = f"https://play.google.com/store/apps/details?id={app_id}&hl={lang}&gl={country}"
 
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept-Language': f'{lang},en;q=0.9',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': f'{lang},en-US;q=0.9,en;q=0.8',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Referer': 'https://play.google.com/',
+        'Sec-Ch-Ua': '"Chromium";v="131", "Not_A Brand";v="24"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"Windows"',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'same-origin',
+        'Sec-Fetch-User': '?1',
+        'Upgrade-Insecure-Requests': '1',
     }
 
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
+        # 强制使用 HTTP/1.1，避免 HTTP/2 兼容性问题
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=15,
+            http2=False  # 禁用 HTTP/2，使用 HTTP/1.1
+        ) as client:
             response = await client.get(url, headers=headers)
             response.raise_for_status()
 
