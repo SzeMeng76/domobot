@@ -37,6 +37,17 @@ logger = logging.getLogger(__name__)
 # Default search countries if none are specified by the user
 DEFAULT_COUNTRIES = ["CN", "NG", "TR", "IN", "MY", "US"]
 
+# Build a comprehensive set of all currency symbols and codes from supported countries
+# This ensures we don't miss any currency when filtering in-app purchase items
+ALL_CURRENCY_INDICATORS = set()
+for country_info in SUPPORTED_COUNTRIES.values():
+    # Add currency symbols (like $, €, ₺, etc.)
+    if country_info.get("symbol"):
+        ALL_CURRENCY_INDICATORS.add(country_info["symbol"])
+    # Add currency codes (like USD, EUR, TRY, etc.)
+    if country_info.get("currency"):
+        ALL_CURRENCY_INDICATORS.add(country_info["currency"])
+
 # iTunes Search API base URL
 ITUNES_API_URL = "https://itunes.apple.com/"
 
@@ -1143,7 +1154,8 @@ async def get_app_prices(
                     price_str = spans[1].text.strip()
 
                     # 只处理包含货币符号的项目（过滤掉非价格的 text-pair）
-                    if price_str and any(char in price_str for char in ['$', '€', '£', '¥', '₹', '₦', '₱', '₩', '₽', 'USD', 'EUR', 'GBP', 'CNY']):
+                    # 使用动态生成的完整货币符号集合，支持所有国家的货币
+                    if price_str and any(indicator in price_str for indicator in ALL_CURRENCY_INDICATORS):
                         if (name, price_str) not in unique_items:
                             unique_items.add((name, price_str))
 
