@@ -127,7 +127,7 @@ class CookingService:
         # 尝试从Redis缓存获取
         if cache_manager and not force_refresh:
             try:
-                cached_data = await cache_manager.get("cooking:recipes_data")
+                cached_data = await cache_manager.get("recipes_data", subdirectory="cooking")
                 if cached_data:
                     self.recipes_data = json.loads(cached_data)
                     self.categories = list(set(recipe.get("category", "其他") for recipe in self.recipes_data))
@@ -150,7 +150,7 @@ class CookingService:
         # 保存到Redis缓存
         if cache_manager:
             try:
-                await cache_manager.set("cooking:recipes_data", json.dumps(data), ttl=self.cache_duration)
+                await cache_manager.set("recipes_data", json.dumps(data), ttl=self.cache_duration, subdirectory="cooking")
                 logger.info("菜谱数据已保存到缓存")
             except Exception as e:
                 logger.warning(f"保存菜谱数据到缓存失败: {e}")
@@ -838,7 +838,7 @@ async def cooking_clean_cache_command(update: Update, context: ContextTypes.DEFA
         
     try:
         if cache_manager:
-            await cache_manager.clear_cache("recipes_data", subdirectory="cooking")
+            await cache_manager.clear_cache(subdirectory="cooking")
             cooking_service.recipes_data = []
             cooking_service.categories = []
             cooking_service.last_fetch_time = 0
