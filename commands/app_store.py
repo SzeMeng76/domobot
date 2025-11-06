@@ -1300,69 +1300,12 @@ async def show_app_details(
         )
 
 
-async def app_store_clean_cache_command(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> None:
-    """清理App Store缓存"""
-    if not update.effective_user or not update.effective_chat or not update.message:
-        return
-
-    user_id = update.effective_user.id
-
-    # 删除用户命令消息
-    await delete_user_command(
-        context, update.message.chat_id, update.message.message_id
-    )
-
-    # 使用 MySQL 用户管理器进行权限检查
-    user_manager = context.bot_data.get("user_cache_manager")
-    if not user_manager:
-        await send_error(context, update.effective_chat.id, "❌ 用户管理器未初始化。")
-        return
-
-    if not (
-        await user_manager.is_super_admin(user_id)
-        or await user_manager.is_admin(user_id)
-    ):
-        await send_error(context, update.effective_chat.id, "❌ 你没有缓存管理权限。")
-        return
-
-    try:
-        cache_manager_obj = context.bot_data.get("cache_manager")
-        if not cache_manager_obj:
-            await send_error(
-                context, update.effective_chat.id, "❌ 缓存管理器未初始化。"
-            )
-            return
-
-        await cache_manager_obj.clear_cache(subdirectory="app_store")
-
-        result_text = "✅ App Store 相关的所有缓存已清理完成。\n\n包括：搜索结果、应用详情和价格信息。"
-
-        await send_success(
-            context,
-            update.effective_chat.id,
-            foldable_text_v2(result_text),
-            parse_mode="MarkdownV2",
-        )
-
-    except Exception as e:
-        logger.error(f"App Store缓存清理失败: {e}")
-        await send_error(context, update.effective_chat.id, f"❌ 缓存清理失败: {e!s}")
-
-
 # Register commands
 command_factory.register_command(
     "app",
     app_command,
     permission=Permission.USER,
     description="App Store应用搜索（支持iOS/iPadOS/macOS/tvOS/watchOS/visionOS）",
-)
-command_factory.register_command(
-    "app_cleancache",
-    app_store_clean_cache_command,
-    permission=Permission.ADMIN,
-    description="清理App Store缓存",
 )
 command_factory.register_callback(
     "^app_",
