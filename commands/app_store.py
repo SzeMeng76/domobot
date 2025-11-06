@@ -773,18 +773,6 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         # 生成唯一的会话ID
         session_id = f"app_search_{user_id}_{int(time.time())}"
 
-        # 如果用户已经有活跃的搜索会话，取消旧的删除任务
-        if user_id in user_search_sessions:
-            old_session = user_search_sessions[user_id]
-            old_session_id = old_session.get("session_id")
-            if old_session_id:
-                cancelled_count = await cancel_session_deletions(
-                    old_session_id, context
-                )
-                logger.info(
-                    f"🔄 用户 {user_id} 有现有搜索会话，已取消 {cancelled_count} 个旧的删除任务"
-                )
-
         # For search, we only use the first specified country.
         country_code = (
             final_countries_to_search[0] if final_countries_to_search else "US"
