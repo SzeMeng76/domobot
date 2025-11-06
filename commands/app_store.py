@@ -1,63 +1,57 @@
+"""
+App Store 应用搜索和价格查询
+
+重构版本 - 使用模块化架构
+支持 iOS/iPadOS/macOS/tvOS/watchOS/visionOS 全平台
+"""
+
 import asyncio
-import json
 import logging
-import re
 import shlex
 import time
 from datetime import datetime
 
-import httpx
-from bs4 import BeautifulSoup
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
+# 导入新的模块化组件
+from commands.app_store_modules import (
+    DEFAULT_COUNTRIES,
+    PLATFORM_FLAGS,
+    PLATFORM_INFO,
+    AppStoreWebAPI,
+    AppStoreParser,
+)
 from utils.command_factory import command_factory
-from utils.config_manager import config_manager, get_config
-from utils.country_data import COUNTRY_NAME_TO_CODE, SUPPORTED_COUNTRIES, get_country_flag
+from utils.config_manager import config_manager
+from utils.country_data import (
+    COUNTRY_NAME_TO_CODE,
+    SUPPORTED_COUNTRIES,
+    get_country_flag,
+)
 from utils.formatter import foldable_text_v2, foldable_text_with_markdown_v2
 from utils.message_manager import (
+    MessageType,
     cancel_session_deletions,
-    send_message_with_auto_delete,
-    send_error,
-    send_success,
-    send_info,  # <--- 把它加进来！
-    send_help,
     delete_user_command,
-    MessageType
+    send_error,
+    send_help,
+    send_info,
+    send_message_with_auto_delete,
+    send_success,
 )
 from utils.permissions import Permission
 from utils.price_parser import extract_currency_and_price
 from utils.session_manager import app_search_sessions as user_search_sessions
 
-
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Default search countries if none are specified by the user
-DEFAULT_COUNTRIES = ["CN", "NG", "TR", "IN", "MY", "US"]
-
-# Build a comprehensive set of all currency symbols and codes from supported countries
-# This ensures we don't miss any currency when filtering in-app purchase items
-ALL_CURRENCY_INDICATORS = set()
-for country_info in SUPPORTED_COUNTRIES.values():
-    # Add currency symbols (like $, €, ₺, etc.)
-    if country_info.get("symbol"):
-        ALL_CURRENCY_INDICATORS.add(country_info["symbol"])
-    # Add currency codes (like USD, EUR, TRY, etc.)
-    if country_info.get("currency"):
-        ALL_CURRENCY_INDICATORS.add(country_info["currency"])
-
-# iTunes Search API base URL
-ITUNES_API_URL = "https://itunes.apple.com/"
-
-# Headers for iTunes API requests
-ITUNES_HEADERS = {
-    "User-Agent": "iTunes/12.11.3 (Windows; Microsoft Windows 10 x64 Professional Edition (Build 19041); x64) AppleWebKit/7611.1022.4001.1 (KHTML, like Gecko) Version/14.1.1 Safari/7611.1022.4001.1",
-    "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-    "Accept-Encoding": "gzip, deflate, br",
-}
+# 搜索配置常量
+RESULTS_PER_PAGE = 5  # 每页显示的应用数量
+MAX_TOTAL_PAGES = 10  # 最大页数
+SEARCH_RESULT_LIMIT = 200  # 搜索结果限制
 
 # Global variables (will be set by main.py)
 rate_converter = None
@@ -65,149 +59,301 @@ cache_manager = None
 
 
 def set_rate_converter(converter):
+    """设置汇率转换器"""
     global rate_converter
     rate_converter = converter
 
 
 def set_cache_manager(manager):
+    """设置缓存管理器"""
     global cache_manager
     cache_manager = manager
 
 
-class SappSearchAPI:
-    """调用iTunes Search API进行App搜索的API类"""
+# ======= 辅助函数 =======
+
+
+def parse_command_args(args_str: str) -> list[str]:
+    """解析命令参数
+
+    Args:
+        args_str: 原始参数字符串
+
+    Returns:
+        list[str]: 解析后的参数列表
+
+    Raises:
+        ValueError: 参数解析错误
+    """
+    param_lexer = shlex.shlex(args_str, posix=True)
+    param_lexer.quotes = '"""＂'
+    param_lexer.whitespace_split = True
+    return [p for p in list(param_lexer) if p]
+
+
+def extract_platform_flag(args_str: str) -> tuple[str, str]:
+    """提取平台参数
+
+    Args:
+        args_str: 原始参数字符串
+
+    Returns:
+        tuple[str, str]: (平台类型, 清理后的参数字符串)
+    """
+    platform = "iphone"  # 默认平台
+    cleaned_args = args_str
+
+    for flag, platform_type in PLATFORM_FLAGS.items():
+        if flag in args_str:
+            platform = platform_type
+            cleaned_args = args_str.replace(flag, "").strip()
+            break
+
+    return platform, " ".join(cleaned_args.split())
+
+
+def is_valid_country(param: str) -> bool:
+    """检查参数是否为有效的国家代码或名称
+
+    Args:
+        param: 待检查的参数
+
+    Returns:
+        bool: 是否为有效国家
+    """
+    return param.upper() in SUPPORTED_COUNTRIES or param in COUNTRY_NAME_TO_CODE
+
+
+def parse_countries(params: list[str]) -> list[str]:
+    """从参数列表中解析国家代码
+
+    Args:
+        params: 参数列表
+
+    Returns:
+        list[str]: 解析出的国家代码列表（已去重）
+    """
+    countries = []
+    for param in params:
+        if is_valid_country(param):
+            resolved_code = COUNTRY_NAME_TO_CODE.get(param, param.upper())
+            if resolved_code in SUPPORTED_COUNTRIES and resolved_code not in countries:
+                countries.append(resolved_code)
+    return countries
+
+
+async def send_error_and_delete_message(
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    error_msg: str,
+    message_to_delete=None,
+) -> None:
+    """发送错误消息并删除指定消息
+
+    Args:
+        context: Telegram 上下文
+        chat_id: 聊天 ID
+        error_msg: 错误消息文本
+        message_to_delete: 需要删除的消息对象（可选）
+    """
+    if message_to_delete:
+        await message_to_delete.delete()
+    await send_error(
+        context, chat_id, foldable_text_v2(error_msg), parse_mode="MarkdownV2"
+    )
+
+
+class CacheKeyBuilder:
+    """缓存键构建器"""
 
     @staticmethod
-    async def search_apps(query: str, country: str = "us", app_type: str = "software", limit: int = 50) -> dict:
-        """
-        使用iTunes Search API搜索App
-
-        Args:
-            query: 搜索关键词
-            country: 国家代码 (默认us)
-            app_type: 应用类型 (software, macSoftware, iPadSoftware)
-            limit: 返回结果数量
-
-        Returns:
-            包含搜索结果的字典
-        """
-        try:
-            async with httpx.AsyncClient(verify=False) as client:
-                params = {"term": query, "country": country, "media": "software", "limit": limit, "entity": app_type}
-
-                response = await client.get(
-                    f"{ITUNES_API_URL}search", params=params, headers=ITUNES_HEADERS, timeout=15
-                )
-                response.raise_for_status()
-                data = response.json()
-
-                # Fallback search logic from py/sapp.py
-                if (
-                    not data.get("results") and app_type != "software"
-                ):  # Only try fallback if not already general software
-                    fallback_params = {
-                        "term": query,
-                        "country": country,
-                        "media": "software",
-                        "limit": limit,
-                        "explicit": "Yes",
-                    }
-                    fallback_response = await client.get(
-                        f"{ITUNES_API_URL}search", params=fallback_params, headers=ITUNES_HEADERS, timeout=15
-                    )
-                    fallback_response.raise_for_status()
-                    fallback_data = fallback_response.json()
-                    if fallback_data.get("results"):
-                        data = fallback_data
-
-                # 根据请求的平台类型过滤结果
-                results = data.get("results", [])
-                filtered_results = SappSearchAPI._filter_results_by_platform(results, app_type)
-
-                return {"results": filtered_results, "query": query, "country": country, "app_type": app_type}
-
-        except Exception as e:
-            logger.error(f"App search error: {e}")
-            return {"results": [], "query": query, "country": country, "app_type": app_type, "error": str(e)}
+    def app_prices(app_id: int, country_code: str, platform: str) -> str:
+        """构建应用价格缓存键"""
+        return f"app_prices_{app_id}_{country_code.lower()}_{platform}"
 
     @staticmethod
-    def _filter_results_by_platform(results: list[dict], requested_app_type: str) -> list[dict]:
-        """
-        根据请求的平台类型过滤搜索结果
-
-        Args:
-            results: iTunes API 返回的原始结果
-            requested_app_type: 请求的应用类型 (software, macSoftware, iPadSoftware)
-
-        Returns:
-            过滤后的结果列表
-        """
-        if requested_app_type == "software":
-            # iOS 应用：过滤掉 macOS 应用
-            return [app for app in results if app.get("kind") != "mac-software"]
-
-        elif requested_app_type == "macSoftware":
-            # macOS 应用：只保留 mac-software
-            return [app for app in results if app.get("kind") == "mac-software"]
-
-        elif requested_app_type == "iPadSoftware":
-            # iPadOS 应用：过滤掉 macOS 应用，保留支持 iPad 的应用
-            filtered = []
-            for app in results:
-                if app.get("kind") == "mac-software":
-                    continue
-                # 检查是否支持 iPad
-                supported_devices = app.get("supportedDevices", [])
-                if any("iPad" in device for device in supported_devices) or (not supported_devices and app.get("kind") != "mac-software"):
-                    filtered.append(app)
-            return filtered
-
-        # 默认返回所有结果
-        return results
+    def search(query: str, country_code: str, platform: str) -> str:
+        """构建搜索结果缓存键"""
+        return f"search_{query}_{country_code.lower()}_{platform}"
 
     @staticmethod
-    async def get_app_details(app_id: str, country: str = "us") -> dict | None:
-        """
-        根据App ID获取详细信息
+    def app_details(app_id: int, countries: list[str], platform: str) -> str:
+        """构建应用详情缓存键"""
+        countries_hash = "_".join(sorted(c.lower() for c in countries))
+        return f"app_details_{app_id}_{countries_hash}_{platform}"
 
-        Args:
-            app_id: App ID
-            country: 国家代码
 
-        Returns:
-            App详细信息
-        """
-        try:
-            async with httpx.AsyncClient(verify=False) as client:
-                params = {"id": app_id, "country": country.lower()}
+def build_search_session_data(
+    query: str, country: str, platform: str, all_results: list[dict]
+) -> dict:
+    """构建搜索会话数据
 
-                response = await client.get(
-                    f"{ITUNES_API_URL}lookup", params=params, headers=ITUNES_HEADERS, timeout=15
-                )
-                response.raise_for_status()
-                data = response.json()
+    Args:
+        query: 搜索关键词
+        country: 国家代码
+        platform: 平台类型
+        all_results: 所有搜索结果
 
-                results = data.get("results", [])
-                return results[0] if results else None
+    Returns:
+        dict: 会话数据字典
+    """
+    total_results = len(all_results)
+    total_pages = (
+        min(MAX_TOTAL_PAGES, (total_results + RESULTS_PER_PAGE - 1) // RESULTS_PER_PAGE)
+        if total_results > 0
+        else 1
+    )
+    page_results = all_results[0:RESULTS_PER_PAGE]
 
-        except Exception as e:
-            logger.error(f"Error getting app details: {e}")
-            return None
+    return {
+        "query": query,
+        "country": country,
+        "platform": platform,
+        "all_results": all_results,
+        "current_page": 1,
+        "total_pages": total_pages,
+        "total_results": total_results,
+        "per_page": RESULTS_PER_PAGE,
+        "results": page_results,
+    }
+
+
+async def load_or_fetch_search_results(
+    query: str, country_code: str, platform: str
+) -> list[dict]:
+    """加载缓存或执行新搜索
+
+    Args:
+        query: 搜索关键词
+        country_code: 国家代码
+        platform: 平台类型
+
+    Returns:
+        list[dict]: 搜索结果列表
+    """
+    search_cache_key = CacheKeyBuilder.search(query, country_code, platform)
+
+    # 尝试从缓存加载
+    cached_data = await cache_manager.load_cache(
+        search_cache_key,
+        max_age_seconds=config_manager.config.app_store_search_cache_duration,
+        subdirectory="app_store",
+    )
+
+    if cached_data:
+        logger.info(f"使用缓存的搜索结果: {query} in {country_code}")
+        return cached_data.get("results", [])
+
+    # 执行网页搜索
+    logger.info(f"网页搜索: {query} in {country_code}, platform: {platform}")
+    raw_data = await AppStoreWebAPI.search_apps_by_web(
+        query, country=country_code, platform=platform, limit=SEARCH_RESULT_LIMIT
+    )
+    all_results = raw_data.get("results", [])
+    logger.info(f"✅ 网页搜索完成: 找到 {len(all_results)} 个应用")
+
+    # 保存缓存
+    cache_data = {
+        "query": query,
+        "country": country_code,
+        "platform": platform,
+        "results": all_results,
+        "timestamp": time.time(),
+    }
+    await cache_manager.save_cache(
+        search_cache_key, cache_data, subdirectory="app_store"
+    )
+    logger.info(
+        f"缓存搜索结果: {query} in {country_code}, 找到 {len(all_results)} 个结果"
+    )
+
+    return all_results
+
+
+def calculate_effective_price(
+    price_data: dict, target_plan: str = None
+) -> tuple[float, float]:
+    """计算用于排序的有效价格
+
+    优先级：
+    1. 目标订阅计划价格（如果指定）
+    2. 最低内购价格
+    3. 应用价格
+
+    Args:
+        price_data: 价格数据字典
+        target_plan: 目标订阅计划名称（可选）
+
+    Returns:
+        tuple[float, float]: (有效价格, 应用价格)
+    """
+    if price_data.get("status") != "ok":
+        return (float("inf"), float("inf"))
+
+    app_price = price_data.get("app_price_cny", float("inf"))
+    target_plan_price = float("inf")
+    min_in_app_price = float("inf")
+
+    in_app_purchases = price_data.get("in_app_purchases", [])
+    for iap in in_app_purchases:
+        cny_price = iap.get("cny_price")
+        if cny_price is not None:
+            if target_plan and iap["name"] == target_plan:
+                target_plan_price = cny_price
+            min_in_app_price = min(min_in_app_price, cny_price)
+
+    # 确定有效价格
+    if target_plan_price != float("inf"):
+        effective_price = target_plan_price
+    elif min_in_app_price != float("inf"):
+        effective_price = min_in_app_price
+    else:
+        effective_price = app_price
+
+    return (effective_price, app_price)
+
+
+def format_help_message() -> str:
+    """格式化帮助消息"""
+    return (
+        "🔍 *App Store 搜索*\n\n"
+        "支持应用名称搜索和App ID直接查询：\n\n"
+        "**基本用法:**\n"
+        "`/app 微信` - 搜索 iOS 应用\n"
+        "`/app WhatsApp US` - 在美区搜索 iOS 应用\n\n"
+        "**App ID 直接查询:**\n"
+        "`/app id363590051` - 直接查询指定 App ID\n"
+        "`/app id363590051 US CN JP` - 查询多国价格\n\n"
+        "**平台筛选:**\n"
+        "`/app Photoshop -mac` - 搜索 macOS 应用\n"
+        "`/app id497799835 -mac` - 查询 macOS 应用价格\n"
+        "`/app Procreate -ipad` - 搜索 iPadOS 应用\n"
+        "`/app Netflix -tv` - 搜索 tvOS 应用\n"
+        "`/app Fitness -watch` - 搜索 watchOS 应用\n"
+        "`/app Safari -vision` - 搜索 visionOS 应用\n\n"
+        "💡 App ID 查询跳过搜索，直接显示价格对比。\n"
+        "🔄 支持的平台: iOS (默认)、iPadOS、macOS、tvOS、watchOS、visionOS"
+    )
 
 
 def format_search_results(search_data: dict) -> str:
-    """Formats the search result message to be a simple prompt."""
+    """格式化搜索结果消息"""
     if search_data.get("error"):
         return f"❌ 搜索失败: {search_data['error']}"
 
     results = search_data["results"]
-    app_type = search_data.get("app_type", "software")
+    platform = search_data.get("platform", "iphone")
 
-    # 确定平台名称
-    platform_name = {"software": "iOS", "macSoftware": "macOS", "iPadSoftware": "iPadOS"}.get(app_type, "iOS")
+    # 获取平台显示信息
+    platform_info = PLATFORM_INFO.get(platform, {"name": "iOS"})
+    platform_name = platform_info["name"]
 
     if not results:
-        return f"🔍 没有找到关键词 '{search_data['query']}' 的相关 {platform_name} 应用 (国家: {search_data['country'].upper()})"
+        query = search_data.get("query", "")
+        country = search_data.get("country", "").upper()
+        return (
+            f"🔍 没有找到关键词 '{query}' 的相关 {platform_name} 应用 (国家: {country})"
+        )
 
     return f"请从下方选择您要查询的 {platform_name} 应用："
 
@@ -215,50 +361,61 @@ def format_search_results(search_data: dict) -> str:
 def create_search_keyboard(search_data: dict) -> InlineKeyboardMarkup:
     """创建搜索结果的内联键盘"""
     keyboard = []
-
-    # 应用选择按钮 (每行1个，显示更多信息)
     results = search_data["results"]
-    app_type = search_data.get("app_type", "software")
+    platform = search_data.get("platform", "iphone")
 
-    # 确定平台图标
-    platform_icon = {"software": "📱", "macSoftware": "💻", "iPadSoftware": "📱"}.get(app_type, "📱")
+    # 获取平台图标
+    platform_icon = PLATFORM_INFO.get(platform, {"icon": "📱"})["icon"]
 
-    # Only create buttons for the first 5 results, consistent with display
-    for i in range(min(len(results), 5)):
+    # 每页最多显示 RESULTS_PER_PAGE 个应用
+    for i in range(min(len(results), RESULTS_PER_PAGE)):
         app = results[i]
         track_name = app.get("trackName", "未知应用")
         app_kind = app.get("kind", "")
 
-        # 根据实际的应用类型确定图标，而不仅仅是搜索类型
+        # 根据实际应用类型确定图标
         if app_kind == "mac-software":
             icon = "💻"
         elif any("iPad" in device for device in app.get("supportedDevices", [])):
             icon = "📱"  # iPad 应用
         else:
-            icon = platform_icon  # 使用默认平台图标
+            icon = platform_icon  # 使用平台默认图标
 
-        # 创建按钮文本，只显示应用名称和平台图标
         button_text = f"{icon} {i + 1}. {track_name}"
-
         callback_data = f"app_select_{i}_{search_data.get('current_page', 1)}"
-        keyboard.append([InlineKeyboardButton(button_text, callback_data=callback_data)])
+        keyboard.append(
+            [InlineKeyboardButton(button_text, callback_data=callback_data)]
+        )
 
+    # 分页导航
     current_page = search_data.get("current_page", 1)
     total_pages = search_data.get("total_pages", 1)
 
     nav_row = []
     if current_page > 1:
-        nav_row.append(InlineKeyboardButton("⬅️ 上一页", callback_data=f"app_page_{current_page - 1}"))
+        nav_row.append(
+            InlineKeyboardButton(
+                "⬅️ 上一页", callback_data=f"app_page_{current_page - 1}"
+            )
+        )
 
-    nav_row.append(InlineKeyboardButton(f"📄 {current_page}/{total_pages}", callback_data="app_page_info"))
+    nav_row.append(
+        InlineKeyboardButton(
+            f"📄 {current_page}/{total_pages}", callback_data="app_page_info"
+        )
+    )
 
     if current_page < total_pages:
-        nav_row.append(InlineKeyboardButton("下一页 ➡️", callback_data=f"app_page_{current_page + 1}"))
+        nav_row.append(
+            InlineKeyboardButton(
+                "下一页 ➡️", callback_data=f"app_page_{current_page + 1}"
+            )
+        )
 
     if nav_row:
         keyboard.append(nav_row)
 
-    # Operation buttons
+    # 操作按钮
     action_row = [
         InlineKeyboardButton("🌍 更改搜索地区", callback_data="app_change_region"),
         InlineKeyboardButton("❌ 关闭", callback_data="app_close"),
@@ -268,31 +425,276 @@ def create_search_keyboard(search_data: dict) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(keyboard)
 
 
+def find_common_plan(price_results: list[dict]) -> str | None:
+    """找到最常见的订阅计划名称用于排序"""
+    plan_counts = {}
+
+    for price_data in price_results:
+        if price_data.get("status") == "ok":
+            for iap in price_data.get("in_app_purchases", []):
+                plan_name = iap["name"]
+                plan_counts[plan_name] = plan_counts.get(plan_name, 0) + 1
+
+    if not plan_counts:
+        return None
+
+    max_count = max(plan_counts.values())
+    common_plans = [plan for plan, count in plan_counts.items() if count == max_count]
+
+    # 优先选择特定关键词的计划
+    for keyword in ["Pro", "Premium", "Plus", "Standard"]:
+        for plan in common_plans:
+            if keyword in plan:
+                return plan
+
+    return common_plans[0] if common_plans else None
+
+
+async def get_app_prices(
+    app_name: str, country_code: str, app_id: int, platform: str
+) -> dict:
+    """获取指定国家的应用价格信息"""
+    global cache_manager, rate_converter
+
+    cache_key = CacheKeyBuilder.app_prices(app_id, country_code, platform)
+
+    # 尝试从缓存加载
+    cached_data = await cache_manager.load_cache(
+        cache_key,
+        max_age_seconds=config_manager.config.app_store_cache_duration,
+        subdirectory="app_store",
+    )
+
+    if cached_data:
+        cache_timestamp = await cache_manager.get_cache_timestamp(
+            cache_key, subdirectory="app_store"
+        )
+        cache_info = (
+            f"*(缓存于: {datetime.fromtimestamp(cache_timestamp).strftime('%Y-%m-%d %H:%M')})*"
+            if cache_timestamp
+            else ""
+        )
+        return {
+            "country_code": country_code,
+            "country_name": SUPPORTED_COUNTRIES.get(country_code, {}).get(
+                "name", country_code
+            ),
+            "flag_emoji": get_country_flag(country_code),
+            "status": "ok",
+            "app_price_str": cached_data.get("app_price_str"),
+            "app_price_cny": cached_data.get("app_price_cny"),
+            "in_app_purchases": cached_data.get("in_app_purchases", []),
+            "cache_info": cache_info,
+            "real_app_name": cached_data.get("real_app_name"),
+        }
+
+    country_info = SUPPORTED_COUNTRIES.get(country_code, {})
+    country_name = country_info.get("name", country_code)
+    flag_emoji = get_country_flag(country_code)
+
+    # 获取应用页面 HTML
+    html_content = await AppStoreWebAPI.fetch_app_page(app_id, country_code)
+
+    if not html_content:
+        return {
+            "country_code": country_code,
+            "country_name": country_name,
+            "flag_emoji": flag_emoji,
+            "status": "not_listed",
+            "error_message": "未上架",
+        }
+
+    try:
+        # 使用 JSON-LD 解析器
+        offers_data = AppStoreParser.parse_json_ld_offers(html_content, country_code)
+
+        if not offers_data:
+            logger.warning(f"无法解析 App {app_id} 在 {country_code} 的价格数据")
+            return {
+                "country_code": country_code,
+                "country_name": country_name,
+                "flag_emoji": flag_emoji,
+                "status": "error",
+                "error_message": "解析失败",
+            }
+
+        real_app_name = offers_data.get("app_name", "")
+        currency = offers_data.get("currency", "USD")
+        price = offers_data.get("price", 0)
+        category = offers_data.get("category", "free")
+
+        # 格式化应用价格
+        if category == "free" or price == 0:
+            app_price_str = "免费"
+            app_price_cny = 0.0
+        else:
+            app_price_str = f"{price} {currency}"
+            if country_code != "CN" and rate_converter and rate_converter.rates:
+                if currency.upper() in rate_converter.rates:
+                    cny_price = await rate_converter.convert(
+                        float(price), currency.upper(), "CNY"
+                    )
+                    if cny_price is not None:
+                        app_price_cny = cny_price
+                    else:
+                        app_price_cny = None
+                else:
+                    app_price_cny = None
+            else:
+                app_price_cny = None
+
+        # 解析内购项目
+        in_app_purchases_raw = AppStoreParser.parse_in_app_purchases_html(html_content)
+
+        # 转换内购项目的货币 - 使用 utils/price_parser.py
+        in_app_purchases = []
+        for iap in in_app_purchases_raw:
+            price_str = iap["price_str"]
+
+            # 使用 utils/price_parser.py 的价格解析函数
+            detected_currency, price_value = extract_currency_and_price(
+                price_str, country_code
+            )
+
+            if price_value is None:
+                price_value = 0
+
+            # 使用主应用的货币代码（来自 JSON-LD）进行转换
+            cny_price = None
+            if price_value > 0 and country_code != "CN":
+                if rate_converter and rate_converter.rates:
+                    if currency.upper() in rate_converter.rates:
+                        cny_price = await rate_converter.convert(
+                            price_value, currency.upper(), "CNY"
+                        )
+
+            in_app_purchases.append(
+                {"name": iap["name"], "price_str": price_str, "cny_price": cny_price}
+            )
+
+        result_data = {
+            "country_code": country_code,
+            "country_name": country_name,
+            "flag_emoji": flag_emoji,
+            "status": "ok",
+            "app_price_str": app_price_str,
+            "app_price_cny": app_price_cny,
+            "in_app_purchases": in_app_purchases,
+            "real_app_name": real_app_name,
+        }
+
+        # 保存到缓存
+        await cache_manager.save_cache(cache_key, result_data, subdirectory="app_store")
+
+        return result_data
+
+    except Exception as e:
+        logger.error(
+            f"解析 App {app_id} 在 {country_code} 的价格时出错: {e}", exc_info=True
+        )
+        return {
+            "country_code": country_code,
+            "country_name": country_name,
+            "flag_emoji": flag_emoji,
+            "status": "error",
+            "error_message": "解析失败",
+        }
+
+
+async def get_multi_country_prices(
+    app_name: str, app_id: int, platform: str, countries: list[str]
+) -> list[dict]:
+    """获取多个国家的应用价格"""
+    tasks = [
+        get_app_prices(app_name, country, app_id, platform) for country in countries
+    ]
+    price_results = await asyncio.gather(*tasks)
+    return price_results
+
+
+def format_app_details(
+    app_name: str,
+    app_id: str,
+    platform: str,
+    price_results: list[dict],
+    target_plan: str = None,
+) -> str:
+    """格式化应用详情消息"""
+    # 获取平台信息
+    platform_info = PLATFORM_INFO.get(platform, {"icon": "📱", "name": "iOS"})
+
+    # 构建消息头部
+    header_lines = [f"{platform_info['icon']} *{app_name}*"]
+    header_lines.append(f"🎯 平台: {platform_info['name']}")
+    header_lines.append(f"🆔 App ID: `id{app_id}`")
+
+    raw_header = "\n".join(header_lines)
+
+    # 构建价格详情
+    price_details_lines = []
+
+    # 过滤出成功的结果
+    successful_results = [res for res in price_results if res.get("status") == "ok"]
+
+    if not successful_results:
+        price_details_lines.append("在可查询的区域中未找到该应用的价格信息。")
+    else:
+        # 按价格排序 - 使用提取的函数
+        sorted_results = sorted(
+            successful_results,
+            key=lambda price_data: calculate_effective_price(price_data, target_plan),
+        )
+
+        for res in sorted_results:
+            country_name = res["country_name"]
+            app_price_str = res["app_price_str"]
+
+            price_details_lines.append(f"🌍 国家/地区: {country_name}")
+            price_details_lines.append(f"💰 应用价格 : {app_price_str}")
+
+            if res["app_price_cny"] is not None and res["app_price_cny"] > 0:
+                price_details_lines[-1] += f" (约 ¥{res['app_price_cny']:.2f} CNY)"
+
+            # 内购项目
+            if res.get("in_app_purchases"):
+                for iap in res["in_app_purchases"]:
+                    iap_name = iap["name"]
+                    iap_price = iap["price_str"]
+                    iap_line = f"  •   {iap_name}: {iap_price}"
+                    if iap["cny_price"] is not None and iap["cny_price"] != float(
+                        "inf"
+                    ):
+                        iap_line += f" (约 ¥{iap['cny_price']:.2f} CNY)"
+                    price_details_lines.append(iap_line)
+
+            price_details_lines.append("")
+
+    price_details_text = "\n".join(price_details_lines)
+
+    # 构建完整消息
+    full_raw_message = f"{raw_header}\n\n{price_details_text}"
+
+    return full_raw_message
+
+
 async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """处理 /app 命令，使用iTunes API进行分页搜索"""
+    """处理 /app 命令，使用新的模块化架构"""
     if not update.message:
         return
 
     if not context.args:
-        help_message = (
-            "🔍 *App Store 搜索*\n\n"
-            "支持应用名称搜索和App ID直接查询：\n\n"
-            "**基本用法:**\n"
-            "`/app 微信` - 搜索 iOS 应用\n"
-            "`/app WhatsApp US` - 在美区搜索 iOS 应用\n\n"
-            "**App ID 直接查询:**\n"
-            "`/app id363590051` - 直接查询指定 App ID\n"
-            "`/app id363590051 US CN JP` - 查询多国价格\n\n"
-            "**平台筛选:**\n"
-            "`/app Photoshop -mac` - 搜索 macOS 应用\n"
-            "`/app id497799835 -mac` - 查询 macOS 应用价格\n"
-            "`/app Procreate -ipad` - 搜索 iPadOS 应用\n\n"
-            "💡 App ID 查询跳过搜索，直接显示价格对比。\n"
-            "🔄 支持的平台: iOS (默认)、macOS、iPadOS"
-        )
+        # 生成帮助消息
+        help_message = format_help_message()
         if update.effective_chat:
-            await send_help(context, update.effective_chat.id, foldable_text_with_markdown_v2(help_message), parse_mode="MarkdownV2")
-            await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+            await send_help(
+                context,
+                update.effective_chat.id,
+                foldable_text_with_markdown_v2(help_message),
+                parse_mode="MarkdownV2",
+            )
+            await delete_user_command(
+                context, update.effective_chat.id, update.message.message_id
+            )
         return
 
     user_id = update.effective_user.id if update.effective_user else None
@@ -313,219 +715,341 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
 
     message = await context.bot.send_message(
-        chat_id=update.effective_chat.id, text=foldable_text_v2(loading_text), parse_mode="MarkdownV2"
+        chat_id=update.effective_chat.id,
+        text=foldable_text_v2(loading_text),
+        parse_mode="MarkdownV2",
     )
 
     try:
-        # --- Start: Copied and adapted argument parsing logic from app_command ---
-        args_str_processed = args_str_full
-        app_type = "software"
+        # 解析参数（包括新的平台参数）
+        platform, args_str_processed = extract_platform_flag(args_str_full)
 
-        if "-mac" in args_str_processed:
-            app_type = "macSoftware"
-            args_str_processed = args_str_processed.replace("-mac", "").strip()
-        elif "-ipad" in args_str_processed:
-            app_type = "iPadSoftware"
-            args_str_processed = args_str_processed.replace("-ipad", "").strip()
-        args_str_processed = " ".join(args_str_processed.split())
-
-        countries_parsed: list[str] = []
-        app_name_to_search = None
-
+        # 解析国家和应用名称
         if not args_str_processed:
             error_message = "❌ 请输入应用名称。"
-            await message.delete()
-            config = get_config()
-            await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
-            # 删除用户命令消息
-            if update.message:
-                await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+            await send_error_and_delete_message(
+                context, update.effective_chat.id, error_message, message
+            )
             return
 
         try:
-            param_lexer = shlex.shlex(args_str_processed, posix=True)
-            param_lexer.quotes = '"""＂'
-            param_lexer.whitespace_split = True
-            all_params_list = [p for p in list(param_lexer) if p]
+            all_params_list = parse_command_args(args_str_processed)
         except ValueError as e:
             error_message = f"❌ 参数解析错误: {e!s}"
-            await message.delete()
-            config = get_config()
-            await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
-            # 删除用户命令消息
-            if update.message:
-                await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+            await send_error_and_delete_message(
+                context, update.effective_chat.id, error_message, message
+            )
             return
 
         if not all_params_list:
             error_message = "❌ 参数解析后为空，请输入应用名称。"
-            await message.delete()
-            config = get_config()
-            await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
-            # 删除用户命令消息
-            if update.message:
-                await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+            await send_error_and_delete_message(
+                context, update.effective_chat.id, error_message, message
+            )
             return
 
         app_name_parts_collected = []
+        countries_parsed = []
         for param_idx, param_val in enumerate(all_params_list):
-            is_country = param_val.upper() in SUPPORTED_COUNTRIES or param_val in COUNTRY_NAME_TO_CODE
-            if is_country:
-                countries_parsed.extend(all_params_list[param_idx:])
+            if is_valid_country(param_val):
+                countries_parsed = all_params_list[param_idx:]
                 break
             app_name_parts_collected.append(param_val)
 
         if not app_name_parts_collected:
             error_message = "❌ 未能从输入中解析出有效的应用名称。"
-            await message.delete()
-            config = get_config()
-            await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
-            # 删除用户命令消息
-            if update.message:
-                await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+            await send_error_and_delete_message(
+                context, update.effective_chat.id, error_message, message
+            )
             return
+
         app_name_to_search = " ".join(app_name_parts_collected)
 
-        final_countries_to_search = []
-        if not countries_parsed:
-            final_countries_to_search = None  # Will use DEFAULT_COUNTRIES later
-        else:
-            for country_input_str in countries_parsed:
-                resolved_code = COUNTRY_NAME_TO_CODE.get(country_input_str, country_input_str.upper())
-                if resolved_code in SUPPORTED_COUNTRIES and resolved_code not in final_countries_to_search:
-                    final_countries_to_search.append(resolved_code)
+        # 解析国家参数
+        final_countries_to_search = (
+            parse_countries(countries_parsed) if countries_parsed else None
+        )
 
-        # Store user-specified countries in session for later use in show_app_details
         # 生成唯一的会话ID
         session_id = f"app_search_{user_id}_{int(time.time())}"
 
-        # 如果用户已经有活跃的搜索会话，记录但不取消旧的删除任务
-        # 让旧消息按原计划自动删除，避免遗留消息
+        # 如果用户已经有活跃的搜索会话，取消旧的删除任务
         if user_id in user_search_sessions:
             old_session = user_search_sessions[user_id]
-            logger.info(
-                f"🔄 User {user_id} has existing search session (message: {old_session.get('message_id')}, query: '{old_session.get('query')}'), will be replaced with new search"
-            )
-
-        user_search_sessions[user_id] = {"user_specified_countries": final_countries_to_search or None}
+            old_session_id = old_session.get("session_id")
+            if old_session_id:
+                cancelled_count = await cancel_session_deletions(
+                    old_session_id, context
+                )
+                logger.info(
+                    f"🔄 用户 {user_id} 有现有搜索会话，已取消 {cancelled_count} 个旧的删除任务"
+                )
 
         # For search, we only use the first specified country.
-        country_code = (final_countries_to_search[0] if final_countries_to_search else "US").lower()
+        country_code = (
+            final_countries_to_search[0] if final_countries_to_search else "US"
+        ).lower()
         final_query = app_name_to_search
-        # --- End: Argument parsing logic ---
 
-        # 确定平台名称用于显示
-        platform_display = {"software": "iOS", "macSoftware": "macOS", "iPadSoftware": "iPadOS"}.get(app_type, "iOS")
+        # 获取平台显示信息
+        platform_info = PLATFORM_INFO.get(platform, {"name": "iOS"})
+        platform_display = platform_info["name"]
 
         search_status_message = f"🔍 正在在 {country_code.upper()} 区域搜索 {platform_display} 应用 '{final_query}' ..."
-        await message.edit_text(foldable_text_v2(search_status_message), parse_mode="MarkdownV2")
-
-        # 生成搜索缓存键
-        search_cache_key = f"search_{final_query}_{country_code.lower()}_{app_type}"
-
-        # 尝试从缓存加载搜索结果
-        cached_search_data = await cache_manager.load_cache(
-            search_cache_key,
-            max_age_seconds=config_manager.config.app_store_search_cache_duration,
-            subdirectory="app_store",
+        await message.edit_text(
+            foldable_text_v2(search_status_message), parse_mode="MarkdownV2"
         )
 
-        if cached_search_data:
-            # 使用缓存的搜索结果
-            all_results = cached_search_data.get("results", [])
-            cache_timestamp = cached_search_data.get("timestamp", 0)
-            cache_age = int(time.time() - cache_timestamp) if cache_timestamp else "unknown"
-            logger.info(f"使用缓存的搜索结果: {final_query} in {country_code} (缓存年龄: {cache_age}秒)")
-        else:
-            # 从API获取搜索结果
-            raw_search_data = await SappSearchAPI.search_apps(
-                final_query, country=country_code, app_type=app_type, limit=200
-            )
-            all_results = raw_search_data.get("results", [])
+        # 使用新的搜索缓存加载函数
+        all_results = await load_or_fetch_search_results(
+            final_query, country_code, platform
+        )
 
-            # 保存搜索结果到缓存
-            search_cache_data = {
-                "query": final_query,
-                "country": country_code.lower(),
-                "app_type": app_type,
-                "results": all_results,
-                "timestamp": time.time(),
-            }
-            await cache_manager.save_cache(search_cache_key, search_cache_data, subdirectory="app_store")
-            logger.info(f"缓存搜索结果: {final_query} in {country_code}, 找到 {len(all_results)} 个结果")
-
-        per_page = 5
-        total_results = len(all_results)
-        total_pages = min(10, (total_results + per_page - 1) // per_page) if total_results > 0 else 1
-
-        page_results = all_results[0:per_page]
-
-        search_data_for_session = {
-            "query": final_query,
-            "country": country_code,
-            "app_type": app_type,
-            "all_results": all_results,
-            "current_page": 1,
-            "total_pages": total_pages,
-            "total_results": total_results,
-            "per_page": per_page,
-            "results": page_results,
-        }
+        # 使用新的分页数据构建函数
+        search_data_for_session = build_search_session_data(
+            final_query, country_code, platform, all_results
+        )
 
         user_search_sessions[user_id] = {
             "query": final_query,
             "search_data": search_data_for_session,
             "message_id": message.message_id,
             "user_specified_countries": final_countries_to_search or None,
-            "chat_id": update.effective_chat.id,  # 获取 chat_id
-            "session_id": session_id,  # 添加会话ID
-            "created_at": datetime.now(),  # 添加创建时间
+            "chat_id": update.effective_chat.id,
+            "session_id": session_id,
+            "created_at": datetime.now(),
         }
 
         logger.info(
-            f"✅ Created new search session for user {user_id}: message {message.message_id}, query '{final_query}', chat {update.effective_chat.id}, session {session_id}"
+            f"✅ Created new search session for user {user_id}: message {message.message_id}, query '{final_query}', platform {platform}"
         )
 
-        # Format and display results
+        # 使用新的格式化器
         result_text = format_search_results(search_data_for_session)
         keyboard = create_search_keyboard(search_data_for_session)
 
         # 删除搜索进度消息，然后发送新的搜索结果消息
         await message.delete()
-        
+
         # 使用统一的消息发送API发送搜索结果
         new_message = await send_message_with_auto_delete(
-            context, 
-            update.effective_chat.id, 
-            foldable_text_v2(result_text), 
+            context,
+            update.effective_chat.id,
+            foldable_text_v2(result_text),
             MessageType.SEARCH_RESULT,
             session_id=session_id,
-            reply_markup=keyboard, 
-            parse_mode="MarkdownV2", 
-            disable_web_page_preview=True
+            reply_markup=keyboard,
+            parse_mode="MarkdownV2",
+            disable_web_page_preview=True,
         )
-        
+
         # 更新会话中的消息ID
         if new_message:
             user_search_sessions[user_id]["message_id"] = new_message.message_id
 
         # 删除用户命令消息
         if update.message:
-            await delete_user_command(context, update.effective_chat.id, update.message.message_id, session_id=session_id)
+            await delete_user_command(
+                context,
+                update.effective_chat.id,
+                update.message.message_id,
+                session_id=session_id,
+            )
 
     except Exception as e:
         logger.error(f"Search process error: {e}")
         error_message = f"❌ 搜索失败: {e!s}\n\n请稍后重试或联系管理员."
         await message.delete()
-        config = get_config()
-        await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
-        
-        # 异常情况下也删除用户命令消息
+        await send_error(
+            context,
+            update.effective_chat.id,
+            foldable_text_v2(error_message),
+            parse_mode="MarkdownV2",
+        )
+
+
+async def handle_app_id_query(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, args_str_full: str
+) -> None:
+    """处理 App ID 直接查询"""
+    if not update.effective_chat:
+        return
+
+    user_id = update.effective_user.id if update.effective_user else None
+    if not user_id:
+        return
+
+    message = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=foldable_text_v2("🔍 正在解析 App ID 并获取应用信息..."),
+        parse_mode="MarkdownV2",
+    )
+
+    try:
+        # 解析参数
+        platform, args_str_processed = extract_platform_flag(args_str_full)
+
+        try:
+            all_params_list = parse_command_args(args_str_processed)
+        except ValueError as e:
+            error_message = f"❌ 参数解析错误: {e!s}"
+            await message.edit_text(
+                foldable_text_v2(error_message), parse_mode="MarkdownV2"
+            )
+            return
+
+        if not all_params_list:
+            error_message = "❌ 参数解析后为空，请提供 App ID。"
+            await message.edit_text(
+                foldable_text_v2(error_message), parse_mode="MarkdownV2"
+            )
+            return
+
+        # 提取 App ID
+        app_id_param = all_params_list[0]
+        if not (app_id_param.lower().startswith("id") and app_id_param[2:].isdigit()):
+            error_message = "❌ 无效的 App ID 格式，请使用 id + 数字，如 id363590051"
+            await message.edit_text(
+                foldable_text_v2(error_message), parse_mode="MarkdownV2"
+            )
+            return
+
+        app_id = app_id_param[2:]  # 移除 'id' 前缀
+
+        # 解析国家参数 - 使用新的解析函数
+        countries_parsed = parse_countries(all_params_list[1:])
+
+        # 确定要查询的国家
+        countries_to_check = countries_parsed if countries_parsed else DEFAULT_COUNTRIES
+
+        # 生成缓存键（使用新的缓存键构建器）
+        detail_cache_key = CacheKeyBuilder.app_details(
+            int(app_id), countries_to_check, platform
+        )
+
+        # 尝试从缓存加载完整的格式化结果
+        cached_detail = await cache_manager.load_cache(
+            detail_cache_key,
+            max_age_seconds=config_manager.config.app_store_cache_duration,
+            subdirectory="app_store",
+        )
+
+        if cached_detail:
+            # 使用缓存的完整结果
+            logger.info(f"使用缓存的应用详情: App ID {app_id}")
+            formatted_message = cached_detail.get(
+                "formatted_message", "❌ 缓存数据格式错误"
+            )
+            await message.edit_text(
+                formatted_message,
+                parse_mode="MarkdownV2",
+                disable_web_page_preview=True,
+            )
+            return
+
+        # 直接使用 App ID 作为应用名称，先开始获取价格信息
+        app_name = f"App ID {app_id}"
+
+        # 获取多国价格信息
+        await message.edit_text(
+            foldable_text_v2(f"💰 正在获取 {app_name} 的多国价格信息..."),
+            parse_mode="MarkdownV2",
+        )
+
+        # 获取多国价格信息
+        price_results_raw = await get_multi_country_prices(
+            app_name=app_name,
+            app_id=int(app_id),
+            platform=platform,
+            countries=countries_to_check,
+        )
+
+        # 格式化结果
+        target_plan = find_common_plan(price_results_raw)
+        successful_results = [res for res in price_results_raw if res["status"] == "ok"]
+
+        # 如果没有找到任何有效结果，显示错误
+        if not successful_results:
+            countries_str = ", ".join(countries_to_check)
+            error_message = f"❌ 在以下区域均未找到 App ID {app_id}：{countries_str}\n\n请检查 ID 是否正确或尝试其他区域"
+            await message.edit_text(
+                foldable_text_v2(error_message), parse_mode="MarkdownV2"
+            )
+            return
+
+        # 从第一个成功的结果中获取真实的应用名称
+        real_app_name = None
+        for res in successful_results:
+            if res.get("real_app_name"):
+                real_app_name = res["real_app_name"]
+                break
+
+        # 如果获取到了真实的应用名称，使用它
+        if real_app_name:
+            app_name = real_app_name
+
+        # 使用新的格式化器
+        full_raw_message = format_app_details(
+            app_name=app_name,
+            app_id=app_id,
+            platform=platform,
+            price_results=price_results_raw,
+            target_plan=target_plan,
+        )
+
+        formatted_message = foldable_text_with_markdown_v2(full_raw_message)
+
+        # 保存格式化结果到缓存
+        cache_data = {
+            "app_id": app_id,
+            "app_name": app_name,
+            "platform": platform,
+            "countries": countries_to_check,
+            "formatted_message": formatted_message,
+            "timestamp": time.time(),
+        }
+        await cache_manager.save_cache(
+            detail_cache_key, cache_data, subdirectory="app_store"
+        )
+        logger.info(
+            f"缓存应用详情: App ID {app_id}, 国家: {', '.join(countries_to_check)}"
+        )
+
+        # 生成会话ID用于消息管理
+        session_id = f"app_id_query_{user_id}_{int(time.time())}"
+
+        # 删除搜索进度消息，然后发送结果
+        await message.delete()
+        await send_message_with_auto_delete(
+            context,
+            update.effective_chat.id,
+            formatted_message,
+            MessageType.SEARCH_RESULT,
+            session_id=session_id,
+            parse_mode="MarkdownV2",
+            disable_web_page_preview=True,
+        )
+
+        # 删除用户命令消息
         if update.message:
-            await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+            await delete_user_command(
+                context,
+                update.effective_chat.id,
+                update.message.message_id,
+                session_id=session_id,
+            )
+
+    except Exception as e:
+        logger.error(f"App ID 查询过程出错: {e}")
+        error_message = f"❌ 查询失败: {e!s}\n\n请稍后重试或联系管理员。"
+        await message.edit_text(
+            foldable_text_v2(error_message), parse_mode="MarkdownV2"
+        )
 
 
-async def handle_app_search_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def handle_app_search_callback(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """处理App搜索相关的回调查询"""
     query = update.callback_query
     await query.answer()
@@ -535,14 +1059,23 @@ async def handle_app_search_callback(update: Update, context: ContextTypes.DEFAU
 
     # 检查用户是否有搜索会话
     if user_id not in user_search_sessions:
-        logger.warning(f"❌ User {user_id} has no active search session for callback: {data}")
+        logger.warning(
+            f"❌ User {user_id} has no active search session for callback: {data}"
+        )
         error_message = "❌ 搜索会话已过期，请重新搜索。"
         await query.message.delete()
-        await send_error(context, query.message.chat_id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
+        await send_error(
+            context,
+            query.message.chat_id,
+            foldable_text_v2(error_message),
+            parse_mode="MarkdownV2",
+        )
         return
 
     session = user_search_sessions[user_id]
-    logger.info(f"🔍 Processing callback for user {user_id}: {data}, session message: {session.get('message_id')}")
+    logger.info(
+        f"🔍 Processing callback for user {user_id}: {data}, session message: {session.get('message_id')}"
+    )
 
     try:
         if data.startswith("app_select_"):
@@ -558,11 +1091,17 @@ async def handle_app_search_callback(update: Update, context: ContextTypes.DEFAU
 
                 if app_id:
                     loading_message = f"🔍 正在获取 '{selected_app.get('trackName', '应用')}' 的详细价格信息"
-                    await query.edit_message_text(foldable_text_v2(loading_message), parse_mode="MarkdownV2")
-                    await show_app_details(query, app_id, selected_app, context, session)
+                    await query.edit_message_text(
+                        foldable_text_v2(loading_message), parse_mode="MarkdownV2"
+                    )
+                    await show_app_details(
+                        query, app_id, selected_app, context, session
+                    )
                 else:
                     error_message = "❌ 无法获取应用ID，请重新选择。"
-                    await query.edit_message_text(foldable_text_v2(error_message), parse_mode="MarkdownV2")
+                    await query.edit_message_text(
+                        foldable_text_v2(error_message), parse_mode="MarkdownV2"
+                    )
 
         elif data.startswith("app_page_"):
             if data == "app_page_info":
@@ -584,7 +1123,11 @@ async def handle_app_search_callback(update: Update, context: ContextTypes.DEFAU
             result_text = format_search_results(search_data)
             keyboard = create_search_keyboard(search_data)
 
-            await query.edit_message_text(foldable_text_v2(result_text), reply_markup=keyboard, parse_mode="MarkdownV2")
+            await query.edit_message_text(
+                foldable_text_v2(result_text),
+                reply_markup=keyboard,
+                parse_mode="MarkdownV2",
+            )
 
         elif data == "app_change_region":
             # 更改搜索地区
@@ -601,7 +1144,9 @@ async def handle_app_search_callback(update: Update, context: ContextTypes.DEFAU
             ]
 
             # 每行2个按钮
-            keyboard = [region_buttons[i : i + 2] for i in range(0, len(region_buttons), 2)]
+            keyboard = [
+                region_buttons[i : i + 2] for i in range(0, len(region_buttons), 2)
+            ]
 
             await query.edit_message_text(
                 foldable_text_v2(change_region_text),
@@ -615,59 +1160,26 @@ async def handle_app_search_callback(update: Update, context: ContextTypes.DEFAU
 
             # 从现有会话中获取基本信息
             final_query = session["query"]
-            app_type = session["search_data"]["app_type"]
+            platform = session["search_data"]["platform"]
 
-            loading_message = f"🔍 正在在 {country_code.upper()} 区域重新搜索 '{final_query}'..."
-            await query.edit_message_text(foldable_text_v2(loading_message), parse_mode="MarkdownV2")
-
-            # --- 开始重建会话 ---
-            # 1. 获取新的搜索结果
-            search_cache_key = f"search_{final_query}_{country_code.lower()}_{app_type}"
-            cached_search_data = await cache_manager.load_cache(
-                search_cache_key,
-                max_age_seconds=config_manager.config.app_store_search_cache_duration,
-                subdirectory="app_store",
+            loading_message = (
+                f"🔍 正在在 {country_code.upper()} 区域重新搜索 '{final_query}'..."
+            )
+            await query.edit_message_text(
+                foldable_text_v2(loading_message), parse_mode="MarkdownV2"
             )
 
-            if cached_search_data:
-                all_results = cached_search_data.get("results", [])
-                cache_timestamp = cached_search_data.get("timestamp", 0)
-                cache_age = int(time.time() - cache_timestamp) if cache_timestamp else "unknown"
-                logger.info(f"使用缓存的搜索结果: {final_query} in {country_code} (缓存年龄: {cache_age}秒)")
-            else:
-                raw_search_data = await SappSearchAPI.search_apps(
-                    final_query, country=country_code.lower(), app_type=app_type, limit=200
-                )
-                all_results = raw_search_data.get("results", [])
-                search_cache_data = {
-                    "query": final_query,
-                    "country": country_code.lower(),
-                    "app_type": app_type,
-                    "results": all_results,
-                    "timestamp": time.time(),
-                }
-                await cache_manager.save_cache(search_cache_key, search_cache_data, subdirectory="app_store")
-                logger.info(f"缓存搜索结果: {final_query} in {country_code}, 找到 {len(all_results)} 个结果")
+            # 使用新的搜索缓存加载函数
+            all_results = await load_or_fetch_search_results(
+                final_query, country_code.lower(), platform
+            )
 
-            # 2. 准备分页和新的 search_data
-            per_page = 5
-            total_results = len(all_results)
-            total_pages = min(10, (total_results + per_page - 1) // per_page) if total_results > 0 else 1
-            page_results = all_results[0:per_page]
+            # 使用新的分页数据构建函数
+            search_data_for_session = build_search_session_data(
+                final_query, country_code.lower(), platform, all_results
+            )
 
-            search_data_for_session = {
-                "query": final_query,
-                "country": country_code.lower(),
-                "app_type": app_type,
-                "all_results": all_results,
-                "current_page": 1,
-                "total_pages": total_pages,
-                "total_results": total_results,
-                "per_page": per_page,
-                "results": page_results,
-            }
-
-            # 3. 完全重建会话对象，而不是修补
+            # 重建会话对象
             user_search_sessions[user_id] = {
                 "query": final_query,
                 "search_data": search_data_for_session,
@@ -679,7 +1191,7 @@ async def handle_app_search_callback(update: Update, context: ContextTypes.DEFAU
             }
             logger.info(f"✅ Region changed. Rebuilt search session for user {user_id}")
 
-            # 4. 显示新结果
+            # 显示新结果
             result_text = format_search_results(search_data_for_session)
             keyboard = create_search_keyboard(search_data_for_session)
 
@@ -696,12 +1208,19 @@ async def handle_app_search_callback(update: Update, context: ContextTypes.DEFAU
             result_text = format_search_results(search_data)
             keyboard = create_search_keyboard(search_data)
 
-            await query.edit_message_text(foldable_text_v2(result_text), reply_markup=keyboard, parse_mode="MarkdownV2")
+            await query.edit_message_text(
+                foldable_text_v2(result_text),
+                reply_markup=keyboard,
+                parse_mode="MarkdownV2",
+            )
 
         elif data == "app_new_search":
             # 开始新搜索
             new_search_message = "🔍 *开始新的搜索*\n\n请使用 `/app 应用名称` 命令开始新的搜索。\n\n例如: `/app 微信`"
-            await query.edit_message_text(foldable_text_with_markdown_v2(new_search_message), parse_mode="MarkdownV2")
+            await query.edit_message_text(
+                foldable_text_with_markdown_v2(new_search_message),
+                parse_mode="MarkdownV2",
+            )
             # 清除会话
             if user_id in user_search_sessions:
                 del user_search_sessions[user_id]
@@ -710,7 +1229,12 @@ async def handle_app_search_callback(update: Update, context: ContextTypes.DEFAU
             # 关闭搜索
             close_message = "🔍 搜索已关闭。\n\n使用 `/app 应用名称` 开始新的搜索。"
             await query.message.delete()
-            await send_info(context, query.message.chat_id, foldable_text_v2(close_message), parse_mode="MarkdownV2")
+            await send_info(
+                context,
+                query.message.chat_id,
+                foldable_text_v2(close_message),
+                parse_mode="MarkdownV2",
+            )
 
             # 清除会话
             if user_id in user_search_sessions:
@@ -720,579 +1244,75 @@ async def handle_app_search_callback(update: Update, context: ContextTypes.DEFAU
         logger.error(f"处理回调查询时发生错误: {e}")
         error_message = f"❌ 操作失败: {e!s}\n\n请重新搜索或联系管理员."
         await query.message.delete()
-        await send_error(context, query.message.chat_id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
-        
-        # 清理用户会话
-        if user_id in user_search_sessions:
-            del user_search_sessions[user_id]
+        await send_error(
+            context,
+            query.message.chat_id,
+            foldable_text_v2(error_message),
+            parse_mode="MarkdownV2",
+        )
 
 
 async def show_app_details(
-    query, app_id: str, app_info: dict, context: ContextTypes.DEFAULT_TYPE, session: dict
+    query,
+    app_id: str,
+    app_info: dict,
+    context: ContextTypes.DEFAULT_TYPE,
+    session: dict,
 ) -> None:
+    """显示应用详情"""
     try:
         user_specified_countries = session.get("user_specified_countries")
         countries_to_check = user_specified_countries or DEFAULT_COUNTRIES
 
         app_name = app_info.get("trackName", "未知应用")
-        app_type = session.get("search_data", {}).get("app_type", "software")
+        platform = session.get("search_data", {}).get("platform", "iphone")
 
-        price_tasks = [get_app_prices(app_name, country, app_id, app_type, context) for country in countries_to_check]
-        price_results_raw = await asyncio.gather(*price_tasks)
+        # 获取多国价格信息
+        price_results_raw = await get_multi_country_prices(
+            app_name=app_name,
+            app_id=int(app_id),
+            platform=platform,
+            countries=countries_to_check,
+        )
 
         target_plan = find_common_plan(price_results_raw)
-        successful_results = [res for res in price_results_raw if res["status"] == "ok"]
-        sorted_results = sorted(successful_results, key=lambda res: sort_key_func(res, target_plan))
 
-        # --- 格式化消息 ---
-        # 确定平台图标和名称
-        platform_info = {
-            "software": {"icon": "📱", "name": "iOS"},
-            "macSoftware": {"icon": "💻", "name": "macOS"},
-            "iPadSoftware": {"icon": "📱", "name": "iPadOS"},
-        }.get(app_type, {"icon": "📱", "name": "iOS"})
+        # 使用新的格式化器
+        full_raw_message = format_app_details(
+            app_name=app_name,
+            app_id=str(app_id),
+            platform=platform,
+            price_results=price_results_raw,
+            target_plan=target_plan,
+        )
 
-        # Build header with MarkdownV2 formatting - will be handled by smart formatter
-        header_lines = [f"{platform_info['icon']} *{app_name}*"]
-        header_lines.append(f"🎯 平台: {platform_info['name']}")
-        #        header_lines.append(f"👤 开发者: {developer}")
-        #        if genre:
-        #            header_lines.append(f"📂 分类: {genre}")
-        header_lines.append(f"🆔 App ID: `id{app_id}`")
-
-        raw_header = "\n".join(header_lines)
-
-        price_details_lines = []
-        if not sorted_results:
-            price_details_lines.append("在可查询的区域中未找到该应用的价格信息。")
-        else:
-            for res in sorted_results:
-                country_name = res["country_name"]
-                app_price_str = res["app_price_str"]
-
-                price_details_lines.append(f"🌍 国家/地区: {country_name}")
-                price_details_lines.append(f"💰 应用价格 : {app_price_str}")
-                if res["app_price_cny"] is not None and res["app_price_cny"] > 0:
-                    price_details_lines[-1] += f" (约 ¥{res['app_price_cny']:.2f} CNY)"
-
-                if res.get("in_app_purchases"):
-                    for iap in res["in_app_purchases"]:
-                        iap_name = iap["name"]
-                        iap_price = iap["price_str"]
-                        iap_line = f"  •   {iap_name}: {iap_price}"
-                        if iap["cny_price"] is not None and iap["cny_price"] != float("inf"):
-                            iap_line += f" (约 ¥{iap['cny_price']:.2f} CNY)"
-                        price_details_lines.append(iap_line)
-                price_details_lines.append("")
-
-        price_details_text = "\n".join(price_details_lines)
-
-        # --- 构建完整的原始消息 ---
-        full_raw_message = f"{raw_header}\n\n{price_details_text}"
-
-        # --- 使用新的智能 formatter 模块进行格式化和折叠 ---
         formatted_message = foldable_text_with_markdown_v2(full_raw_message)
 
-        await query.edit_message_text(formatted_message, parse_mode="MarkdownV2", disable_web_page_preview=True)
+        await query.edit_message_text(
+            formatted_message, parse_mode="MarkdownV2", disable_web_page_preview=True
+        )
 
     except Exception as e:
         logger.error(f"显示应用详情时发生错误: {e}", exc_info=True)
         error_message = f"❌ 获取应用详情失败: {e!s}"
-        await query.edit_message_text(foldable_text_v2(error_message), parse_mode="MarkdownV2")
-
-
-async def handle_app_id_query(update: Update, context: ContextTypes.DEFAULT_TYPE, args_str_full: str) -> None:
-    """处理 App ID 直接查询"""
-    if not update.effective_chat:
-        return
-
-    user_id = update.effective_user.id if update.effective_user else None
-    if not user_id:
-        return
-
-    message = await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=foldable_text_v2("🔍 正在解析 App ID 并获取应用信息..."),
-        parse_mode="MarkdownV2",
-    )
-
-    try:
-        # 解析参数
-        args_str_processed = args_str_full
-        app_type = "software"
-
-        # 处理平台参数
-        if "-mac" in args_str_processed:
-            app_type = "macSoftware"
-            args_str_processed = args_str_processed.replace("-mac", "").strip()
-        elif "-ipad" in args_str_processed:
-            app_type = "iPadSoftware"
-            args_str_processed = args_str_processed.replace("-ipad", "").strip()
-
-        args_str_processed = " ".join(args_str_processed.split())
-
-        try:
-            param_lexer = shlex.shlex(args_str_processed, posix=True)
-            param_lexer.quotes = '"""＂'
-            param_lexer.whitespace_split = True
-            all_params_list = [p for p in list(param_lexer) if p]
-        except ValueError as e:
-            error_message = f"❌ 参数解析错误: {e!s}"
-            await message.edit_text(foldable_text_v2(error_message), parse_mode="MarkdownV2")
-            # 删除用户命令消息
-            if update.message:
-                await delete_user_command(context, update.effective_chat.id, update.message.message_id)
-            return
-
-        if not all_params_list:
-            error_message = "❌ 参数解析后为空，请提供 App ID。"
-            await message.edit_text(foldable_text_v2(error_message), parse_mode="MarkdownV2")
-            # 删除用户命令消息
-            if update.message:
-                await delete_user_command(context, update.effective_chat.id, update.message.message_id)
-            return
-
-        # 提取 App ID
-        app_id_param = all_params_list[0]
-        if not (app_id_param.lower().startswith("id") and app_id_param[2:].isdigit()):
-            error_message = "❌ 无效的 App ID 格式，请使用 id + 数字，如 id363590051"
-            await message.edit_text(foldable_text_v2(error_message), parse_mode="MarkdownV2")
-            # 删除用户命令消息
-            if update.message:
-                await delete_user_command(context, update.effective_chat.id, update.message.message_id)
-            return
-
-        app_id = app_id_param[2:]  # 移除 'id' 前缀
-
-        # 解析国家参数
-        countries_parsed = []
-        for param_val in all_params_list[1:]:
-            is_country = param_val.upper() in SUPPORTED_COUNTRIES or param_val in COUNTRY_NAME_TO_CODE
-            if is_country:
-                resolved_code = COUNTRY_NAME_TO_CODE.get(param_val, param_val.upper())
-                if resolved_code in SUPPORTED_COUNTRIES and resolved_code not in countries_parsed:
-                    countries_parsed.append(resolved_code)
-
-        # 确定要查询的国家
-        countries_to_check = countries_parsed if countries_parsed else DEFAULT_COUNTRIES
-
-        # 生成缓存键（基于 App ID、国家列表和平台类型）
-        countries_hash = "_".join(sorted(countries_to_check))
-        detail_cache_key = f"app_details_{app_id}_{countries_hash}_{app_type}"
-
-        # 尝试从缓存加载完整的格式化结果
-        cached_detail = await cache_manager.load_cache(
-            detail_cache_key, max_age_seconds=config_manager.config.app_store_cache_duration, subdirectory="app_store"
+        await query.edit_message_text(
+            foldable_text_v2(error_message), parse_mode="MarkdownV2"
         )
 
-        if cached_detail:
-            # 使用缓存的完整结果
-            logger.info(f"使用缓存的应用详情: App ID {app_id}")
-            formatted_message = cached_detail.get("formatted_message", "❌ 缓存数据格式错误")
-            await message.edit_text(formatted_message, parse_mode="MarkdownV2", disable_web_page_preview=True)
-            # 删除用户命令消息
-            if update.message:
-                await delete_user_command(context, update.effective_chat.id, update.message.message_id)
-            return
 
-        # 直接使用 App ID 作为应用名称，先开始获取价格信息
-        app_name = f"App ID {app_id}"
-
-        # 获取多国价格信息
-        await message.edit_text(foldable_text_v2(f"💰 正在获取 {app_name} 的多国价格信息..."), parse_mode="MarkdownV2")
-
-        price_tasks = [
-            get_app_prices(app_name, country, int(app_id), app_type, context) for country in countries_to_check
-        ]
-        price_results_raw = await asyncio.gather(*price_tasks)
-
-        # 格式化结果
-        target_plan = find_common_plan(price_results_raw)
-        successful_results = [res for res in price_results_raw if res["status"] == "ok"]
-
-        # 如果没有找到任何有效结果，显示错误
-        if not successful_results:
-            countries_str = ", ".join(countries_to_check)
-            error_message = (
-                f"❌ 在以下区域均未找到 App ID {app_id}：{countries_str}\n\n请检查 ID 是否正确或尝试其他区域"
-            )
-            await message.delete()
-            await send_error(context, update.effective_chat.id, error_message)
-            # 删除用户命令消息
-            if update.message:
-                await delete_user_command(context, update.effective_chat.id, update.message.message_id)
-            return
-
-        # 从第一个成功的结果中获取真实的应用名称
-        real_app_name = None
-        for res in successful_results:
-            if res.get("real_app_name"):
-                real_app_name = res["real_app_name"]
-                break
-
-        # 如果获取到了真实的应用名称，使用它；否则保持原来的 App ID 格式
-        if real_app_name:
-            app_name = real_app_name
-
-        sorted_results = sorted(successful_results, key=lambda res: sort_key_func(res, target_plan))
-
-        # 确定平台图标和名称
-        platform_info = {
-            "software": {"icon": "📱", "name": "iOS"},
-            "macSoftware": {"icon": "💻", "name": "macOS"},
-            "iPadSoftware": {"icon": "📱", "name": "iPadOS"},
-        }.get(app_type, {"icon": "📱", "name": "iOS"})
-
-        # 构建消息头部
-        header_lines = [f"{platform_info['icon']} *{app_name}*"]
-        header_lines.append(f"🎯 平台: {platform_info['name']}")
-        header_lines.append(f"🆔 App ID: `id{app_id}`")
-
-        raw_header = "\n".join(header_lines)
-
-        # 构建价格详情
-        price_details_lines = []
-        if not sorted_results:
-            price_details_lines.append("在可查询的区域中未找到该应用的价格信息。")
-        else:
-            for res in sorted_results:
-                country_name = res["country_name"]
-                app_price_str = res["app_price_str"]
-
-                price_details_lines.append(f"🌍 国家/地区: {country_name}")
-                price_details_lines.append(f"💰 应用价格 : {app_price_str}")
-                if res["app_price_cny"] is not None and res["app_price_cny"] > 0:
-                    price_details_lines[-1] += f" (约 ¥{res['app_price_cny']:.2f} CNY)"
-
-                if res.get("in_app_purchases"):
-                    for iap in res["in_app_purchases"]:
-                        iap_name = iap["name"]
-                        iap_price = iap["price_str"]
-                        iap_line = f"  •   {iap_name}: {iap_price}"
-                        if iap["cny_price"] is not None and iap["cny_price"] != float("inf"):
-                            iap_line += f" (约 ¥{iap['cny_price']:.2f} CNY)"
-                        price_details_lines.append(iap_line)
-                price_details_lines.append("")
-
-        price_details_text = "\n".join(price_details_lines)
-
-        # 构建完整消息
-        full_raw_message = f"{raw_header}\n\n{price_details_text}"
-        formatted_message = foldable_text_with_markdown_v2(full_raw_message)
-
-        # 保存格式化结果到缓存
-        cache_data = {
-            "app_id": app_id,
-            "app_name": app_name,
-            "app_type": app_type,
-            "countries": countries_to_check,
-            "formatted_message": formatted_message,
-            "timestamp": time.time(),
-        }
-        await cache_manager.save_cache(detail_cache_key, cache_data, subdirectory="app_store")
-        logger.info(f"缓存应用详情: App ID {app_id}, 国家: {countries_hash}")
-
-        # 生成会话ID用于消息管理
-        session_id = f"app_id_query_{user_id}_{int(time.time())}"
-        
-        # 删除搜索进度消息，然后发送结果
-        await message.delete()
-        await send_message_with_auto_delete(
-            context,
-            update.effective_chat.id,
-            formatted_message,
-            MessageType.SEARCH_RESULT,
-            session_id=session_id,
-            parse_mode="MarkdownV2",
-            disable_web_page_preview=True
-        )
-
-        # 删除用户命令消息
-        if update.message:
-            await delete_user_command(context, update.effective_chat.id, update.message.message_id, session_id=session_id)
-
-    except Exception as e:
-        logger.error(f"App ID 查询过程出错: {e}")
-        error_message = f"❌ 查询失败: {e!s}\n\n请稍后重试或联系管理员。"
-        await message.edit_text(foldable_text_v2(error_message), parse_mode="MarkdownV2")
-        
-        # 异常情况下也删除用户命令消息
-        if update.message:
-            await delete_user_command(context, update.effective_chat.id, update.message.message_id)
-
-
-async def get_app_prices(
-    app_name: str, country_code: str, app_id: int, app_type: str, context: ContextTypes.DEFAULT_TYPE
-) -> dict:
-    """Fetches and formats app and in-app purchase prices for a given country."""
-    global cache_manager, rate_converter
-
-    cache_key = f"app_prices_{app_id}_{country_code}_{app_type}"
-
-    # Check cache first (using app_store subdirectory)
-    cached_data = await cache_manager.load_cache(
-        cache_key, max_age_seconds=config_manager.config.app_store_cache_duration, subdirectory="app_store"
-    )
-    if cached_data:
-        cache_timestamp = await cache_manager.get_cache_timestamp(cache_key, subdirectory="app_store")
-        cache_info = (
-            f"*(缓存于: {datetime.fromtimestamp(cache_timestamp).strftime('%Y-%m-%d %H:%M')})*"
-            if cache_timestamp
-            else ""
-        )
-        return {
-            "country_code": country_code,
-            "country_name": SUPPORTED_COUNTRIES.get(country_code, {}).get("name", country_code),
-            "flag_emoji": get_country_flag(country_code),
-            "status": "ok",
-            "app_price_str": cached_data.get("app_price_str"),
-            "app_price_cny": cached_data.get("app_price_cny"),
-            "in_app_purchases": cached_data.get("in_app_purchases", []),
-            "cache_info": cache_info,
-            "real_app_name": cached_data.get("real_app_name"),  # 添加真实应用名称
-        }
-
-    country_info = SUPPORTED_COUNTRIES.get(country_code, {})
-    country_name = country_info.get("name", country_code)
-    flag_emoji = get_country_flag(country_code)
-
-    url = f"https://apps.apple.com/{country_code.lower()}/app/id{app_id}"
-
-    try:
-        async with httpx.AsyncClient(follow_redirects=True, verify=False) as client:
-            response = await client.get(url, timeout=12)
-            response.raise_for_status()
-            content = response.text
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 404:
-            logger.info(f"App 'id{app_id}' not found in {country_code} (404).")
-            return {
-                "country_code": country_code,
-                "country_name": country_name,
-                "flag_emoji": flag_emoji,
-                "status": "not_listed",
-                "error_message": "未上架",
-            }
-        else:
-            logger.error(f"HTTP error fetching prices for {app_name} in {country_code}: {e}")
-            return {
-                "country_code": country_code,
-                "country_name": country_name,
-                "flag_emoji": flag_emoji,
-                "status": "error",
-                "error_message": f"获取失败 (HTTP {e.response.status_code})",
-            }
-    except httpx.RequestError as e:
-        logger.error(f"Failed to fetch prices for {app_name} in {country_code}: {e}")
-        return {
-            "country_code": country_code,
-            "country_name": country_name,
-            "flag_emoji": flag_emoji,
-            "status": "error",
-            "error_message": "获取失败 (网络错误)",
-        }
-    except Exception as e:
-        logger.error(f"Unknown error fetching prices for {app_name} in {country_code}: {e}")
-        return {
-            "country_code": country_code,
-            "country_name": country_name,
-            "flag_emoji": flag_emoji,
-            "status": "error",
-            "error_message": "获取失败 (未知错误)",
-        }
-
-    try:
-        # Try lxml first, fall back to html.parser if not available
-        try:
-            soup = BeautifulSoup(content, "lxml")
-        except Exception:
-            soup = BeautifulSoup(content, "html.parser")
-
-        app_price_str = "免费"
-        app_price_cny = 0.0
-        real_app_name = None
-
-        script_tags = soup.find_all("script", type="application/ld+json")
-        for script in script_tags:
-            try:
-                json_data = json.loads(script.string)
-                if isinstance(json_data, dict) and json_data.get("@type") == "SoftwareApplication":
-                    # 获取应用名称
-                    if not real_app_name:
-                        real_app_name = json_data.get("name", "").strip()
-
-                    offers = json_data.get("offers", {})
-                    if offers:
-                        price = offers.get("price", 0)
-                        currency = offers.get("priceCurrency", "USD")
-                        category = offers.get("category", "").lower()
-                        if category != "free" and float(price) > 0:
-                            app_price_str = f"{price} {currency}"
-                            if country_code != "CN" and rate_converter and rate_converter.rates and currency.upper() in rate_converter.rates:
-                                # Ensure we're converting from the correct source currency to CNY
-                                cny_price = await rate_converter.convert(float(price), currency.upper(), "CNY")
-                                if cny_price is not None:
-                                    app_price_cny = cny_price
-                    break
-            except (json.JSONDecodeError, TypeError, ValueError):
-                continue
-
-        # 新的HTML结构使用 div.text-pair 来存储内购信息
-        # 旧的选择器: li.list-with-numbers__item (已废弃)
-        # 新的选择器: div.text-pair
-        in_app_items = soup.select("div.text-pair")
-        unique_items = set()
-        in_app_purchases = []
-
-        if in_app_items:
-            for item in in_app_items:
-                # 新结构: <div class="text-pair"><span>名称</span><span>价格</span></div>
-                spans = item.find_all("span", recursive=False)
-
-                if len(spans) >= 2:
-                    name = spans[0].text.strip()
-                    price_str = spans[1].text.strip()
-
-                    # 只处理包含货币符号的项目（过滤掉非价格的 text-pair）
-                    # 使用动态生成的完整货币符号集合，支持所有国家的货币
-                    if price_str and any(indicator in price_str for indicator in ALL_CURRENCY_INDICATORS):
-                        if (name, price_str) not in unique_items:
-                            unique_items.add((name, price_str))
-
-                            in_app_cny_price = None
-                            if country_code != "CN" and rate_converter and rate_converter.rates:
-                                # 特殊处理：如果价格字符串包含USD，直接使用USD
-                                if "USD" in price_str.upper():
-                                    # 提取USD价格
-                                    import re
-                                    usd_match = re.search(r'USD\s*([\d.,]+)', price_str, re.IGNORECASE)
-                                    if usd_match:
-                                        try:
-                                            usd_price = float(usd_match.group(1).replace(',', ''))
-                                            if "USD" in rate_converter.rates:
-                                                cny_price = await rate_converter.convert(usd_price, "USD", "CNY")
-                                                if cny_price is not None:
-                                                    in_app_cny_price = cny_price
-                                        except ValueError:
-                                            pass
-                                else:
-                                    # 使用原始的price_parser逻辑
-                                    detected_currency, price_value = extract_currency_and_price(price_str, country_code)
-                                    # Debug logging
-                                    logger.info(f"内购价格解析: price_str='{price_str}', detected_currency='{detected_currency}', price_value={price_value}")
-                                    if price_value is not None and detected_currency.upper() in rate_converter.rates:
-                                        cny_price = await rate_converter.convert(price_value, detected_currency, "CNY")
-                                        if cny_price is not None:
-                                            in_app_cny_price = cny_price
-                            in_app_purchases.append({"name": name, "price_str": price_str, "cny_price": in_app_cny_price})
-
-        result_data = {
-            "country_code": country_code,
-            "country_name": country_name,
-            "flag_emoji": flag_emoji,
-            "status": "ok",
-            "app_price_str": app_price_str,
-            "app_price_cny": app_price_cny,
-            "in_app_purchases": in_app_purchases,
-            "real_app_name": real_app_name,  # 添加真实应用名称
-        }
-
-        # Save to cache before returning (using app_store subdirectory)
-        await cache_manager.save_cache(cache_key, result_data, subdirectory="app_store")
-        return result_data
-
-    except Exception as e:
-        logger.error(f"Error parsing prices for {app_name} in {country_code}: {e}")
-        return {
-            "country_code": country_code,
-            "country_name": country_name,
-            "flag_emoji": flag_emoji,
-            "status": "error",
-            "error_message": "解析失败",
-        }
-
-
-def extract_cny_price(price_str: str) -> float:
-    """Extracts CNY price from a formatted string for sorting."""
-    if "免费" in price_str:
-        return 0.0
-
-    # Matches "(约 ¥123.45)"
-    match = re.search(r"\(约 ¥([\d,.]+)\)", price_str)
-    if match:
-        try:
-            return float(match.group(1).replace(",", ""))
-        except ValueError:
-            return float("inf")
-
-    return float("inf")
-
-
-def find_common_plan(all_price_data: list[dict]) -> str | None:
-    """Finds the most common subscription plan name across all results for sorting."""
-    plan_counts = {}
-
-    for price_data in all_price_data:
-        if price_data["status"] == "ok":
-            for iap in price_data.get("in_app_purchases", []):
-                plan_name = iap["name"]
-                plan_counts[plan_name] = plan_counts.get(plan_name, 0) + 1
-
-    if not plan_counts:
-        return None
-
-    max_count = max(plan_counts.values())
-    common_plans = [plan for plan, count in plan_counts.items() if count == max_count]
-
-    for keyword in ["Pro", "Premium", "Plus", "Standard"]:
-        for plan in common_plans:
-            if keyword in plan:
-                return plan
-
-    return common_plans[0] if common_plans else None
-
-
-def sort_key_func(price_data: dict, target_plan: str | None = None) -> tuple[float, float]:
-    """Sorting key function for price results, prioritizing target plan or cheapest in-app/app price."""
-    if price_data["status"] != "ok":
-        return (float("inf"), float("inf"))  # Place non-ok statuses at the end
-
-    app_price = price_data.get("app_price_cny", float("inf"))
-
-    target_plan_price = float("inf")
-    min_in_app_price = float("inf")
-
-    in_app_purchases = price_data.get("in_app_purchases", [])
-
-    for iap in in_app_purchases:
-        cny_price = iap.get("cny_price")
-        if cny_price is not None:
-            if iap["name"] == target_plan:
-                target_plan_price = cny_price
-            min_in_app_price = min(min_in_app_price, cny_price)
-
-    # Determine the effective price for sorting
-    if target_plan_price != float("inf"):
-        effective_price = target_plan_price
-    elif min_in_app_price != float("inf"):
-        effective_price = min_in_app_price
-    else:
-        effective_price = app_price
-
-    # Return a tuple: the effective price and the main app price (for tie-breaking)
-    return (effective_price, app_price)
-
-
-async def app_store_clean_cache_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def app_store_clean_cache_command(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """清理App Store缓存"""
     if not update.effective_user or not update.effective_chat or not update.message:
         return
 
     user_id = update.effective_user.id
-    config = get_config()
 
     # 删除用户命令消息
-    await delete_user_command(context, update.message.chat_id, update.message.message_id)
+    await delete_user_command(
+        context, update.message.chat_id, update.message.message_id
+    )
 
     # 使用 MySQL 用户管理器进行权限检查
     user_manager = context.bot_data.get("user_cache_manager")
@@ -1300,21 +1320,31 @@ async def app_store_clean_cache_command(update: Update, context: ContextTypes.DE
         await send_error(context, update.effective_chat.id, "❌ 用户管理器未初始化。")
         return
 
-    if not (await user_manager.is_super_admin(user_id) or await user_manager.is_admin(user_id)):
+    if not (
+        await user_manager.is_super_admin(user_id)
+        or await user_manager.is_admin(user_id)
+    ):
         await send_error(context, update.effective_chat.id, "❌ 你没有缓存管理权限。")
         return
 
     try:
-        cache_manager = context.bot_data.get("cache_manager")
-        if not cache_manager:
-            await send_error(context, update.effective_chat.id, "❌ 缓存管理器未初始化。")
+        cache_manager_obj = context.bot_data.get("cache_manager")
+        if not cache_manager_obj:
+            await send_error(
+                context, update.effective_chat.id, "❌ 缓存管理器未初始化。"
+            )
             return
 
-        await cache_manager.clear_cache(subdirectory="app_store")
+        await cache_manager_obj.clear_cache(subdirectory="app_store")
 
         result_text = "✅ App Store 相关的所有缓存已清理完成。\n\n包括：搜索结果、应用详情和价格信息。"
 
-        await send_success(context, update.effective_chat.id, foldable_text_v2(result_text), parse_mode="MarkdownV2")
+        await send_success(
+            context,
+            update.effective_chat.id,
+            foldable_text_v2(result_text),
+            parse_mode="MarkdownV2",
+        )
 
     except Exception as e:
         logger.error(f"App Store缓存清理失败: {e}")
@@ -1323,12 +1353,20 @@ async def app_store_clean_cache_command(update: Update, context: ContextTypes.DE
 
 # Register commands
 command_factory.register_command(
-    "app", app_command, permission=Permission.USER, description="App Store应用搜索（支持iOS/macOS/iPadOS平台筛选）"
+    "app",
+    app_command,
+    permission=Permission.USER,
+    description="App Store应用搜索（支持iOS/iPadOS/macOS/tvOS/watchOS/visionOS）",
 )
-# 已迁移到统一缓存管理命令 /cleancache
-# command_factory.register_command(
-#     "app_cleancache", app_store_clean_cache_command, permission=Permission.ADMIN, description="清理App Store缓存"
-# )
+command_factory.register_command(
+    "app_cleancache",
+    app_store_clean_cache_command,
+    permission=Permission.ADMIN,
+    description="清理App Store缓存",
+)
 command_factory.register_callback(
-    "^app_", handle_app_search_callback, permission=Permission.USER, description="App搜索回调处理"
+    "^app_",
+    handle_app_search_callback,
+    permission=Permission.USER,
+    description="App搜索回调处理",
 )

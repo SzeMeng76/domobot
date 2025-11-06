@@ -6,6 +6,7 @@ python-dotenv==1.0.0
 
 # HTTP Requests
 httpx==0.28.1
+brotli==1.1.0  # Required for Brotli decompression (App Store uses br encoding)
 
 # Web Scraping
 beautifulsoup4==4.12.2
