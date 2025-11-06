@@ -2,9 +2,19 @@ import asyncio
 import logging
 import re
 
-from google_play_scraper import app as gp_app
-from google_play_scraper import exceptions as gp_exceptions
-from google_play_scraper import search
+# 使用 HTML 解析器版本（更准确可靠）
+from utils.google_play_html_scraper import app as gp_app
+from utils.google_play_html_scraper import search
+# 保留异常类的导入
+try:
+    from google_play_scraper import exceptions as gp_exceptions
+except:
+    # 如果导入失败，定义一个简单的异常类
+    class NotFoundError(Exception):
+        pass
+    class gp_exceptions:
+        NotFoundError = NotFoundError
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -231,6 +241,7 @@ async def googleplay_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if cached_search:
             app_info_short = cached_search.get("results", [{}])[0] if cached_search.get("results") else None
         else:
+            # HTML 解析器版本返回准确的搜索结果
             search_results = await asyncio.to_thread(
                 search, query, n_hits=1, lang=lang_code, country=initial_search_country
             )
@@ -243,6 +254,7 @@ async def googleplay_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 app_info_short = None
 
         if app_info_short:
+            # HTML 解析器保证 appId 总是存在
             app_id = app_info_short["appId"]
             app_title_short = app_info_short.get("title", query)
             icon_url = app_info_short.get("icon")
