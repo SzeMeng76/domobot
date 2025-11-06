@@ -256,7 +256,8 @@ async def googleplay_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if app_info_short:
             # HTML 解析器保证 appId 总是存在
             app_id = app_info_short["appId"]
-            app_title_short = app_info_short.get("title", query)
+            # HTML 解析器的 title 可能是 None，使用 or 确保有值
+            app_title_short = app_info_short.get("title") or query
             icon_url = app_info_short.get("icon")
         else:
             error_message = f"😕 在区域 {initial_search_country} 未找到应用: {query}"
