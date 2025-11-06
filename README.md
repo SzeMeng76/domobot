@@ -245,9 +245,12 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /steams cyberpunk         # Comprehensive search (games + bundles)
 
 # App stores (with in-app purchase pricing)
-/app WeChat                # App Store: detailed IAP items and pricing
+/app WeChat                # App Store: detailed IAP items and pricing (iOS/iPadOS/macOS/tvOS/watchOS/visionOS)
+/app -ipad Procreate       # iPad-specific search
+/app -mac "Final Cut Pro"  # Mac-specific search
 /gp WhatsApp              # Google Play: IAP price ranges
 # Note: Apple Store shows individual IAP items with prices; Google Play shows ranges (e.g., "$0.99-$99.99 per item")
+# Platform flags: -iphone, -ipad, -mac, -tv, -watch, -vision (default: -iphone)
 
 # Apple services
 /aps iCloud

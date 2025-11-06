@@ -245,9 +245,12 @@ docker-compose down
 /steams cyberpunk         # 综合搜索（游戏+捆绑包）
 
 # 应用商店（含内购价格信息）
-/app 微信                  # App Store: 详细内购项目和价格
+/app 微信                  # App Store: 详细内购项目和价格（支持iOS/iPadOS/macOS/tvOS/watchOS/visionOS）
+/app -ipad Procreate       # iPad专属搜索
+/app -mac "Final Cut Pro"  # Mac专属搜索
 /gp WeChat                # Google Play: 内购价格范围和CNY转换
 # 注: Apple Store显示具体内购项目价格；Google Play显示价格范围（如"每件$0.99-$99.99"）
+# 平台参数: -iphone, -ipad, -mac, -tv, -watch, -vision（默认: -iphone）
 
 # Apple服务
 /aps iCloud
