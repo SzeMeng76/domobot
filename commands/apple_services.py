@@ -560,96 +560,178 @@ async def get_service_info(url: str, country_code: str, service: str, context: C
                 result_lines.append(f"{service_display_name} 服务在该国家/地区不可用。")
             elif country_code == "CN":
                 logger.info("Applying CN-specific parsing for Apple Music.")
-                student_plan_item = plans_section.select_one("div.plan-list-item.student")
-                if student_plan_item and isinstance(student_plan_item, Tag):
-                    plan_name_tag = student_plan_item.select_one("p.plan-type:not(.cost)")
-                    price_tag = student_plan_item.select_one("p.cost")
-                    if plan_name_tag and price_tag:
-                        plan_name = plan_name_tag.get_text(strip=True).replace("4", "").strip()
-                        price_str = price_tag.get_text(strip=True)
-                        result_lines.append(f"• 学生计划: {price_str}")
 
-                individual_plan_item = plans_section.select_one("div.plan-list-item.individual")
-                if individual_plan_item and isinstance(individual_plan_item, Tag):
-                    plan_name_tag = individual_plan_item.select_one("p.plan-type:not(.cost)")
-                    price_tag = individual_plan_item.select_one("p.cost")
-                    if plan_name_tag and price_tag:
-                        plan_name = plan_name_tag.get_text(strip=True)
-                        price_str = price_tag.get_text(strip=True)
-                        result_lines.append(f"• 个人计划: {price_str}")
+                # Try new gallery-based structure first (2024+ layout)
+                gallery_items = plans_section.select("li.gallery-item")
+                parsed_any = False
 
-                family_plan_item = plans_section.select_one("div.plan-list-item.family")
-                if family_plan_item and isinstance(family_plan_item, Tag):
-                    plan_name_tag = family_plan_item.select_one("p.plan-type:not(.cost)")
-                    price_tag = family_plan_item.select_one("p.cost")
-                    if plan_name_tag and price_tag:
-                        plan_name = plan_name_tag.get_text(strip=True).replace("5", "").strip()
-                        price_str = price_tag.get_text(strip=True)
-                        result_lines.append(f"• 家庭计划: {price_str}")
+                if gallery_items:
+                    logger.info(f"Found {len(gallery_items)} gallery items (new layout)")
+                    # Extract student price from FAQ if available
+                    student_price = None
+                    faq_section = soup.find("section", class_="section-faq")
+                    if faq_section:
+                        faq_text = faq_section.get_text()
+                        student_match = re.search(r'学生.*?每月仅需\s*(RMB\s*\d+)', faq_text)
+                        if student_match:
+                            student_price = student_match.group(1)
+                            result_lines.append(f"• 学生计划: {student_price}/月")
+                            parsed_any = True
+
+                    # Parse gallery items for individual and family plans
+                    for item in gallery_items:
+                        plan_name_elem = item.select_one("h3.tile-eyebrow")
+                        price_elem = item.select_one("p.tile-headline")
+
+                        if plan_name_elem and price_elem:
+                            plan_name = plan_name_elem.get_text(strip=True)
+                            price_text = price_elem.get_text(strip=True)
+                            # Extract price from "仅需 RMB 11/月" format
+                            price_match = re.search(r'(RMB\s*\d+)/月', price_text)
+                            if price_match:
+                                price_str = f"{price_match.group(1)}/月"
+                                result_lines.append(f"• {plan_name}计划: {price_str}")
+                                parsed_any = True
+
+                # Fallback to old structure if new layout didn't work
+                if not parsed_any:
+                    logger.info("Falling back to old plan-list-item structure")
+                    student_plan_item = plans_section.select_one("div.plan-list-item.student")
+                    if student_plan_item and isinstance(student_plan_item, Tag):
+                        plan_name_tag = student_plan_item.select_one("p.plan-type:not(.cost)")
+                        price_tag = student_plan_item.select_one("p.cost")
+                        if plan_name_tag and price_tag:
+                            plan_name = plan_name_tag.get_text(strip=True).replace("4", "").strip()
+                            price_str = price_tag.get_text(strip=True)
+                            result_lines.append(f"• 学生计划: {price_str}")
+
+                    individual_plan_item = plans_section.select_one("div.plan-list-item.individual")
+                    if individual_plan_item and isinstance(individual_plan_item, Tag):
+                        plan_name_tag = individual_plan_item.select_one("p.plan-type:not(.cost)")
+                        price_tag = individual_plan_item.select_one("p.cost")
+                        if plan_name_tag and price_tag:
+                            plan_name = plan_name_tag.get_text(strip=True)
+                            price_str = price_tag.get_text(strip=True)
+                            result_lines.append(f"• 个人计划: {price_str}")
+
+                    family_plan_item = plans_section.select_one("div.plan-list-item.family")
+                    if family_plan_item and isinstance(family_plan_item, Tag):
+                        plan_name_tag = family_plan_item.select_one("p.plan-type:not(.cost)")
+                        price_tag = family_plan_item.select_one("p.cost")
+                        if plan_name_tag and price_tag:
+                            plan_name = plan_name_tag.get_text(strip=True).replace("5", "").strip()
+                            price_str = price_tag.get_text(strip=True)
+                            result_lines.append(f"• 家庭计划: {price_str}")
             else:
                 logger.info(f"Applying standard parsing for Apple Music ({country_code}).")
-                plan_items = plans_section.select("div.plan-list-item")
-                plan_order = ["student", "individual", "family"]
-                processed_plans = set()
 
-                for plan_type in plan_order:
-                    item = plans_section.select_one(f"div.plan-list-item.{plan_type}")
-                    if item and isinstance(item, Tag) and plan_type not in processed_plans:
+                # Try new gallery-based structure first (2024+ layout)
+                gallery_items = plans_section.select("li.gallery-item")
+                parsed_any = False
+
+                if gallery_items:
+                    logger.info(f"Found {len(gallery_items)} gallery items for {country_code} (new layout)")
+
+                    # Map of plan IDs to Chinese names
+                    plan_name_map = {
+                        "student": "学生",
+                        "individual": "个人",
+                        "voice": "Voice",
+                        "family": "家庭"
+                    }
+
+                    for item in gallery_items:
+                        # Get plan ID from item's id attribute
+                        plan_id = item.get("id", "")
+                        plan_name_elem = item.select_one("h3.tile-eyebrow")
+                        price_elem = item.select_one("p.tile-headline")
+
+                        if plan_name_elem and price_elem:
+                            # Use mapped Chinese name if available, otherwise use extracted name
+                            plan_name = plan_name_map.get(plan_id, plan_name_elem.get_text(strip=True))
+                            price_text = price_elem.get_text(strip=True)
+
+                            # Extract the main price, handling various formats
+                            # Examples: "₹119/month", "月額1,080円。新規登録すると、最初の1か月間無料。"
+                            price_match = re.search(r'([¥₹$€£₩₦]\s*[\d,]+(?:\.\d+)?(?:/month|/年|/月)?|月額\s*[\d,]+円|[\d,]+(?:\.\d+)?\s*(?:TL|RM|USD|EUR|GBP|JPY|INR|KRW|NGN|BRL|CAD|AUD|NZD|HKD|SGD|PHP|ILS|PKR|kr|RUB|PLN|CZK|HUF)(?:/month|/mo)?)', price_text)
+
+                            if price_match:
+                                price_str = price_match.group(1).strip()
+                                # Clean up common suffixes
+                                price_str = re.sub(r'/month|/mo\.?|。.*$', '', price_str, flags=re.IGNORECASE).strip()
+
+                                line = f"• {plan_name}计划: {price_str}"
+                                if country_code != "CN":
+                                    cny_price_str = await convert_price_to_cny(price_str, country_code, context)
+                                    line += cny_price_str
+                                result_lines.append(line)
+                                parsed_any = True
+
+                # Fallback to old plan-list-item structure
+                if not parsed_any:
+                    logger.info(f"Falling back to old plan-list-item structure for {country_code}")
+                    plan_items = plans_section.select("div.plan-list-item")
+                    plan_order = ["student", "individual", "family"]
+                    processed_plans = set()
+
+                    for plan_type in plan_order:
+                        item = plans_section.select_one(f"div.plan-list-item.{plan_type}")
+                        if item and isinstance(item, Tag) and plan_type not in processed_plans:
+                            plan_name_tag = item.select_one("p.plan-type:not(.cost), h3, h4, .plan-title, .plan-name")
+                            plan_name_extracted = (
+                                plan_name_tag.get_text(strip=True).replace("プラン", "").strip()
+                                if plan_name_tag
+                                else plan_type.capitalize()
+                            )
+
+                            price_tag = item.select_one("p.cost span, p.cost, .price, .plan-price")
+                            if price_tag:
+                                price_str = price_tag.get_text(strip=True)
+                                price_str = re.sub(
+                                    r"\s*/\s*(月|month|mo\\.?).*", "", price_str, flags=re.IGNORECASE
+                                ).strip()
+
+                                if plan_type == "student":
+                                    plan_name = "学生"
+                                elif plan_type == "individual":
+                                    plan_name = "个人"
+                                elif plan_type == "family":
+                                    plan_name = "家庭"
+                                else:
+                                    plan_name = plan_name_extracted
+
+                                line = f"• {plan_name}计划: {price_str}"
+                                cny_price_str = await convert_price_to_cny(price_str, country_code, context)
+                                line += cny_price_str
+                                result_lines.append(line)
+                                processed_plans.add(plan_type)
+
+                    for item in plan_items:
+                        class_list = item.get("class", [])
+                        is_processed = False
+                        for p_plan in processed_plans:
+                            if p_plan in class_list:
+                                is_processed = True
+                                break
+                        if is_processed:
+                            continue
+
                         plan_name_tag = item.select_one("p.plan-type:not(.cost), h3, h4, .plan-title, .plan-name")
-                        plan_name_extracted = (
+                        plan_name = (
                             plan_name_tag.get_text(strip=True).replace("プラン", "").strip()
                             if plan_name_tag
-                            else plan_type.capitalize()
+                            else "未知计划"
                         )
 
                         price_tag = item.select_one("p.cost span, p.cost, .price, .plan-price")
                         if price_tag:
                             price_str = price_tag.get_text(strip=True)
-                            price_str = re.sub(
-                                r"\s*/\s*(月|month|mo\\.?).*", "", price_str, flags=re.IGNORECASE
-                            ).strip()
+                            price_str = re.sub(r"\s*/\s*(月|month).*", "", price_str, flags=re.IGNORECASE).strip()
 
-                            if plan_type == "student":
-                                plan_name = "学生"
-                            elif plan_type == "individual":
-                                plan_name = "个人"
-                            elif plan_type == "family":
-                                plan_name = "家庭"
-                            else:
-                                plan_name = plan_name_extracted
-
-                            line = f"• {plan_name}计划: {price_str}"
+                            line = f"• {plan_name}: {price_str}"
                             cny_price_str = await convert_price_to_cny(price_str, country_code, context)
                             line += cny_price_str
                             result_lines.append(line)
-                            processed_plans.add(plan_type)
-
-                for item in plan_items:
-                    class_list = item.get("class", [])
-                    is_processed = False
-                    for p_plan in processed_plans:
-                        if p_plan in class_list:
-                            is_processed = True
-                            break
-                    if is_processed:
-                        continue
-
-                    plan_name_tag = item.select_one("p.plan-type:not(.cost), h3, h4, .plan-title, .plan-name")
-                    plan_name = (
-                        plan_name_tag.get_text(strip=True).replace("プラン", "").strip()
-                        if plan_name_tag
-                        else "未知计划"
-                    )
-
-                    price_tag = item.select_one("p.cost span, p.cost, .price, .plan-price")
-                    if price_tag:
-                        price_str = price_tag.get_text(strip=True)
-                        price_str = re.sub(r"\s*/\s*(月|month).*", "", price_str, flags=re.IGNORECASE).strip()
-
-                        line = f"• {plan_name}: {price_str}"
-                        cny_price_str = await convert_price_to_cny(price_str, country_code, context)
-                        line += cny_price_str
-                        result_lines.append(line)
 
         # Only join if there are actual price details beyond the header
         if len(result_lines) > 1:
