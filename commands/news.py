@@ -82,9 +82,12 @@ NEWS_SOURCES = {
     'baidu': '百度热搜',
     '36kr-quick': '36氪快讯',
     'cls-telegraph': '财联社电报',
+    'cls-depth': '财联社深度',
+    'cls-hot': '财联社热榜',
     'verge': 'The Verge (英文科技)',
     'douban': '豆瓣电影',
     'steam': 'Steam游戏排行',
+    'tencent-hot': '腾讯新闻综合早报',
     # 兼容性别名（保持原有源名称可用）
     'github': 'GitHub趋势',
     'v2ex': 'V2EX最新',
@@ -149,22 +152,22 @@ async def get_verge_news(count: int = 10) -> List[Dict]:
     try:
         httpx_client = get_http_client()
         logger.info("从 The Verge RSS 获取新闻")
-        
+
         # 获取RSS数据
         response = await httpx_client.get(VERGE_RSS_URL, timeout=10.0)
         response.raise_for_status()
-        
+
         # 解析RSS
         feed = feedparser.parse(response.text)
         items = []
-        
+
         for entry in feed.entries[:count]:
             # 提取新闻内容
             title = entry.get('title', '无标题')
             url = entry.get('link', '')
             pub_date = entry.get('published', '')
             summary = entry.get('summary', '')
-            
+
             # 如果启用翻译，翻译标题和摘要
             if TRANSLATION_AVAILABLE:
                 try:
@@ -183,7 +186,7 @@ async def get_verge_news(count: int = 10) -> List[Dict]:
                 # 没有翻译功能时也应用长度限制
                 limited_summary = summary[:500] if len(summary) > 500 else summary
                 translated_summary = f"[英文] {limited_summary}"
-            
+
             items.append({
                 'title': translated_title,
                 'url': url,
@@ -191,10 +194,10 @@ async def get_verge_news(count: int = 10) -> List[Dict]:
                 'original_summary_length': len(summary),  # 保存原始摘要长度用于判断
                 'extra': {'info': pub_date}
             })
-        
+
         logger.info(f"成功获取 {len(items)} 条 Verge 新闻")
         return items
-        
+
     except Exception as e:
         logger.error(f"获取 Verge 新闻失败: {e}")
         return []
@@ -216,8 +219,8 @@ def create_news_sources_keyboard() -> InlineKeyboardMarkup:
     categories = [
         ("🔧 科技类", ['github', 'ithome', 'juejin', 'hackernews', 'solidot', 'sspai', 'ghxi', 'linuxdo', 'chongbuluo', 'verge']),
         ("💬 社交类", ['zhihu', 'weibo', 'v2ex', 'bilibili', 'douyin', 'tieba', 'kuaishou', 'coolapk', 'hupu']),
-        ("💰 财经类", ['jin10', 'wallstreetcn', 'gelonghui', 'xueqiu', '36kr', 'fastbull', 'mktnews', 'cls-telegraph']),
-        ("📰 新闻类", ['toutiao', 'thepaper', 'ifeng', 'baidu', 'cankaoxiaoxi', 'zaobao', 'sputniknewscn', 'kaopu']),
+        ("💰 财经类", ['jin10', 'wallstreetcn', 'gelonghui', 'xueqiu', '36kr', 'fastbull', 'mktnews', 'cls-telegraph', 'cls-depth', 'cls-hot']),
+        ("📰 新闻类", ['toutiao', 'thepaper', 'ifeng', 'baidu', 'tencent-hot', 'cankaoxiaoxi', 'zaobao', 'sputniknewscn', 'kaopu']),
         ("🛍️ 其他", ['smzdm', 'producthunt', 'nowcoder', 'pcbeta', 'douban', 'steam'])
     ]
     
@@ -650,8 +653,8 @@ async def newslist_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         categories = [
             ("🔧 科技类", ['github', 'ithome', 'juejin', 'hackernews', 'solidot', 'sspai', 'ghxi', 'linuxdo', 'chongbuluo', 'verge']),
             ("💬 社交类", ['zhihu', 'weibo', 'v2ex', 'bilibili', 'douyin', 'tieba', 'kuaishou', 'coolapk', 'hupu']),
-            ("💰 财经类", ['jin10', 'wallstreetcn', 'gelonghui', 'xueqiu', '36kr', 'fastbull', 'mktnews', 'cls-telegraph']),
-            ("📰 新闻类", ['toutiao', 'thepaper', 'ifeng', 'baidu', 'cankaoxiaoxi', 'zaobao', 'sputniknewscn', 'kaopu']),
+            ("💰 财经类", ['jin10', 'wallstreetcn', 'gelonghui', 'xueqiu', '36kr', 'fastbull', 'mktnews', 'cls-telegraph', 'cls-depth', 'cls-hot']),
+            ("📰 新闻类", ['toutiao', 'thepaper', 'ifeng', 'baidu', 'tencent-hot', 'cankaoxiaoxi', 'zaobao', 'sputniknewscn', 'kaopu']),
             ("🛍️ 其他", ['smzdm', 'producthunt', 'nowcoder', 'pcbeta', 'douban', 'steam'])
         ]
         
@@ -766,7 +769,7 @@ HOT_NEWS_SOURCES = {
     'social': ['weibo', 'bilibili', 'zhihu', 'tieba', 'douyin'],  # 微博最稳定，放第一
     'tech': ['ithome', 'github', 'juejin', 'sspai'],    # IT之家很稳定
     'finance': ['jin10', 'wallstreetcn', 'gelonghui'],  # 金十数据稳定
-    'news': ['toutiao', 'baidu', 'thepaper']             # 头条稳定
+    'news': ['tencent-hot', 'toutiao', 'baidu', 'thepaper']  # 腾讯新闻综合早报优先
 }
 
 def get_balanced_hot_sources() -> List[str]:
