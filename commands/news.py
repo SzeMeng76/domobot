@@ -81,9 +81,11 @@ NEWS_SOURCES = {
     'mktnews-flash': 'MKTNews快讯',
     'baidu': '百度热搜',
     '36kr-quick': '36氪快讯',
+    '36kr-renqi': '36氪人气榜',
     'cls-telegraph': '财联社电报',
     'cls-depth': '财联社深度',
     'cls-hot': '财联社热榜',
+    'freebuf': 'FreeBuf网络安全',
     'verge': 'The Verge (英文科技)',
     'douban': '豆瓣电影',
     'steam': 'Steam游戏排行',
@@ -217,9 +219,9 @@ def create_news_sources_keyboard() -> InlineKeyboardMarkup:
     
     # 按类别分组显示新闻源（使用兼容名称，便于用户识别）
     categories = [
-        ("🔧 科技类", ['github', 'ithome', 'juejin', 'hackernews', 'solidot', 'sspai', 'ghxi', 'linuxdo', 'chongbuluo', 'verge']),
+        ("🔧 科技类", ['github', 'ithome', 'juejin', 'hackernews', 'solidot', 'sspai', 'ghxi', 'linuxdo', 'chongbuluo', 'freebuf', 'verge']),
         ("💬 社交类", ['zhihu', 'weibo', 'v2ex', 'bilibili', 'douyin', 'tieba', 'kuaishou', 'coolapk', 'hupu']),
-        ("💰 财经类", ['jin10', 'wallstreetcn', 'gelonghui', 'xueqiu', '36kr', 'fastbull', 'mktnews', 'cls-telegraph', 'cls-depth', 'cls-hot']),
+        ("💰 财经类", ['jin10', 'wallstreetcn', 'gelonghui', 'xueqiu', '36kr', '36kr-renqi', 'fastbull', 'mktnews', 'cls-telegraph', 'cls-depth', 'cls-hot']),
         ("📰 新闻类", ['toutiao', 'thepaper', 'ifeng', 'baidu', 'tencent-hot', 'cankaoxiaoxi', 'zaobao', 'sputniknewscn', 'kaopu']),
         ("🛍️ 其他", ['smzdm', 'producthunt', 'nowcoder', 'pcbeta', 'douban', 'steam'])
     ]
@@ -651,9 +653,9 @@ async def newslist_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # 按类别分组显示（使用兼容名称）
         categories = [
-            ("🔧 科技类", ['github', 'ithome', 'juejin', 'hackernews', 'solidot', 'sspai', 'ghxi', 'linuxdo', 'chongbuluo', 'verge']),
+            ("🔧 科技类", ['github', 'ithome', 'juejin', 'hackernews', 'solidot', 'sspai', 'ghxi', 'linuxdo', 'chongbuluo', 'freebuf', 'verge']),
             ("💬 社交类", ['zhihu', 'weibo', 'v2ex', 'bilibili', 'douyin', 'tieba', 'kuaishou', 'coolapk', 'hupu']),
-            ("💰 财经类", ['jin10', 'wallstreetcn', 'gelonghui', 'xueqiu', '36kr', 'fastbull', 'mktnews', 'cls-telegraph', 'cls-depth', 'cls-hot']),
+            ("💰 财经类", ['jin10', 'wallstreetcn', 'gelonghui', 'xueqiu', '36kr', '36kr-renqi', 'fastbull', 'mktnews', 'cls-telegraph', 'cls-depth', 'cls-hot']),
             ("📰 新闻类", ['toutiao', 'thepaper', 'ifeng', 'baidu', 'tencent-hot', 'cankaoxiaoxi', 'zaobao', 'sputniknewscn', 'kaopu']),
             ("🛍️ 其他", ['smzdm', 'producthunt', 'nowcoder', 'pcbeta', 'douban', 'steam'])
         ]
