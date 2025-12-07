@@ -623,7 +623,7 @@ class SpotifyPriceBot(PriceQueryService):
             error_message = f"❌ 错误：未能加载 {self.service_name} 价格数据。请稍后再试或检查日志。"
             return foldable_text_v2(error_message)
 
-        result_messages = []
+        result_data = []
         not_found = []
 
         for query in query_list:
@@ -635,13 +635,39 @@ class SpotifyPriceBot(PriceQueryService):
 
             country_code = price_info.get("country_code")
             if country_code:
-                formatted_message = await self._format_price_message(country_code, price_info)
-                if formatted_message:
-                    result_messages.append(formatted_message)
+                # 获取家庭版价格用于排序
+                family_price = self._extract_comparison_price(price_info)
+                if family_price is not None:
+                    result_data.append({
+                        "country_code": country_code,
+                        "price_info": price_info,
+                        "sort_price": family_price
+                    })
                 else:
-                    not_found.append(query)
+                    # 如果没有家庭版价格，使用最低价格套餐排序
+                    min_price = float('inf')
+                    plans = price_info.get("plans", [])
+                    for plan in plans:
+                        price_cny = plan.get("price_cny") or plan.get("monthly_equivalent_cny", 0)
+                        if price_cny and price_cny > 0:
+                            min_price = min(min_price, price_cny)
+                    result_data.append({
+                        "country_code": country_code,
+                        "price_info": price_info,
+                        "sort_price": min_price if min_price != float('inf') else 0
+                    })
             else:
                 not_found.append(query)
+
+        # 按价格从低到高排序
+        result_data.sort(key=lambda x: x["sort_price"])
+
+        # 生成格式化消息
+        result_messages = []
+        for item in result_data:
+            formatted_message = await self._format_price_message(item["country_code"], item["price_info"])
+            if formatted_message:
+                result_messages.append(formatted_message)
 
         # 组装原始文本消息
         raw_message_parts = []

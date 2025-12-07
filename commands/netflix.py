@@ -72,19 +72,31 @@ class NetflixPriceBot(PriceQueryService):
         country_info = SUPPORTED_COUNTRIES.get(country_code.upper(), {})
         country_name = price_info.get("name_cn", country_code)
         country_flag = get_country_flag(country_code)
-        
+
         lines = [f"📍 国家/地区: {country_name} ({country_code.upper()}) {country_flag}"]
-        
+
         plans = price_info.get("plans", [])
-        
+
+        # 按价格从低到高排序套餐
+        def get_sort_price(plan):
+            cny_price_str = plan.get("monthly_price_cny", "")
+            if cny_price_str and cny_price_str.startswith("CNY "):
+                try:
+                    return float(cny_price_str.replace("CNY ", ""))
+                except (ValueError, TypeError):
+                    pass
+            return float('inf')  # 无价格信息的排到最后
+
+        plans = sorted(plans, key=get_sort_price)
+
         plan_name_mapping = {
             "Mobile": "移动版",
-            "Standard with ads": "标准广告版", 
+            "Standard with ads": "标准广告版",
             "Basic": "基础版",
             "Standard": "标准版",
             "Premium": "高级版"
         }
-        
+
         for plan in plans:
             plan_name = plan.get("plan_name", "")
             chinese_name = plan_name_mapping.get(plan_name, plan_name)
@@ -124,7 +136,7 @@ class NetflixPriceBot(PriceQueryService):
             error_message = f"❌ 错误：未能加载 {self.service_name} 价格数据。请稍后再试或检查日志。"
             return foldable_text_v2(error_message)
 
-        result_messages = []
+        result_data = []
         not_found = []
 
         for query in query_list:
@@ -136,13 +148,43 @@ class NetflixPriceBot(PriceQueryService):
 
             country_code = price_info.get("code")
             if country_code:
-                formatted_message = await self._format_price_message(country_code, price_info)
-                if formatted_message:
-                    result_messages.append(formatted_message)
+                # 获取高级版价格用于排序
+                premium_price = self._extract_comparison_price(price_info)
+                if premium_price is not None:
+                    result_data.append({
+                        "country_code": country_code,
+                        "price_info": price_info,
+                        "sort_price": premium_price
+                    })
                 else:
-                    not_found.append(query)
+                    # 如果没有高级版价格，使用最低价格套餐排序
+                    min_price = float('inf')
+                    plans = price_info.get("plans", [])
+                    for plan in plans:
+                        cny_price_str = plan.get("monthly_price_cny", "")
+                        if cny_price_str and cny_price_str.startswith("CNY "):
+                            try:
+                                price_val = float(cny_price_str.replace("CNY ", ""))
+                                min_price = min(min_price, price_val)
+                            except (ValueError, TypeError):
+                                pass
+                    result_data.append({
+                        "country_code": country_code,
+                        "price_info": price_info,
+                        "sort_price": min_price if min_price != float('inf') else 0
+                    })
             else:
                 not_found.append(query)
+
+        # 按价格从低到高排序
+        result_data.sort(key=lambda x: x["sort_price"])
+
+        # 生成格式化消息
+        result_messages = []
+        for item in result_data:
+            formatted_message = await self._format_price_message(item["country_code"], item["price_info"])
+            if formatted_message:
+                result_messages.append(formatted_message)
 
         # Assemble raw text message
         raw_message_parts = []
