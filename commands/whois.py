@@ -213,8 +213,11 @@ class WhoisService:
         # 尝试使用whois21
         if self._whois21:
             try:
-                # 正确的whois21用法：实例化WHOIS类（在异步线程中执行）
-                whois_obj = await asyncio.to_thread(self._whois21.WHOIS, domain)
+                # 正确的whois21用法：实例化WHOIS类（在异步线程中执行，添加10秒超时）
+                whois_obj = await asyncio.wait_for(
+                    asyncio.to_thread(self._whois21.WHOIS, domain),
+                    timeout=10.0
+                )
                 if whois_obj.success:
                     # whois21返回的是对象，需要获取其属性
                     data = self._extract_whois21_data(whois_obj)
@@ -225,11 +228,14 @@ class WhoisService:
                         return result
             except Exception as e:
                 logger.debug(f"whois21查询失败: {e}")
-        
+
         # 备选方案：使用python-whois
         if self._python_whois and not result['success']:
             try:
-                data = await asyncio.to_thread(self._python_whois.whois, domain)
+                data = await asyncio.wait_for(
+                    asyncio.to_thread(self._python_whois.whois, domain),
+                    timeout=10.0
+                )
                 if data:
                     result['success'] = True
                     result['data'] = self._format_python_whois_data(data)
@@ -275,11 +281,14 @@ class WhoisService:
         try:
             # 验证IP地址格式
             ipaddress.ip_address(ip)
-            
-            # 使用RDAP查询（推荐方式）- 正确的API使用方法
+
+            # 使用RDAP查询（推荐方式）- 正确的API使用方法，添加15秒超时
             obj = self._ipwhois.IPWhois(ip)
-            data = await asyncio.to_thread(obj.lookup_rdap)
-            
+            data = await asyncio.wait_for(
+                asyncio.to_thread(obj.lookup_rdap),
+                timeout=15.0
+            )
+
             # 添加调试信息
             logger.debug(f"IP查询返回数据类型: {type(data)}")
             if isinstance(data, dict):
@@ -378,11 +387,14 @@ class WhoisService:
                 return result
             
             asn_number = asn_match.group(1)
-            
-            # 使用任意IP查询ASN信息（使用8.8.8.8作为查询入口）
+
+            # 使用任意IP查询ASN信息（使用8.8.8.8作为查询入口），添加15秒超时
             obj = self._ipwhois.IPWhois('8.8.8.8')
-            data = await asyncio.to_thread(obj.lookup_rdap, asn=asn_number)
-            
+            data = await asyncio.wait_for(
+                asyncio.to_thread(obj.lookup_rdap, asn=asn_number),
+                timeout=15.0
+            )
+
             if data:
                 if isinstance(data, dict) and 'asn' in data:
                     result['success'] = True
