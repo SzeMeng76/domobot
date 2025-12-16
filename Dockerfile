@@ -5,14 +5,8 @@ FROM python:3.13 as builder
 # 设置工作目录
 WORKDIR /app
 
-# 安装编译依赖（lxml、cryptography等C扩展包需要）
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    libxml2-dev \
-    libxslt1-dev \
-    libffi-dev \
-    libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
+# [可选] 如果遇到编译错误，可以取消注释下一行来安装常见的构建依赖
+# RUN apt-get update && apt-get install -y build-essential libpq-dev
 
 # 复制 requirements.txt 并构建所有依赖的 wheel 文件
 COPY requirements.txt .
