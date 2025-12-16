@@ -151,22 +151,30 @@ def set_dependencies(c_manager):
 
 class WhoisService:
     """WHOIS查询服务类"""
-    
+
     def __init__(self):
         # 延迟导入避免启动时的依赖问题
+        self._whoisit = None
         self._whois21 = None
         self._ipwhois = None
         self._python_whois = None
-    
+
     def _import_libraries(self):
         """延迟导入WHOIS和DNS库"""
+        try:
+            if self._whoisit is None:
+                import whoisit
+                self._whoisit = whoisit
+        except ImportError:
+            logger.warning("whoisit库未安装，将使用备选WHOIS查询方案")
+
         try:
             if self._whois21 is None:
                 import whois21
                 self._whois21 = whois21
         except ImportError:
             logger.warning("whois21库未安装，域名查询功能受限")
-        
+
         try:
             if self._ipwhois is None:
                 # 导入整个ipwhois模块，而不只是IPWhois类
@@ -174,14 +182,14 @@ class WhoisService:
                 self._ipwhois = ipwhois
         except ImportError:
             logger.warning("ipwhois库未安装，IP/ASN查询功能不可用")
-        
+
         try:
             if self._python_whois is None:
                 import whois as python_whois
                 self._python_whois = python_whois
         except ImportError:
             logger.warning("python-whois库未安装，域名查询备选方案不可用")
-        
+
         try:
             if not hasattr(self, '_dns'):
                 import dns.resolver
@@ -195,12 +203,12 @@ class WhoisService:
     async def query_domain(self, domain: str) -> Dict[str, Any]:
         """查询域名WHOIS信息"""
         self._import_libraries()
-        
+
         # 清理域名输入
         domain = domain.lower().strip()
         if domain.startswith(('http://', 'https://')):
             domain = domain.split('//', 1)[1].split('/')[0]
-        
+
         result = {
             'type': 'domain',
             'query': domain,
@@ -209,9 +217,27 @@ class WhoisService:
             'error': None,
             'source': None
         }
-        
-        # 尝试使用whois21
-        if self._whois21:
+
+        # 尝试使用whoisit（优先，基于RDAP，原生异步）
+        if self._whoisit:
+            try:
+                # whoisit 4.0+ 使用原生异步函数
+                data = await asyncio.wait_for(
+                    self._whoisit.domain_async(domain),
+                    timeout=10.0
+                )
+                if data:
+                    formatted_data = self._format_whoisit_data(data)
+                    if formatted_data:
+                        result['success'] = True
+                        result['data'] = formatted_data
+                        result['source'] = 'whoisit'
+                        return result
+            except Exception as e:
+                logger.debug(f"whoisit查询失败: {e}")
+
+        # 备选方案1：使用whois21
+        if self._whois21 and not result['success']:
             try:
                 # 正确的whois21用法：实例化WHOIS类（在异步线程中执行，添加10秒超时）
                 whois_obj = await asyncio.wait_for(
@@ -229,7 +255,7 @@ class WhoisService:
             except Exception as e:
                 logger.debug(f"whois21查询失败: {e}")
 
-        # 备选方案：使用python-whois
+        # 备选方案2：使用python-whois
         if self._python_whois and not result['success']:
             try:
                 data = await asyncio.wait_for(
@@ -264,85 +290,115 @@ class WhoisService:
     async def query_ip(self, ip: str) -> Dict[str, Any]:
         """查询IP地址WHOIS信息"""
         self._import_libraries()
-        
+
         result = {
             'type': 'ip',
             'query': ip,
             'success': False,
             'data': {},
             'error': None,
-            'source': 'ipwhois'
+            'source': None
         }
-        
-        if not self._ipwhois:
-            result['error'] = "IP查询功能不可用，请安装ipwhois库"
-            return result
-        
+
+        # 验证IP地址格式
         try:
-            # 验证IP地址格式
             ipaddress.ip_address(ip)
+        except ValueError:
+            result['error'] = "无效的IP地址格式"
+            return result
 
-            # 使用RDAP查询（推荐方式）- 正确的API使用方法，添加15秒超时
-            obj = self._ipwhois.IPWhois(ip)
-            data = await asyncio.wait_for(
-                asyncio.to_thread(obj.lookup_rdap),
-                timeout=15.0
-            )
+        # 尝试使用whoisit（优先，基于RDAP，原生异步）
+        if self._whoisit:
+            try:
+                # whoisit 4.0+ 使用原生异步函数查询IP
+                data = await asyncio.wait_for(
+                    self._whoisit.ip_async(ip),
+                    timeout=15.0
+                )
+                if data:
+                    formatted_data = self._format_whoisit_ip_data(data)
 
-            # 添加调试信息
-            logger.debug(f"IP查询返回数据类型: {type(data)}")
-            if isinstance(data, dict):
-                logger.debug(f"数据的顶级键: {list(data.keys())}")
-            
-            if data:
-                # 检查data是否为字典类型
+                    # 尝试获取地理位置信息
+                    geolocation_data = await self._query_ip_geolocation(ip)
+                    if geolocation_data:
+                        geo_info = self._format_geolocation_data(geolocation_data)
+                        formatted_data.update(geo_info)
+
+                    if formatted_data:
+                        result['success'] = True
+                        result['data'] = formatted_data
+                        result['source'] = 'whoisit'
+                        return result
+            except Exception as e:
+                logger.debug(f"whoisit IP查询失败: {e}")
+
+        # 备选方案：使用ipwhois
+        if self._ipwhois and not result['success']:
+            try:
+                # 使用RDAP查询（推荐方式）- 正确的API使用方法，添加15秒超时
+                obj = self._ipwhois.IPWhois(ip)
+                data = await asyncio.wait_for(
+                    asyncio.to_thread(obj.lookup_rdap),
+                    timeout=15.0
+                )
+
+                # 添加调试信息
+                logger.debug(f"IP查询返回数据类型: {type(data)}")
                 if isinstance(data, dict):
-                    try:
-                        formatted_data = self._format_ip_data(data)
-                        
-                        # 尝试获取地理位置信息
-                        geolocation_data = await self._query_ip_geolocation(ip)
-                        if geolocation_data:
-                            # 将地理位置信息添加到结果中
-                            geo_info = self._format_geolocation_data(geolocation_data)
-                            formatted_data.update(geo_info)
-                        
-                        if formatted_data:  # 确保格式化后有数据
-                            result['success'] = True
-                            result['data'] = formatted_data
-                        else:
-                            # 如果格式化后没有数据，显示原始数据的一些关键字段
-                            fallback_data = {}
-                            if 'query' in data:
-                                fallback_data['查询IP'] = data['query']
-                            if 'asn' in data:
-                                fallback_data['ASN'] = f"AS{data['asn']}"
-                            if 'asn_description' in data:
-                                fallback_data['ASN描述'] = data['asn_description']
-                            
-                            if fallback_data:
+                    logger.debug(f"数据的顶级键: {list(data.keys())}")
+
+                if data:
+                    # 检查data是否为字典类型
+                    if isinstance(data, dict):
+                        try:
+                            formatted_data = self._format_ip_data(data)
+
+                            # 尝试获取地理位置信息
+                            geolocation_data = await self._query_ip_geolocation(ip)
+                            if geolocation_data:
+                                # 将地理位置信息添加到结果中
+                                geo_info = self._format_geolocation_data(geolocation_data)
+                                formatted_data.update(geo_info)
+
+                            if formatted_data:  # 确保格式化后有数据
                                 result['success'] = True
-                                result['data'] = fallback_data
+                                result['data'] = formatted_data
+                                result['source'] = 'ipwhois'
                             else:
-                                # 显示所有顶级字段作为调试信息
-                                debug_data = {}
-                                for key, value in data.items():
-                                    if isinstance(value, (str, int, float)):
-                                        debug_data[f'调试_{key}'] = str(value)[:100]
-                                    else:
-                                        debug_data[f'调试_{key}'] = f"类型: {type(value).__name__}"
-                                
-                                result['success'] = True
-                                result['data'] = debug_data if debug_data else {'调试': '无可显示数据'}
-                    except Exception as format_error:
-                        logger.error(f"格式化IP数据时出错: {format_error}")
-                        # 直接显示原始数据结构
-                        debug_data = {'调试错误': str(format_error)}
-                        for key, value in data.items():
-                            if isinstance(value, (str, int, float)):
-                                debug_data[f'原始_{key}'] = str(value)[:100]
-                            else:
-                                debug_data[f'原始_{key}_类型'] = type(value).__name__
+                                # 如果格式化后没有数据，显示原始数据的一些关键字段
+                                fallback_data = {}
+                                if 'query' in data:
+                                    fallback_data['查询IP'] = data['query']
+                                if 'asn' in data:
+                                    fallback_data['ASN'] = f"AS{data['asn']}"
+                                if 'asn_description' in data:
+                                    fallback_data['ASN描述'] = data['asn_description']
+
+                                if fallback_data:
+                                    result['success'] = True
+                                    result['data'] = fallback_data
+                                    result['source'] = 'ipwhois'
+                                else:
+                                    # 显示所有顶级字段作为调试信息
+                                    debug_data = {}
+                                    for key, value in data.items():
+                                        if isinstance(value, (str, int, float)):
+                                            debug_data[f'调试_{key}'] = str(value)[:100]
+                                        else:
+                                            debug_data[f'调试_{key}'] = f"类型: {type(value).__name__}"
+
+                                    result['success'] = True
+                                    result['data'] = debug_data if debug_data else {'调试': '无可显示数据'}
+                                    result['source'] = 'ipwhois'
+                        except Exception as format_error:
+                            logger.error(f"格式化IP数据时出错: {format_error}")
+                            # 直接显示原始数据结构
+                            debug_data = {'调试错误': str(format_error)}
+                            for key, value in data.items():
+                                if isinstance(value, (str, int, float)):
+                                    debug_data[f'原始_{key}'] = str(value)[:100]
+                                else:
+                                    debug_data[f'原始_{key}_类型'] = type(value).__name__
                         result['success'] = True
                         result['data'] = debug_data
                 elif isinstance(data, str):
@@ -365,51 +421,72 @@ class WhoisService:
     async def query_asn(self, asn: str) -> Dict[str, Any]:
         """查询ASN信息"""
         self._import_libraries()
-        
+
         result = {
             'type': 'asn',
             'query': asn,
             'success': False,
             'data': {},
             'error': None,
-            'source': 'ipwhois'
+            'source': None
         }
-        
-        if not self._ipwhois:
-            result['error'] = "ASN查询功能不可用，请安装ipwhois库"
+
+        # 提取ASN号码
+        asn_match = re.match(r'^(?:AS)?(\d+)$', asn.upper())
+        if not asn_match:
+            result['error'] = "无效的ASN格式，请使用 AS1234 或 1234 格式"
             return result
-        
-        try:
-            # 提取ASN号码
-            asn_match = re.match(r'^(?:AS)?(\d+)$', asn.upper())
-            if not asn_match:
-                result['error'] = "无效的ASN格式，请使用 AS1234 或 1234 格式"
-                return result
-            
-            asn_number = asn_match.group(1)
 
-            # 使用任意IP查询ASN信息（使用8.8.8.8作为查询入口），添加15秒超时
-            obj = self._ipwhois.IPWhois('8.8.8.8')
-            data = await asyncio.wait_for(
-                asyncio.to_thread(obj.lookup_rdap, asn=asn_number),
-                timeout=15.0
-            )
+        asn_number = int(asn_match.group(1))
 
-            if data:
-                if isinstance(data, dict) and 'asn' in data:
-                    result['success'] = True
-                    result['data'] = self._format_asn_data(data, asn_number)
-                elif isinstance(data, str):
-                    result['success'] = True
-                    result['data'] = {'原始数据': data[:300] + "..." if len(data) > 300 else data}
+        # 尝试使用whoisit（优先，基于RDAP，原生异步）
+        if self._whoisit:
+            try:
+                # whoisit 4.0+ 使用原生异步函数查询ASN
+                data = await asyncio.wait_for(
+                    self._whoisit.asn_async(asn_number),
+                    timeout=15.0
+                )
+                if data:
+                    formatted_data = self._format_whoisit_asn_data(data, asn_number)
+                    if formatted_data:
+                        result['success'] = True
+                        result['data'] = formatted_data
+                        result['source'] = 'whoisit'
+                        return result
+            except Exception as e:
+                logger.debug(f"whoisit ASN查询失败: {e}")
+
+        # 备选方案：使用ipwhois
+        if self._ipwhois and not result['success']:
+            try:
+                # 使用任意IP查询ASN信息（使用8.8.8.8作为查询入口），添加15秒超时
+                obj = self._ipwhois.IPWhois('8.8.8.8')
+                data = await asyncio.wait_for(
+                    asyncio.to_thread(obj.lookup_rdap, asn=str(asn_number)),
+                    timeout=15.0
+                )
+
+                if data:
+                    if isinstance(data, dict) and 'asn' in data:
+                        result['success'] = True
+                        result['data'] = self._format_asn_data(data, str(asn_number))
+                        result['source'] = 'ipwhois'
+                    elif isinstance(data, str):
+                        result['success'] = True
+                        result['data'] = {'原始数据': data[:300] + "..." if len(data) > 300 else data}
+                        result['source'] = 'ipwhois'
+                    else:
+                        result['error'] = f"未找到ASN {asn}的信息"
                 else:
                     result['error'] = f"未找到ASN {asn}的信息"
-            else:
-                result['error'] = f"未找到ASN {asn}的信息"
-                
-        except Exception as e:
-            logger.error(f"ASN查询失败: {e}")
-            result['error'] = f"查询失败: {str(e)}"
+
+            except Exception as e:
+                logger.error(f"ASN查询失败: {e}")
+                result['error'] = f"查询失败: {str(e)}"
+
+        if not result['success'] and not result['error']:
+            result['error'] = f"未找到ASN {asn}的信息"
         
         return result
     
@@ -532,9 +609,170 @@ class WhoisService:
             result['data'] = tld_info
         else:
             result['error'] = f"未找到TLD {tld}的信息"
-        
+
         return result
-    
+
+    def _format_whoisit_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """格式化whoisit查询结果（RDAP数据字典）"""
+        formatted = {}
+
+        try:
+            # whoisit 4.0+ 返回解析后的字典格式
+            logger.debug(f"whoisit返回的数据键: {list(data.keys())}")
+
+            # 提取域名信息
+            if 'name' in data and data['name']:
+                formatted['域名'] = str(data['name'])
+
+            # 提取注册商信息
+            if 'registrar' in data and data['registrar']:
+                formatted['注册商'] = str(data['registrar'])
+
+            # 提取时间信息
+            if 'registered' in data and data['registered']:
+                formatted['创建时间'] = str(data['registered'])
+            if 'expiration' in data and data['expiration']:
+                formatted['过期时间'] = str(data['expiration'])
+            if 'changed' in data and data['changed']:
+                formatted['更新时间'] = str(data['changed'])
+
+            # 提取状态信息
+            if 'status' in data and data['status']:
+                if isinstance(data['status'], list):
+                    formatted['状态'] = ', '.join(str(s) for s in data['status'])
+                else:
+                    formatted['状态'] = str(data['status'])
+
+            # 提取DNS服务器
+            if 'nameservers' in data and data['nameservers']:
+                if isinstance(data['nameservers'], list):
+                    formatted['DNS服务器'] = ', '.join(str(ns) for ns in data['nameservers'])
+                else:
+                    formatted['DNS服务器'] = str(data['nameservers'])
+
+            # 提取联系信息（如果有）
+            if 'entities' in data and isinstance(data['entities'], dict):
+                for role, entity_list in data['entities'].items():
+                    if isinstance(entity_list, list) and len(entity_list) > 0:
+                        entity = entity_list[0]
+                        if isinstance(entity, dict):
+                            if 'name' in entity and entity['name']:
+                                formatted[f'{role}联系人'] = str(entity['name'])
+                            if 'email' in entity and entity['email']:
+                                formatted[f'{role}邮箱'] = str(entity['email'])
+
+            logger.debug(f"whoisit数据提取结果: {formatted}")
+
+        except Exception as e:
+            logger.error(f"格式化whoisit数据失败: {e}")
+            # 如果格式化失败，尝试获取原始数据的关键信息
+            for key, value in data.items():
+                if value and not key.startswith('_'):
+                    try:
+                        if isinstance(value, (str, int, float)):
+                            formatted[key] = str(value)[:200]  # 限制长度
+                        elif isinstance(value, list) and len(value) > 0:
+                            formatted[key] = str(value[0])[:200]
+                    except:
+                        pass
+
+        return formatted
+
+    def _format_whoisit_ip_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """格式化whoisit IP查询结果（RDAP数据字典）"""
+        formatted = {}
+
+        try:
+            logger.debug(f"whoisit IP返回的数据键: {list(data.keys())}")
+
+            # 提取ASN信息
+            if 'asn' in data and data['asn']:
+                formatted['ASN'] = f"AS{data['asn']}"
+            if 'asn_description' in data and data['asn_description']:
+                formatted['ASN描述'] = str(data['asn_description'])
+            if 'asn_country' in data and data['asn_country']:
+                formatted['ASN国家'] = str(data['asn_country'])
+
+            # 提取网络信息
+            if 'network' in data and isinstance(data['network'], dict):
+                network = data['network']
+                if 'name' in network and network['name']:
+                    formatted['网络名称'] = str(network['name'])
+                if 'cidr' in network and network['cidr']:
+                    formatted['IP段'] = str(network['cidr'])
+                if 'country' in network and network['country']:
+                    formatted['网络国家'] = str(network['country'])
+
+            # 提取组织信息
+            if 'entities' in data and isinstance(data['entities'], dict):
+                for role, entity_list in data['entities'].items():
+                    if isinstance(entity_list, list) and len(entity_list) > 0:
+                        entity = entity_list[0]
+                        if isinstance(entity, dict) and 'name' in entity and entity['name']:
+                            formatted['组织'] = str(entity['name'])
+                            break
+
+            logger.debug(f"whoisit IP数据提取结果: {formatted}")
+
+        except Exception as e:
+            logger.error(f"格式化whoisit IP数据失败: {e}")
+            for key, value in data.items():
+                if value and not key.startswith('_'):
+                    try:
+                        if isinstance(value, (str, int, float)):
+                            formatted[key] = str(value)[:200]
+                    except:
+                        pass
+
+        return formatted
+
+    def _format_whoisit_asn_data(self, data: Dict[str, Any], asn_number: int) -> Dict[str, Any]:
+        """格式化whoisit ASN查询结果（RDAP数据字典）"""
+        formatted = {'ASN': f"AS{asn_number}"}
+
+        try:
+            logger.debug(f"whoisit ASN返回的数据键: {list(data.keys())}")
+
+            # 提取ASN描述
+            if 'name' in data and data['name']:
+                formatted['描述'] = str(data['name'])
+
+            # 提取国家信息
+            if 'country' in data and data['country']:
+                formatted['国家'] = str(data['country'])
+
+            # 提取注册机构
+            if 'rir' in data and data['rir']:
+                formatted['注册机构'] = str(data['rir'])
+
+            # 提取时间信息
+            if 'registered' in data and data['registered']:
+                formatted['注册时间'] = str(data['registered'])
+            if 'changed' in data and data['changed']:
+                formatted['更新时间'] = str(data['changed'])
+
+            # 提取实体信息
+            if 'entities' in data and isinstance(data['entities'], dict):
+                for role, entity_list in data['entities'].items():
+                    if isinstance(entity_list, list) and len(entity_list) > 0:
+                        entity = entity_list[0]
+                        if isinstance(entity, dict) and 'name' in entity and entity['name']:
+                            formatted[f'{role}'] = str(entity['name'])
+
+            logger.debug(f"whoisit ASN数据提取结果: {formatted}")
+
+        except Exception as e:
+            logger.error(f"格式化whoisit ASN数据失败: {e}")
+            for key, value in data.items():
+                if value and not key.startswith('_'):
+                    try:
+                        if isinstance(value, (str, int, float)):
+                            formatted[key] = str(value)[:200]
+                    except:
+                        pass
+
+        return formatted
+
     def _extract_whois21_data(self, whois_obj) -> Dict[str, Any]:
         """提取whois21查询结果，根据官方文档正确实现"""
         formatted = {}
