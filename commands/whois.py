@@ -405,16 +405,16 @@ class WhoisService:
                     # 如果返回的是字符串，可能是错误信息或原始whois数据
                     result['success'] = True
                     result['data'] = {'原始数据': data[:500] + "..." if len(data) > 500 else data}
+                    result['source'] = 'ipwhois'
                 else:
                     result['error'] = f"查询返回了意外的数据类型: {type(data)}"
-            else:
-                result['error'] = "未找到IP地址信息"
-                
-        except ValueError:
-            result['error'] = "无效的IP地址格式"
-        except Exception as e:
-            logger.error(f"IP查询失败: {e}")
-            result['error'] = f"查询失败: {str(e)}"
+
+            except Exception as e:
+                logger.error(f"ipwhois查询失败: {e}")
+                result['error'] = f"查询失败: {str(e)}"
+
+        if not result['success'] and not result['error']:
+            result['error'] = "无法查询IP信息"
         
         return result
     
