@@ -1,6 +1,6 @@
 # --- STAGE 1: Builder ---
-# 使用一个完整的、非 slim 的 Python 3.12 镜像作为"构建器"
-FROM python:3.12 as builder
+# 使用一个完整的、非 slim 的 Python 3.13 镜像作为"构建器"
+FROM python:3.13 as builder
 
 # 设置工作目录
 WORKDIR /app
@@ -14,8 +14,8 @@ RUN pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements.txt
 
 
 # --- STAGE 2: Final Image ---
-# 使用一个非常轻量的 slim Python 3.12 镜像作为最终的生产镜像
-FROM python:3.12-slim
+# 使用一个非常轻量的 slim Python 3.13 镜像作为最终的生产镜像
+FROM python:3.13-slim
 
 # 清理 apt 缓存
 RUN apt-get update && rm -rf /var/lib/apt/lists/*
