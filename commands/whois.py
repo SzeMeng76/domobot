@@ -155,29 +155,21 @@ class WhoisService:
     def __init__(self):
         # 延迟导入避免启动时的依赖问题
         self._whoisit = None
-        self._whoisit_bootstrapped = False
         self._whois21 = None
         self._ipwhois = None
         self._python_whois = None
 
-    async def _import_libraries(self):
+    def _import_libraries(self):
         """延迟导入WHOIS和DNS库"""
         try:
             if self._whoisit is None:
                 import whoisit
                 self._whoisit = whoisit
                 logger.info(f"whoisit库加载成功，版本: {whoisit.version}")
-
-                # Bootstrap whoisit (必须！)
-                if not self._whoisit_bootstrapped:
-                    logger.info("正在bootstrap whoisit...")
-                    await whoisit.bootstrap_async()
-                    self._whoisit_bootstrapped = True
-                    logger.info("whoisit bootstrap完成")
         except ImportError as e:
             logger.warning(f"whoisit库未安装: {e}，将使用备选WHOIS查询方案")
         except Exception as e:
-            logger.error(f"whoisit库导入或bootstrap错误: {e}")
+            logger.error(f"whoisit库导入错误: {e}")
 
         try:
             if self._whois21 is None:
@@ -213,7 +205,7 @@ class WhoisService:
     
     async def query_domain(self, domain: str) -> Dict[str, Any]:
         """查询域名WHOIS信息"""
-        await self._import_libraries()
+        self._import_libraries()
 
         # 清理域名输入
         domain = domain.lower().strip()
@@ -304,7 +296,7 @@ class WhoisService:
     
     async def query_ip(self, ip: str) -> Dict[str, Any]:
         """查询IP地址WHOIS信息"""
-        await self._import_libraries()
+        self._import_libraries()
 
         result = {
             'type': 'ip',
@@ -435,7 +427,7 @@ class WhoisService:
     
     async def query_asn(self, asn: str) -> Dict[str, Any]:
         """查询ASN信息"""
-        await self._import_libraries()
+        self._import_libraries()
 
         result = {
             'type': 'asn',
@@ -1415,7 +1407,7 @@ class WhoisService:
     
     async def query_dns(self, domain: str) -> Dict[str, Any]:
         """查询域名DNS记录"""
-        await self._import_libraries()
+        self._import_libraries()
         
         result = {
             'type': 'dns',
