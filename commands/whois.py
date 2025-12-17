@@ -741,7 +741,8 @@ class WhoisService:
 
             async with create_custom_client(headers=headers) as client:
                 response = await client.get(url, timeout=15.0)
-                response.raise_for_status()
+                # 不检查状态码，因为该网站返回403但仍包含有效数据
+                # response.raise_for_status()
 
                 # 解析 HTML
                 soup = BeautifulSoup(response.text, 'html.parser')
