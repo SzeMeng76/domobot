@@ -203,12 +203,12 @@ class WhoisService:
     async def query_domain(self, domain: str) -> Dict[str, Any]:
         """查询域名WHOIS信息"""
         self._import_libraries()
-        
+
         # 清理域名输入
         domain = domain.lower().strip()
         if domain.startswith(('http://', 'https://')):
             domain = domain.split('//', 1)[1].split('/')[0]
-        
+
         result = {
             'type': 'domain',
             'query': domain,
@@ -217,6 +217,18 @@ class WhoisService:
             'error': None,
             'source': None
         }
+
+        # .ng 域名特殊处理 - 使用 Web WHOIS
+        if domain.endswith('.ng'):
+            try:
+                ng_result = await self._query_ng_domain_web(domain)
+                if ng_result['success']:
+                    result.update(ng_result)
+                    return result
+                else:
+                    logger.debug(f".ng Web查询失败: {ng_result.get('error')}")
+            except Exception as e:
+                logger.debug(f".ng Web查询异常: {e}")
 
         # 优先使用asyncwhois（支持更多TLD，包括.ng等）
         if self._asyncwhois:
@@ -709,6 +721,81 @@ class WhoisService:
 
         logger.debug(f"asyncwhois格式化后的数据: {formatted}")
         return formatted
+
+    async def _query_ng_domain_web(self, domain: str) -> Dict[str, Any]:
+        """通过 Web 接口查询 .ng 域名"""
+        result = {
+            'type': 'domain',
+            'query': domain,
+            'success': False,
+            'data': {},
+            'error': None,
+            'source': 'whois.net.ng'
+        }
+
+        try:
+            from utils.http_client import create_custom_client
+            from bs4 import BeautifulSoup
+
+            url = f"https://whois.net.ng/whois/?domain={domain}"
+            headers = {
+                "User-Agent": "Mozilla/5.0 (compatible; MengBot/1.0)"
+            }
+
+            async with create_custom_client(headers=headers) as client:
+                response = await client.get(url, timeout=15.0)
+                response.raise_for_status()
+
+                # 解析 HTML
+                soup = BeautifulSoup(response.text, 'html.parser')
+
+                # 查找包含 WHOIS 数据的表格
+                tables = soup.find_all('table', class_='table')
+                if not tables:
+                    result['error'] = "未找到 WHOIS 数据"
+                    return result
+
+                whois_data = {}
+                for table in tables:
+                    rows = table.find_all('tr')
+                    for row in rows:
+                        cols = row.find_all('td')
+                        if len(cols) >= 2:
+                            key = cols[0].get_text(strip=True).rstrip(':')
+                            value = cols[1].get_text(separator=' ', strip=True)
+
+                            # 映射字段名为中文
+                            field_map = {
+                                'Domain': '域名',
+                                'Registrar': '注册商',
+                                'Registered On': '创建时间',
+                                'Expires On': '过期时间',
+                                'Updated On': '更新时间',
+                                'Status': '状态',
+                                'Name Servers': 'DNS服务器',
+                                'Registrar Abuse Contact Email': '注册商举报邮箱',
+                                'Registrar Abuse Contact Phone': '注册商举报电话',
+                                'Registrar Country': '注册商国家',
+                            }
+
+                            if key in field_map:
+                                chinese_key = field_map[key]
+                                # 避免重复
+                                if chinese_key not in whois_data:
+                                    whois_data[chinese_key] = value
+
+                if whois_data:
+                    result['success'] = True
+                    result['data'] = whois_data
+                    logger.debug(f".ng域名Web查询成功: {domain}")
+                else:
+                    result['error'] = "域名未注册或查询失败"
+
+        except Exception as e:
+            logger.error(f".ng域名Web查询失败: {e}")
+            result['error'] = f"查询失败: {str(e)}"
+
+        return result
 
     def _should_skip_field(self, key: str, value: Any) -> bool:
         """判断是否应该跳过某个字段"""
