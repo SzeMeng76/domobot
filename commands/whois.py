@@ -165,11 +165,8 @@ class WhoisService:
             if self._whoisit is None:
                 import whoisit
                 self._whoisit = whoisit
-                logger.info(f"whoisit库加载成功，版本: {whoisit.version}")
-        except ImportError as e:
-            logger.warning(f"whoisit库未安装: {e}，将使用备选WHOIS查询方案")
-        except Exception as e:
-            logger.error(f"whoisit库导入错误: {e}")
+        except ImportError:
+            logger.warning("whoisit库未安装，将使用备选WHOIS查询方案")
 
         try:
             if self._whois21 is None:
@@ -224,7 +221,6 @@ class WhoisService:
         # 尝试使用whoisit（优先，基于RDAP，原生异步）
         if self._whoisit:
             try:
-                logger.info(f"使用whoisit查询域名: {domain}")
                 # whoisit 4.0+ 使用原生异步函数
                 data = await asyncio.wait_for(
                     self._whoisit.domain_async(domain),
@@ -236,12 +232,9 @@ class WhoisService:
                         result['success'] = True
                         result['data'] = formatted_data
                         result['source'] = 'whoisit'
-                        logger.info(f"whoisit查询成功: {domain}")
                         return result
             except Exception as e:
-                logger.warning(f"whoisit查询失败: {e}，降级到whois21")
-        else:
-            logger.warning("whoisit未加载，直接使用whois21")
+                logger.debug(f"whoisit查询失败: {e}")
 
         # 备选方案1：使用whois21
         if self._whois21 and not result['success']:
