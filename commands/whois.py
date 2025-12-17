@@ -230,13 +230,40 @@ class WhoisService:
             except Exception as e:
                 logger.debug(f".ng Web查询异常: {e}")
 
-        # 优先使用asyncwhois（支持更多TLD，包括.ng等）
-        if self._asyncwhois:
+        # 优先使用 whois21（快速且解析能力强）
+        if self._whois21:
             try:
-                # asyncwhois 原生异步支持
+                whois_obj = await asyncio.wait_for(
+                    asyncio.to_thread(self._whois21.WHOIS, domain),
+                    timeout=10.0
+                )
+                if whois_obj.success:
+                    data = self._extract_whois21_data(whois_obj)
+                    if data:
+                        result['success'] = True
+                        result['data'] = data
+                        result['source'] = 'whois21'
+
+                        # 添加DNS信息
+                        try:
+                            dns_result = await self.query_dns(domain)
+                            if dns_result['success'] and dns_result.get('data'):
+                                for key, value in dns_result['data'].items():
+                                    result['data'][f'🌐 {key}'] = value
+                                logger.debug(f"已添加DNS信息到域名查询结果")
+                        except Exception as e:
+                            logger.debug(f"添加DNS信息失败: {e}")
+
+                        return result
+            except Exception as e:
+                logger.debug(f"whois21查询失败: {e}")
+
+        # 备选方案1：使用 asyncwhois（支持更多TLD）
+        if self._asyncwhois and not result['success']:
+            try:
                 query_string, parsed_dict = await self._asyncwhois.aio_whois(
                     domain,
-                    find_authoritative_server=True,  # 查找权威服务器
+                    find_authoritative_server=True,
                     ignore_not_found=False,
                     timeout=15
                 )
@@ -260,37 +287,7 @@ class WhoisService:
             except Exception as e:
                 logger.debug(f"asyncwhois查询失败: {e}")
 
-        # 备选方案1：使用whois21
-        if self._whois21 and not result['success']:
-            try:
-                # 正确的whois21用法：实例化WHOIS类（在异步线程中执行，添加10秒超时）
-                whois_obj = await asyncio.wait_for(
-                    asyncio.to_thread(self._whois21.WHOIS, domain),
-                    timeout=10.0
-                )
-                if whois_obj.success:
-                    # whois21返回的是对象，需要获取其属性
-                    data = self._extract_whois21_data(whois_obj)
-                    if data:
-                        result['success'] = True
-                        result['data'] = data
-                        result['source'] = 'whois21'
-
-                        # 添加DNS信息
-                        try:
-                            dns_result = await self.query_dns(domain)
-                            if dns_result['success'] and dns_result.get('data'):
-                                for key, value in dns_result['data'].items():
-                                    result['data'][f'🌐 {key}'] = value
-                                logger.debug(f"已添加DNS信息到域名查询结果")
-                        except Exception as e:
-                            logger.debug(f"添加DNS信息失败: {e}")
-
-                        return result
-            except Exception as e:
-                logger.debug(f"whois21查询失败: {e}")
-
-        # 备选方案2：使用python-whois
+        # 备选方案2：使用 python-whois
         if self._python_whois and not result['success']:
             try:
                 data = await asyncio.wait_for(
