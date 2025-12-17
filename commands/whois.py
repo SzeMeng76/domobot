@@ -758,21 +758,22 @@ class WhoisService:
                     for row in rows:
                         cols = row.find_all('td')
                         if len(cols) >= 2:
-                            key = cols[0].get_text(strip=True).rstrip(':')
+                            # 提取字段名，转换为小写以支持不区分大小写的匹配
+                            key = cols[0].get_text(strip=True).rstrip(':').strip().lower()
                             value = cols[1].get_text(separator=' ', strip=True)
 
-                            # 映射字段名为中文
+                            # 映射字段名为中文（使用小写键）
                             field_map = {
-                                'Domain': '域名',
-                                'Registrar': '注册商',
-                                'Registered On': '创建时间',
-                                'Expires On': '过期时间',
-                                'Updated On': '更新时间',
-                                'Status': '状态',
-                                'Name Servers': 'DNS服务器',
-                                'Registrar Abuse Contact Email': '注册商举报邮箱',
-                                'Registrar Abuse Contact Phone': '注册商举报电话',
-                                'Registrar Country': '注册商国家',
+                                'domain': '域名',
+                                'registrar': '注册商',
+                                'registered on': '创建时间',
+                                'expires on': '过期时间',
+                                'updated on': '更新时间',
+                                'status': '状态',
+                                'name servers': 'DNS服务器',
+                                'registrar abuse contact email': '注册商举报邮箱',
+                                'registrar abuse contact phone': '注册商举报电话',
+                                'registrar country': '注册商国家',
                             }
 
                             if key in field_map:
