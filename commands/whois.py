@@ -154,19 +154,27 @@ class WhoisService:
     
     def __init__(self):
         # 延迟导入避免启动时的依赖问题
+        self._asyncwhois = None
         self._whois21 = None
         self._ipwhois = None
         self._python_whois = None
-    
+
     def _import_libraries(self):
         """延迟导入WHOIS和DNS库"""
+        try:
+            if self._asyncwhois is None:
+                import asyncwhois
+                self._asyncwhois = asyncwhois
+        except ImportError:
+            logger.warning("asyncwhois库未安装，域名查询功能受限")
+
         try:
             if self._whois21 is None:
                 import whois21
                 self._whois21 = whois21
         except ImportError:
             logger.warning("whois21库未安装，域名查询功能受限")
-        
+
         try:
             if self._ipwhois is None:
                 # 导入整个ipwhois模块，而不只是IPWhois类
@@ -174,14 +182,14 @@ class WhoisService:
                 self._ipwhois = ipwhois
         except ImportError:
             logger.warning("ipwhois库未安装，IP/ASN查询功能不可用")
-        
+
         try:
             if self._python_whois is None:
                 import whois as python_whois
                 self._python_whois = python_whois
         except ImportError:
             logger.warning("python-whois库未安装，域名查询备选方案不可用")
-        
+
         try:
             if not hasattr(self, '_dns'):
                 import dns.resolver
@@ -209,9 +217,39 @@ class WhoisService:
             'error': None,
             'source': None
         }
-        
-        # 尝试使用whois21
-        if self._whois21:
+
+        # 优先使用asyncwhois（支持更多TLD，包括.ng等）
+        if self._asyncwhois:
+            try:
+                # asyncwhois 原生异步支持
+                query_string, parsed_dict = await self._asyncwhois.aio_whois(
+                    domain,
+                    find_authoritative_server=True,  # 查找权威服务器
+                    ignore_not_found=False,
+                    timeout=15
+                )
+
+                if parsed_dict:
+                    result['success'] = True
+                    result['data'] = self._format_asyncwhois_data(parsed_dict)
+                    result['source'] = 'asyncwhois'
+
+                    # 添加DNS信息
+                    try:
+                        dns_result = await self.query_dns(domain)
+                        if dns_result['success'] and dns_result.get('data'):
+                            for key, value in dns_result['data'].items():
+                                result['data'][f'🌐 {key}'] = value
+                            logger.debug(f"已添加DNS信息到域名查询结果")
+                    except Exception as e:
+                        logger.debug(f"添加DNS信息失败: {e}")
+
+                    return result
+            except Exception as e:
+                logger.debug(f"asyncwhois查询失败: {e}")
+
+        # 备选方案1：使用whois21
+        if self._whois21 and not result['success']:
             try:
                 # 正确的whois21用法：实例化WHOIS类（在异步线程中执行，添加10秒超时）
                 whois_obj = await asyncio.wait_for(
@@ -225,11 +263,22 @@ class WhoisService:
                         result['success'] = True
                         result['data'] = data
                         result['source'] = 'whois21'
+
+                        # 添加DNS信息
+                        try:
+                            dns_result = await self.query_dns(domain)
+                            if dns_result['success'] and dns_result.get('data'):
+                                for key, value in dns_result['data'].items():
+                                    result['data'][f'🌐 {key}'] = value
+                                logger.debug(f"已添加DNS信息到域名查询结果")
+                        except Exception as e:
+                            logger.debug(f"添加DNS信息失败: {e}")
+
                         return result
             except Exception as e:
                 logger.debug(f"whois21查询失败: {e}")
 
-        # 备选方案：使用python-whois
+        # 备选方案2：使用python-whois
         if self._python_whois and not result['success']:
             try:
                 data = await asyncio.wait_for(
@@ -240,22 +289,20 @@ class WhoisService:
                     result['success'] = True
                     result['data'] = self._format_python_whois_data(data)
                     result['source'] = 'python-whois'
+
+                    # 添加DNS信息
+                    try:
+                        dns_result = await self.query_dns(domain)
+                        if dns_result['success'] and dns_result.get('data'):
+                            for key, value in dns_result['data'].items():
+                                result['data'][f'🌐 {key}'] = value
+                            logger.debug(f"已添加DNS信息到域名查询结果")
+                    except Exception as e:
+                        logger.debug(f"添加DNS信息失败: {e}")
             except Exception as e:
                 logger.debug(f"python-whois查询失败: {e}")
                 result['error'] = str(e)
-        
-        # 如果WHOIS查询成功，尝试添加DNS信息
-        if result['success']:
-            try:
-                dns_result = await self.query_dns(domain)
-                if dns_result['success'] and dns_result.get('data'):
-                    # 将DNS数据合并到WHOIS结果中
-                    for key, value in dns_result['data'].items():
-                        result['data'][f'🌐 {key}'] = value
-                    logger.debug(f"已添加DNS信息到域名查询结果")
-            except Exception as e:
-                logger.debug(f"添加DNS信息失败: {e}")
-        
+
         if not result['success']:
             result['error'] = "无法查询域名信息，请检查域名是否有效"
         
@@ -610,10 +657,59 @@ class WhoisService:
                     formatted['原始WHOIS数据'] = raw_text[:500]  # 限制长度
                 except Exception as e:
                     logger.debug(f"无法获取原始数据: {e}")
-        
+
         logger.debug(f"最终提取的数据: {formatted}")
         return formatted
-    
+
+    def _format_asyncwhois_data(self, parsed_dict: Dict[str, Any]) -> Dict[str, Any]:
+        """格式化 asyncwhois 返回的数据"""
+        formatted = {}
+
+        # asyncwhois 返回的字段映射
+        field_mapping = {
+            'domain_name': '域名',
+            'registrar': '注册商',
+            'whois_server': '注册商WHOIS服务器',
+            'registrar_url': '注册商网址',
+            'updated': '更新时间',
+            'created': '创建时间',
+            'expires': '过期时间',
+            'name_servers': 'DNS服务器',
+            'status': '状态',
+            'dnssec': 'DNSSEC',
+            'registrant_name': '注册人',
+            'registrant_organization': '注册组织',
+            'registrant_country': '注册国家',
+            'registrant_state': '注册省/州',
+            'registrant_city': '注册城市',
+            'registrant_address': '注册地址',
+            'registrant_zipcode': '注册邮编',
+            'registrant_email': '注册邮箱',
+            'admin_name': '管理员',
+            'admin_email': '管理员邮箱',
+            'tech_name': '技术联系人',
+            'tech_email': '技术联系人邮箱',
+        }
+
+        for eng_key, cn_key in field_mapping.items():
+            if eng_key in parsed_dict and parsed_dict[eng_key]:
+                value = parsed_dict[eng_key]
+
+                # 处理列表值
+                if isinstance(value, list):
+                    if len(value) == 1:
+                        formatted[cn_key] = str(value[0])
+                    else:
+                        formatted[cn_key] = ', '.join(str(v) for v in value)
+                # 处理日期时间对象
+                elif isinstance(value, datetime):
+                    formatted[cn_key] = value.strftime('%Y-%m-%d %H:%M:%S UTC')
+                else:
+                    formatted[cn_key] = str(value)
+
+        logger.debug(f"asyncwhois格式化后的数据: {formatted}")
+        return formatted
+
     def _should_skip_field(self, key: str, value: Any) -> bool:
         """判断是否应该跳过某个字段"""
         # 转换为字符串进行检查
