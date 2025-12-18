@@ -310,7 +310,7 @@ async def get_news(source_id: str, count: int = 10) -> List[Dict]:
     actual_source_id = get_actual_source_name(source_id)
     
     httpx_client = get_http_client()
-    base_url = "https://newsnow.busiyi.world"
+    base_url = "https://news.smone.us"
     url = f"{base_url}/api/s?id={actual_source_id}"
     
     # 检查缓存
