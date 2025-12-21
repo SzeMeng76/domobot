@@ -90,6 +90,8 @@ NEWS_SOURCES = {
     'douban': '豆瓣电影',
     'steam': 'Steam游戏排行',
     'tencent-hot': '腾讯新闻综合早报',
+    'qqvideo-tv-hotsearch': '腾讯视频电视剧热搜榜',
+    'iqiyi-hot-ranklist': '爱奇艺热播榜',
     # 兼容性别名（保持原有源名称可用）
     'github': 'GitHub趋势',
     'v2ex': 'V2EX最新',
@@ -223,7 +225,8 @@ def create_news_sources_keyboard() -> InlineKeyboardMarkup:
         ("💬 社交类", ['zhihu', 'weibo', 'v2ex', 'bilibili', 'douyin', 'tieba', 'kuaishou', 'coolapk', 'hupu']),
         ("💰 财经类", ['jin10', 'wallstreetcn', 'gelonghui', 'xueqiu', '36kr', '36kr-renqi', 'fastbull', 'mktnews', 'cls-telegraph', 'cls-depth', 'cls-hot']),
         ("📰 新闻类", ['toutiao', 'thepaper', 'ifeng', 'baidu', 'tencent-hot', 'cankaoxiaoxi', 'zaobao', 'sputniknewscn', 'kaopu']),
-        ("🛍️ 其他", ['smzdm', 'producthunt', 'nowcoder', 'pcbeta', 'douban', 'steam'])
+        ("📺 影视类", ['qqvideo-tv-hotsearch', 'iqiyi-hot-ranklist', 'douban']),
+        ("🛍️ 其他", ['smzdm', 'producthunt', 'nowcoder', 'pcbeta', 'steam'])
     ]
     
     for category_name, sources in categories:
@@ -657,7 +660,8 @@ async def newslist_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ("💬 社交类", ['zhihu', 'weibo', 'v2ex', 'bilibili', 'douyin', 'tieba', 'kuaishou', 'coolapk', 'hupu']),
             ("💰 财经类", ['jin10', 'wallstreetcn', 'gelonghui', 'xueqiu', '36kr', '36kr-renqi', 'fastbull', 'mktnews', 'cls-telegraph', 'cls-depth', 'cls-hot']),
             ("📰 新闻类", ['toutiao', 'thepaper', 'ifeng', 'baidu', 'tencent-hot', 'cankaoxiaoxi', 'zaobao', 'sputniknewscn', 'kaopu']),
-            ("🛍️ 其他", ['smzdm', 'producthunt', 'nowcoder', 'pcbeta', 'douban', 'steam'])
+            ("📺 影视类", ['qqvideo-tv-hotsearch', 'iqiyi-hot-ranklist', 'douban']),
+            ("🛍️ 其他", ['smzdm', 'producthunt', 'nowcoder', 'pcbeta', 'steam'])
         ]
         
         help_lines = ["📰 **NewsNow 新闻源列表**\n"]
@@ -771,27 +775,30 @@ HOT_NEWS_SOURCES = {
     'social': ['weibo', 'bilibili', 'zhihu', 'tieba', 'douyin'],  # 微博最稳定，放第一
     'tech': ['ithome', 'github', 'juejin', 'sspai'],    # IT之家很稳定
     'finance': ['jin10', 'wallstreetcn', 'gelonghui'],  # 金十数据稳定
-    'news': ['tencent-hot', 'toutiao', 'baidu', 'thepaper']  # 腾讯新闻综合早报优先
+    'news': ['tencent-hot', 'toutiao', 'baidu', 'thepaper'],  # 腾讯新闻综合早报优先
+    'video': ['qqvideo-tv-hotsearch', 'iqiyi-hot-ranklist']  # 影视热搜榜
 }
 
 def get_balanced_hot_sources() -> List[str]:
     """获取平衡的热门源列表（Vercel优化版）"""
     sources = []
-    
+
     # Vercel优化策略：减少并发，优选稳定源
     # 控制在5个源以内，避免Vercel并发限制
-    social_sources = HOT_NEWS_SOURCES['social'][:2]  # 只取最稳定的2个：weibo, bilibili
-    tech_sources = HOT_NEWS_SOURCES['tech'][:1]      # 只取最稳定的1个：ithome  
+    social_sources = HOT_NEWS_SOURCES['social'][:1]  # 只取最稳定的1个：weibo
+    tech_sources = HOT_NEWS_SOURCES['tech'][:1]      # 只取最稳定的1个：ithome
     finance_sources = HOT_NEWS_SOURCES['finance'][:1] # 只取最稳定的1个：jin10
     news_sources = HOT_NEWS_SOURCES['news'][:1]       # 取1个：toutiao
-    
-    sources.extend(social_sources)   # 2个社交源
+    video_sources = HOT_NEWS_SOURCES['video'][:1]     # 取1个：qqvideo-tv-hotsearch
+
+    sources.extend(social_sources)   # 1个社交源
     sources.extend(tech_sources)     # 1个科技源
-    sources.extend(finance_sources)  # 1个财经源  
+    sources.extend(finance_sources)  # 1个财经源
     sources.extend(news_sources)     # 1个新闻源
-    
+    sources.extend(video_sources)    # 1个影视源
+
     # 总共5个源，既保证内容丰富又避免Vercel限制
-    logger.info(f"Vercel优化热门源: 社交{social_sources} + 科技{tech_sources} + 财经{finance_sources} + 新闻{news_sources} = 总计{sources} (共{len(sources)}个源)")
+    logger.info(f"Vercel优化热门源: 社交{social_sources} + 科技{tech_sources} + 财经{finance_sources} + 新闻{news_sources} + 影视{video_sources} = 总计{sources} (共{len(sources)}个源)")
     return sources
 
 @with_error_handling  
