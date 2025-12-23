@@ -102,14 +102,19 @@ class NetflixPriceBot(PriceQueryService):
             chinese_name = plan_name_mapping.get(plan_name, plan_name)
             original_price = plan.get("monthly_price_original", "")
             cny_price = plan.get("monthly_price_cny", "")
-            
+            extra_slots = plan.get("extra_member_slots", "")
+
             if original_price and cny_price:
                 price_display = f"{original_price} ≈ {cny_price}"
             elif original_price:
                 price_display = original_price
             else:
                 continue
-                
+
+            # 添加 extra member slots 信息
+            if extra_slots:
+                price_display += f" (额外成员位: {extra_slots})"
+
             lines.append(f"  • {chinese_name}：{price_display}")
         
         return "\n".join(lines)
