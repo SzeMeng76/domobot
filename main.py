@@ -169,13 +169,13 @@ def setup_handlers(application: Application):
     # 动态加载所有命令
     load_commands()
 
-    # 使用命令工厂设置处理器
-    command_factory.setup_handlers(application)
-
-    # 手动添加管理员对话处理器
+    # 重要：ConversationHandler 必须在 UnifiedTextHandler 之前注册
+    # 否则 UnifiedTextHandler 会拦截所有文本消息，导致 ConversationHandler 收不到用户输入
     from commands.admin_commands import admin_panel_handler
-
     application.add_handler(admin_panel_handler.get_conversation_handler())
+
+    # 使用命令工厂设置处理器（包括 UnifiedTextHandler）
+    command_factory.setup_handlers(application)
 
     # 错误处理器
     application.add_error_handler(error_handler)
