@@ -168,8 +168,12 @@ async def rate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "`/rate USD JPY` (USD -> JPY, 100 USD)\n"
             "`/rate USD CNY 50` (USD -> CNY, 50 USD)\n"
             "`/rate USD 1+1` (USD -> CNY, 计算 1+1)\n\n"
-            "📣 数据约每小时更新\n"
-            "🌐 数据来源: Open Exchange Rates"
+            "*✨ 新功能:*\n"
+            "• 自动显示多平台汇率对比\n"
+            "• 标记最优汇率 🏆\n"
+            "• 计算平台间差价\n\n"
+            "📣 主源每小时更新 | 平台每8小时更新\n"
+            "🌐 数据来源: OpenExchange + Coinbase, Visa, Wise, UnionPay, Neutrino"
         )
 
         await message.delete()
@@ -279,12 +283,61 @@ async def rate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         result_lines.extend(
             [
                 "",
-                "💱 *转换详情*",
+                "💱 *主要汇率*",
                 f"   {from_symbol} `{formatted_amount}` *{from_currency}* → {to_symbol} `{formatted_converted}` *{to_currency}*",
+            ]
+        )
+
+        # 获取多平台对比数据
+        try:
+            comparison = await rate_converter.get_platform_comparison(amount, from_currency, to_currency)
+            if comparison and comparison["platforms"]:
+                result_lines.extend(["", "📊 *多平台对比*"])
+
+                # 收集所有平台的结果（包括主源）
+                all_results = []
+                if comparison["primary"]:
+                    all_results.append(("OpenExchange", comparison["primary"]["converted"]))
+
+                for platform, data in comparison["platforms"].items():
+                    all_results.append((platform, data["converted"]))
+
+                # 找出最优汇率
+                if all_results:
+                    best_platform, best_value = max(all_results, key=lambda x: x[1])
+                    worst_platform, worst_value = min(all_results, key=lambda x: x[1])
+
+                    # 显示各平台汇率
+                    for platform, data in sorted(comparison["platforms"].items()):
+                        converted_val = data["converted"]
+                        formatted_val = f"{converted_val:.2f}".rstrip("0").rstrip(".")
+
+                        # 标记最优/最差
+                        marker = ""
+                        if converted_val == best_value:
+                            marker = " 🏆"  # 最划算
+                        elif converted_val == worst_value and len(all_results) > 1:
+                            marker = " 📉"  # 最差
+
+                        result_lines.append(f"   • {platform}: {to_symbol} `{formatted_val}`{marker}")
+
+                    # 显示差价
+                    if best_value != worst_value:
+                        diff = best_value - worst_value
+                        diff_percent = (diff / worst_value) * 100
+                        formatted_diff = f"{diff:.2f}".rstrip("0").rstrip(".")
+                        result_lines.append("")
+                        result_lines.append(f"💡 *最大差价*: {to_symbol} `{formatted_diff}` ({diff_percent:.2f}%)")
+        except Exception as e:
+            logger.warning(f"Failed to get platform comparison: {e}")
+            # 即使对比失败，也不影响主要功能
+
+        result_lines.extend(
+            [
                 "",
                 "━━━━━━━━━━━━━━━━",
-                "📣 数据约每小时更新",
-                "🌐 来源: Open Exchange Rates",
+                "📣 主源每小时更新 | 平台对比每8小时更新",
+                "🌐 来源: OpenExchange + 5个主流平台",
             ]
         )
 
