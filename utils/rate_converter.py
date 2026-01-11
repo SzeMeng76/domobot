@@ -47,7 +47,7 @@ class RateConverter:
             },
             {
                 "name": "Visa",
-                "url": "https://raw.githubusercontent.com/DyAxy/NewExchangeRatesTable/refs/heads/main/data/visa.json",
+                "url": "https://raw.githubusercontent.com/SzeMeng76/NewExchangeRatesTable/refs/heads/main/data/visa.json",
                 "cache_key": "github_visa",
                 "cache_duration": 28800
             },
