@@ -491,7 +491,10 @@ class AdminPanelHandler:
             keyboard = [
                 [InlineKeyboardButton("🔍 输入群组ID", callback_data="antispam_input_group")],
                 [InlineKeyboardButton("📊 全局统计", callback_data="antispam_global_stats")],
-                [InlineKeyboardButton("📝 最近日志", callback_data="antispam_global_logs")],
+                [
+                    InlineKeyboardButton("🚫 垃圾日志", callback_data="antispam_global_logs_spam"),
+                    InlineKeyboardButton("📝 全部日志", callback_data="antispam_global_logs_all")
+                ],
                 [InlineKeyboardButton("🔙 返回", callback_data="back_to_main")]
             ]
 
@@ -1169,6 +1172,131 @@ class AdminPanelHandler:
             logger.error(f"创建Telegraph页面失败: {e}")
             return None
 
+    async def _handle_antispam_global_logs_spam(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """显示全局垃圾消息日志"""
+        return await self._show_global_logs(update, context, spam_only=True)
+
+    async def _handle_antispam_global_logs_all(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """显示全局所有检测日志"""
+        return await self._show_global_logs(update, context, spam_only=False)
+
+    async def _show_global_logs(self, update: Update, context: ContextTypes.DEFAULT_TYPE, spam_only: bool):
+        """显示全局日志的通用函数"""
+        query = update.callback_query
+        anti_spam_handler = context.bot_data.get("anti_spam_handler")
+        if not anti_spam_handler:
+            return await self.show_antispam_panel(query, context, "❌ 功能未启用")
+
+        manager = anti_spam_handler.manager
+        logs = await manager.get_global_recent_logs(limit=50, spam_only=spam_only)
+
+        log_type_text = "垃圾消息" if spam_only else "所有检测"
+
+        if not logs:
+            text = f"📝 *AI反垃圾 - {log_type_text}*\n\n暂无日志记录\n"
+            await self._show_panel(
+                query, text,
+                InlineKeyboardMarkup([[InlineKeyboardButton("🔙 返回", callback_data="manage_antispam")]])
+            )
+            return ANTISPAM_PANEL
+
+        # 判断是否需要 Telegraph
+        if len(logs) > 15:
+            telegraph_content = self._format_logs_for_telegraph_v2(logs, spam_only)
+            telegraph_url = await self._create_telegraph_page(
+                f"AI反垃圾 - {log_type_text}",
+                telegraph_content
+            )
+
+            if telegraph_url:
+                text = f"📝 *AI反垃圾 - {log_type_text}*\n\n共 {len(logs)} 条记录，以下显示最近10条:\n\n"
+                text += self._format_log_entries(logs[:10])
+                text += f"\n📄 查看完整日志: {telegraph_url}"
+            else:
+                text = f"📝 *AI反垃圾 - {log_type_text}*\n\n显示最近 15 条记录:\n\n"
+                text += self._format_log_entries(logs[:15])
+        else:
+            text = f"📝 *AI反垃圾 - {log_type_text}*\n\n显示最近 {len(logs)} 条记录:\n\n"
+            text += self._format_log_entries(logs)
+
+        await self._show_panel(
+            query, text,
+            InlineKeyboardMarkup([[InlineKeyboardButton("🔙 返回", callback_data="manage_antispam")]])
+        )
+        return ANTISPAM_PANEL
+
+    def _format_log_entries(self, logs: list) -> str:
+        """格式化日志条目"""
+        text = ""
+        for log in logs:
+            created_at = log.get('created_at')
+            time_str = created_at.strftime("%m-%d %H:%M") if created_at else "未知时间"
+            group_id = log.get('group_id', 'N/A')
+            username = log.get('username', '未知用户')
+            spam_score = log.get('spam_score', 0)
+            is_spam = log.get('is_spam', False)
+            is_banned = log.get('is_banned', False)
+            message_text = log.get('message_text', '')
+
+            if len(message_text) > 50:
+                message_text = message_text[:47] + "..."
+
+            if is_spam and is_banned:
+                icon = "🚫"
+            elif is_spam:
+                icon = "⚠️"
+            else:
+                icon = "✅"
+
+            text += f"{icon} `{group_id}` | {time_str}\n"
+            text += f"   用户: {username} | 分数: {spam_score}\n"
+            text += f"   {message_text}\n\n"
+        return text
+
+    def _format_logs_for_telegraph_v2(self, logs: list, spam_only: bool) -> str:
+        """Telegraph格式日志"""
+        log_type_text = "垃圾消息" if spam_only else "所有检测"
+        content = f"<h3>AI反垃圾{log_type_text}日志</h3>"
+        content += f"<p>共 {len(logs)} 条记录</p>"
+
+        for i, log in enumerate(logs, 1):
+            created_at = log.get('created_at')
+            time_str = created_at.strftime("%Y-%m-%d %H:%M:%S") if created_at else "未知时间"
+            group_id = log.get('group_id', 'N/A')
+            username = log.get('username', '未知用户')
+            spam_score = log.get('spam_score', 0)
+            spam_reason = log.get('spam_reason', '无')
+            is_spam = log.get('is_spam', False)
+            is_banned = log.get('is_banned', False)
+            message_text = log.get('message_text', '')
+            message_type = log.get('message_type', 'text')
+
+            import html
+            username = html.escape(str(username))
+            message_text = html.escape(str(message_text))
+            spam_reason = html.escape(str(spam_reason))
+
+            if is_spam and is_banned:
+                status = "🚫 已封禁"
+            elif is_spam:
+                status = "⚠️ 检测为垃圾"
+            else:
+                status = "✅ 正常消息"
+
+            content += f"""
+<h4>{i}. {status} - {time_str}</h4>
+<p>
+<strong>群组ID:</strong> {group_id}<br>
+<strong>用户:</strong> {username}<br>
+<strong>垃圾分数:</strong> {spam_score}<br>
+<strong>消息类型:</strong> {message_type}<br>
+<strong>检测原因:</strong> {spam_reason}<br>
+<strong>消息内容:</strong> {message_text}
+</p>
+<hr>
+"""
+        return content
+
     async def handle_antispam_group_id(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """处理输入的群组ID"""
         user_message = update.message
@@ -1232,7 +1360,8 @@ class AdminPanelHandler:
                     CallbackQueryHandler(self._handle_antispam_config, pattern="^antispam_config$"),
                     CallbackQueryHandler(self._handle_antispam_stats, pattern="^antispam_stats$"),
                     CallbackQueryHandler(self._handle_antispam_global_stats, pattern="^antispam_global_stats$"),
-                    CallbackQueryHandler(self._handle_antispam_global_logs, pattern="^antispam_global_logs$"),
+                    CallbackQueryHandler(self._handle_antispam_global_logs_spam, pattern="^antispam_global_logs_spam$"),
+                    CallbackQueryHandler(self._handle_antispam_global_logs_all, pattern="^antispam_global_logs_all$"),
                     CallbackQueryHandler(self._to_antispam_panel, pattern="^manage_antispam$"),
                     CallbackQueryHandler(self.show_main_panel, pattern="^back_to_main$"),
                 ],
