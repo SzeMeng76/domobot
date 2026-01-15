@@ -556,6 +556,9 @@ async def get_app_prices(
                 price_str, country_code
             )
 
+            # 调试日志
+            logger.info(f"[IAP Debug] price_str='{price_str}', detected_currency='{detected_currency}', price_value={price_value}, main_currency='{currency}'")
+
             if price_value is None:
                 price_value = 0
 
@@ -565,10 +568,12 @@ async def get_app_prices(
                 if rate_converter and rate_converter.rates:
                     # 使用 detected_currency 而不是主应用的 currency
                     actual_currency = detected_currency if detected_currency else currency
+                    logger.info(f"[IAP Debug] Converting {price_value} {actual_currency} to CNY")
                     if actual_currency.upper() in rate_converter.rates:
                         cny_price = await rate_converter.convert(
                             price_value, actual_currency.upper(), "CNY"
                         )
+                        logger.info(f"[IAP Debug] Conversion result: {cny_price} CNY")
 
             in_app_purchases.append(
                 {"name": iap["name"], "price_str": price_str, "cny_price": cny_price}

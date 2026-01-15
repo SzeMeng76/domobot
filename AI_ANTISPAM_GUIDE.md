@@ -84,6 +84,100 @@ docker-compose logs -f appbot
 - `anti_spam_logs`: 检测日志表
 - `anti_spam_stats`: 统计数据表
 
+**⚠️ 重要：如果您是从旧版本升级**
+
+如果您的数据库已经存在（旧版本升级），MySQL 不会重新执行 `init.sql`。您需要手动创建 anti_spam 表：
+
+```bash
+# 方案一：直接在容器中执行 SQL（推荐，不影响现有数据）
+docker-compose exec mysql mysql -u root -p
+
+# 输入密码后，执行以下 SQL：
+USE bot;
+
+CREATE TABLE IF NOT EXISTS anti_spam_config (
+    group_id BIGINT PRIMARY KEY COMMENT '群组ID',
+    enabled BOOLEAN DEFAULT FALSE COMMENT '是否启用反垃圾功能',
+    joined_time_threshold INT DEFAULT 3 COMMENT '新用户判定阈值（天数）',
+    speech_count_threshold INT DEFAULT 3 COMMENT '新用户判定阈值（发言次数）',
+    verification_times_threshold INT DEFAULT 1 COMMENT '需要验证的次数',
+    spam_score_threshold INT DEFAULT 80 COMMENT '垃圾分数阈值（0-100）',
+    auto_delete_delay INT DEFAULT 120 COMMENT '自动删除通知延迟（秒）',
+    check_text BOOLEAN DEFAULT TRUE COMMENT '检测文本消息',
+    check_photo BOOLEAN DEFAULT TRUE COMMENT '检测图片消息',
+    check_sticker BOOLEAN DEFAULT FALSE COMMENT '检测贴纸消息',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='反垃圾配置表';
+
+CREATE TABLE IF NOT EXISTS anti_spam_user_info (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL COMMENT '用户ID',
+    group_id BIGINT NOT NULL COMMENT '群组ID',
+    username VARCHAR(255) COMMENT '用户名',
+    first_name VARCHAR(255) COMMENT '名字',
+    joined_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '入群时间',
+    number_of_speeches INT DEFAULT 0 COMMENT '发言次数',
+    verification_times INT DEFAULT 0 COMMENT '已验证次数',
+    is_verified BOOLEAN DEFAULT FALSE COMMENT '是否已通过验证',
+    last_message_time TIMESTAMP NULL COMMENT '最后发言时间',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_user_group (user_id, group_id),
+    INDEX idx_user_id (user_id),
+    INDEX idx_group_id (group_id),
+    INDEX idx_is_verified (is_verified)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户反垃圾信息表';
+
+CREATE TABLE IF NOT EXISTS anti_spam_logs (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL COMMENT '用户ID',
+    group_id BIGINT NOT NULL COMMENT '群组ID',
+    username VARCHAR(255) COMMENT '用户名',
+    message_type VARCHAR(20) COMMENT '消息类型: text, photo, sticker',
+    message_text TEXT COMMENT '消息内容（文本）',
+    spam_score INT COMMENT 'AI评分（0-100）',
+    spam_reason TEXT COMMENT '判定原因',
+    spam_mock_text TEXT COMMENT '讽刺评论',
+    is_spam BOOLEAN DEFAULT FALSE COMMENT '是否为垃圾',
+    is_banned BOOLEAN DEFAULT FALSE COMMENT '是否已封禁',
+    detection_time_ms INT COMMENT '检测耗时（毫秒）',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_user_id (user_id),
+    INDEX idx_group_id (group_id),
+    INDEX idx_is_spam (is_spam),
+    INDEX idx_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='垃圾检测日志表';
+
+CREATE TABLE IF NOT EXISTS anti_spam_stats (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    group_id BIGINT NOT NULL COMMENT '群组ID',
+    date DATE NOT NULL COMMENT '统计日期',
+    total_checks INT DEFAULT 0 COMMENT '总检测次数',
+    spam_detected INT DEFAULT 0 COMMENT '检测到垃圾次数',
+    users_banned INT DEFAULT 0 COMMENT '封禁用户数',
+    false_positives INT DEFAULT 0 COMMENT '误报次数（管理员解禁）',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_group_date (group_id, date),
+    INDEX idx_group_id (group_id),
+    INDEX idx_date (date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='反垃圾统计表';
+
+exit;
+
+# 方案二：使用 SQL 文件导入（会跳过已存在的表）
+docker-compose exec mysql mysql -u root -p bot < database/init.sql
+
+# 执行完成后重启机器人
+docker-compose restart appbot
+```
+
+验证表已创建：
+```bash
+docker-compose exec mysql mysql -u root -p -e "USE bot; SHOW TABLES LIKE 'anti_spam%';"
+```
+
 #### 4. 更新到最新版本
 
 ```bash
