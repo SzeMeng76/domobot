@@ -177,8 +177,7 @@ def setup_handlers(application: Application):
     # 注册 AI 反垃圾处理器（必须在 UnifiedTextHandler 之前）
     anti_spam_handler = application.bot_data.get("anti_spam_handler")
     if anti_spam_handler:
-        from telegram.ext import MessageHandler, CallbackQueryHandler
-        from telegram import filters
+        from telegram.ext import MessageHandler, CallbackQueryHandler, filters
 
         # 注册新成员加入处理器
         application.add_handler(MessageHandler(
