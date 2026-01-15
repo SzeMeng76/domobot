@@ -174,6 +174,32 @@ def setup_handlers(application: Application):
     from commands.admin_commands import admin_panel_handler
     application.add_handler(admin_panel_handler.get_conversation_handler())
 
+    # 注册 AI 反垃圾处理器（必须在 UnifiedTextHandler 之前）
+    anti_spam_handler = application.bot_data.get("anti_spam_handler")
+    if anti_spam_handler:
+        from telegram.ext import MessageHandler, CallbackQueryHandler
+        from telegram import filters
+
+        # 注册新成员加入处理器
+        application.add_handler(MessageHandler(
+            filters.StatusUpdate.NEW_CHAT_MEMBERS,
+            anti_spam_handler.handle_new_member
+        ))
+
+        # 注册群组消息处理器（文本和图片）
+        application.add_handler(MessageHandler(
+            filters.ChatType.GROUPS & (filters.TEXT | filters.PHOTO) & ~filters.COMMAND,
+            anti_spam_handler.handle_message
+        ))
+
+        # 注册解禁回调处理器
+        application.add_handler(CallbackQueryHandler(
+            anti_spam_handler.handle_unban_callback,
+            pattern="^antispam_unban:"
+        ))
+
+        logger.info("✅ AI反垃圾处理器已注册")
+
     # 使用命令工厂设置处理器（包括 UnifiedTextHandler）
     command_factory.setup_handlers(application)
 
@@ -230,12 +256,34 @@ async def setup_application(application: Application, config) -> None:
 
     httpx_client = get_http_client()
 
+    # 初始化 AI 反垃圾组件（如果启用）
+    anti_spam_manager = None
+    anti_spam_detector = None
+    anti_spam_handler = None
+    if config.anti_spam_enabled and config.openai_api_key:
+        logger.info("🛡️ 初始化AI反垃圾功能...")
+        from utils.anti_spam_manager import AntiSpamManager
+        from utils.anti_spam_detector import AntiSpamDetector
+        from handlers.anti_spam_handler import AntiSpamHandler
+
+        anti_spam_manager = AntiSpamManager(user_cache_manager.pool)
+        anti_spam_detector = AntiSpamDetector(
+            api_key=config.openai_api_key,
+            model=config.openai_model,
+            base_url=config.openai_base_url if config.openai_base_url else None
+        )
+        anti_spam_handler = AntiSpamHandler(anti_spam_manager, anti_spam_detector)
+        logger.info("✅ AI反垃圾功能初始化完成")
+    elif config.anti_spam_enabled:
+        logger.warning("⚠️ AI反垃圾功能已启用但缺少OPENAI_API_KEY，功能将不可用")
+
     # 将核心组件存储到 bot_data 中
     application.bot_data["cache_manager"] = cache_manager
     application.bot_data["rate_converter"] = rate_converter
     application.bot_data["httpx_client"] = httpx_client
     application.bot_data["user_cache_manager"] = user_cache_manager
     application.bot_data["stats_manager"] = stats_manager
+    application.bot_data["anti_spam_handler"] = anti_spam_handler  # 存储反垃圾处理器
     logger.info("✅ 核心组件初始化完成")
 
     # ========================================

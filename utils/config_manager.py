@@ -32,7 +32,16 @@ class BotConfig:
         
         # 航班服务API配置
         self.serpapi_key: str = ""
-    
+
+        # OpenAI API配置（用于AI反垃圾）
+        self.openai_api_key: str = ""
+        self.openai_model: str = "gpt-5-mini"  # 默认使用 gpt-5-mini
+        self.openai_base_url: str = ""  # 可选，用于代理
+
+        # AI反垃圾功能配置
+        self.anti_spam_enabled: bool = True
+        self.anti_spam_default_threshold: int = 80
+
         # Webhook 配置
         self.webhook_url = ""
         self.webhook_listen = "0.0.0.0"
@@ -353,6 +362,15 @@ class ConfigManager:
         
         # 航班服务 API 配置
         self.config.serpapi_key = os.getenv("SERPAPI_KEY", "")
+
+        # OpenAI API 配置（用于AI反垃圾）
+        self.config.openai_api_key = os.getenv("OPENAI_API_KEY", "")
+        self.config.openai_model = os.getenv("OPENAI_MODEL", "gpt-5-mini")
+        self.config.openai_base_url = os.getenv("OPENAI_BASE_URL", "")
+
+        # AI反垃圾功能配置
+        self.config.anti_spam_enabled = get_bool_env("ANTI_SPAM_ENABLED", "True")
+        self.config.anti_spam_default_threshold = get_int_env("ANTI_SPAM_DEFAULT_THRESHOLD", "80")
 
         # MySQL 配置
         self.config.db_host = os.getenv("DB_HOST", "localhost")

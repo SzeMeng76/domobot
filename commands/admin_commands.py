@@ -286,13 +286,15 @@ async def addgroup_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     USER_PANEL,
     GROUP_PANEL,
     ADMIN_PANEL,
+    ANTISPAM_PANEL,
     AWAITING_USER_ID_TO_ADD,
     AWAITING_USER_ID_TO_REMOVE,
     AWAITING_GROUP_ID_TO_ADD,
     AWAITING_GROUP_ID_TO_REMOVE,
     AWAITING_ADMIN_ID_TO_ADD,
     AWAITING_ADMIN_ID_TO_REMOVE,
-) = range(10)
+    AWAITING_ANTISPAM_GROUP_ID,
+) = range(12)
 
 
 class AdminPanelHandler:
@@ -328,6 +330,7 @@ class AdminPanelHandler:
         keyboard = [
             [InlineKeyboardButton("👤 管理用户白名单", callback_data="manage_users")],
             [InlineKeyboardButton("👨‍👩‍👧‍👦 管理群组白名单", callback_data="manage_groups")],
+            [InlineKeyboardButton("🛡️ AI反垃圾管理", callback_data="manage_antispam")],
         ]
         if await is_super_admin(user_id):
             keyboard.insert(0, [InlineKeyboardButton("👥 管理管理员", callback_data="manage_admins")])
@@ -449,6 +452,105 @@ class AdminPanelHandler:
         ]
         await self._show_panel(query, text, InlineKeyboardMarkup(keyboard))
         return ADMIN_PANEL
+
+    async def show_antispam_panel(
+        self, query: CallbackQuery, context: ContextTypes.DEFAULT_TYPE, status_message: str | None = None
+    ) -> int:
+        """显示AI反垃圾管理面板"""
+        # 检查反垃圾功能是否可用
+        anti_spam_handler = context.bot_data.get("anti_spam_handler")
+        if not anti_spam_handler or not hasattr(anti_spam_handler, 'manager'):
+            await self._show_panel(query, "❌ AI反垃圾功能未启用\n请检查 OPENAI_API_KEY 配置", InlineKeyboardMarkup([[InlineKeyboardButton("🔙 返回", callback_data="back_to_main")]]))
+            return ANTISPAM_PANEL
+
+        manager = anti_spam_handler.manager
+
+        # 获取当前选中的群组ID（从context中获取，如果没有则为None）
+        selected_group_id = context.user_data.get("antispam_selected_group_id")
+
+        if not selected_group_id:
+            # 显示群组选择列表
+            user_manager = get_user_manager(context)
+            if not user_manager:
+                await self._show_panel(query, "❌ 用户管理器未初始化", InlineKeyboardMarkup([[InlineKeyboardButton("🔙 返回", callback_data="back_to_main")]]))
+                return ANTISPAM_PANEL
+
+            groups = await user_manager.get_whitelisted_groups()
+
+            text = "🛡️ *AI反垃圾管理*\n\n"
+            if status_message:
+                text += f"{status_message}\n\n"
+
+            text += "请选择要管理的群组：\n\n"
+            if groups:
+                text += "\n".join([f"• {g['group_name']} (`{g['group_id']}`)" for g in groups[:10]])
+                text += f"\n\n共 {len(groups)} 个白名单群组"
+            else:
+                text += "📭 暂无白名单群组\n请先添加群组到白名单"
+
+            keyboard = [
+                [InlineKeyboardButton("🔍 输入群组ID", callback_data="antispam_input_group")],
+                [InlineKeyboardButton("🔙 返回", callback_data="back_to_main")]
+            ]
+
+            await self._show_panel(query, text, InlineKeyboardMarkup(keyboard))
+            return ANTISPAM_PANEL
+
+        # 有选中的群组，显示该群组的反垃圾配置
+        group_name = context.user_data.get("antispam_selected_group_name", f"群组 {selected_group_id}")
+
+        # 获取配置
+        config = await manager.get_group_config(selected_group_id)
+        is_enabled = config.get('enabled', False) if config else False
+
+        # 获取统计数据
+        stats = await manager.get_group_stats(selected_group_id, days=7)
+        total_checks = sum(s.get('total_checks', 0) for s in stats)
+        spam_detected = sum(s.get('spam_detected', 0) for s in stats)
+        users_banned = sum(s.get('users_banned', 0) for s in stats)
+        false_positives = sum(s.get('false_positives', 0) for s in stats)
+
+        # 构建面板文本
+        status_text = "✅ 已启用" if is_enabled else "❌ 未启用"
+        text = f"🛡️ *AI反垃圾管理*\n\n"
+        if status_message:
+            text += f"{status_message}\n\n"
+
+        text += f"📊 状态: {status_text}\n"
+        text += f"🏢 群组: {group_name}\n"
+        text += f"🆔 ID: `{selected_group_id}`\n\n"
+        text += f"📈 *最近7天统计:*\n"
+        text += f"• 总检测: {total_checks}次\n"
+        text += f"• 检测垃圾: {spam_detected}次\n"
+        text += f"• 封禁用户: {users_banned}人\n"
+        text += f"• 误报: {false_positives}次\n"
+
+        if config and is_enabled:
+            text += f"\n⚙️ *当前配置:*\n"
+            text += f"• 分数阈值: {config.get('spam_score_threshold', 80)}\n"
+            text += f"• 新用户天数: {config.get('joined_time_threshold', 3)}天\n"
+            text += f"• 新用户发言数: {config.get('speech_count_threshold', 3)}次\n"
+            text += f"• 检测文本: {'✅' if config.get('check_text', True) else '❌'}\n"
+            text += f"• 检测图片: {'✅' if config.get('check_photo', True) else '❌'}\n"
+
+        # 构建按钮
+        keyboard = []
+        if is_enabled:
+            keyboard.append([InlineKeyboardButton("❌ 禁用", callback_data="antispam_disable")])
+        else:
+            keyboard.append([InlineKeyboardButton("✅ 启用", callback_data="antispam_enable")])
+
+        keyboard.append([
+            InlineKeyboardButton("⚙️ 配置", callback_data="antispam_config"),
+            InlineKeyboardButton("📊 详细统计", callback_data="antispam_stats")
+        ])
+        keyboard.append([
+            InlineKeyboardButton("🔄 切换群组", callback_data="antispam_change_group"),
+            InlineKeyboardButton("🔙 返回", callback_data="back_to_main")
+        ])
+
+        await self._show_panel(query, text, InlineKeyboardMarkup(keyboard))
+        return ANTISPAM_PANEL
 
     async def prompt_for_input(
         self, query: CallbackQuery, context: ContextTypes.DEFAULT_TYPE, prompt_text: str, next_state: int
@@ -703,6 +805,10 @@ class AdminPanelHandler:
         context.user_data["current_panel"] = "admin"
         return await self.show_admin_panel(update.callback_query, context)
 
+    async def _to_antispam_panel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        context.user_data["current_panel"] = "antispam"
+        return await self.show_antispam_panel(update.callback_query, context)
+
     async def _prompt_user_add(self, u, c):
         return await self.prompt_for_input(u.callback_query, c, "请输入要添加的用户ID", AWAITING_USER_ID_TO_ADD)
 
@@ -721,6 +827,106 @@ class AdminPanelHandler:
     async def _prompt_admin_remove(self, u, c):
         return await self.prompt_for_input(u.callback_query, c, "请输入要移除的管理员ID", AWAITING_ADMIN_ID_TO_REMOVE)
 
+    # ==================== 反垃圾管理回调处理 ====================
+
+    async def _prompt_antispam_input_group(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """提示输入群组ID"""
+        return await self.prompt_for_input(update.callback_query, context, "请输入要管理的群组ID (负数，如 -1001234567890)", AWAITING_ANTISPAM_GROUP_ID)
+
+    async def _handle_antispam_change_group(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """切换群组"""
+        context.user_data.pop("antispam_selected_group_id", None)
+        context.user_data.pop("antispam_selected_group_name", None)
+        return await self.show_antispam_panel(update.callback_query, context)
+
+    async def _handle_antispam_enable(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """启用反垃圾功能"""
+        group_id = context.user_data.get("antispam_selected_group_id")
+        if not group_id:
+            return await self.show_antispam_panel(update.callback_query, context)
+        anti_spam_handler = context.bot_data.get("anti_spam_handler")
+        if not anti_spam_handler:
+            return await self.show_antispam_panel(update.callback_query, context, "❌ 功能未启用")
+        success = await anti_spam_handler.manager.enable_group(group_id)
+        return await self.show_antispam_panel(update.callback_query, context, "✅ 已成功启用" if success else "❌ 启用失败")
+
+    async def _handle_antispam_disable(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """禁用反垃圾功能"""
+        group_id = context.user_data.get("antispam_selected_group_id")
+        if not group_id:
+            return await self.show_antispam_panel(update.callback_query, context)
+        anti_spam_handler = context.bot_data.get("anti_spam_handler")
+        if not anti_spam_handler:
+            return await self.show_antispam_panel(update.callback_query, context, "❌ 功能未启用")
+        success = await anti_spam_handler.manager.disable_group(group_id)
+        return await self.show_antispam_panel(update.callback_query, context, "✅ 已成功禁用" if success else "❌ 禁用失败")
+
+    async def _handle_antispam_config(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """显示配置选项"""
+        query = update.callback_query
+        text = "⚙️ *配置提示*\n\n当前版本的配置调整功能开发中\n\n你可以通过修改数据库中的 `anti_spam_config` 表来调整配置\n\n主要配置项:\n• spam\\_score\\_threshold: 垃圾分数阈值 (80\\-100)\n• joined\\_time\\_threshold: 新用户天数 (1\\-7)\n• speech\\_count\\_threshold: 新用户发言数 (1\\-10)\n• check\\_text/check\\_photo: 检测类型开关"
+        await self._show_panel(query, text, InlineKeyboardMarkup([[InlineKeyboardButton("🔙 返回", callback_data="manage_antispam")]]))
+        return ANTISPAM_PANEL
+
+    async def _handle_antispam_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """显示详细统计"""
+        query = update.callback_query
+        group_id = context.user_data.get("antispam_selected_group_id")
+        if not group_id:
+            return await self.show_antispam_panel(query, context)
+        anti_spam_handler = context.bot_data.get("anti_spam_handler")
+        if not anti_spam_handler:
+            return await self.show_antispam_panel(query, context)
+        manager = anti_spam_handler.manager
+        stats = await manager.get_group_stats(group_id, days=30)
+        if not stats:
+            text = "📊 *详细统计*\n\n暂无统计数据"
+        else:
+            total_checks = sum(s.get('total_checks', 0) for s in stats)
+            total_spam = sum(s.get('spam_detected', 0) for s in stats)
+            total_banned = sum(s.get('users_banned', 0) for s in stats)
+            total_fp = sum(s.get('false_positives', 0) for s in stats)
+            text = f"📊 *详细统计* (最近30天)\n\n📈 *总计:*\n• 总检测: {total_checks}次\n• 垃圾消息: {total_spam}条\n• 封禁用户: {total_banned}人\n• 误报: {total_fp}次\n"
+            if total_spam > 0:
+                accuracy = ((total_spam - total_fp) / total_spam * 100)
+                text += f"• 准确率: {accuracy:.1f}%\n"
+            text += "\n📅 *每日数据* (最近10天):\n"
+            for stat in stats[:10]:
+                date = str(stat.get('date', ''))
+                checks = stat.get('total_checks', 0)
+                spam = stat.get('spam_detected', 0)
+                banned = stat.get('users_banned', 0)
+                fp = stat.get('false_positives', 0)
+                text += f"\n{date}\n  检测:{checks} | 垃圾:{spam} | 封禁:{banned} | 误报:{fp}\n"
+        await self._show_panel(query, text, InlineKeyboardMarkup([[InlineKeyboardButton("🔙 返回", callback_data="manage_antispam")]]))
+        return ANTISPAM_PANEL
+
+    async def handle_antispam_group_id(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """处理输入的群组ID"""
+        user_message = update.message
+        if user_message:
+            await _schedule_deletion(chat_id=user_message.chat_id, message_id=user_message.message_id, delay=0, context=context)
+        try:
+            group_id = int(update.message.text.strip())
+            if group_id >= 0:
+                raise ValueError("群组ID必须是负数")
+            context.user_data["antispam_selected_group_id"] = group_id
+            try:
+                chat = await context.bot.get_chat(group_id)
+                context.user_data["antispam_selected_group_name"] = chat.title
+            except:
+                context.user_data["antispam_selected_group_name"] = f"群组 {group_id}"
+            query = context.user_data.get("admin_query")
+            if query:
+                return await self.show_antispam_panel(query, context, f"✅ 已选择群组 {group_id}")
+            else:
+                return ANTISPAM_PANEL
+        except ValueError as e:
+            query = context.user_data.get("admin_query")
+            if query:
+                await self._show_panel(query, f"❌ 输入错误: {str(e)}\n\n请重新输入群组ID", InlineKeyboardMarkup([[InlineKeyboardButton("❌ 取消", callback_data="cancel_input")]]))
+            return AWAITING_ANTISPAM_GROUP_ID
+
     def get_conversation_handler(self) -> ConversationHandler:
         return ConversationHandler(
             entry_points=[CommandHandler("admin", self.show_main_panel)],
@@ -729,6 +935,7 @@ class AdminPanelHandler:
                     CallbackQueryHandler(self._to_user_panel, pattern="^manage_users$"),
                     CallbackQueryHandler(self._to_group_panel, pattern="^manage_groups$"),
                     CallbackQueryHandler(self._to_admin_panel, pattern="^manage_admins$"),
+                    CallbackQueryHandler(self._to_antispam_panel, pattern="^manage_antispam$"),
                     CallbackQueryHandler(self.close_panel, pattern="^close$"),
                 ],
                 USER_PANEL: [
@@ -747,6 +954,16 @@ class AdminPanelHandler:
                     CallbackQueryHandler(self._prompt_admin_add, pattern="^admin_add$"),
                     CallbackQueryHandler(self._prompt_admin_remove, pattern="^admin_remove$"),
                     CallbackQueryHandler(self._refresh_admins, pattern="^refresh_admins$"),
+                    CallbackQueryHandler(self.show_main_panel, pattern="^back_to_main$"),
+                ],
+                ANTISPAM_PANEL: [
+                    CallbackQueryHandler(self._prompt_antispam_input_group, pattern="^antispam_input_group$"),
+                    CallbackQueryHandler(self._handle_antispam_change_group, pattern="^antispam_change_group$"),
+                    CallbackQueryHandler(self._handle_antispam_enable, pattern="^antispam_enable$"),
+                    CallbackQueryHandler(self._handle_antispam_disable, pattern="^antispam_disable$"),
+                    CallbackQueryHandler(self._handle_antispam_config, pattern="^antispam_config$"),
+                    CallbackQueryHandler(self._handle_antispam_stats, pattern="^antispam_stats$"),
+                    CallbackQueryHandler(self._to_antispam_panel, pattern="^manage_antispam$"),
                     CallbackQueryHandler(self.show_main_panel, pattern="^back_to_main$"),
                 ],
                 AWAITING_USER_ID_TO_ADD: [
@@ -776,6 +993,11 @@ class AdminPanelHandler:
                 ],
                 AWAITING_ADMIN_ID_TO_REMOVE: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_remove_admin),
+                    CallbackQueryHandler(self.cancel_input, pattern="^cancel_input$"),
+                    CommandHandler("admin", self.show_main_panel),  # 允许重新启动admin
+                ],
+                AWAITING_ANTISPAM_GROUP_ID: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_antispam_group_id),
                     CallbackQueryHandler(self.cancel_input, pattern="^cancel_input$"),
                     CommandHandler("admin", self.show_main_panel),  # 允许重新启动admin
                 ],
