@@ -556,6 +556,23 @@ async def get_app_prices(
                 price_str, country_code
             )
 
+            # 如果检测到的货币与国家本地货币不同，重新用正确的 locale 解析
+            # 例如：阿根廷区显示 USD 价格时，应该用 US locale 解析，而不是 AR locale
+            if detected_currency and detected_currency != SUPPORTED_COUNTRIES.get(country_code, {}).get("currency"):
+                # 找到使用该货币的国家作为 locale
+                currency_to_country = {
+                    "USD": "US",
+                    "EUR": "DE",
+                    "GBP": "GB",
+                    "JPY": "JP",
+                    "AUD": "AU",
+                    "CAD": "CA",
+                }
+                correct_country = currency_to_country.get(detected_currency, "US")
+                # 重新解析
+                _, price_value = extract_currency_and_price(price_str, correct_country)
+                logger.info(f"[IAP Debug] Re-parsed with {correct_country} locale: {price_value}")
+
             # 调试日志
             logger.info(f"[IAP Debug] price_str='{price_str}', detected_currency='{detected_currency}', price_value={price_value}, main_currency='{currency}'")
 

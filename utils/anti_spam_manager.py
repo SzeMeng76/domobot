@@ -275,3 +275,60 @@ class AntiSpamManager:
                     (group_id, start_date)
                 )
                 return await cursor.fetchall()
+
+    # ==================== 数据清理 ====================
+
+    async def cleanup_old_data(self, logs_days: int = 30, stats_days: int = 90,
+                               inactive_users_days: int = 60) -> Dict[str, int]:
+        """
+        清理旧数据
+
+        Args:
+            logs_days: 保留最近多少天的检测日志（默认30天）
+            stats_days: 保留最近多少天的统计数据（默认90天）
+            inactive_users_days: 清理多少天未活动的已验证用户（默认60天）
+
+        Returns:
+            清理结果统计 {"logs_deleted": 数量, "stats_deleted": 数量, "users_deleted": 数量}
+        """
+        result = {"logs_deleted": 0, "stats_deleted": 0, "users_deleted": 0}
+
+        try:
+            async with self.pool.acquire() as conn:
+                async with conn.cursor() as cursor:
+                    # 清理旧的检测日志
+                    logs_cutoff = datetime.now() - timedelta(days=logs_days)
+                    await cursor.execute(
+                        """DELETE FROM anti_spam_logs
+                           WHERE created_at < %s""",
+                        (logs_cutoff,)
+                    )
+                    result["logs_deleted"] = cursor.rowcount
+
+                    # 清理旧的统计数据
+                    stats_cutoff = datetime.now().date() - timedelta(days=stats_days)
+                    await cursor.execute(
+                        """DELETE FROM anti_spam_stats
+                           WHERE date < %s""",
+                        (stats_cutoff,)
+                    )
+                    result["stats_deleted"] = cursor.rowcount
+
+                    # 清理长时间未活动的已验证用户记录
+                    users_cutoff = datetime.now() - timedelta(days=inactive_users_days)
+                    await cursor.execute(
+                        """DELETE FROM anti_spam_user_info
+                           WHERE is_verified = TRUE
+                           AND (last_message_time < %s OR last_message_time IS NULL)""",
+                        (users_cutoff,)
+                    )
+                    result["users_deleted"] = cursor.rowcount
+
+                    await conn.commit()
+
+                    logger.info(f"Anti-spam data cleanup completed: {result}")
+                    return result
+
+        except Exception as e:
+            logger.error(f"Failed to cleanup anti-spam data: {e}")
+            return result

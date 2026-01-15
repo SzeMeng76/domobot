@@ -177,6 +177,10 @@ class RedisTaskScheduler:
                 # 计算下次执行时间（7天后）
                 next_run = time.time() + (7 * 24 * 60 * 60)
                 await self.schedule_task(task_id, task_type, next_run, data)
+            elif task_type == "antispam_cleanup":
+                # AI反垃圾清理任务每周执行一次
+                next_run = time.time() + (7 * 24 * 60 * 60)
+                await self.schedule_task(task_id, task_type, next_run, data)
             elif task_type == "rate_refresh":
                 # 汇率刷新任务每30分钟执行一次
                 next_run = time.time() + (30 * 60)

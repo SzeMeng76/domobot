@@ -406,6 +406,53 @@ async def setup_application(application: Application, config) -> None:
         logger.info(" 已配置 酒店服务缓存 每周日UTC 5:00 定时清理")
         cleanup_tasks_added += 1
 
+    # 注册 AI 反垃圾数据库清理任务
+    anti_spam_handler = application.bot_data.get("anti_spam_handler")
+    if anti_spam_handler and config.anti_spam_enabled:
+        # 注册 anti_spam 清理处理器
+        async def handle_antispam_cleanup(task_id: str, data: dict):
+            """处理 AI 反垃圾数据清理"""
+            try:
+                anti_spam_manager = anti_spam_handler.manager
+                logs_days = data.get("logs_days", 30)
+                stats_days = data.get("stats_days", 90)
+                inactive_users_days = data.get("inactive_users_days", 60)
+
+                result = await anti_spam_manager.cleanup_old_data(
+                    logs_days=logs_days,
+                    stats_days=stats_days,
+                    inactive_users_days=inactive_users_days
+                )
+                logger.info(f"🗑️ AI反垃圾数据清理完成: {result}")
+            except Exception as e:
+                logger.error(f"AI反垃圾数据清理失败: {e}")
+
+        # 注册处理器
+        task_scheduler.register_handler("antispam_cleanup", handle_antispam_cleanup)
+
+        # 添加每周清理任务（周日 UTC 6:00）
+        import datetime
+        now = datetime.datetime.utcnow()
+        weekday = 6  # 周日
+        hour = 6
+        minute = 0
+
+        days_ahead = weekday - now.weekday()
+        if days_ahead <= 0:
+            days_ahead += 7
+
+        next_run = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        next_run = next_run + datetime.timedelta(days=days_ahead)
+
+        await task_scheduler.schedule_task(
+            task_id="antispam_weekly_cleanup",
+            task_type="antispam_cleanup",
+            execute_at=next_run.timestamp(),
+            data={"logs_days": 30, "stats_days": 90, "inactive_users_days": 60, "weekday": weekday, "hour": hour, "minute": minute}
+        )
+        logger.info(f"🗑️ 已配置 AI反垃圾数据 每周日UTC 6:00 定时清理（保留：日志30天，统计90天，用户60天）")
+        cleanup_tasks_added += 1
+
     # 启动任务调度器（包含汇率刷新任务）
     task_scheduler.start()
     if cleanup_tasks_added > 0:
