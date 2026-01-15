@@ -164,44 +164,68 @@ class AntiSpamHandler:
                 logger.info(f"User {user_id} passed verification")
                 return
 
-            # 是垃圾，执行封禁
+            # 是垃圾，执行处理
             spam_score = detection_result.spam_score
             threshold = config.get('spam_score_threshold', 80)
 
             if spam_score >= threshold:
                 # 删除原始消息
+                message_deleted = False
                 try:
                     await message.delete()
+                    message_deleted = True
+                    logger.info(f"Deleted spam message from user {user_id} in group {group_id}")
                 except Exception as e:
                     logger.error(f"Failed to delete message: {e}")
 
-                # 封禁用户
+                # 尝试封禁用户
+                user_banned = False
+                ban_error_msg = None
                 try:
                     await context.bot.ban_chat_member(group_id, user_id)
+                    user_banned = True
                     logger.info(f"Banned user {user_id} in group {group_id}")
                 except Exception as e:
-                    logger.error(f"Failed to ban user: {e}")
-                    return
+                    ban_error_msg = str(e)
+                    logger.warning(f"Failed to ban user {user_id}: {e} (bot may lack ban permission)")
 
                 # 发送通知消息
-                notification_text = (
-                    f"🚫 检测到垃圾广告并已封禁\n\n"
-                    f"👤 用户: {username}\n"
-                    f"📊 垃圾分数: {spam_score}/100\n"
-                    f"📝 原因: {detection_result.spam_reason}\n"
-                    f"💬 评论: {detection_result.spam_mock_text}\n"
-                    f"⏱️ 检测耗时: {detection_time_ms}ms"
-                )
-
-                # 创建解禁按钮
-                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-                keyboard = [[
-                    InlineKeyboardButton(
-                        "✅ 解禁此用户",
-                        callback_data=f"antispam_unban:{user_id}"
+                if user_banned:
+                    notification_text = (
+                        f"🚫 检测到垃圾广告并已封禁\n\n"
+                        f"👤 用户: {username}\n"
+                        f"📊 垃圾分数: {spam_score}/100\n"
+                        f"📝 原因: {detection_result.spam_reason}\n"
+                        f"💬 评论: {detection_result.spam_mock_text}\n"
+                        f"⏱️ 检测耗时: {detection_time_ms}ms"
                     )
-                ]]
-                reply_markup = InlineKeyboardMarkup(keyboard)
+                elif message_deleted:
+                    notification_text = (
+                        f"⚠️ 检测到垃圾广告，已删除消息\n\n"
+                        f"👤 用户: {username}\n"
+                        f"📊 垃圾分数: {spam_score}/100\n"
+                        f"📝 原因: {detection_result.spam_reason}\n"
+                        f"💬 评论: {detection_result.spam_mock_text}\n"
+                        f"⏱️ 检测耗时: {detection_time_ms}ms\n\n"
+                        f"❌ 无法封禁用户（可能缺少封禁权限）\n"
+                        f"💡 请给予机器人封禁权限以完整保护群组"
+                    )
+                else:
+                    # 既无法删除消息也无法封禁，只记录日志不发通知
+                    logger.error(f"Failed to take any action against spam from user {user_id}")
+                    return
+
+                # 创建按钮（只在成功封禁时显示解禁按钮）
+                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                reply_markup = None
+                if user_banned:
+                    keyboard = [[
+                        InlineKeyboardButton(
+                            "✅ 解禁此用户",
+                            callback_data=f"antispam_unban:{user_id}"
+                        )
+                    ]]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
 
                 # 发送通知
                 notification = await context.bot.send_message(
