@@ -559,13 +559,15 @@ async def get_app_prices(
             if price_value is None:
                 price_value = 0
 
-            # 使用主应用的货币代码（来自 JSON-LD）进行转换
+            # 使用检测到的货币代码（而非主应用货币）进行转换
             cny_price = None
             if price_value > 0 and country_code != "CN":
                 if rate_converter and rate_converter.rates:
-                    if currency.upper() in rate_converter.rates:
+                    # 使用 detected_currency 而不是主应用的 currency
+                    actual_currency = detected_currency if detected_currency else currency
+                    if actual_currency.upper() in rate_converter.rates:
                         cny_price = await rate_converter.convert(
-                            price_value, currency.upper(), "CNY"
+                            price_value, actual_currency.upper(), "CNY"
                         )
 
             in_app_purchases.append(
