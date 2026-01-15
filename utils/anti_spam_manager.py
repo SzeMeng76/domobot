@@ -276,6 +276,96 @@ class AntiSpamManager:
                 )
                 return await cursor.fetchall()
 
+    async def get_recent_logs(self, group_id: int, limit: int = 20,
+                             spam_only: bool = False) -> List[Dict]:
+        """
+        获取最近的检测日志
+
+        Args:
+            group_id: 群组ID
+            limit: 返回记录数量
+            spam_only: 是否只返回垃圾消息
+
+        Returns:
+            检测日志列表
+        """
+        async with self.pool.acquire() as conn:
+            async with conn.cursor(aiomysql.DictCursor) as cursor:
+                if spam_only:
+                    await cursor.execute(
+                        """SELECT * FROM anti_spam_logs
+                           WHERE group_id = %s AND is_spam = TRUE
+                           ORDER BY created_at DESC
+                           LIMIT %s""",
+                        (group_id, limit)
+                    )
+                else:
+                    await cursor.execute(
+                        """SELECT * FROM anti_spam_logs
+                           WHERE group_id = %s
+                           ORDER BY created_at DESC
+                           LIMIT %s""",
+                        (group_id, limit)
+                    )
+                return await cursor.fetchall()
+
+    async def get_global_stats(self, days: int = 7) -> Dict:
+        """
+        获取全局统计（所有群组汇总）
+
+        Args:
+            days: 统计天数
+
+        Returns:
+            全局统计数据
+        """
+        async with self.pool.acquire() as conn:
+            async with conn.cursor(aiomysql.DictCursor) as cursor:
+                start_date = datetime.now().date() - timedelta(days=days)
+                await cursor.execute(
+                    """SELECT
+                           COUNT(DISTINCT group_id) as total_groups,
+                           SUM(total_checks) as total_checks,
+                           SUM(spam_detected) as total_spam,
+                           SUM(users_banned) as total_banned,
+                           SUM(false_positives) as total_fp
+                       FROM anti_spam_stats
+                       WHERE date >= %s""",
+                    (start_date,)
+                )
+                result = await cursor.fetchone()
+                return result if result else {}
+
+    async def get_global_recent_logs(self, limit: int = 20, spam_only: bool = True) -> List[Dict]:
+        """
+        获取全局最近日志（所有群组）
+
+        Args:
+            limit: 返回记录数量
+            spam_only: 是否只返回垃圾消息
+
+        Returns:
+            检测日志列表
+        """
+        async with self.pool.acquire() as conn:
+            async with conn.cursor(aiomysql.DictCursor) as cursor:
+                if spam_only:
+                    await cursor.execute(
+                        """SELECT * FROM anti_spam_logs
+                           WHERE is_spam = TRUE
+                           ORDER BY created_at DESC
+                           LIMIT %s""",
+                        (limit,)
+                    )
+                else:
+                    await cursor.execute(
+                        """SELECT * FROM anti_spam_logs
+                           ORDER BY created_at DESC
+                           LIMIT %s""",
+                        (limit,)
+                    )
+                return await cursor.fetchall()
+
     # ==================== 数据清理 ====================
 
     async def cleanup_old_data(self, logs_days: int = 30, stats_days: int = 90,

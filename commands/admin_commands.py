@@ -490,6 +490,8 @@ class AdminPanelHandler:
 
             keyboard = [
                 [InlineKeyboardButton("🔍 输入群组ID", callback_data="antispam_input_group")],
+                [InlineKeyboardButton("📊 全局统计", callback_data="antispam_global_stats")],
+                [InlineKeyboardButton("📝 最近日志", callback_data="antispam_global_logs")],
                 [InlineKeyboardButton("🔙 返回", callback_data="back_to_main")]
             ]
 
@@ -901,6 +903,272 @@ class AdminPanelHandler:
         await self._show_panel(query, text, InlineKeyboardMarkup([[InlineKeyboardButton("🔙 返回", callback_data="manage_antispam")]]))
         return ANTISPAM_PANEL
 
+    async def _handle_antispam_global_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """显示全局统计（所有群组）"""
+        query = update.callback_query
+        anti_spam_handler = context.bot_data.get("anti_spam_handler")
+        if not anti_spam_handler:
+            return await self.show_antispam_panel(query, context, "❌ 功能未启用")
+
+        manager = anti_spam_handler.manager
+
+        # 获取最近7天和30天的统计
+        stats_7d = await manager.get_global_stats(days=7)
+        stats_30d = await manager.get_global_stats(days=30)
+
+        # 构建显示文本
+        text = "📊 *AI反垃圾 - 全局统计*\n\n"
+
+        # 最近7天统计
+        text += "📅 *最近7天:*\n"
+        if stats_7d and stats_7d.get('total_checks'):
+            total_groups = stats_7d.get('total_groups', 0) or 0
+            total_checks = stats_7d.get('total_checks', 0) or 0
+            total_spam = stats_7d.get('total_spam', 0) or 0
+            total_banned = stats_7d.get('total_banned', 0) or 0
+            total_fp = stats_7d.get('total_fp', 0) or 0
+
+            text += f"• 启用群组: {total_groups}个\n"
+            text += f"• 总检测: {total_checks}次\n"
+            text += f"• 垃圾消息: {total_spam}条\n"
+            text += f"• 封禁用户: {total_banned}人\n"
+            text += f"• 误报: {total_fp}次\n"
+
+            if total_spam > 0:
+                accuracy = ((total_spam - total_fp) / total_spam * 100)
+                text += f"• 准确率: {accuracy:.1f}%\n"
+        else:
+            text += "暂无数据\n"
+
+        # 最近30天统计
+        text += "\n📅 *最近30天:*\n"
+        if stats_30d and stats_30d.get('total_checks'):
+            total_groups = stats_30d.get('total_groups', 0) or 0
+            total_checks = stats_30d.get('total_checks', 0) or 0
+            total_spam = stats_30d.get('total_spam', 0) or 0
+            total_banned = stats_30d.get('total_banned', 0) or 0
+            total_fp = stats_30d.get('total_fp', 0) or 0
+
+            text += f"• 启用群组: {total_groups}个\n"
+            text += f"• 总检测: {total_checks}次\n"
+            text += f"• 垃圾消息: {total_spam}条\n"
+            text += f"• 封禁用户: {total_banned}人\n"
+            text += f"• 误报: {total_fp}次\n"
+
+            if total_spam > 0:
+                accuracy = ((total_spam - total_fp) / total_spam * 100)
+                text += f"• 准确率: {accuracy:.1f}%\n"
+        else:
+            text += "暂无数据\n"
+
+        await self._show_panel(
+            query,
+            text,
+            InlineKeyboardMarkup([[InlineKeyboardButton("🔙 返回", callback_data="manage_antispam")]])
+        )
+        return ANTISPAM_PANEL
+
+    async def _handle_antispam_global_logs(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """显示全局最近日志（所有群组）"""
+        query = update.callback_query
+        anti_spam_handler = context.bot_data.get("anti_spam_handler")
+        if not anti_spam_handler:
+            return await self.show_antispam_panel(query, context, "❌ 功能未启用")
+
+        manager = anti_spam_handler.manager
+
+        # 获取最近的垃圾消息日志（只显示检测为垃圾的）
+        logs = await manager.get_global_recent_logs(limit=50, spam_only=True)
+
+        # 构建显示文本
+        if not logs:
+            text = "📝 *AI反垃圾 - 最近日志*\n\n暂无日志记录\n"
+            await self._show_panel(
+                query,
+                text,
+                InlineKeyboardMarkup([[InlineKeyboardButton("🔙 返回", callback_data="manage_antispam")]])
+            )
+            return ANTISPAM_PANEL
+
+        # 判断是否需要使用 Telegraph（日志数量超过15条）
+        if len(logs) > 15:
+            # 创建 Telegraph 页面
+            telegraph_content = self._format_logs_for_telegraph(logs)
+            telegraph_url = await self._create_telegraph_page(
+                "AI反垃圾 - 最近检测日志",
+                telegraph_content
+            )
+
+            if telegraph_url:
+                # 显示前10条 + Telegraph 链接
+                text = "📝 *AI反垃圾 - 最近日志*\n\n"
+                text += f"共检测到 {len(logs)} 条垃圾消息，以下显示最近10条:\n\n"
+
+                for log in logs[:10]:
+                    created_at = log.get('created_at')
+                    time_str = created_at.strftime("%m-%d %H:%M") if created_at else "未知时间"
+                    group_id = log.get('group_id', 'N/A')
+                    username = log.get('username', '未知用户')
+                    spam_score = log.get('spam_score', 0)
+                    is_banned = log.get('is_banned', False)
+                    message_text = log.get('message_text', '')
+
+                    if len(message_text) > 50:
+                        message_text = message_text[:47] + "..."
+
+                    ban_icon = "🚫" if is_banned else "⚠️"
+                    text += f"{ban_icon} `{group_id}` | {time_str}\n"
+                    text += f"   用户: {username}\n"
+                    text += f"   分数: {spam_score} | {message_text}\n\n"
+
+                text += f"\n📄 查看完整日志: {telegraph_url}"
+            else:
+                # Telegraph 创建失败，只显示前15条
+                text = "📝 *AI反垃圾 - 最近日志*\n\n"
+                text += f"显示最近 15 条垃圾消息检测记录:\n\n"
+
+                for log in logs[:15]:
+                    created_at = log.get('created_at')
+                    time_str = created_at.strftime("%m-%d %H:%M") if created_at else "未知时间"
+                    group_id = log.get('group_id', 'N/A')
+                    username = log.get('username', '未知用户')
+                    spam_score = log.get('spam_score', 0)
+                    is_banned = log.get('is_banned', False)
+                    message_text = log.get('message_text', '')
+
+                    if len(message_text) > 50:
+                        message_text = message_text[:47] + "..."
+
+                    ban_icon = "🚫" if is_banned else "⚠️"
+                    text += f"{ban_icon} `{group_id}` | {time_str}\n"
+                    text += f"   用户: {username}\n"
+                    text += f"   分数: {spam_score} | {message_text}\n\n"
+        else:
+            # 日志数量不多，直接显示
+            text = "📝 *AI反垃圾 - 最近日志*\n\n"
+            text += f"显示最近 {len(logs)} 条垃圾消息检测记录:\n\n"
+
+            for log in logs:
+                created_at = log.get('created_at')
+                time_str = created_at.strftime("%m-%d %H:%M") if created_at else "未知时间"
+                group_id = log.get('group_id', 'N/A')
+                username = log.get('username', '未知用户')
+                spam_score = log.get('spam_score', 0)
+                is_banned = log.get('is_banned', False)
+                message_text = log.get('message_text', '')
+
+                if len(message_text) > 50:
+                    message_text = message_text[:47] + "..."
+
+                ban_icon = "🚫" if is_banned else "⚠️"
+                text += f"{ban_icon} `{group_id}` | {time_str}\n"
+                text += f"   用户: {username}\n"
+                text += f"   分数: {spam_score} | {message_text}\n\n"
+
+        await self._show_panel(
+            query,
+            text,
+            InlineKeyboardMarkup([[InlineKeyboardButton("🔙 返回", callback_data="manage_antispam")]])
+        )
+        return ANTISPAM_PANEL
+
+    def _format_logs_for_telegraph(self, logs: list) -> str:
+        """将日志格式化为 Telegraph 友好的格式"""
+        content = "<h3>AI反垃圾检测日志</h3>"
+        content += f"<p>共 {len(logs)} 条垃圾消息检测记录</p>"
+
+        for i, log in enumerate(logs, 1):
+            created_at = log.get('created_at')
+            time_str = created_at.strftime("%Y-%m-%d %H:%M:%S") if created_at else "未知时间"
+            group_id = log.get('group_id', 'N/A')
+            username = log.get('username', '未知用户')
+            spam_score = log.get('spam_score', 0)
+            spam_reason = log.get('spam_reason', '无')
+            is_banned = log.get('is_banned', False)
+            message_text = log.get('message_text', '')
+            message_type = log.get('message_type', 'text')
+
+            # HTML转义
+            import html
+            username = html.escape(str(username))
+            message_text = html.escape(str(message_text))
+            spam_reason = html.escape(str(spam_reason))
+
+            ban_status = "🚫 已封禁" if is_banned else "⚠️ 仅检测"
+
+            content += f"""
+<h4>{i}. {ban_status} - {time_str}</h4>
+<p>
+<strong>群组ID:</strong> {group_id}<br>
+<strong>用户:</strong> {username}<br>
+<strong>垃圾分数:</strong> {spam_score}<br>
+<strong>消息类型:</strong> {message_type}<br>
+<strong>检测原因:</strong> {spam_reason}<br>
+<strong>消息内容:</strong> {message_text}
+</p>
+<hr>
+"""
+
+        return content
+
+    async def _create_telegraph_page(self, title: str, content: str) -> str:
+        """创建 Telegraph 页面"""
+        import httpx
+
+        try:
+            # 创建 Telegraph 账户
+            account_data = {
+                "short_name": "AntiSpamBot",
+                "author_name": "MengBot AntiSpam",
+                "author_url": "https://t.me/mengpricebot"
+            }
+
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                # 创建账户
+                account_response = await client.post(
+                    "https://api.telegra.ph/createAccount",
+                    json=account_data
+                )
+
+                if account_response.status_code != 200:
+                    logger.error(f"创建Telegraph账户失败: {account_response.status_code}")
+                    return None
+
+                account_info = account_response.json()
+                if not account_info.get("ok"):
+                    logger.error(f"创建Telegraph账户失败: {account_info}")
+                    return None
+
+                access_token = account_info["result"]["access_token"]
+
+                # 创建页面
+                page_data = {
+                    "access_token": access_token,
+                    "title": title,
+                    "content": content,
+                    "return_content": False
+                }
+
+                page_response = await client.post(
+                    "https://api.telegra.ph/createPage",
+                    json=page_data
+                )
+
+                if page_response.status_code != 200:
+                    logger.error(f"创建Telegraph页面失败: {page_response.status_code}")
+                    return None
+
+                page_info = page_response.json()
+                if not page_info.get("ok"):
+                    logger.error(f"创建Telegraph页面失败: {page_info}")
+                    return None
+
+                return page_info["result"]["url"]
+
+        except Exception as e:
+            logger.error(f"创建Telegraph页面失败: {e}")
+            return None
+
     async def handle_antispam_group_id(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """处理输入的群组ID"""
         user_message = update.message
@@ -963,6 +1231,8 @@ class AdminPanelHandler:
                     CallbackQueryHandler(self._handle_antispam_disable, pattern="^antispam_disable$"),
                     CallbackQueryHandler(self._handle_antispam_config, pattern="^antispam_config$"),
                     CallbackQueryHandler(self._handle_antispam_stats, pattern="^antispam_stats$"),
+                    CallbackQueryHandler(self._handle_antispam_global_stats, pattern="^antispam_global_stats$"),
+                    CallbackQueryHandler(self._handle_antispam_global_logs, pattern="^antispam_global_logs$"),
                     CallbackQueryHandler(self._to_antispam_panel, pattern="^manage_antispam$"),
                     CallbackQueryHandler(self.show_main_panel, pattern="^back_to_main$"),
                 ],

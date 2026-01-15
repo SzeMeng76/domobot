@@ -60,6 +60,7 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 -   📱 **App Stores:** Application and in-app purchase price lookup for the App Store (detailed IAP items with pricing) and Google Play (IAP price ranges). *(Whitelist required)*
 -   🔐 **Admin System:** A comprehensive admin permission system with user/group whitelisting.
 -   📊 **User Caching & Stats:** Caching user data and command usage statistics.
+-   🛡️ **AI Anti-Spam:** Intelligent spam detection system powered by OpenAI GPT-4o-mini with **group-level configuration**, automatic user verification based on join time and activity, customizable spam score thresholds, comprehensive logging and statistics, **global statistics dashboard**, **Telegraph-integrated log viewing**, and automatic data cleanup. Features smart detection for new users while respecting verified members, detailed spam analysis with reasoning and mock text, ban/mute actions, and complete admin panel integration with per-group and cross-group analytics.
 
 ### 🚀 Getting Started
 
@@ -118,6 +119,7 @@ All configurations are managed via the `.env` file. You must copy `.env.example`
 | `USER_COMMAND_DELETE_DELAY` | Delay in seconds before deleting a user's command. Use `0` for immediate deletion. | `5`                     |
 | `LOG_LEVEL`                 | Set the logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`).                | `INFO`                  |
 | `LOAD_CUSTOM_SCRIPTS`       | Set to `true` to enable loading scripts from the `custom_scripts/` directory. | `false`                 |
+| `OPENAI_API_KEY`            | **(Optional)** API Key from OpenAI for AI anti-spam detection feature. Feature is enabled by default if key is provided. After setting the key, enable anti-spam for specific groups via `/admin` panel. |                         |
 
 The configuration is managed by the `BotConfig` class in `utils/config_manager.py`, which supports setting cache durations, auto-deletion toggles, feature flags, and performance parameters.
 
@@ -263,6 +265,14 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /addgroup                 # Add current group to whitelist
 /admin                    # Open admin panel (interactive)
 
+# AI Anti-Spam Management (via /admin panel)
+# - Enable/disable anti-spam for specific groups
+# - View per-group statistics (checks, spam detected, bans, false positives)
+# - View global statistics across all groups (7-day and 30-day summaries)
+# - View recent detection logs with Telegraph integration for long lists
+# - Configure spam score thresholds and detection parameters
+# - Automatic weekly data cleanup (logs: 30 days, stats: 90 days, inactive users: 60 days)
+
 # Data Points Management
 /listpoints [limit]       # List known data points (default 10, with statistics)
 /addpoint <user_id> <date> [note] # Add new data point (format: YYYY-MM-DD)
@@ -339,6 +349,10 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 - `group_whitelist`: Whitelisted groups
 - `admin_logs`: Administrator action logs
 - `command_stats`: Command usage statistics
+- `anti_spam_config`: AI anti-spam group configuration
+- `anti_spam_user_info`: User verification and activity tracking
+- `anti_spam_logs`: Spam detection history and details
+- `anti_spam_stats`: Daily statistics aggregation
 
 The schema is defined in `database/init.sql` and is created automatically by the application on first run.
 
@@ -602,7 +616,8 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 
 ### 📚 API Dependencies
 
-- **CoinMarketCap API:** For cryptocurrency price data  
+- **OpenAI API:** For AI-powered spam detection with GPT-4o-mini model
+- **CoinMarketCap API:** For cryptocurrency price data
 - **CoinGecko API:** For cryptocurrency rankings, trending coins, and market data (free tier, no API key required)
 - **DY.AX BIN API:** For credit card BIN information lookup
 - **TMDB API:** For movie and TV show information with Telegraph integration

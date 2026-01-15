@@ -79,10 +79,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     admin_help_text = """
 
 🔧 *管理员*
-权限: `/admin` `/add <ID>` `/addgroup`
+权限: `/admin` - 统一管理面板(用户/群组/反垃圾)
 缓存: `/cleancache` - 统一缓存管理菜单 | `/cleancache all` - 清理全部
 用户: `/cache` `/cleanid [天数]`
-数据: `/addpoint` `/removepoint` `/listpoints`"""
+数据: `/addpoint` `/removepoint` `/listpoints`
+反垃圾: 通过 `/admin` 管理(启用/禁用/统计/日志/配置)"""
 
     super_admin_help_text = """
 
