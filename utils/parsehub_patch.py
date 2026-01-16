@@ -88,6 +88,7 @@ def patch_parsehub_yt_dlp():
                 logger.info(f"🌐 [Patch] Added Facebook headers (Referer/Origin)")
 
             params["http_headers"] = headers
+            logger.info(f"🔍 [Patch] http_headers passed to yt-dlp: {headers}")
 
             # Add cookies if configured (FIX: YtParser doesn't handle cookies)
             temp_cookie_file = None
