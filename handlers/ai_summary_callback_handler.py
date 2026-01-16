@@ -145,10 +145,13 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                     disable_web_page_preview=True
                 )
 
-            await query.answer("✅ 已显示AI总结", show_alert=False)
+            # 不需要第二次answer，已在第49行answer过
+            # await query.answer("✅ 已显示AI总结", show_alert=False)
 
         elif action == "unsummary":
             # 隐藏AI总结，恢复原始caption
+            await query.answer("隐藏中...")  # 立即answer避免超时
+
             if message_id in _message_cache and _message_cache[message_id].get("original"):
                 original_caption = _message_cache[message_id]["original"]
 
@@ -172,9 +175,9 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                         disable_web_page_preview=True
                     )
 
-                await query.answer("AI总结已隐藏", show_alert=False)
-            else:
-                await query.answer("无法恢复原始内容", show_alert=True)
+                # 不需要第二次answer，已在上面answer过
+                # await query.answer("AI总结已隐藏", show_alert=False)
+            # else分支已被删除：无法恢复时在上面已经answer过了，不需要额外处理
 
     except Exception as e:
         logger.error(f"AI总结callback处理失败: {e}", exc_info=True)
