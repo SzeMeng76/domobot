@@ -168,7 +168,7 @@ class ParseHubAdapter:
                 logger.warning(f"媒体下载失败但解析成功: {download_error}")
                 # 创建一个空的DownloadResult（只包含解析信息，没有实际文件）
                 from parsehub.types import DownloadResult
-                download_result = DownloadResult(pr=result, media=None)
+                download_result = DownloadResult(parse_result=result, media=None)
 
             parse_time = time.time() - start_time
 
