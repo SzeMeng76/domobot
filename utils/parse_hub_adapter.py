@@ -10,7 +10,7 @@ import logging
 import tempfile
 import time
 from pathlib import Path
-from typing import Optional, List, Tuple, Dict, Any
+from typing import Optional, List, Tuple, Dict
 
 from parsehub import ParseHub
 from parsehub.config import DownloadConfig, ParseConfig, GlobalConfig
@@ -83,7 +83,7 @@ class ParseHubAdapter:
         user_id: int,
         group_id: Optional[int] = None,
         proxy: Optional[str] = None
-    ) -> Tuple[Optional[Any], Optional[str], float]:
+    ) -> Tuple[Optional, Optional[str], float]:
         """
         解析URL并下载媒体
 
