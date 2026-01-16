@@ -18,10 +18,8 @@ RUN pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements.txt
 FROM python:3.12-slim
 
 # 安装系统依赖（ParseHub 需要的图形库和 FFmpeg）
-# 参考: ParseHub README.md - Ubuntu 24 依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
-    libglx-mesa0 \
     libegl1 \
     libglib2.0-0 \
     libsm6 \
