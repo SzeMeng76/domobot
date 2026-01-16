@@ -5,7 +5,7 @@ AI总结按钮callback handler
 """
 
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, LinkPreviewOptions
 from telegram.ext import ContextTypes, CallbackQueryHandler
 
 logger = logging.getLogger(__name__)
