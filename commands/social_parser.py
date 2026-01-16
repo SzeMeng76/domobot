@@ -3,6 +3,7 @@
 支持20+平台的视频、图片、图文解析
 """
 
+import hashlib
 import logging
 import time
 from pathlib import Path
@@ -16,6 +17,13 @@ from utils.message_manager import send_error, send_info, delete_user_command
 from utils.permissions import Permission
 
 logger = logging.getLogger(__name__)
+
+
+def get_url_hash(url: str) -> str:
+    """生成URL的MD5哈希值（用于callback_data）"""
+    md5 = hashlib.md5()
+    md5.update(url.encode("utf-8"))
+    return md5.hexdigest()
 
 # 全局适配器实例
 _adapter = None
@@ -107,30 +115,40 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         # 更新状态
         await status_msg.edit_text("📤 上传中...")
 
-        # 生成唯一的解析ID用于callback
-        parse_id = _adapter._get_cache_key(formatted['url'])
+        # 生成URL的MD5哈希（用于callback_data和缓存key）
+        url_hash = get_url_hash(formatted['url'])
+        logger.info(f"🔑 URL哈希: {url_hash}")
 
         # 创建inline keyboard按钮
         from telegram import InlineKeyboardButton, InlineKeyboardMarkup
         buttons = [[InlineKeyboardButton("🔗 原链接", url=formatted['url'])]]
 
         # 如果启用了AI总结，添加AI总结按钮
-        # 详细调试日志
-        logger.info(f"🔍 _adapter.config 类型: {type(_adapter.config)}")
-        logger.info(f"🔍 _adapter.config 是否为None: {_adapter.config is None}")
-        if _adapter.config:
-            logger.info(f"🔍 enable_ai_summary 值: {_adapter.config.enable_ai_summary}")
-            logger.info(f"🔍 enable_ai_summary 类型: {type(_adapter.config.enable_ai_summary)}")
-            logger.info(f"🔍 条件判断: _adapter.config={bool(_adapter.config)}, enable_ai_summary={bool(_adapter.config.enable_ai_summary)}")
-
         if _adapter.config and _adapter.config.enable_ai_summary:
-            buttons[0].append(InlineKeyboardButton("📝 AI总结", callback_data=f"ai_summary:{parse_id}"))
-            logger.info(f"✅ AI总结按钮已添加")
+            # 使用URL哈希作为callback_data（类似parse_hub_bot）
+            buttons[0].append(InlineKeyboardButton("📝 AI总结", callback_data=f"summary_{url_hash}"))
+            logger.info(f"✅ AI总结按钮已添加: summary_{url_hash}")
         else:
             logger.info(f"⚠️ 未添加AI总结按钮")
 
         reply_markup = InlineKeyboardMarkup(buttons)
-        logger.info(f"📝 创建按钮: {len(buttons[0])}个按钮")
+
+        # 缓存解析数据到Redis（用于AI总结回调）
+        if _adapter.config and _adapter.config.enable_ai_summary and _adapter.cache_manager:
+            cache_data = {
+                'url': formatted['url'],
+                'caption': caption,
+                'title': formatted.get('title', ''),
+                'desc': formatted.get('desc', ''),
+                'platform': platform
+            }
+            await _adapter.cache_manager.set(
+                f"summary:{url_hash}",
+                cache_data,
+                ttl=86400,  # 缓存24小时
+                subdirectory="social_parser"
+            )
+            logger.info(f"✅ 已缓存解析数据: cache:social_parser:summary:{url_hash}")
 
         # 发送媒体（带按钮）
         await _send_media(context, chat_id, result, caption, reply_to_message_id=update.message.message_id if update.message else None, reply_markup=reply_markup)

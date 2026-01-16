@@ -33,79 +33,91 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         if not query.data:
             return
 
-        # "ai_summary:parse_id" - 显示AI总结
-        # "hide_summary:parse_id" - 隐藏AI总结
-        action, parse_id = query.data.split(":", 1)
+        # callback_data格式: summary_<url_hash> 或 unsummary_<url_hash>
+        # 类似parse_hub_bot的实现
+        if not ("summary_" in query.data or "unsummary_" in query.data):
+            logger.warning(f"未知的callback_data格式: {query.data}")
+            return
+
+        action, url_hash = query.data.split("_", 1)
 
         message_id = query.message.message_id
         current_caption = query.message.caption or query.message.text
 
-        if action == "ai_summary":
+        if action == "summary":
             # 显示AI总结
             await query.answer("📝 生成中...")
 
-            # 检查缓存
-            if message_id in _message_cache and _message_cache[message_id].get("summary"):
-                # 使用缓存的AI总结
-                ai_summary = _message_cache[message_id]["summary"]
+            # URL哈希已从callback_data提取
+            logger.info(f"🔑 URL哈希: {url_hash}")
+
+            # 从Redis缓存读取解析数据
+            cache_data = await _adapter.cache_manager.get(
+                f"summary:{url_hash}",
+                subdirectory="social_parser"
+            )
+            if not cache_data:
+                logger.error(f"❌ 缓存已失效: cache:social_parser:summary:{url_hash}")
+                await query.answer("❌ 缓存已失效，请重新发送链接", show_alert=True)
+                return
+
+            logger.info(f"✅ 从缓存读取数据: {cache_data.get('title', 'N/A')}")
+
+            # 检查是否已有AI总结缓存
+            ai_summary_cache = await _adapter.cache_manager.get(
+                f"ai_summary:{url_hash}",
+                subdirectory="social_parser"
+            )
+
+            if ai_summary_cache:
+                # 从缓存中提取AI总结文本
+                ai_summary = ai_summary_cache.get('summary', '')
+                logger.info(f"✅ 使用缓存的AI总结")
             else:
-                # 提取原始URL - 从按钮中获取（更可靠）
-                original_url = None
-                logger.info(f"🔍 开始提取URL from reply_markup")
-                if query.message.reply_markup and query.message.reply_markup.inline_keyboard:
-                    logger.info(f"🔍 找到 {len(query.message.reply_markup.inline_keyboard)} 行按钮")
-                    for row_idx, row in enumerate(query.message.reply_markup.inline_keyboard):
-                        logger.info(f"🔍 第{row_idx}行有 {len(row)} 个按钮")
-                        for btn_idx, btn in enumerate(row):
-                            logger.info(f"🔍 按钮[{row_idx},{btn_idx}]: text={btn.text}, url={getattr(btn, 'url', None)}")
-                            if hasattr(btn, 'url') and btn.url and "原链接" in btn.text:
-                                original_url = btn.url
-                                logger.info(f"✅ 从按钮中提取到URL: {original_url}")
-                                break
-                        if original_url:
-                            break
+                # 没有缓存，生成新的AI总结
+                # 构造临时的ParseResult对象用于生成总结
+                from parsehub.types import ParseResult
 
-                # 如果按钮中没找到，尝试从caption中提取
-                if not original_url:
-                    logger.info(f"⚠️ 按钮中未找到URL，尝试从caption提取")
-                    import re
-                    url_match = re.search(r'🔗 \[原链接\]\((https?://[^\)]+)\)', current_caption or '')
-                    if url_match:
-                        original_url = url_match.group(1)
-                        logger.info(f"✅ 从caption提取到URL: {original_url}")
+                # 创建一个简化的ParseResult对象
+                class TempParseResult:
+                    def __init__(self, data):
+                        self.raw_url = data.get('url', '')
+                        self.title = data.get('title', '')
+                        self.desc = data.get('desc', '')
 
-                if not original_url:
-                    logger.error(f"❌ 无法提取URL: caption={current_caption}")
-                    await query.answer("❌ 无法找到原链接", show_alert=True)
-                    return
-
-                # 缓存原始caption
-                if message_id not in _message_cache:
-                    _message_cache[message_id] = {"original": current_caption, "url": original_url}
-
-                # 重新解析URL
-                user_id = query.from_user.id
-                result, platform, _ = await _adapter.parse_url(original_url, user_id)
-
-                if not result or not result.pr:
-                    await query.answer("❌ 解析失败", show_alert=True)
-                    return
+                temp_result = TempParseResult(cache_data)
 
                 # 生成AI总结
-                ai_summary = await _adapter.generate_ai_summary(result.pr)
+                ai_summary = await _adapter.generate_ai_summary(temp_result)
 
                 if not ai_summary:
                     await query.answer("❌ AI总结生成失败", show_alert=True)
                     return
 
-                # 缓存AI总结
-                _message_cache[message_id]["summary"] = ai_summary
+                # 缓存AI总结（24小时）- 注意：需要包装成dict
+                await _adapter.cache_manager.set(
+                    f"ai_summary:{url_hash}",
+                    {'summary': ai_summary},  # 包装成dict
+                    ttl=86400,
+                    subdirectory="social_parser"
+                )
+                logger.info(f"✅ AI总结已缓存: cache:social_parser:ai_summary:{url_hash}")
+
+            # 缓存原始caption到内存（用于toggle）
+            if message_id not in _message_cache:
+                _message_cache[message_id] = {
+                    "original": current_caption,
+                    "url_hash": url_hash
+                }
+
+            # 缓存AI总结到内存
+            _message_cache[message_id]["summary"] = ai_summary
 
             # 构建新caption（原始内容 + AI总结）
             new_caption = _message_cache[message_id]["original"] + f"\n\n📝 *AI总结:*\n{ai_summary}"
 
-            # 更新按钮为"已显示"状态
-            new_markup = _get_buttons_with_hide(query.message.reply_markup, parse_id)
+            # 更新按钮为"已显示"状态（✅表示已显示，点击可隐藏）
+            new_markup = _get_buttons_with_hide(query.message.reply_markup, url_hash)
 
             await query.edit_message_caption(
                 caption=new_caption,
@@ -115,13 +127,13 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
             await query.answer("✅ AI总结已显示", show_alert=False)
 
-        elif action == "hide_summary":
+        elif action == "unsummary":
             # 隐藏AI总结，恢复原始caption
             if message_id in _message_cache and _message_cache[message_id].get("original"):
                 original_caption = _message_cache[message_id]["original"]
 
                 # 恢复按钮为"显示"状态
-                new_markup = _get_buttons_with_show(query.message.reply_markup, parse_id)
+                new_markup = _get_buttons_with_show(query.message.reply_markup, url_hash)
 
                 await query.edit_message_caption(
                     caption=original_caption,
@@ -138,8 +150,8 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.answer("❌ 处理失败", show_alert=True)
 
 
-def _get_buttons_with_hide(original_markup, parse_id: str):
-    """生成带"隐藏AI总结"按钮的markup"""
+def _get_buttons_with_hide(original_markup, url_hash: str):
+    """生成带"隐藏AI总结"按钮的markup（✅表示已显示）"""
     if not original_markup or not original_markup.inline_keyboard:
         return None
 
@@ -147,9 +159,9 @@ def _get_buttons_with_hide(original_markup, parse_id: str):
     for row in original_markup.inline_keyboard:
         new_row = []
         for btn in row:
-            if "AI总结" in btn.text or "生成中" in btn.text:
-                # 替换为"隐藏"按钮
-                new_row.append(InlineKeyboardButton("📝 AI总结✅", callback_data=f"hide_summary:{parse_id}"))
+            if "AI总结" in btn.text:
+                # 替换为"已显示"按钮（类似parse_hub_bot的✅）
+                new_row.append(InlineKeyboardButton("📝 AI总结✅", callback_data=f"unsummary_{url_hash}"))
             else:
                 new_row.append(btn)
         new_buttons.append(new_row)
@@ -157,7 +169,7 @@ def _get_buttons_with_hide(original_markup, parse_id: str):
     return InlineKeyboardMarkup(new_buttons)
 
 
-def _get_buttons_with_show(original_markup, parse_id: str):
+def _get_buttons_with_show(original_markup, url_hash: str):
     """生成带"显示AI总结"按钮的markup"""
     if not original_markup or not original_markup.inline_keyboard:
         return None
@@ -167,8 +179,8 @@ def _get_buttons_with_show(original_markup, parse_id: str):
         new_row = []
         for btn in row:
             if "AI总结" in btn.text:
-                # 替换为"显示"按钮
-                new_row.append(InlineKeyboardButton("📝 AI总结", callback_data=f"ai_summary:{parse_id}"))
+                # 恢复为"显示"按钮
+                new_row.append(InlineKeyboardButton("📝 AI总结", callback_data=f"summary_{url_hash}"))
             else:
                 new_row.append(btn)
         new_buttons.append(new_row)
@@ -179,4 +191,5 @@ def _get_buttons_with_show(original_markup, parse_id: str):
 # 创建handler
 def get_ai_summary_handler():
     """获取AI总结callback handler"""
-    return CallbackQueryHandler(ai_summary_callback, pattern=r"^(ai_summary|hide_summary):")
+    # 匹配 summary_<hash> 和 unsummary_<hash> 格式
+    return CallbackQueryHandler(ai_summary_callback, pattern=r"^(summary|unsummary)_")

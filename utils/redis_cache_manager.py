@@ -185,7 +185,7 @@ class RedisCacheManager:
             logger.error(f"加载缓存失败 {cache_key}: {e}")
             return None
 
-    async def save_cache(self, key: str, data: dict, subdirectory: str | None = None):
+    async def save_cache(self, key: str, data: dict, subdirectory: str | None = None, ttl: int | None = None):
         """
         保存数据到缓存，保持与 CacheManager 相同的接口
 
@@ -193,13 +193,16 @@ class RedisCacheManager:
             key: 缓存键
             data: 要缓存的数据
             subdirectory: 子目录
+            ttl: 可选的过期时间（秒），如果不指定则使用subdirectory默认TTL
         """
         if not self._connected:
             logger.warning("Redis 未连接，无法保存缓存")
             return
 
         cache_key = self._get_cache_key(key, subdirectory)
-        ttl = self._get_ttl_for_subdirectory(subdirectory, key)
+        # 如果传入了ttl就用传入的，否则用自动计算的
+        if ttl is None:
+            ttl = self._get_ttl_for_subdirectory(subdirectory, key)
 
         try:
             # 为了兼容性，保持数据格式
@@ -300,7 +303,7 @@ class RedisCacheManager:
 
     async def set(self, key: str, data: dict, ttl: int | None = None, subdirectory: str | None = None):
         """设置缓存数据（别名方法）"""
-        await self.save_cache(key, data, subdirectory)
+        await self.save_cache(key, data, subdirectory, ttl)
 
     # 同步包装方法（用于向后兼容）
     def load_cache_sync(
