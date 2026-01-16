@@ -6,13 +6,6 @@ Monkey patch for ParseHub to fix issues:
 4. XhsParser empty download list: XhsParser crashes when download_list is empty
 """
 
-import logging
-import os
-import sys
-import tempfile
-
-logger = logging.getLogger(__name__)
-
 
 def patch_parsehub_yt_dlp():
     """
@@ -21,21 +14,18 @@ def patch_parsehub_yt_dlp():
     2. Pass cookies from ParseConfig to yt-dlp
     3. Patch BiliAPI to add Referer headers for anti-crawler
     4. Patch XhsParser to handle empty download list gracefully
-
-    IMPORTANT: Import parsehub classes INSIDE this function to ensure they're imported
-    from sys.modules cache, not re-imported by ParseHub's dynamic loading.
     """
     try:
-        logger.info("🔧 Starting ParseHub patch...")
+        import logging
+        import os
+        import tempfile
+        logger = logging.getLogger(__name__)
 
-        # Import parsehub classes here (not at module level)
-        # This ensures we patch after parse_hub_adapter imports them
         from parsehub.parsers.base.yt_dlp_parser import YtParser
         from parsehub.provider_api.bilibili import BiliAPI
         from parsehub.parsers.parser.xhs_ import XhsParser
 
-        logger.info(f"🔍 YtParser module: {YtParser.__module__}")
-        logger.info(f"🔍 YtParser id: {id(YtParser)}")
+        logger.info("🔧 Starting ParseHub patch...")
 
         def fixed_extract_info(self, url):
             """Fixed _extract_info that passes cookies to yt-dlp"""
@@ -50,9 +40,14 @@ def patch_parsehub_yt_dlp():
             # 配置JavaScript runtime（YouTube需要）
             # yt-dlp默认只识别deno，需要手动指定node
             # 参考: yt_dlp/YoutubeDL.py:538-544
-            # js_runtimes格式: {'runtime_name': {'path': '/path/to/executable'}}
-            params["js_runtimes"] = {"node": {"path": "/usr/bin/node"}}  # 明确指定Node.js路径
-            logger.info(f"🔧 [Patch] Configured yt-dlp to use Node.js runtime at /usr/bin/node")
+            # Debian/Ubuntu的nodejs包可能叫nodejs或node，自动查找
+            import shutil
+            node_path = shutil.which("node") or shutil.which("nodejs")
+            if node_path:
+                params["js_runtimes"] = {"node": {"path": node_path}}
+                logger.info(f"🔧 [Patch] Configured yt-dlp to use Node.js runtime at {node_path}")
+            else:
+                logger.warning(f"⚠️ [Patch] Node.js not found in PATH! YouTube parsing may fail")
 
             # Add headers (Referer/Origin) for anti-crawler
             # yt-dlp需要这些headers才能绕过各平台的反爬虫检测

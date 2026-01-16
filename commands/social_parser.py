@@ -10,10 +10,7 @@ from pathlib import Path
 from telegram import Update
 from telegram.ext import ContextTypes
 
-# IMPORTANT: Delay parsehub imports to allow patch to apply first
-# ParseHub types are imported inside functions that need them
-# from parsehub.types import Video, Image, VideoParseResult, ImageParseResult, MultimediaParseResult
-
+from parsehub.types import Video, Image, VideoParseResult, ImageParseResult, MultimediaParseResult
 from utils.command_factory import command_factory
 from utils.error_handling import with_error_handling
 from utils.message_manager import send_error, send_info, delete_user_command
@@ -200,8 +197,6 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def _send_media(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None, reply_markup=None):
     """发送媒体文件"""
-    from parsehub.types import Video, Image, VideoParseResult, ImageParseResult, MultimediaParseResult
-
     try:
         # download_result.pr 是原始的 ParseResult
         if isinstance(download_result.pr, VideoParseResult):
@@ -448,7 +443,6 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
 async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None, reply_markup=None):
     """发送混合媒体（参考parse_hub_bot的实现，使用media_group分批发送）"""
     from telegram import InputMediaPhoto, InputMediaVideo
-    from parsehub.types import Video, Image
 
     media_list = download_result.media
     if not isinstance(media_list, list):
