@@ -152,8 +152,10 @@ class ParseHubAdapter:
                     platform_cookie = self.config.kuaishou_cookie
                     logger.info(f"✅ 使用Kuaishou cookie")
                 elif platform_id == 'youtube' and self.config.youtube_cookie:
-                    platform_cookie = self.config.youtube_cookie
-                    logger.info(f"✅ 使用YouTube cookie (通过patch传递给yt-dlp)")
+                    # YouTube cookie是文件路径，不能传给ParseConfig（会被解析成dict）
+                    # 直接在parsehub_patch.py中通过环境变量 YOUTUBE_COOKIE 读取
+                    platform_cookie = None
+                    logger.info(f"✅ YouTube cookie配置存在，通过patch从环境变量读取")
                 else:
                     logger.info(f"⚠️ 平台 {platform_id} 未配置cookie或不匹配")
 

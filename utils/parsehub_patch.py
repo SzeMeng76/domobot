@@ -91,6 +91,20 @@ def patch_parsehub_yt_dlp():
 
             # Add cookies if configured (FIX: YtParser doesn't handle cookies)
             temp_cookie_file = None
+
+            # YouTube特殊处理：从环境变量读取（因为ParseConfig会把文件路径解析成dict）
+            youtube_cookie_from_env = None
+            if "youtube.com" in url.lower() or "youtu.be" in url.lower():
+                youtube_cookie_from_env = os.getenv("YOUTUBE_COOKIE")
+                if youtube_cookie_from_env:
+                    logger.info(f"🍪 [Patch] YouTube cookie from env: {youtube_cookie_from_env}")
+                    if os.path.exists(youtube_cookie_from_env):
+                        params["cookiefile"] = youtube_cookie_from_env
+                        logger.info(f"🍪 [Patch] Using YouTube cookie file: {youtube_cookie_from_env}")
+                    else:
+                        logger.warning(f"⚠️ [Patch] YouTube cookie file not found: {youtube_cookie_from_env}")
+
+            # 其他平台cookie处理（从ParseConfig传递）
             if self.cfg.cookie:
                 logger.info(f"🍪 [Patch] Received cookie type: {type(self.cfg.cookie)}, value preview: {str(self.cfg.cookie)[:100]}")
                 # 检查cookie类型：文件路径或字符串
@@ -99,7 +113,7 @@ def patch_parsehub_yt_dlp():
                     # 判断是文件路径还是cookie字符串
                     if os.path.exists(self.cfg.cookie):
                         logger.info(f"🍪 [Patch] File exists! Setting cookiefile parameter")
-                        # YouTube Netscape文件路径，直接使用
+                        # Netscape文件路径，直接使用
                         params["cookiefile"] = self.cfg.cookie
                         logger.info(f"🍪 [Patch] Using cookie file: {self.cfg.cookie}")
                     else:
