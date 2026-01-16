@@ -8,13 +8,8 @@ Monkey patch for ParseHub to fix issues:
 
 import logging
 import os
+import sys
 import tempfile
-
-# Import at module level (before patch function) to ensure we patch the same classes
-# that other modules will import later
-from parsehub.parsers.base.yt_dlp_parser import YtParser
-from parsehub.provider_api.bilibili import BiliAPI
-from parsehub.parsers.parser.xhs_ import XhsParser
 
 logger = logging.getLogger(__name__)
 
@@ -26,9 +21,21 @@ def patch_parsehub_yt_dlp():
     2. Pass cookies from ParseConfig to yt-dlp
     3. Patch BiliAPI to add Referer headers for anti-crawler
     4. Patch XhsParser to handle empty download list gracefully
+
+    IMPORTANT: Import parsehub classes INSIDE this function to ensure they're imported
+    from sys.modules cache, not re-imported by ParseHub's dynamic loading.
     """
     try:
         logger.info("🔧 Starting ParseHub patch...")
+
+        # Import parsehub classes here (not at module level)
+        # This ensures we patch after parse_hub_adapter imports them
+        from parsehub.parsers.base.yt_dlp_parser import YtParser
+        from parsehub.provider_api.bilibili import BiliAPI
+        from parsehub.parsers.parser.xhs_ import XhsParser
+
+        logger.info(f"🔍 YtParser module: {YtParser.__module__}")
+        logger.info(f"🔍 YtParser id: {id(YtParser)}")
 
         @property
         def fixed_params(self) -> dict:
