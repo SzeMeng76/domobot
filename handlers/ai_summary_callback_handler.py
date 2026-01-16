@@ -119,7 +119,7 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
             # 替换模式：只显示AI总结（类似parse_hub_bot）
             # 构建新caption：只包含AI总结和原链接
-            summary_caption = f"📝 *AI总结:*\n\n{ai_summary}"
+            summary_caption = f"📝 AI总结:\n\n{ai_summary}"
 
             # 添加原链接（从缓存数据中获取）
             if cache_data and cache_data.get('url'):
@@ -133,16 +133,14 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                 # 图片/视频消息（有caption）
                 await query.edit_message_caption(
                     caption=summary_caption,
-                    parse_mode="Markdown",
                     reply_markup=new_markup
                 )
             else:
                 # 纯文本消息（无caption）
                 await query.edit_message_text(
                     text=summary_caption,
-                    parse_mode="Markdown",
                     reply_markup=new_markup,
-                    disable_web_page_preview=True
+                    link_preview_options=LinkPreviewOptions(is_disabled=True)
                 )
 
             # 不需要第二次answer，已在第49行answer过
