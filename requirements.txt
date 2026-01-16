@@ -7,6 +7,7 @@ python-dotenv>=1.0.1  # ParseHub requires >=1.0.1
 # HTTP Requests
 httpx==0.28.1
 brotli==1.1.0  # Required for Brotli decompression (App Store uses br encoding)
+aiohttp==3.13.3  # Async HTTP client/server for anti-crawler proxy
 
 # OpenAI API (for AI Anti-Spam)
 openai==2.15.0
