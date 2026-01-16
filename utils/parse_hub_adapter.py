@@ -113,39 +113,42 @@ class ParseHubAdapter:
                     parse_time = time.time() - start_time
                     return cached.get("result"), cached.get("platform"), parse_time
 
-            # 配置解析器（优先使用传入的proxy，否则使用配置中的proxy）
+            # 选择解析器
+            parser = self.parsehub.select_parser(url)
+            if not parser:
+                logger.error(f"不支持的平台: {url}")
+                return None, None, 0
+
+            # 获取平台ID
+            platform_id = getattr(parser, '__platform_id__', '')
+            platform_name = platform_id or "unknown"
+
+            # 配置代理（优先使用传入的proxy，否则使用配置中的proxy）
             parser_proxy = proxy or (self.config.parser_proxy if self.config else None)
             downloader_proxy = proxy or (self.config.downloader_proxy if self.config else None)
 
-            # 根据平台选择 Cookie
+            # 根据平台选择 Cookie（ParseConfig会自动将字符串转换为dict）
             platform_cookie = None
             if self.config:
-                parser = self.parsehub.select_parser(url)
-                if parser:
-                    platform_id = getattr(parser, '__platform_id__', '')
-                    if platform_id == 'twitter' and self.config.twitter_cookie:
-                        platform_cookie = self.config.twitter_cookie
-                    elif platform_id == 'instagram' and self.config.instagram_cookie:
-                        platform_cookie = self.config.instagram_cookie
-                    elif platform_id == 'facebook' and self.config.facebook_cookie:
-                        platform_cookie = self.config.facebook_cookie
+                if platform_id == 'twitter' and self.config.twitter_cookie:
+                    platform_cookie = self.config.twitter_cookie
+                elif platform_id == 'instagram' and self.config.instagram_cookie:
+                    platform_cookie = self.config.instagram_cookie
+                elif platform_id == 'facebook' and self.config.facebook_cookie:
+                    platform_cookie = self.config.facebook_cookie
 
-            # 创建配置（Cookie 是字符串，ParseConfig 会自动解析）
+            # 创建配置（重要：每次都创建新的ParseHub实例，传入配置）
             parse_config = ParseConfig(proxy=parser_proxy, cookie=platform_cookie)
             download_config = DownloadConfig(proxy=downloader_proxy, save_dir=self.temp_dir)
 
-            # 解析
-            self.parsehub.config = parse_config
-            result = await self.parsehub.parse(url)
+            # 创建新的ParseHub实例并传入配置
+            parsehub = ParseHub(config=parse_config)
+            result = await parsehub.parse(url)
 
             if not result:
                 return None, None, 0
 
-            # 获取平台名称
-            parser = self.parsehub.select_parser(url)
-            platform_name = parser.__platform_id__ if (parser and hasattr(parser, '__platform_id__')) else "unknown"
-
-            # 下载媒体（download() 方法返回 DownloadResult，但会自动使用 config.save_dir）
+            # 下载媒体
             download_result = await result.download(config=download_config)
 
             parse_time = time.time() - start_time
@@ -166,7 +169,7 @@ class ParseHubAdapter:
 
         except Exception as e:
             parse_time = time.time() - start_time
-            logger.error(f"解析URL失败: {e}")
+            logger.error(f"解析URL失败: {e}", exc_info=True)
 
             # 记录失败统计
             await self._record_stats(
