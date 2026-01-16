@@ -37,16 +37,6 @@ def patch_parsehub_yt_dlp():
         logger.info(f"🔍 YtParser module: {YtParser.__module__}")
         logger.info(f"🔍 YtParser id: {id(YtParser)}")
 
-        @property
-        def fixed_params(self) -> dict:
-            """Fixed params with correct format selector"""
-            params = {
-                "format": "bestvideo[height<=1080]+bestaudio/best",
-                "quiet": True,
-                "playlist_items": "1",
-            }
-            return params
-
         def fixed_extract_info(self, url):
             """Fixed _extract_info that passes cookies to yt-dlp"""
             from yt_dlp import YoutubeDL
@@ -202,9 +192,10 @@ def patch_parsehub_yt_dlp():
                 raise RuntimeError(error_msg) from None
 
         # Apply YtParser patches
-        YtParser.params = fixed_params
+        # Note: Don't patch params property - it breaks subtitle configs and other settings
+        # Only patch _extract_info method which handles js_runtimes internally
         YtParser._extract_info = fixed_extract_info
-        logger.info("✅ YtParser patched: format selector + cookie handling + headers")
+        logger.info("✅ YtParser patched: js_runtimes + cookie handling + headers")
 
         # Patch BiliAPI to support cookies and add Referer headers
         # Problem: BiliAPI.__init__ doesn't accept cookie parameter
