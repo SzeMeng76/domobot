@@ -12,13 +12,15 @@ import time
 from pathlib import Path
 from typing import Optional, List, Tuple, Dict, Any
 
-# Apply monkey patch to fix Facebook/YouTube parsing (ParseHub 1.5.10 format bug)
-from utils.parsehub_patch import patch_parsehub_yt_dlp
-patch_parsehub_yt_dlp()
-
+# IMPORTANT: Import ParseHub FIRST to let it load all parsers via get_all_subclasses
+# THEN apply patch AFTER all parsers are loaded
 from parsehub import ParseHub
 from parsehub.config import DownloadConfig, ParseConfig, GlobalConfig
 from parsehub.types import ParseResult, VideoParseResult, ImageParseResult, MultimediaParseResult
+
+# Apply monkey patch AFTER ParseHub imports (to patch the reloaded classes)
+from utils.parsehub_patch import patch_parsehub_yt_dlp
+patch_parsehub_yt_dlp()
 
 logger = logging.getLogger(__name__)
 
