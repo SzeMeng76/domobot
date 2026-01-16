@@ -270,39 +270,55 @@ def patch_parsehub_yt_dlp():
         logger.info("✅ BiliAPI patched: cookie support (from env) + anti-crawler headers")
 
         # Patch XhsParser to handle empty download list
+        # Reference: parsehub/parsers/parser/xhs_.py - parse method line 15
         original_xhs_parse = XhsParser.parse
 
         async def patched_xhs_parse(self, url: str):
             """Patched XhsParser.parse to handle empty download list"""
-            from parsehub.types import VideoParseResult, ImageParseResult
+            from parsehub.types import VideoParseResult, ImageParseResult, MultimediaParseResult, Video, Image
+            from parsehub.parsers.parser.xhs_ import XHS, Log
 
-            # 调用原始的XhsParser._parse_share_note来获取结果
-            result = await self._parse_share_note(url)
-            k = {
-                "desc": result.get("desc"),
-                "title": result.get("title"),
-                "cover_url": result.get("封面"),
-            }
+            # 调用原始逻辑获取数据
+            url = await self.get_raw_url(url)
+            async with XHS(user_agent="", cookie="") as xhs:
+                x_result = await xhs.extract(url, False, log=Log)
 
-            # 检查是否有下载地址
-            download_list = result.get("下载地址", [])
+            from parsehub.types.error import ParseError
+            if not x_result or not (result := x_result[0]):
+                raise ParseError("小红书解析失败")
 
-            if result.get("type") == "video":
-                # 视频类型：检查下载地址是否为空
+            desc = self.hashtag_handler(result["作品描述"])
+            k = {"title": result["作品标题"], "desc": desc, "raw_url": url}
+
+            # Livephoto处理
+            if all(result["动图地址"]):
+                return MultimediaParseResult(media=[Video(i) for i in result["动图地址"]], **k)
+
+            # 视频类型：检查下载地址是否为空
+            elif result["作品类型"] == "视频":
+                download_list = result.get("下载地址", [])
                 if not download_list or len(download_list) == 0:
                     logger.warning(f"🌐 [Patch] XHS video has no download URLs, returning empty VideoParseResult")
-                    # 返回空的VideoParseResult（仅包含元数据）
                     return VideoParseResult(video=None, **k)
                 else:
                     return VideoParseResult(video=download_list[0], **k)
-            else:
-                # 图片类型：过滤掉None和空字符串
-                valid_images = [img for img in download_list if img]
-                if not valid_images:
+
+            # 图文类型：检查下载地址是否为空
+            elif result["作品类型"] == "图文":
+                download_list = result.get("下载地址", [])
+                if not download_list:
                     logger.warning(f"🌐 [Patch] XHS images have no download URLs, returning empty ImageParseResult")
-                    return ImageParseResult(images=[], **k)
-                else:
-                    return ImageParseResult(images=valid_images, **k)
+                    return ImageParseResult(photo=[], **k)
+
+                photos = []
+                for i in download_list:
+                    img_url = i if i.endswith("?") else i + "?"
+                    ext = (await self.get_ext_by_url(img_url)) or "png"
+                    photos.append(Image(img_url, ext))
+                return ImageParseResult(photo=photos, **k)
+
+            else:
+                raise ParseError("不支持的类型")
 
         XhsParser.parse = patched_xhs_parse
         logger.info("✅ XhsParser patched: handle empty download list")
