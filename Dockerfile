@@ -19,6 +19,7 @@ FROM python:3.12-slim
 
 # 安装系统依赖（ParseHub 需要的图形库和 FFmpeg）
 # 参考: ParseHub README.md - Ubuntu 24 依赖
+# 添加 Node.js 用于 yt-dlp JavaScript runtime (YouTube解析需要)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglx-mesa0 \
@@ -30,6 +31,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     libfontconfig1 \
     ffmpeg \
+    nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # 设置工作目录

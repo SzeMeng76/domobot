@@ -27,7 +27,7 @@ def patch_parsehub_yt_dlp():
         def fixed_params(self) -> dict:
             """Fixed params with correct format selector"""
             params = {
-                "format": "bestvideo[height<=1080]+bestaudio/best",  # Fixed format
+                "format": "bestvideo[height<=1080]+bestaudio/best",
                 "quiet": True,
                 "playlist_items": "1",
             }
@@ -173,32 +173,75 @@ def patch_parsehub_yt_dlp():
         YtParser._extract_info = fixed_extract_info
         logger.info("✅ YtParser patched: format selector + cookie handling + headers")
 
-        # Patch BiliAPI to add Referer headers for anti-crawler
-        # 不能只patch __init__，因为_get_client可能复用旧client
-        # 需要patch _get_client方法，强制使用带Referer的headers
-        original_get_client = BiliAPI._get_client
+        # Patch BiliAPI to support cookies and add Referer headers
+        # Problem: BiliAPI.__init__ doesn't accept cookie parameter
+        # Solution: Patch __init__ to accept cookie, and patch get_video_info to use it
+        original_bili_init = BiliAPI.__init__
+        original_get_video_info = BiliAPI.get_video_info
 
-        def patched_get_client(self):
-            """Patched BiliAPI._get_client with anti-crawler headers"""
-            # 确保headers包含Referer和Origin
-            if "Referer" not in self.headers:
-                self.headers.update({
-                    "Referer": "https://www.bilibili.com/",
-                    "Origin": "https://www.bilibili.com"
-                })
-                logger.info("🌐 [Patch] BiliAPI headers updated with Referer/Origin")
+        def patched_bili_init(self, proxy: str = None, cookie: dict = None):
+            """Patched BiliAPI.__init__ to accept cookie parameter"""
+            original_bili_init(self, proxy)
+            # 保存cookie供API调用使用
+            self.cookie = cookie
+            # 添加Referer和Origin headers
+            self.headers.update({
+                "Referer": "https://www.bilibili.com/",
+                "Origin": "https://www.bilibili.com"
+            })
+            if cookie:
+                logger.info(f"🌐 [Patch] BiliAPI initialized with cookie and anti-crawler headers")
+            else:
+                logger.info(f"🌐 [Patch] BiliAPI initialized with anti-crawler headers (no cookie)")
 
-            # 如果client已存在且未关闭，先关闭旧client以应用新headers
-            if self._client is not None and not getattr(self._client, "is_closed", False):
-                import asyncio
-                # 同步上下文中无法调用异步aclose，直接重置
-                self._client = None
+        async def patched_get_video_info(self, url: str):
+            """Patched get_video_info to use self.cookie"""
+            bvid = self.get_bvid(url)
+            # 使用self.cookie而不是硬编码None
+            response = await self._get_client().get(
+                "https://api.bilibili.com/x/web-interface/view/detail",
+                params={"bvid": bvid},
+                cookies=self.cookie  # 传入cookie！
+            )
+            return response.json()
 
-            # 调用原始方法创建新client（会使用更新后的self.headers）
-            return original_get_client(self)
+        BiliAPI.__init__ = patched_bili_init
+        BiliAPI.get_video_info = patched_get_video_info
 
-        BiliAPI._get_client = patched_get_client
-        logger.info("✅ BiliAPI patched: anti-crawler headers")
+        # Note: BiliParse.bili_api_parse creates BiliAPI without cookie
+        # But since we patched BiliAPI.__init__ to accept cookie parameter,
+        # we need to ensure cookie is passed. The easiest way is to patch
+        # the BiliAPI creation call in BiliParse, but that's complex.
+        #
+        # Instead, we rely on the fact that ParseConfig.cookie is accessible
+        # via self.cfg.cookie in BiliParse. We just need BiliParse to pass it.
+        #
+        # Since we can't easily modify the calling code, we make BiliAPI
+        # read cookie from environment if not provided in __init__.
+
+        # Update: Simplify - patch BiliAPI to read from environment variable
+        original_bili_init_v2 = BiliAPI.__init__
+
+        def patched_bili_init_v2(self, proxy: str = None, cookie: dict = None):
+            """Enhanced BiliAPI.__init__ that reads cookie from env if not provided"""
+            # 如果没传cookie，尝试从环境变量读取
+            if not cookie:
+                import os
+                cookie_str = os.getenv("BILIBILI_COOKIE")
+                if cookie_str:
+                    cookie = {}
+                    for item in cookie_str.split(';'):
+                        item = item.strip()
+                        if '=' in item:
+                            key, value = item.split('=', 1)
+                            cookie[key.strip()] = value.strip()
+                    logger.info(f"🌐 [Patch] BiliAPI loaded cookie from environment")
+
+            # 调用之前patch的版本
+            patched_bili_init(self, proxy, cookie)
+
+        BiliAPI.__init__ = patched_bili_init_v2
+        logger.info("✅ BiliAPI patched: cookie support (from env) + anti-crawler headers")
 
         return True
 
