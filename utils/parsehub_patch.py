@@ -37,17 +37,9 @@ def patch_parsehub_yt_dlp():
             if self.cfg.proxy:
                 params["proxy"] = self.cfg.proxy
 
-            # 配置JavaScript runtime（YouTube需要）
-            # yt-dlp默认只识别deno，需要手动指定node
-            # 参考: yt_dlp/YoutubeDL.py:538-544
-            # Debian/Ubuntu的nodejs包可能叫nodejs或node，自动查找
-            import shutil
-            node_path = shutil.which("node") or shutil.which("nodejs")
-            if node_path:
-                params["js_runtimes"] = {"node": {"path": node_path}}
-                logger.info(f"🔧 [Patch] Configured yt-dlp to use Node.js runtime at {node_path}")
-            else:
-                logger.warning(f"⚠️ [Patch] Node.js not found in PATH! YouTube parsing may fail")
+            # JavaScript runtime配置：
+            # yt-dlp默认支持deno，会自动检测PATH中的deno
+            # 不需要手动配置js_runtimes (Dockerfile已安装deno并添加到PATH)
 
             # Add headers (Referer/Origin) for anti-crawler
             # yt-dlp需要这些headers才能绕过各平台的反爬虫检测
