@@ -95,17 +95,10 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         # 格式化结果（result 现在是 DownloadResult）
         formatted = await _adapter.format_result(result, platform)
 
-        # 生成AI总结（如果启用）- 传递 ParseResult
-        ai_summary = await _adapter.generate_ai_summary(result.pr)
-
         # 构建标题和描述
         caption = f"**{formatted['title']}**"
         if formatted['desc']:
             caption += f"\n\n{formatted['desc'][:200]}"  # 限制描述长度
-
-        # 添加AI总结
-        if ai_summary:
-            caption += f"\n\n📝 *AI总结:* {ai_summary}"
 
         if formatted['url']:
             caption += f"\n\n🔗 [原链接]({formatted['url']})"
@@ -114,8 +107,21 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         # 更新状态
         await status_msg.edit_text("📤 上传中...")
 
-        # 发送媒体
-        await _send_media(context, chat_id, result, caption, update.message.message_id if update.message else None)
+        # 生成唯一的解析ID用于callback
+        parse_id = _adapter._get_cache_key(formatted['url'])
+
+        # 创建inline keyboard按钮
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+        buttons = [[InlineKeyboardButton("🔗 原链接", url=formatted['url'])]]
+
+        # 如果启用了AI总结，添加AI总结按钮
+        if _adapter.config and _adapter.config.enable_ai_summary:
+            buttons[0].append(InlineKeyboardButton("📝 AI总结", callback_data=f"ai_summary:{parse_id}"))
+
+        reply_markup = InlineKeyboardMarkup(buttons)
+
+        # 发送媒体（带按钮）
+        await _send_media(context, chat_id, result, caption, reply_to_message_id=update.message.message_id if update.message else None, reply_markup=reply_markup)
 
         # 删除状态消息
         await status_msg.delete()
@@ -133,19 +139,19 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             await delete_user_command(context, chat_id, update.message.message_id)
 
 
-async def _send_media(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None):
+async def _send_media(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None, reply_markup=None):
     """发送媒体文件"""
     try:
         # download_result.pr 是原始的 ParseResult
         if isinstance(download_result.pr, VideoParseResult):
             # 发送视频
-            await _send_video(context, chat_id, download_result, caption, reply_to_message_id)
+            await _send_video(context, chat_id, download_result, caption, reply_to_message_id, reply_markup)
         elif isinstance(download_result.pr, ImageParseResult):
             # 发送图片
-            await _send_images(context, chat_id, download_result, caption, reply_to_message_id)
+            await _send_images(context, chat_id, download_result, caption, reply_to_message_id, reply_markup)
         elif isinstance(download_result.pr, MultimediaParseResult):
             # 发送混合媒体
-            await _send_multimedia(context, chat_id, download_result, caption, reply_to_message_id)
+            await _send_multimedia(context, chat_id, download_result, caption, reply_to_message_id, reply_markup)
         else:
             # 只发送文本
             await context.bot.send_message(
@@ -153,14 +159,15 @@ async def _send_media(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
                 text=caption,
                 parse_mode="Markdown",
                 reply_to_message_id=reply_to_message_id,
-                disable_web_page_preview=True
+                disable_web_page_preview=True,
+                reply_markup=reply_markup
             )
     except Exception as e:
         logger.error(f"发送媒体失败: {e}")
         raise
 
 
-async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None):
+async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None, reply_markup=None):
     """发送视频（支持视频分割和图床上传）"""
     media = download_result.media
     video_path = Path(media.path)
@@ -252,11 +259,12 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
             height=media.height or 0,
             duration=media.duration or 0,
             reply_to_message_id=reply_to_message_id,
-            supports_streaming=True
+            supports_streaming=True,
+            reply_markup=reply_markup
         )
 
 
-async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None):
+async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None, reply_markup=None):
     """发送图片"""
     media_list = download_result.media
     if not isinstance(media_list, list):
@@ -280,28 +288,34 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                 photo=photo_file,
                 caption=caption,
                 parse_mode="Markdown",
-                reply_to_message_id=reply_to_message_id
+                reply_to_message_id=reply_to_message_id,
+                reply_markup=reply_markup
             )
     elif len(media_list) <= 10:
         # 多张图片（使用媒体组，最多10张）
         from telegram import InputMediaPhoto
 
         media_group = []
-        for i, img in enumerate(media_list[:10]):
+        for img in media_list[:10]:
             image_path = str(img.path)
             with open(image_path, 'rb') as photo_file:
-                media_group.append(
-                    InputMediaPhoto(
-                        media=photo_file.read(),
-                        caption=caption if i == 0 else None,
-                        parse_mode="Markdown" if i == 0 else None
-                    )
-                )
+                media_group.append(InputMediaPhoto(media=photo_file.read()))
 
-        await context.bot.send_media_group(
+        # 发送媒体组（不带caption）
+        messages = await context.bot.send_media_group(
             chat_id=chat_id,
             media=media_group,
             reply_to_message_id=reply_to_message_id
+        )
+
+        # 单独发送文本消息带caption和按钮
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=caption,
+            parse_mode="Markdown",
+            reply_to_message_id=messages[0].message_id,  # 回复到第一张图片
+            disable_web_page_preview=True,
+            reply_markup=reply_markup
         )
     else:
         # 超过10张，分批发送
@@ -324,7 +338,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
             await context.bot.send_media_group(chat_id=chat_id, media=media_group)
 
 
-async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None):
+async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None, reply_markup=None):
     """发送混合媒体"""
     media_list = download_result.media
     if not isinstance(media_list, list):

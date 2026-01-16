@@ -236,10 +236,12 @@ class ParseHubAdapter:
     async def _extract_url(self, text: str) -> Optional[str]:
         """从文本中提取URL"""
         try:
-            # 使用 ParseHub 的 get_raw_url 方法
+            # 使用 ParseHub 的 get_raw_url 方法处理短链接和提取URL
             url = await self.parsehub.get_raw_url(text)
+            logger.debug(f"提取URL: {text} -> {url}")
             return url
-        except Exception:
+        except Exception as e:
+            logger.error(f"提取URL失败: {text}, 错误: {e}")
             return None
 
     def _get_cache_key(self, url: str) -> str:

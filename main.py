@@ -203,6 +203,13 @@ def setup_handlers(application: Application):
     from handlers.auto_parse_handler import setup_auto_parse_handler
     setup_auto_parse_handler(application)
 
+    # 注册AI总结callback handler
+    from handlers.ai_summary_callback_handler import get_ai_summary_handler, set_adapter
+    from commands.social_parser import _adapter as parser_adapter
+    set_adapter(parser_adapter)
+    application.add_handler(get_ai_summary_handler())
+    logger.info("✅ AI总结callback处理器已注册")
+
     # 使用命令工厂设置处理器（包括 UnifiedTextHandler）
     command_factory.setup_handlers(application)
 
