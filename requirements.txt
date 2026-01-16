@@ -2,7 +2,7 @@
 python-telegram-bot[all]==22.2
 
 # Environment Configuration
-python-dotenv==1.0.0
+python-dotenv>=1.0.1  # ParseHub requires >=1.0.1
 
 # HTTP Requests
 httpx==0.28.1
