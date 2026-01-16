@@ -89,10 +89,12 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     try:
         # 解析URL
-        result, platform, parse_time = await _adapter.parse_url(text, user_id, group_id)
+        result, platform, parse_time, error_msg = await _adapter.parse_url(text, user_id, group_id)
 
         if not result:
-            await status_msg.edit_text("❌ 解析失败，请检查链接是否正确")
+            # 显示具体错误信息
+            error_text = f"❌ {error_msg}" if error_msg else "❌ 解析失败，请检查链接是否正确"
+            await status_msg.edit_text(error_text)
             if update.message:
                 await delete_user_command(context, chat_id, update.message.message_id)
             return

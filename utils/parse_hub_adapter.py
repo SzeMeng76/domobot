@@ -94,7 +94,7 @@ class ParseHubAdapter:
         user_id: int,
         group_id: Optional[int] = None,
         proxy: Optional[str] = None
-    ) -> Tuple[Optional[Any], Optional[str], float]:
+    ) -> Tuple[Optional[Any], Optional[str], float, Optional[str]]:
         """
         解析URL并下载媒体
 
@@ -105,7 +105,7 @@ class ParseHubAdapter:
             proxy: 代理地址（可选，不传则使用配置中的代理）
 
         Returns:
-            (DownloadResult, platform_name, parse_time): 下载结果、平台名称、解析耗时
+            (DownloadResult, platform_name, parse_time, error_msg): 下载结果、平台名称、解析耗时、错误信息
         """
         start_time = time.time()
 
@@ -113,7 +113,7 @@ class ParseHubAdapter:
             # 提取 URL
             url = await self._extract_url(text)
             if not url:
-                return None, None, 0
+                return None, None, 0, "未找到有效的URL"
 
             # 注意：DownloadResult包含文件对象，不能序列化到Redis缓存
             # 每次都需要重新解析和下载
@@ -123,7 +123,7 @@ class ParseHubAdapter:
             parser = self.parsehub.select_parser(url)
             if not parser:
                 logger.error(f"不支持的平台: {url}")
-                return None, None, 0
+                return None, None, 0, "不支持的平台"
 
             # 获取平台ID
             platform_id = getattr(parser, '__platform_id__', '')
@@ -214,7 +214,7 @@ class ParseHubAdapter:
             result = await parsehub.parse(url)
 
             if not result:
-                return None, None, 0
+                return None, None, 0, "解析失败，未返回结果"
 
             # 下载媒体
             try:
@@ -235,11 +235,12 @@ class ParseHubAdapter:
             # 记录统计
             await self._record_stats(user_id, group_id, platform_name, url, True, parse_time * 1000)
 
-            return download_result, platform_name, parse_time
+            return download_result, platform_name, parse_time, None
 
         except Exception as e:
             parse_time = time.time() - start_time
-            logger.error(f"解析URL失败: {e}", exc_info=True)
+            error_msg = self._format_error_message(e)
+            logger.error(f"解析URL失败: {error_msg}", exc_info=True)
 
             # 记录失败统计
             await self._record_stats(
@@ -249,10 +250,57 @@ class ParseHubAdapter:
                 text,
                 False,
                 parse_time * 1000,
-                str(e)
+                error_msg
             )
 
-            return None, None, parse_time
+            return None, None, parse_time, error_msg
+
+    def _format_error_message(self, error: Exception) -> str:
+        """格式化错误信息，使其对用户更友好"""
+        error_str = str(error)
+
+        # Bilibili相关错误
+        if "412" in error_str or "Precondition Failed" in error_str:
+            return "Bilibili风控限制（412错误），请检查cookie配置或稍后重试"
+        if "Bilibili解析失败" in error_str:
+            return "Bilibili解析失败，可能是链接失效或需要登录"
+
+        # YouTube相关错误
+        if "Sign in to confirm" in error_str or "not a bot" in error_str:
+            return "YouTube需要登录验证，请检查cookie配置"
+        if "Requested format is not available" in error_str:
+            return "YouTube视频格式不可用，可能需要安装Node.js或视频已被删除"
+        if "No supported JavaScript runtime" in error_str:
+            return "缺少JavaScript运行环境，YouTube解析可能受限"
+
+        # Twitter/X相关错误
+        if "twitter" in error_str.lower() or "x.com" in error_str.lower():
+            return f"Twitter/X解析失败：{error_str}"
+
+        # 通用网络错误
+        if "timeout" in error_str.lower():
+            return "请求超时，请稍后重试"
+        if "connection" in error_str.lower():
+            return "网络连接失败，请检查网络或代理设置"
+        if "404" in error_str:
+            return "内容不存在（404），链接可能已失效"
+        if "403" in error_str:
+            return "访问被拒绝（403），可能需要登录或cookie"
+        if "500" in error_str or "502" in error_str or "503" in error_str:
+            return "服务器错误，平台服务可能暂时不可用"
+
+        # Cookie相关错误
+        if "cookie" in error_str.lower():
+            return f"Cookie配置问题：{error_str}"
+
+        # 下载失败
+        if "download" in error_str.lower():
+            return f"下载失败：{error_str}"
+
+        # 其他错误，返回原始错误信息（截断过长的信息）
+        if len(error_str) > 150:
+            return error_str[:150] + "..."
+        return error_str
 
     async def format_result(self, download_result, platform: str) -> dict:
         """
