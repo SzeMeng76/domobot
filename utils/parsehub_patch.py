@@ -305,7 +305,9 @@ def patch_parsehub_yt_dlp():
 
                 photos = []
                 for i in download_list:
-                    img_url = i if i.endswith("?") else i + "?"
+                    # Remove ?imageView2/format/png params - causes CDN 500 error
+                    # Use base URL without params
+                    img_url = i.split('?')[0] if '?' in i else i
                     ext = (await self.get_ext_by_url(img_url)) or "png"
                     photos.append(Image(img_url, ext))
                 return ImageParseResult(photo=photos, **k)

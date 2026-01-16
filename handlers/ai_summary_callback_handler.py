@@ -79,7 +79,7 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                 logger.info(f"📍 重新解析URL: {original_url}")
 
                 # 重新解析获取完整的DownloadResult
-                download_result, platform, _ = await _adapter.parse_url(
+                download_result, platform, _, error_msg = await _adapter.parse_url(
                     original_url,
                     user_id=query.from_user.id,
                     group_id=None
