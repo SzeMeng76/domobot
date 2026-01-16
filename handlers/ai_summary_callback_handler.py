@@ -49,15 +49,27 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                 # 使用缓存的AI总结
                 ai_summary = _message_cache[message_id]["summary"]
             else:
-                # 提取原始URL
-                import re
-                url_match = re.search(r'🔗 \[原链接\]\((https?://[^\)]+)\)', current_caption)
+                # 提取原始URL - 从按钮中获取（更可靠）
+                original_url = None
+                if query.message.reply_markup and query.message.reply_markup.inline_keyboard:
+                    for row in query.message.reply_markup.inline_keyboard:
+                        for btn in row:
+                            if btn.url and "原链接" in btn.text:
+                                original_url = btn.url
+                                break
+                        if original_url:
+                            break
 
-                if not url_match:
+                # 如果按钮中没找到，尝试从caption中提取
+                if not original_url:
+                    import re
+                    url_match = re.search(r'🔗 \[原链接\]\((https?://[^\)]+)\)', current_caption or '')
+                    if url_match:
+                        original_url = url_match.group(1)
+
+                if not original_url:
                     await query.answer("❌ 无法找到原链接", show_alert=True)
                     return
-
-                original_url = url_match.group(1)
 
                 # 缓存原始caption
                 if message_id not in _message_cache:

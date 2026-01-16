@@ -182,6 +182,19 @@ async def _send_media(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
 async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None, reply_markup=None):
     """发送视频（支持视频分割和图床上传）"""
     media = download_result.media
+
+    # 如果没有媒体文件（下载失败），只发送文本
+    if not media or not hasattr(media, 'path') or not media.path:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"{caption}\n\n⚠️ 媒体下载失败",
+            parse_mode="Markdown",
+            reply_to_message_id=reply_to_message_id,
+            disable_web_page_preview=True,
+            reply_markup=reply_markup
+        )
+        return
+
     video_path = Path(media.path)
 
     # 检查文件大小（Telegram 限制 50MB）
@@ -396,7 +409,8 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
         text=f"{caption}\n\n📁 共{len(media_list)}个媒体文件",
         parse_mode="Markdown",
         reply_to_message_id=reply_to_message_id,
-        disable_web_page_preview=True
+        disable_web_page_preview=True,
+        reply_markup=reply_markup
     )
 
     # 逐个发送媒体
