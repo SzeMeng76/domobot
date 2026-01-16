@@ -12,6 +12,10 @@ import time
 from pathlib import Path
 from typing import Optional, List, Tuple, Dict, Any
 
+# Apply monkey patch to fix Facebook/YouTube parsing (ParseHub 1.5.10 format bug)
+from utils.parsehub_patch import patch_parsehub_yt_dlp
+patch_parsehub_yt_dlp()
+
 from parsehub import ParseHub
 from parsehub.config import DownloadConfig, ParseConfig, GlobalConfig
 from parsehub.types import ParseResult, VideoParseResult, ImageParseResult, MultimediaParseResult
@@ -104,14 +108,9 @@ class ParseHubAdapter:
             if not url:
                 return None, None, 0
 
-            # 检查缓存
-            cache_key = self._get_cache_key(url)
-            if self.cache_manager:
-                cached = await self.cache_manager.get(cache_key)
-                if cached:
-                    logger.info(f"从缓存获取解析结果: {url}")
-                    parse_time = time.time() - start_time
-                    return cached.get("result"), cached.get("platform"), parse_time
+            # 注意：DownloadResult包含文件对象，不能序列化到Redis缓存
+            # 每次都需要重新解析和下载
+            # cache_key = self._get_cache_key(url)
 
             # 选择解析器
             parser = self.parsehub.select_parser(url)
@@ -159,15 +158,8 @@ class ParseHubAdapter:
 
             parse_time = time.time() - start_time
 
-            # 缓存结果（使用配置的缓存时间）
-            cache_duration = self.config.parser_cache_duration if self.config else 86400
-            if self.cache_manager:
-                await self.cache_manager.set(
-                    cache_key,
-                    {"result": download_result, "platform": platform_name},
-                    ttl=cache_duration,
-                    subdirectory="social_parser"
-                )
+            # 注意：DownloadResult不能序列化，不缓存到Redis
+            # ParseHub自己有内存缓存机制处理重复URL
 
             # 记录统计
             await self._record_stats(user_id, group_id, platform_name, url, True, parse_time * 1000)
