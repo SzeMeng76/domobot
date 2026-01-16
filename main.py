@@ -742,7 +742,32 @@ def main() -> None:
     application.post_shutdown = cleanup_application
 
     # ========================================
-    # 第三步：启动机器人
+    # 第三步：启动反爬虫代理服务器（如果启用）
+    # ========================================
+    proxy_task = None
+    if os.getenv("ENABLE_ANTI_CRAWLER_PROXY", "true").lower() == "true":
+        try:
+            from utils.anti_crawler_proxy import AntiCrawlerProxy
+            import asyncio
+
+            proxy_host = os.getenv("ANTI_CRAWLER_PROXY_HOST", "127.0.0.1")
+            proxy_port = int(os.getenv("ANTI_CRAWLER_PROXY_PORT", "8765"))
+
+            logger.info(f"🎭 启动反爬虫代理服务器: {proxy_host}:{proxy_port}")
+            proxy = AntiCrawlerProxy(host=proxy_host, port=proxy_port)
+
+            # 在后台启动代理服务器
+            async def start_proxy():
+                await proxy.start()
+
+            loop = asyncio.get_event_loop()
+            proxy_task = loop.create_task(start_proxy())
+            logger.info("✅ 反爬虫代理服务器已启动")
+        except Exception as e:
+            logger.warning(f"⚠️ 反爬虫代理服务器启动失败: {e}")
+
+    # ========================================
+    # 第四步：启动机器人
     # ========================================
     try:
         if config.webhook_url:
