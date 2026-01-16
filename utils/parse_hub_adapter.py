@@ -131,15 +131,21 @@ class ParseHubAdapter:
             # Facebook/YouTube等基于yt-dlp的平台不支持cookie（ParseHub库限制）
             platform_cookie = None
             if self.config:
+                logger.info(f"🔍 平台: {platform_id}")
                 if platform_id == 'twitter' and self.config.twitter_cookie:
                     platform_cookie = self.config.twitter_cookie
-                    logger.info(f"Twitter cookie raw: {platform_cookie[:50]}...")
+                    logger.info(f"✅ 使用Twitter cookie: {platform_cookie[:50]}...")
                 elif platform_id == 'instagram' and self.config.instagram_cookie:
                     platform_cookie = self.config.instagram_cookie
+                    logger.info(f"✅ 使用Instagram cookie")
                 elif platform_id == 'bilibili' and self.config.bilibili_cookie:
                     platform_cookie = self.config.bilibili_cookie
+                    logger.info(f"✅ 使用Bilibili cookie: {platform_cookie[:50]}...")
                 elif platform_id == 'kuaishou' and self.config.kuaishou_cookie:
                     platform_cookie = self.config.kuaishou_cookie
+                    logger.info(f"✅ 使用Kuaishou cookie")
+                else:
+                    logger.info(f"⚠️ 平台 {platform_id} 未配置cookie或不匹配")
 
             # 创建配置（重要：每次都创建新的ParseHub实例，传入配置）
             parse_config = ParseConfig(proxy=parser_proxy, cookie=platform_cookie)
