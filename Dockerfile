@@ -17,16 +17,8 @@ RUN pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements.txt
 # 使用一个非常轻量的 slim Python 3.12 镜像作为最终的生产镜像
 FROM python:3.12-slim
 
-# 安装系统依赖（ParseHub 需要的图形库和 FFmpeg）
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
-    libgomp1 \
-    ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
+# 清理 apt 缓存
+RUN apt-get update && rm -rf /var/lib/apt/lists/*
 
 # 设置工作目录
 WORKDIR /app
