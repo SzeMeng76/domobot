@@ -3,6 +3,7 @@ Monkey patch for ParseHub to fix issues:
 1. YtParser format selector: Invalid format causes Facebook/YouTube videos to fail
 2. YtParser cookie handling: YtParser doesn't pass cookies to yt-dlp
 3. BiliAPI anti-crawler: BiliAPI doesn't set Referer headers for API calls
+4. XhsParse empty download list: XhsParse crashes when download_list is empty
 """
 
 def patch_parsehub_yt_dlp():
@@ -11,6 +12,7 @@ def patch_parsehub_yt_dlp():
     1. Use correct format selector
     2. Pass cookies from ParseConfig to yt-dlp
     3. Patch BiliAPI to add Referer headers for anti-crawler
+    4. Patch XhsParse to handle empty download list gracefully
     """
     try:
         import logging
@@ -20,6 +22,7 @@ def patch_parsehub_yt_dlp():
 
         from parsehub.parsers.base.yt_dlp_parser import YtParser
         from parsehub.provider_api.bilibili import BiliAPI
+        from parsehub.parsers.parser.xhs_ import XhsParse
 
         logger.info("🔧 Starting ParseHub patch...")
 
@@ -45,11 +48,8 @@ def patch_parsehub_yt_dlp():
 
             # 配置JavaScript runtime（YouTube需要）
             # yt-dlp默认只识别deno，需要手动指定node
-            params["extractor_args"] = {
-                "youtube": {
-                    "js_runtimes": ["node"]  # 使用Node.js作为JS runtime
-                }
-            }
+            # 正确的参数格式是顶层的 js_runtimes，不是 extractor_args
+            params["js_runtimes"] = {"node": {}}  # 使用Node.js作为JS runtime
             logger.info(f"🔧 [Patch] Configured yt-dlp to use Node.js runtime")
 
             # Add headers (Referer/Origin) for anti-crawler
@@ -251,6 +251,44 @@ def patch_parsehub_yt_dlp():
 
         BiliAPI.__init__ = patched_bili_init_v2
         logger.info("✅ BiliAPI patched: cookie support (from env) + anti-crawler headers")
+
+        # Patch XhsParse to handle empty download list
+        original_xhs_parse = XhsParse.parse
+
+        async def patched_xhs_parse(self, url: str):
+            """Patched XhsParse.parse to handle empty download list"""
+            from parsehub.types import VideoParseResult, ImageParseResult
+
+            # 调用原始的XhsParse._parse_share_note来获取结果
+            result = await self._parse_share_note(url)
+            k = {
+                "desc": result.get("desc"),
+                "title": result.get("title"),
+                "cover_url": result.get("封面"),
+            }
+
+            # 检查是否有下载地址
+            download_list = result.get("下载地址", [])
+
+            if result.get("type") == "video":
+                # 视频类型：检查下载地址是否为空
+                if not download_list or len(download_list) == 0:
+                    logger.warning(f"🌐 [Patch] XHS video has no download URLs, returning empty VideoParseResult")
+                    # 返回空的VideoParseResult（仅包含元数据）
+                    return VideoParseResult(video=None, **k)
+                else:
+                    return VideoParseResult(video=download_list[0], **k)
+            else:
+                # 图片类型：过滤掉None和空字符串
+                valid_images = [img for img in download_list if img]
+                if not valid_images:
+                    logger.warning(f"🌐 [Patch] XHS images have no download URLs, returning empty ImageParseResult")
+                    return ImageParseResult(images=[], **k)
+                else:
+                    return ImageParseResult(images=valid_images, **k)
+
+        XhsParse.parse = patched_xhs_parse
+        logger.info("✅ XhsParse patched: handle empty download list")
 
         return True
 

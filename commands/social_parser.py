@@ -334,14 +334,18 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
     if not isinstance(media_list, list):
         media_list = [media_list]
 
+    # 过滤掉None的媒体对象（下载失败的）
+    media_list = [m for m in media_list if m is not None and hasattr(m, 'path') and m.path]
+
     if len(media_list) == 0:
-        # 没有图片，只发送文本
+        # 没有图片（下载失败），只发送文本
         await context.bot.send_message(
             chat_id=chat_id,
-            text=caption,
+            text=f"{caption}\n\n⚠️ 媒体下载失败（CDN错误），仅显示文字内容",
             parse_mode="Markdown",
             reply_to_message_id=reply_to_message_id,
-            disable_web_page_preview=True
+            disable_web_page_preview=True,
+            reply_markup=reply_markup
         )
     elif len(media_list) == 1:
         # 单张图片
