@@ -62,6 +62,7 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                 return
 
             logger.info(f"✅ 从缓存读取数据: {cache_data.get('title', 'N/A')}")
+            original_url = cache_data.get('url', '')
 
             # 检查是否已有AI总结缓存
             ai_summary_cache = await _adapter.cache_manager.get(
@@ -74,34 +75,33 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                 ai_summary = ai_summary_cache.get('summary', '')
                 logger.info(f"✅ 使用缓存的AI总结")
             else:
-                # 没有缓存，生成新的AI总结
-                # 构造临时的ParseResult对象用于生成总结
-                from parsehub.types import ParseResult
+                # 没有缓存，重新解析URL并生成AI总结（类似parse_hub_bot）
+                logger.info(f"📍 重新解析URL: {original_url}")
 
-                # 创建一个简化的ParseResult对象
-                class TempParseResult:
-                    def __init__(self, data):
-                        self.raw_url = data.get('url', '')
-                        self.title = data.get('title', '')
-                        self.desc = data.get('desc', '')
+                # 重新解析获取完整的DownloadResult
+                download_result, platform, _ = await _adapter.parse_url(
+                    original_url,
+                    user_id=query.from_user.id,
+                    group_id=None
+                )
 
-                temp_result = TempParseResult(cache_data)
+                if not download_result:
+                    await query.answer("❌ 重新解析失败，无法生成总结", show_alert=True)
+                    return
 
-                # 生成AI总结
+                # 生成AI总结（传递完整的DownloadResult）
                 logger.info(f"📍 准备调用 generate_ai_summary")
-                ai_summary = await _adapter.generate_ai_summary(temp_result)
+                ai_summary = await _adapter.generate_ai_summary(download_result)
                 logger.info(f"📍 generate_ai_summary 调用完成")
-
-                logger.info(f"🔍 AI总结返回值类型: {type(ai_summary)}, 值: {repr(ai_summary)}, 布尔值: {bool(ai_summary)}")
 
                 if not ai_summary:
                     await query.answer("❌ AI总结生成失败", show_alert=True)
                     return
 
-                # 缓存AI总结（24小时）- 注意：需要包装成dict
+                # 缓存AI总结（24小时）
                 await _adapter.cache_manager.set(
                     f"ai_summary:{url_hash}",
-                    {'summary': ai_summary},  # 包装成dict
+                    {'summary': ai_summary},
                     ttl=86400,
                     subdirectory="social_parser"
                 )

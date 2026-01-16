@@ -213,8 +213,7 @@ class BotConfig:
         self.video_split_size = 45  # MB
         self.ffmpeg_path = "ffmpeg"
 
-        # 转录配置
-        self.enable_transcription = False
+        # 转录配置（用于AI总结中的视频转录）
         self.transcription_provider = "openai"
         self.transcription_api_key = None
         self.transcription_base_url = None
@@ -447,8 +446,7 @@ class ConfigManager:
         self.config.video_split_size = get_int_env("VIDEO_SPLIT_SIZE", "45")
         self.config.ffmpeg_path = os.getenv("FFMPEG_PATH", "ffmpeg")
 
-        # 转录配置
-        self.config.enable_transcription = get_bool_env("ENABLE_TRANSCRIPTION", "False")
+        # 转录配置（用于AI总结中的视频转录）
         self.config.transcription_provider = os.getenv("TRANSCRIPTION_PROVIDER", "openai")
         self.config.transcription_api_key = os.getenv("TRANSCRIPTION_API_KEY", self.config.openai_api_key)
         self.config.transcription_base_url = os.getenv("TRANSCRIPTION_BASE_URL", self.config.openai_base_url)

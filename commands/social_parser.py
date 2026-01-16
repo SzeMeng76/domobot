@@ -102,6 +102,7 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         # 格式化结果（result 现在是 DownloadResult）
         formatted = await _adapter.format_result(result, platform)
+        logger.info(f"🔍 formatted结果: title='{formatted.get('title')}', desc='{formatted.get('desc', '')[:100]}'")
 
         # 构建标题和描述（类似parse_hub_bot：有title或desc才显示，都没有才显示"无标题"）
         if formatted['title'] or formatted['desc']:
@@ -310,11 +311,6 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
         return
 
     # 文件大小正常，直接发送
-    # 可选：生成转录文字
-    transcription = await _adapter.transcribe_video(video_path)
-    if transcription:
-        caption += f"\n\n📝 *转录文字:*\n{transcription[:300]}{'...' if len(transcription) > 300 else ''}"
-
     with open(video_path, 'rb') as video_file:
         await context.bot.send_video(
             chat_id=chat_id,

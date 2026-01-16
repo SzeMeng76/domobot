@@ -567,12 +567,12 @@ class ParseHubAdapter:
             logger.error(f"视频分割失败: {e}")
             return [video_path]
 
-    async def generate_ai_summary(self, result: ParseResult) -> Optional[str]:
+    async def generate_ai_summary(self, download_result) -> Optional[str]:
         """
-        使用AI生成内容总结
+        使用ParseHub内置的AI总结功能生成内容总结
 
         Args:
-            result: 解析结果
+            download_result: DownloadResult 对象
 
         Returns:
             总结文本，失败返回None
@@ -585,20 +585,24 @@ class ParseHubAdapter:
             return None
 
         try:
-            from utils.ai_summary import generate_summary
-
-            summary = await generate_summary(
-                result=result,
+            # 使用 ParseHub 内置的 summary() 方法
+            # 注意：需要传递完整的配置参数
+            summary_result = await download_result.summary(
                 api_key=self.config.openai_api_key,
-                model=self.config.ai_summary_model,
                 base_url=self.config.openai_base_url,
-                max_length=50
+                model=self.config.ai_summary_model,
+                provider="openai",
+                transcriptions_provider=self.config.transcription_provider,
+                transcriptions_api_key=self.config.transcription_api_key,
+                transcriptions_base_url=self.config.transcription_base_url,
             )
 
-            return summary
+            # summary_result.content 是总结文本
+            logger.info(f"✅ AI总结生成成功，长度: {len(summary_result.content)}")
+            return summary_result.content
 
         except Exception as e:
-            logger.error(f"AI总结生成失败: {e}")
+            logger.error(f"AI总结生成失败: {e}", exc_info=True)
             return None
 
     async def publish_to_telegraph(self, result: ParseResult, content_html: str) -> Optional[str]:
@@ -638,45 +642,3 @@ class ParseHubAdapter:
             logger.error(f"Telegraph发布失败: {e}")
             return None
 
-    async def transcribe_video(self, video_path: Path) -> Optional[str]:
-        """
-        转录视频音频为文字
-
-        Args:
-            video_path: 视频路径
-
-        Returns:
-            转录文本，失败返回None
-        """
-        if not self.config or not self.config.enable_transcription:
-            return None
-
-        if not self.config.transcription_api_key:
-            logger.warning("转录功能已启用但未配置 API KEY")
-            return None
-
-        try:
-            from utils.transcription import transcribe_media
-
-            # 根据配置选择转录服务
-            kwargs = {
-                "api_key": self.config.transcription_api_key,
-            }
-
-            if self.config.transcription_provider == "openai":
-                kwargs["base_url"] = self.config.transcription_base_url
-            elif self.config.transcription_provider == "azure":
-                # Azure 需要 region
-                kwargs["region"] = self.config.transcription_base_url or "eastus"
-
-            text = await transcribe_media(
-                media_path=video_path,
-                provider=self.config.transcription_provider,
-                **kwargs
-            )
-
-            return text
-
-        except Exception as e:
-            logger.error(f"视频转录失败: {e}")
-            return None
