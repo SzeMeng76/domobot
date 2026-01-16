@@ -1,0 +1,581 @@
+"""
+ParseHub 适配器
+将 ParseHub 库适配到 python-telegram-bot 框架
+整合所有高级功能：图床上传、AI总结、Telegraph发布、视频分割、转录等
+"""
+
+import asyncio
+import hashlib
+import logging
+import tempfile
+import time
+from pathlib import Path
+from typing import Optional, List, Tuple, Dict
+
+from parsehub import ParseHub
+from parsehub.config import DownloadConfig, ParseConfig, GlobalConfig
+from parsehub.types import ParseResult, VideoParseResult, ImageParseResult, MultimediaParseResult
+
+logger = logging.getLogger(__name__)
+
+
+class ParseHubAdapter:
+    """ParseHub 适配器类"""
+
+    def __init__(self, cache_manager=None, user_manager=None, config=None):
+        """
+        初始化适配器
+
+        Args:
+            cache_manager: Redis 缓存管理器
+            user_manager: MySQL 用户管理器
+            config: Bot配置对象
+        """
+        self.cache_manager = cache_manager
+        self.user_manager = user_manager
+        self.config = config
+        self.parsehub = ParseHub()
+        self.temp_dir = Path(tempfile.gettempdir()) / "domobot_parse"
+        self.temp_dir.mkdir(exist_ok=True)
+
+        # 配置 ParseHub GlobalConfig
+        if config:
+            if config.douyin_api:
+                GlobalConfig.douyin_api = config.douyin_api
+                logger.info(f"✅ 配置抖音API: {config.douyin_api}")
+            GlobalConfig.duration_limit = 0  # 不限制视频时长
+
+    async def get_supported_platforms(self) -> List[str]:
+        """获取支持的平台列表"""
+        try:
+            platforms = self.parsehub.get_supported_platforms()
+            return platforms
+        except Exception as e:
+            logger.error(f"获取支持的平台列表失败: {e}")
+            return []
+
+    async def check_url_supported(self, text: str) -> bool:
+        """
+        检查文本中是否包含支持的平台URL
+
+        Args:
+            text: 待检查的文本
+
+        Returns:
+            bool: 是否包含支持的URL
+        """
+        try:
+            # 提取 URL
+            url = await self._extract_url(text)
+            if not url:
+                return False
+
+            # 检查是否支持
+            parser = self.parsehub.select_parser(url)
+            return parser is not None
+        except Exception as e:
+            logger.error(f"检查URL支持失败: {e}")
+            return False
+
+    async def parse_url(
+        self,
+        text: str,
+        user_id: int,
+        group_id: Optional[int] = None,
+        proxy: Optional[str] = None
+    ) -> Tuple[Optional, Optional[str], float]:
+        """
+        解析URL并下载媒体
+
+        Args:
+            text: 包含URL的文本
+            user_id: 用户ID
+            group_id: 群组ID（可选）
+            proxy: 代理地址（可选，不传则使用配置中的代理）
+
+        Returns:
+            (DownloadResult, platform_name, parse_time): 下载结果、平台名称、解析耗时
+        """
+        start_time = time.time()
+
+        try:
+            # 提取 URL
+            url = await self._extract_url(text)
+            if not url:
+                return None, None, 0
+
+            # 检查缓存
+            cache_key = self._get_cache_key(url)
+            if self.cache_manager:
+                cached = await self.cache_manager.get(cache_key)
+                if cached:
+                    logger.info(f"从缓存获取解析结果: {url}")
+                    parse_time = time.time() - start_time
+                    return cached.get("result"), cached.get("platform"), parse_time
+
+            # 配置解析器（优先使用传入的proxy，否则使用配置中的proxy）
+            parser_proxy = proxy or (self.config.parser_proxy if self.config else None)
+            downloader_proxy = proxy or (self.config.downloader_proxy if self.config else None)
+
+            # 根据平台选择 Cookie
+            platform_cookie = None
+            if self.config:
+                parser = self.parsehub.select_parser(url)
+                if parser:
+                    platform_id = getattr(parser, '__platform_id__', '')
+                    if platform_id == 'twitter' and self.config.twitter_cookie:
+                        platform_cookie = self.config.twitter_cookie
+                    elif platform_id == 'instagram' and self.config.instagram_cookie:
+                        platform_cookie = self.config.instagram_cookie
+                    elif platform_id == 'facebook' and self.config.facebook_cookie:
+                        platform_cookie = self.config.facebook_cookie
+
+            # 创建配置（Cookie 是字符串，ParseConfig 会自动解析）
+            parse_config = ParseConfig(proxy=parser_proxy, cookie=platform_cookie)
+            download_config = DownloadConfig(proxy=downloader_proxy, save_dir=self.temp_dir)
+
+            # 解析
+            self.parsehub.config = parse_config
+            result = await self.parsehub.parse(url)
+
+            if not result:
+                return None, None, 0
+
+            # 获取平台名称
+            parser = self.parsehub.select_parser(url)
+            platform_name = parser.__platform_id__ if (parser and hasattr(parser, '__platform_id__')) else "unknown"
+
+            # 下载媒体（download() 方法返回 DownloadResult，但会自动使用 config.save_dir）
+            download_result = await result.download(config=download_config)
+
+            parse_time = time.time() - start_time
+
+            # 缓存结果（使用配置的缓存时间）
+            cache_duration = self.config.parser_cache_duration if self.config else 86400
+            if self.cache_manager:
+                await self.cache_manager.set(
+                    cache_key,
+                    {"result": download_result, "platform": platform_name},
+                    expire=cache_duration
+                )
+
+            # 记录统计
+            await self._record_stats(user_id, group_id, platform_name, url, True, parse_time * 1000)
+
+            return download_result, platform_name, parse_time
+
+        except Exception as e:
+            parse_time = time.time() - start_time
+            logger.error(f"解析URL失败: {e}")
+
+            # 记录失败统计
+            await self._record_stats(
+                user_id,
+                group_id,
+                "unknown",
+                text,
+                False,
+                parse_time * 1000,
+                str(e)
+            )
+
+            return None, None, parse_time
+
+    async def format_result(self, download_result, platform: str) -> dict:
+        """
+        格式化下载结果
+
+        Args:
+            download_result: DownloadResult 下载结果
+            platform: 平台名称
+
+        Returns:
+            dict: 格式化后的结果
+        """
+        try:
+            # download_result.pr 是原始的 ParseResult
+            pr = download_result.pr
+            formatted = {
+                "title": pr.title or "无标题",
+                "desc": pr.desc or "",
+                "platform": platform,
+                "url": pr.raw_url,
+                "media_type": self._get_media_type(pr),
+                "media_count": 0,
+                "media_paths": []
+            }
+
+            # 获取媒体路径
+            media = download_result.media
+            if isinstance(media, list):
+                formatted["media_count"] = len(media)
+                formatted["media_paths"] = [str(m.path) for m in media if m.exists()]
+            elif media and media.exists():
+                formatted["media_count"] = 1
+                formatted["media_paths"] = [str(media.path)]
+
+            return formatted
+
+        except Exception as e:
+            logger.error(f"格式化结果失败: {e}")
+            return {}
+
+    def _get_media_type(self, result: ParseResult) -> str:
+        """获取媒体类型"""
+        if isinstance(result, VideoParseResult):
+            return "video"
+        elif isinstance(result, ImageParseResult):
+            return "image"
+        elif isinstance(result, MultimediaParseResult):
+            return "multimedia"
+        else:
+            return "unknown"
+
+    async def _extract_url(self, text: str) -> Optional[str]:
+        """从文本中提取URL"""
+        try:
+            # 使用 ParseHub 的 get_raw_url 方法
+            url = await self.parsehub.get_raw_url(text)
+            return url
+        except Exception:
+            return None
+
+    def _get_cache_key(self, url: str) -> str:
+        """生成缓存键"""
+        url_hash = hashlib.md5(url.encode()).hexdigest()
+        return f"parse:result:{url_hash}"
+
+    async def _record_stats(
+        self,
+        user_id: int,
+        group_id: Optional[int],
+        platform: str,
+        url: str,
+        success: bool,
+        parse_time_ms: float,
+        error_message: Optional[str] = None
+    ):
+        """记录解析统计"""
+        if not self.user_manager:
+            return
+
+        try:
+            async with self.user_manager.pool.acquire() as conn:
+                async with conn.cursor() as cursor:
+                    await cursor.execute(
+                        """
+                        INSERT INTO social_parser_stats
+                        (user_id, group_id, platform, url, parse_success, parse_time_ms, error_message)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        (user_id, group_id, platform, url, success, int(parse_time_ms), error_message)
+                    )
+                    await conn.commit()
+        except Exception as e:
+            logger.error(f"记录解析统计失败: {e}")
+
+    async def cleanup_temp_files(self, older_than_hours: int = 24):
+        """清理临时文件"""
+        try:
+            import shutil
+            cutoff_time = time.time() - (older_than_hours * 3600)
+
+            for item in self.temp_dir.iterdir():
+                if item.is_dir() and item.stat().st_mtime < cutoff_time:
+                    shutil.rmtree(item, ignore_errors=True)
+                    logger.info(f"清理临时目录: {item}")
+        except Exception as e:
+            logger.error(f"清理临时文件失败: {e}")
+
+    async def is_auto_parse_enabled(self, group_id: int) -> bool:
+        """
+        检查群组是否启用了自动解析
+
+        Args:
+            group_id: 群组ID
+
+        Returns:
+            bool: 是否启用
+        """
+        if not self.user_manager:
+            return False
+
+        try:
+            async with self.user_manager.pool.acquire() as conn:
+                async with conn.cursor() as cursor:
+                    await cursor.execute(
+                        "SELECT auto_parse_enabled FROM social_parser_config WHERE group_id = %s",
+                        (group_id,)
+                    )
+                    result = await cursor.fetchone()
+                    return bool(result[0]) if result else False
+        except Exception as e:
+            logger.error(f"检查自动解析状态失败: {e}")
+            return False
+
+    async def enable_auto_parse(self, group_id: int, enabled_by: int) -> bool:
+        """
+        启用群组自动解析
+
+        Args:
+            group_id: 群组ID
+            enabled_by: 启用者ID
+
+        Returns:
+            bool: 是否成功
+        """
+        if not self.user_manager:
+            return False
+
+        try:
+            async with self.user_manager.pool.acquire() as conn:
+                async with conn.cursor() as cursor:
+                    await cursor.execute(
+                        """
+                        INSERT INTO social_parser_config (group_id, auto_parse_enabled, enabled_by)
+                        VALUES (%s, TRUE, %s)
+                        ON DUPLICATE KEY UPDATE
+                            auto_parse_enabled = TRUE,
+                            enabled_by = %s,
+                            updated_at = CURRENT_TIMESTAMP
+                        """,
+                        (group_id, enabled_by, enabled_by)
+                    )
+                    await conn.commit()
+                    logger.info(f"群组 {group_id} 启用自动解析")
+                    return True
+        except Exception as e:
+            logger.error(f"启用自动解析失败: {e}")
+            return False
+
+    async def disable_auto_parse(self, group_id: int) -> bool:
+        """
+        禁用群组自动解析
+
+        Args:
+            group_id: 群组ID
+
+        Returns:
+            bool: 是否成功
+        """
+        if not self.user_manager:
+            return False
+
+        try:
+            async with self.user_manager.pool.acquire() as conn:
+                async with conn.cursor() as cursor:
+                    await cursor.execute(
+                        """
+                        UPDATE social_parser_config
+                        SET auto_parse_enabled = FALSE,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE group_id = %s
+                        """,
+                        (group_id,)
+                    )
+                    await conn.commit()
+                    logger.info(f"群组 {group_id} 禁用自动解析")
+                    return True
+        except Exception as e:
+            logger.error(f"禁用自动解析失败: {e}")
+            return False
+
+    async def get_auto_parse_groups(self) -> List[int]:
+        """
+        获取所有启用自动解析的群组
+
+        Returns:
+            List[int]: 群组ID列表
+        """
+        if not self.user_manager:
+            return []
+
+        try:
+            async with self.user_manager.pool.acquire() as conn:
+                async with conn.cursor() as cursor:
+                    await cursor.execute(
+                        "SELECT group_id FROM social_parser_config WHERE auto_parse_enabled = TRUE"
+                    )
+                    results = await cursor.fetchall()
+                    return [row[0] for row in results]
+        except Exception as e:
+            logger.error(f"获取自动解析群组列表失败: {e}")
+            return []
+
+    # ==================== 高级功能 ====================
+
+    async def upload_to_image_host(self, file_path: Path) -> Optional[str]:
+        """
+        上传文件到图床
+
+        Args:
+            file_path: 文件路径
+
+        Returns:
+            图床URL，失败返回None
+        """
+        if not self.config or not self.config.enable_image_host:
+            return None
+
+        try:
+            from utils.image_host import ImageHostUploader
+
+            proxy = self.config.downloader_proxy if self.config else None
+            kwargs = {}
+            if self.config.catbox_userhash:
+                kwargs["catbox_userhash"] = self.config.catbox_userhash
+            if self.config.zioooo_storage_id:
+                kwargs["zioooo_storage_id"] = self.config.zioooo_storage_id
+
+            async with ImageHostUploader(
+                service=self.config.image_host_service,
+                proxy=proxy,
+                **kwargs
+            ) as uploader:
+                url = await uploader.upload(file_path)
+                return url
+
+        except Exception as e:
+            logger.error(f"上传到图床失败: {e}")
+            return None
+
+    async def split_large_video(self, video_path: Path) -> List[Path]:
+        """
+        分割大视频文件
+
+        Args:
+            video_path: 视频路径
+
+        Returns:
+            分割后的文件路径列表（如果不需要分割，返回原文件）
+        """
+        if not self.config or not self.config.enable_video_split:
+            return [video_path]
+
+        try:
+            from utils.video_splitter import split_video_if_needed
+
+            parts = await split_video_if_needed(
+                video_path,
+                max_size_mb=self.config.video_split_size,
+                ffmpeg_path=self.config.ffmpeg_path
+            )
+            return parts
+
+        except Exception as e:
+            logger.error(f"视频分割失败: {e}")
+            return [video_path]
+
+    async def generate_ai_summary(self, result: ParseResult) -> Optional[str]:
+        """
+        使用AI生成内容总结
+
+        Args:
+            result: 解析结果
+
+        Returns:
+            总结文本，失败返回None
+        """
+        if not self.config or not self.config.enable_ai_summary:
+            return None
+
+        if not self.config.openai_api_key:
+            logger.warning("AI总结功能已启用但未配置 OPENAI_API_KEY")
+            return None
+
+        try:
+            from utils.ai_summary import generate_summary
+
+            summary = await generate_summary(
+                result=result,
+                api_key=self.config.openai_api_key,
+                model=self.config.ai_summary_model,
+                base_url=self.config.openai_base_url,
+                max_length=50
+            )
+
+            return summary
+
+        except Exception as e:
+            logger.error(f"AI总结生成失败: {e}")
+            return None
+
+    async def publish_to_telegraph(self, result: ParseResult, content_html: str) -> Optional[str]:
+        """
+        发布内容到 Telegraph
+
+        Args:
+            result: 解析结果
+            content_html: HTML内容
+
+        Returns:
+            Telegraph URL，失败返回None
+        """
+        if not self.config or not self.config.enable_telegraph:
+            return None
+
+        try:
+            from utils.telegraph_helper import TelegraphPublisher
+
+            publisher = TelegraphPublisher(
+                access_token=self.config.telegraph_token,
+                author_name=self.config.telegraph_author
+            )
+
+            url = await publisher.create_page(
+                title=result.title or "解析内容",
+                content=content_html
+            )
+
+            if url and not self.config.telegraph_token:
+                # 保存自动创建的token
+                self.config.telegraph_token = publisher.access_token
+
+            return url
+
+        except Exception as e:
+            logger.error(f"Telegraph发布失败: {e}")
+            return None
+
+    async def transcribe_video(self, video_path: Path) -> Optional[str]:
+        """
+        转录视频音频为文字
+
+        Args:
+            video_path: 视频路径
+
+        Returns:
+            转录文本，失败返回None
+        """
+        if not self.config or not self.config.enable_transcription:
+            return None
+
+        if not self.config.transcription_api_key:
+            logger.warning("转录功能已启用但未配置 API KEY")
+            return None
+
+        try:
+            from utils.transcription import transcribe_media
+
+            # 根据配置选择转录服务
+            kwargs = {
+                "api_key": self.config.transcription_api_key,
+            }
+
+            if self.config.transcription_provider == "openai":
+                kwargs["base_url"] = self.config.transcription_base_url
+            elif self.config.transcription_provider == "azure":
+                # Azure 需要 region
+                kwargs["region"] = self.config.transcription_base_url or "eastus"
+
+            text = await transcribe_media(
+                media_path=video_path,
+                provider=self.config.transcription_provider,
+                **kwargs
+            )
+
+            return text
+
+        except Exception as e:
+            logger.error(f"视频转录失败: {e}")
+            return None

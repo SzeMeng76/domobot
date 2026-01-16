@@ -1,0 +1,401 @@
+"""
+社交媒体解析命令模块
+支持20+平台的视频、图片、图文解析
+"""
+
+import logging
+import time
+from pathlib import Path
+from telegram import Update
+from telegram.ext import ContextTypes
+
+from parsehub.types import Video, Image, VideoParseResult, ImageParseResult, MultimediaParseResult
+from utils.command_factory import command_factory
+from utils.error_handling import with_error_handling
+from utils.message_manager import send_error, send_info, delete_user_command
+from utils.permissions import Permission
+
+logger = logging.getLogger(__name__)
+
+# 全局适配器实例
+_adapter = None
+
+
+def set_adapter(adapter):
+    """设置 ParseHub 适配器"""
+    global _adapter
+    _adapter = adapter
+
+
+@with_error_handling
+async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    /parse <URL> - 解析社交媒体链接
+    /parse reply - 回复一条消息解析其中的链接
+    """
+    if not _adapter:
+        await send_error(context, update.effective_chat.id, "❌ 解析功能未初始化")
+        return
+
+    user_id = update.effective_user.id
+    chat_id = update.effective_chat.id
+    group_id = chat_id if chat_id < 0 else None
+
+    # 获取要解析的文本
+    text = None
+    if context.args:
+        text = " ".join(context.args)
+    elif update.message.reply_to_message:
+        text = update.message.reply_to_message.text or update.message.reply_to_message.caption
+
+    if not text:
+        help_text = (
+            "📝 *使用方法：*\n\n"
+            "• `/parse <链接>` \\- 解析指定链接\n"
+            "• 回复一条消息并输入 `/parse` \\- 解析被回复消息中的链接\n\n"
+            "🌐 *支持的平台：*\n"
+            "抖音、快手、B站、YouTube、TikTok、小红书、Twitter/X、Instagram、Facebook、微博等20\\+平台"
+        )
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=help_text,
+            parse_mode="MarkdownV2"
+        )
+        if update.message:
+            await delete_user_command(context, chat_id, update.message.message_id)
+        return
+
+    # 检查是否包含支持的URL
+    if not await _adapter.check_url_supported(text):
+        await send_error(
+            context,
+            chat_id,
+            "❌ 未检测到支持的平台链接\n\n支持：抖音、B站、YouTube、TikTok、小红书、Twitter等20+平台"
+        )
+        if update.message:
+            await delete_user_command(context, chat_id, update.message.message_id)
+        return
+
+    # 发送处理中消息
+    status_msg = await send_info(context, chat_id, "🔄 解析中...")
+
+    try:
+        # 解析URL
+        result, platform, parse_time = await _adapter.parse_url(text, user_id, group_id)
+
+        if not result:
+            await status_msg.edit_text("❌ 解析失败，请检查链接是否正确")
+            if update.message:
+                await delete_user_command(context, chat_id, update.message.message_id)
+            return
+
+        # 更新状态
+        await status_msg.edit_text("📥 下载中...")
+
+        # 格式化结果（result 现在是 DownloadResult）
+        formatted = await _adapter.format_result(result, platform)
+
+        # 生成AI总结（如果启用）- 传递 ParseResult
+        ai_summary = await _adapter.generate_ai_summary(result.pr)
+
+        # 构建标题和描述
+        caption = f"**{formatted['title']}**"
+        if formatted['desc']:
+            caption += f"\n\n{formatted['desc'][:200]}"  # 限制描述长度
+
+        # 添加AI总结
+        if ai_summary:
+            caption += f"\n\n📝 *AI总结:* {ai_summary}"
+
+        if formatted['url']:
+            caption += f"\n\n🔗 [原链接]({formatted['url']})"
+        caption += f"\n\n📱 平台: {platform.upper()}"
+
+        # 更新状态
+        await status_msg.edit_text("📤 上传中...")
+
+        # 发送媒体
+        await _send_media(context, chat_id, result, caption, update.message.message_id if update.message else None)
+
+        # 删除状态消息
+        await status_msg.delete()
+
+        # 删除用户命令
+        if update.message:
+            await delete_user_command(context, chat_id, update.message.message_id)
+
+        logger.info(f"用户 {user_id} 解析成功: {platform} - {formatted['title']}")
+
+    except Exception as e:
+        logger.error(f"解析失败: {e}", exc_info=True)
+        await status_msg.edit_text(f"❌ 处理失败: {str(e)}")
+        if update.message:
+            await delete_user_command(context, chat_id, update.message.message_id)
+
+
+async def _send_media(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None):
+    """发送媒体文件"""
+    try:
+        # download_result.pr 是原始的 ParseResult
+        if isinstance(download_result.pr, VideoParseResult):
+            # 发送视频
+            await _send_video(context, chat_id, download_result, caption, reply_to_message_id)
+        elif isinstance(download_result.pr, ImageParseResult):
+            # 发送图片
+            await _send_images(context, chat_id, download_result, caption, reply_to_message_id)
+        elif isinstance(download_result.pr, MultimediaParseResult):
+            # 发送混合媒体
+            await _send_multimedia(context, chat_id, download_result, caption, reply_to_message_id)
+        else:
+            # 只发送文本
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=caption,
+                parse_mode="Markdown",
+                reply_to_message_id=reply_to_message_id,
+                disable_web_page_preview=True
+            )
+    except Exception as e:
+        logger.error(f"发送媒体失败: {e}")
+        raise
+
+
+async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None):
+    """发送视频（支持视频分割和图床上传）"""
+    media = download_result.media
+    video_path = Path(media.path)
+
+    # 检查文件大小（Telegram 限制 50MB）
+    video_size_mb = video_path.stat().st_size / (1024 * 1024)
+
+    if video_size_mb > 50:
+        # 文件太大，尝试分割或上传到图床
+        logger.info(f"视频文件过大 ({video_size_mb:.1f}MB)，尝试高级处理...")
+
+        # 尝试视频分割
+        video_parts = await _adapter.split_large_video(video_path)
+        if len(video_parts) > 1:
+            # 分割成功，逐个发送
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"{caption}\n\n📁 视频已分割为 {len(video_parts)} 个片段",
+                parse_mode="Markdown",
+                reply_to_message_id=reply_to_message_id,
+                disable_web_page_preview=True
+            )
+
+            for i, part in enumerate(video_parts, 1):
+                with open(part, 'rb') as video_file:
+                    await context.bot.send_video(
+                        chat_id=chat_id,
+                        video=video_file,
+                        caption=f"片段 {i}/{len(video_parts)}",
+                        supports_streaming=True
+                    )
+            return
+
+        # 分割失败或未启用，尝试上传到图床
+        image_host_url = await _adapter.upload_to_image_host(video_path)
+        if image_host_url:
+            # 上传成功
+            message_text = f"{caption}\n\n⚠️ 视频文件过大 ({video_size_mb:.1f}MB)\n📤 已上传到图床\n🔗 [点击查看视频]({image_host_url})"
+            if media.thumb_url:
+                await context.bot.send_photo(
+                    chat_id=chat_id,
+                    photo=media.thumb_url,
+                    caption=message_text,
+                    parse_mode="Markdown",
+                    reply_to_message_id=reply_to_message_id
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=message_text,
+                    parse_mode="Markdown",
+                    reply_to_message_id=reply_to_message_id,
+                    disable_web_page_preview=False
+                )
+            return
+
+        # 都失败了，只发送缩略图和提示
+        if media.thumb_url:
+            await context.bot.send_photo(
+                chat_id=chat_id,
+                photo=media.thumb_url,
+                caption=f"{caption}\n\n⚠️ 视频文件过大 ({video_size_mb:.1f}MB)，无法直接发送",
+                parse_mode="Markdown",
+                reply_to_message_id=reply_to_message_id
+            )
+        else:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"{caption}\n\n⚠️ 视频文件过大，无法直接发送",
+                parse_mode="Markdown",
+                reply_to_message_id=reply_to_message_id,
+                disable_web_page_preview=True
+            )
+        return
+
+    # 文件大小正常，直接发送
+    # 可选：生成转录文字
+    transcription = await _adapter.transcribe_video(video_path)
+    if transcription:
+        caption += f"\n\n📝 *转录文字:*\n{transcription[:300]}{'...' if len(transcription) > 300 else ''}"
+
+    with open(video_path, 'rb') as video_file:
+        await context.bot.send_video(
+            chat_id=chat_id,
+            video=video_file,
+            caption=caption,
+            parse_mode="Markdown",
+            width=media.width or 0,
+            height=media.height or 0,
+            duration=media.duration or 0,
+            reply_to_message_id=reply_to_message_id,
+            supports_streaming=True
+        )
+
+
+async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None):
+    """发送图片"""
+    media_list = download_result.media
+    if not isinstance(media_list, list):
+        media_list = [media_list]
+
+    if len(media_list) == 0:
+        # 没有图片，只发送文本
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=caption,
+            parse_mode="Markdown",
+            reply_to_message_id=reply_to_message_id,
+            disable_web_page_preview=True
+        )
+    elif len(media_list) == 1:
+        # 单张图片
+        image_path = str(media_list[0].path)
+        with open(image_path, 'rb') as photo_file:
+            await context.bot.send_photo(
+                chat_id=chat_id,
+                photo=photo_file,
+                caption=caption,
+                parse_mode="Markdown",
+                reply_to_message_id=reply_to_message_id
+            )
+    elif len(media_list) <= 10:
+        # 多张图片（使用媒体组，最多10张）
+        from telegram import InputMediaPhoto
+
+        media_group = []
+        for i, img in enumerate(media_list[:10]):
+            image_path = str(img.path)
+            with open(image_path, 'rb') as photo_file:
+                media_group.append(
+                    InputMediaPhoto(
+                        media=photo_file.read(),
+                        caption=caption if i == 0 else None,
+                        parse_mode="Markdown" if i == 0 else None
+                    )
+                )
+
+        await context.bot.send_media_group(
+            chat_id=chat_id,
+            media=media_group,
+            reply_to_message_id=reply_to_message_id
+        )
+    else:
+        # 超过10张，分批发送
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"{caption}\n\n📷 共{len(media_list)}张图片，分批发送中...",
+            parse_mode="Markdown",
+            reply_to_message_id=reply_to_message_id,
+            disable_web_page_preview=True
+        )
+
+        from telegram import InputMediaPhoto
+        for batch_start in range(0, len(media_list), 10):
+            batch = media_list[batch_start:batch_start + 10]
+            media_group = []
+            for img in batch:
+                image_path = str(img.path)
+                with open(image_path, 'rb') as photo_file:
+                    media_group.append(InputMediaPhoto(media=photo_file.read()))
+            await context.bot.send_media_group(chat_id=chat_id, media=media_group)
+
+
+async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None):
+    """发送混合媒体"""
+    media_list = download_result.media
+    if not isinstance(media_list, list):
+        media_list = [media_list]
+
+    # 发送说明
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=f"{caption}\n\n📁 共{len(media_list)}个媒体文件",
+        parse_mode="Markdown",
+        reply_to_message_id=reply_to_message_id,
+        disable_web_page_preview=True
+    )
+
+    # 逐个发送媒体
+    for media in media_list:
+        try:
+            media_path = str(media.path)
+            if isinstance(media, Video):
+                with open(media_path, 'rb') as video_file:
+                    await context.bot.send_video(
+                        chat_id=chat_id,
+                        video=video_file,
+                        supports_streaming=True
+                    )
+            elif isinstance(media, Image):
+                with open(media_path, 'rb') as photo_file:
+                    await context.bot.send_photo(chat_id=chat_id, photo=photo_file)
+        except Exception as e:
+            logger.error(f"发送媒体失败: {e}")
+            continue
+
+
+@with_error_handling
+async def platforms_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/platforms - 查看支持的平台列表"""
+    if not _adapter:
+        await send_error(context, update.effective_chat.id, "❌ 解析功能未初始化")
+        return
+
+    platforms = await _adapter.get_supported_platforms()
+
+    if not platforms:
+        await send_error(context, update.effective_chat.id, "❌ 获取平台列表失败")
+        return
+
+    text = "🌐 *支持的平台列表：*\n\n"
+    text += "\n".join([f"• {platform}" for platform in platforms])
+    text += f"\n\n共支持 *{len(platforms)}* 个平台"
+
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=text,
+        parse_mode="Markdown"
+    )
+
+    if update.message:
+        await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+
+
+# 注册命令
+command_factory.register_command(
+    "parse",
+    parse_command,
+    permission=Permission.USER,  # 白名单用户/群组可用（涉及API费用）
+    description="解析社交媒体链接"
+)
+
+command_factory.register_command(
+    "platforms",
+    platforms_command,
+    permission=Permission.NONE,  # 公开命令，所有人可用
+    description="查看支持的平台列表"
+)

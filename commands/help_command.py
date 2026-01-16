@@ -43,6 +43,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 📊 `/finance AAPL` - 股票查询 | 🗺️ `/map 天安门` - 地图服务
 ✈️ `/flight 北京 洛杉矶 2024-12-25` - 智能航班搜索
 🏨 `/hotel 东京 2024-12-25 2024-12-28` - 智能酒店搜索
+📱 `/parse <链接>` - 社交媒体解析 | `/platforms` - 支持平台
 
 💱 *汇率* `/rate [货币] [数额]` - 支持表达式计算
 🪙 *加密货币* `/crypto <币种> [数量] [货币]` - 实时价格

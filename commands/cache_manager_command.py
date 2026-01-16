@@ -42,6 +42,7 @@ CACHE_SERVICES = {
     'map': '地图服务缓存',
     'flights': '航班服务缓存',
     'hotels': '酒店服务缓存',
+    'social_parser': '社交解析缓存',
 }
 
 async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
@@ -93,7 +94,7 @@ async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
                         prefixes = [
                             "movie_search_", "movie_popular_", "movie_detail_", "movie_rec_",
                             "movie_watch_providers_",
-                            "tv_search_", "tv_popular_", "tv_detail_", "tv_rec_", 
+                            "tv_search_", "tv_popular_", "tv_detail_", "tv_rec_",
                             "tv_season_", "tv_episode_", "tv_watch_providers_",
                             "trending_", "now_playing_", "upcoming_",
                             "person_search_", "person_detail_",
@@ -101,6 +102,9 @@ async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
                         ]
                         for prefix in prefixes:
                             await cache_manager.clear_cache(subdirectory="movie", key_prefix=prefix)
+                    elif svc == 'social_parser':
+                        # 特殊处理social_parser的缓存结构
+                        await cache_manager.clear_cache(subdirectory="social_parser")
                     else:
                         await cache_manager.clear_cache(subdirectory=svc)
             return True, "✅ 所有缓存已清理完成"
@@ -144,7 +148,7 @@ async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
                 prefixes = [
                     "movie_search_", "movie_popular_", "movie_detail_", "movie_rec_",
                     "movie_watch_providers_",
-                    "tv_search_", "tv_popular_", "tv_detail_", "tv_rec_", 
+                    "tv_search_", "tv_popular_", "tv_detail_", "tv_rec_",
                     "tv_season_", "tv_episode_", "tv_watch_providers_",
                     "trending_", "now_playing_", "upcoming_",
                     "person_search_", "person_detail_",
@@ -152,6 +156,9 @@ async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
                 ]
                 for prefix in prefixes:
                     await cache_manager.clear_cache(subdirectory="movie", key_prefix=prefix)
+            elif service == 'social_parser':
+                # 特殊处理social_parser的缓存结构
+                await cache_manager.clear_cache(subdirectory="social_parser")
             else:
                 await cache_manager.clear_cache(subdirectory=service)
             

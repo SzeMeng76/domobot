@@ -199,6 +199,10 @@ def setup_handlers(application: Application):
 
         logger.info("✅ AI反垃圾处理器已注册")
 
+    # 注册社交媒体自动解析处理器（必须在 UnifiedTextHandler 之前）
+    from handlers.auto_parse_handler import setup_auto_parse_handler
+    setup_auto_parse_handler(application)
+
     # 使用命令工厂设置处理器（包括 UnifiedTextHandler）
     command_factory.setup_handlers(application)
 
@@ -277,12 +281,17 @@ async def setup_application(application: Application, config) -> None:
         logger.warning("⚠️ AI反垃圾功能已启用但缺少OPENAI_API_KEY，功能将不可用")
 
     # 将核心组件存储到 bot_data 中
+    # 初始化社交媒体解析适配器
+    from utils.parse_hub_adapter import ParseHubAdapter
+    parse_adapter = ParseHubAdapter(cache_manager, user_cache_manager, config)
+
     application.bot_data["cache_manager"] = cache_manager
     application.bot_data["rate_converter"] = rate_converter
     application.bot_data["httpx_client"] = httpx_client
     application.bot_data["user_cache_manager"] = user_cache_manager
     application.bot_data["stats_manager"] = stats_manager
     application.bot_data["anti_spam_handler"] = anti_spam_handler  # 存储反垃圾处理器
+    application.bot_data["parse_adapter"] = parse_adapter  # 存储社交解析适配器
     logger.info("✅ 核心组件初始化完成")
 
     # ========================================
@@ -316,6 +325,12 @@ async def setup_application(application: Application, config) -> None:
     map.set_dependencies(cache_manager, httpx_client)
     flight.set_dependencies(cache_manager, httpx_client)
     hotel.set_dependencies(cache_manager, httpx_client)
+
+    # 注入社交媒体解析依赖
+    from commands import social_parser
+    from handlers import auto_parse_handler
+    social_parser.set_adapter(parse_adapter)
+    auto_parse_handler.set_adapter(parse_adapter)
 
     # 新增：为需要用户缓存的模块注入依赖
     # 这里可以根据实际需要为特定命令模块注入用户缓存管理器
