@@ -330,13 +330,47 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
             reply_markup=reply_markup
         )
     else:
-        # 超过10张，分批发送
+        # 超过10张，上传到图床并发送Telegraph链接（类似parse_hub_bot）
+        if _adapter.config and _adapter.config.enable_image_host:
+            try:
+                # 上传图片到图床
+                logger.info(f"上传 {len(media_list)} 张图片到图床...")
+                uploaded_urls = []
+                for img in media_list:
+                    img_url = await _adapter.upload_to_image_host(img.path)
+                    if img_url:
+                        uploaded_urls.append(img_url)
+
+                if uploaded_urls:
+                    # 创建HTML内容
+                    html_content = f"<p>{download_result.pr.desc or ''}</p><br><br>"
+                    html_content += "".join([f'<img src="{url}">' for url in uploaded_urls])
+
+                    # 发布到Telegraph
+                    telegraph_url = await _adapter.publish_to_telegraph(download_result.pr, html_content)
+
+                    if telegraph_url:
+                        # 发送Telegraph链接
+                        await context.bot.send_message(
+                            chat_id=chat_id,
+                            text=f"{caption}\n\n📷 共{len(media_list)}张图片\n🔗 [查看完整图集]({telegraph_url})",
+                            parse_mode="Markdown",
+                            reply_to_message_id=reply_to_message_id,
+                            disable_web_page_preview=False,
+                            reply_markup=reply_markup
+                        )
+                        return
+            except Exception as e:
+                logger.error(f"上传图床失败: {e}")
+
+        # 图床失败或未启用，降级为分批发送
         await context.bot.send_message(
             chat_id=chat_id,
             text=f"{caption}\n\n📷 共{len(media_list)}张图片，分批发送中...",
             parse_mode="Markdown",
             reply_to_message_id=reply_to_message_id,
-            disable_web_page_preview=True
+            disable_web_page_preview=True,
+            reply_markup=reply_markup
         )
 
         from telegram import InputMediaPhoto
