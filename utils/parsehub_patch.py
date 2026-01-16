@@ -3,7 +3,7 @@ Monkey patch for ParseHub to fix issues:
 1. YtParser format selector: Invalid format causes Facebook/YouTube videos to fail
 2. YtParser cookie handling: YtParser doesn't pass cookies to yt-dlp
 3. BiliAPI anti-crawler: BiliAPI doesn't set Referer headers for API calls
-4. XhsParse empty download list: XhsParse crashes when download_list is empty
+4. XhsParser empty download list: XhsParser crashes when download_list is empty
 """
 
 def patch_parsehub_yt_dlp():
@@ -12,7 +12,7 @@ def patch_parsehub_yt_dlp():
     1. Use correct format selector
     2. Pass cookies from ParseConfig to yt-dlp
     3. Patch BiliAPI to add Referer headers for anti-crawler
-    4. Patch XhsParse to handle empty download list gracefully
+    4. Patch XhsParser to handle empty download list gracefully
     """
     try:
         import logging
@@ -22,7 +22,7 @@ def patch_parsehub_yt_dlp():
 
         from parsehub.parsers.base.yt_dlp_parser import YtParser
         from parsehub.provider_api.bilibili import BiliAPI
-        from parsehub.parsers.parser.xhs_ import XhsParse
+        from parsehub.parsers.parser.xhs_ import XhsParser
 
         logger.info("🔧 Starting ParseHub patch...")
 
@@ -48,63 +48,76 @@ def patch_parsehub_yt_dlp():
 
             # 配置JavaScript runtime（YouTube需要）
             # yt-dlp默认只识别deno，需要手动指定node
-            # 正确的参数格式是顶层的 js_runtimes，不是 extractor_args
-            params["js_runtimes"] = {"node": {}}  # 使用Node.js作为JS runtime
-            logger.info(f"🔧 [Patch] Configured yt-dlp to use Node.js runtime")
+            # 参考: yt_dlp/YoutubeDL.py:538-544
+            # js_runtimes格式: {'runtime_name': {'path': '/path/to/executable'}}
+            params["js_runtimes"] = {"node": {"path": "/usr/bin/node"}}  # 明确指定Node.js路径
+            logger.info(f"🔧 [Patch] Configured yt-dlp to use Node.js runtime at /usr/bin/node")
 
             # Add headers (Referer/Origin) for anti-crawler
             # yt-dlp需要这些headers才能绕过各平台的反爬虫检测
+            # 重要：不要覆盖params["http_headers"]，而是更新现有headers
+            # 参考: yt_dlp/YoutubeDL.py:742 - params['http_headers'] = HTTPHeaderDict(std_headers, self.params.get('http_headers'))
             url_lower = url.lower()
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            }
 
+            # 获取现有headers（如果有的话），否则使用空dict
+            http_headers = params.get("http_headers", {})
+            if not isinstance(http_headers, dict):
+                http_headers = {}
+
+            # 只更新User-Agent（如果没有设置的话）
+            if "User-Agent" not in http_headers:
+                http_headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+            # 根据平台添加Referer和Origin
             if "youtube.com" in url_lower or "youtu.be" in url_lower:
-                headers.update({
+                http_headers.update({
                     "Referer": "https://www.youtube.com/",
                     "Origin": "https://www.youtube.com"
                 })
                 logger.info(f"🌐 [Patch] Added YouTube headers (Referer/Origin)")
             elif "bilibili.com" in url_lower or "b23.tv" in url_lower:
-                headers.update({
+                http_headers.update({
                     "Referer": "https://www.bilibili.com/",
                     "Origin": "https://www.bilibili.com"
                 })
                 logger.info(f"🌐 [Patch] Added Bilibili headers (Referer/Origin)")
             elif "twitter.com" in url_lower or "x.com" in url_lower:
-                headers.update({
+                http_headers.update({
                     "Referer": "https://twitter.com/",
                     "Origin": "https://twitter.com"
                 })
                 logger.info(f"🌐 [Patch] Added Twitter headers (Referer/Origin)")
             elif "instagram.com" in url_lower:
-                headers.update({
+                http_headers.update({
                     "Referer": "https://www.instagram.com/",
                     "Origin": "https://www.instagram.com"
                 })
                 logger.info(f"🌐 [Patch] Added Instagram headers (Referer/Origin)")
             elif "kuaishou.com" in url_lower:
-                headers.update({
+                http_headers.update({
                     "Referer": "https://www.kuaishou.com/",
                     "Origin": "https://www.kuaishou.com"
                 })
                 logger.info(f"🌐 [Patch] Added Kuaishou headers (Referer/Origin)")
             elif "facebook.com" in url_lower or "fb.watch" in url_lower:
-                headers.update({
+                http_headers.update({
                     "Referer": "https://www.facebook.com/",
                     "Origin": "https://www.facebook.com"
                 })
                 logger.info(f"🌐 [Patch] Added Facebook headers (Referer/Origin)")
 
-            params["http_headers"] = headers
-            logger.info(f"🔍 [Patch] http_headers passed to yt-dlp: {headers}")
+            # 更新params（而不是覆盖）
+            params["http_headers"] = http_headers
+            logger.info(f"🔍 [Patch] Final http_headers: {http_headers}")
 
             # Add cookies if configured (FIX: YtParser doesn't handle cookies)
+            # 参考: yt_dlp/YoutubeDL.py:349 - cookiefile: File name or text stream from where cookies should be read
             temp_cookie_file = None
 
             # YouTube特殊处理：从环境变量读取cookie文件路径
             # （因为ParseConfig会把文件路径解析成dict）
-            if "youtube.com" in url.lower() or "youtu.be" in url.lower():
+            # 优先级：环境变量 > ParseConfig
+            if ("youtube.com" in url.lower() or "youtu.be" in url.lower()) and "cookiefile" not in params:
                 youtube_cookie_from_env = os.getenv("YOUTUBE_COOKIE")
                 if youtube_cookie_from_env:
                     logger.info(f"🍪 [Patch] YouTube cookie from env: {youtube_cookie_from_env}")
@@ -115,7 +128,8 @@ def patch_parsehub_yt_dlp():
                         logger.warning(f"⚠️ [Patch] YouTube cookie file not found: {youtube_cookie_from_env}")
 
             # 其他平台cookie处理（从ParseConfig传递）
-            if self.cfg.cookie:
+            # 只有在cookiefile还没设置时才处理
+            if self.cfg.cookie and "cookiefile" not in params:
                 logger.info(f"🍪 [Patch] Received cookie type: {type(self.cfg.cookie)}, value preview: {str(self.cfg.cookie)[:100]}")
                 # 检查cookie类型：文件路径或字符串
                 if isinstance(self.cfg.cookie, str):
@@ -252,14 +266,14 @@ def patch_parsehub_yt_dlp():
         BiliAPI.__init__ = patched_bili_init_v2
         logger.info("✅ BiliAPI patched: cookie support (from env) + anti-crawler headers")
 
-        # Patch XhsParse to handle empty download list
-        original_xhs_parse = XhsParse.parse
+        # Patch XhsParser to handle empty download list
+        original_xhs_parse = XhsParser.parse
 
         async def patched_xhs_parse(self, url: str):
-            """Patched XhsParse.parse to handle empty download list"""
+            """Patched XhsParser.parse to handle empty download list"""
             from parsehub.types import VideoParseResult, ImageParseResult
 
-            # 调用原始的XhsParse._parse_share_note来获取结果
+            # 调用原始的XhsParser._parse_share_note来获取结果
             result = await self._parse_share_note(url)
             k = {
                 "desc": result.get("desc"),
@@ -287,8 +301,8 @@ def patch_parsehub_yt_dlp():
                 else:
                     return ImageParseResult(images=valid_images, **k)
 
-        XhsParse.parse = patched_xhs_parse
-        logger.info("✅ XhsParse patched: handle empty download list")
+        XhsParser.parse = patched_xhs_parse
+        logger.info("✅ XhsParser patched: handle empty download list")
 
         return True
 

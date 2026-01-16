@@ -441,38 +441,99 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
 
 
 async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None, reply_markup=None):
-    """发送混合媒体"""
+    """发送混合媒体（参考parse_hub_bot的实现，使用media_group分批发送）"""
+    from telegram import InputMediaPhoto, InputMediaVideo
+
     media_list = download_result.media
     if not isinstance(media_list, list):
         media_list = [media_list]
 
-    # 发送说明
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text=f"{caption}\n\n📁 共{len(media_list)}个媒体文件",
-        parse_mode="Markdown",
-        reply_to_message_id=reply_to_message_id,
-        disable_web_page_preview=True,
-        reply_markup=reply_markup
-    )
+    # 过滤掉None的媒体对象
+    media_list = [m for m in media_list if m is not None and hasattr(m, 'path') and m.path]
 
-    # 逐个发送媒体
-    for media in media_list:
-        try:
-            media_path = str(media.path)
-            if isinstance(media, Video):
-                with open(media_path, 'rb') as video_file:
-                    await context.bot.send_video(
+    count = len(media_list)
+
+    if count == 0:
+        # 没有媒体文件，只发送文本
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"{caption}\n\n⚠️ 媒体下载失败",
+            parse_mode="Markdown",
+            reply_to_message_id=reply_to_message_id,
+            disable_web_page_preview=True,
+            reply_markup=reply_markup
+        )
+        return
+    elif count == 1:
+        # 单个媒体文件，直接发送
+        media = media_list[0]
+        if isinstance(media, Video):
+            with open(str(media.path), 'rb') as video_file:
+                await context.bot.send_video(
+                    chat_id=chat_id,
+                    video=video_file,
+                    caption=caption,
+                    parse_mode="Markdown",
+                    reply_to_message_id=reply_to_message_id,
+                    supports_streaming=True,
+                    reply_markup=reply_markup
+                )
+        elif isinstance(media, Image):
+            with open(str(media.path), 'rb') as photo_file:
+                await context.bot.send_photo(
+                    chat_id=chat_id,
+                    photo=photo_file,
+                    caption=caption,
+                    parse_mode="Markdown",
+                    reply_to_message_id=reply_to_message_id,
+                    reply_markup=reply_markup
+                )
+    else:
+        # 多个媒体文件，使用media_group分批发送（每批最多10个）
+        # 参考: parse_hub_bot/methods/tg_parse_hub.py:809
+        media_groups = []
+        for i in range(0, count, 10):
+            batch = media_list[i:i + 10]
+            media_group = []
+            for media in batch:
+                try:
+                    if isinstance(media, Video):
+                        media_group.append(InputMediaVideo(
+                            media=open(str(media.path), 'rb'),
+                            width=media.width or 0,
+                            height=media.height or 0,
+                            duration=media.duration or 0,
+                            supports_streaming=True
+                        ))
+                    elif isinstance(media, Image):
+                        media_group.append(InputMediaPhoto(media=open(str(media.path), 'rb')))
+                except Exception as e:
+                    logger.error(f"准备媒体失败: {e}")
+                    continue
+
+            if media_group:
+                try:
+                    messages = await context.bot.send_media_group(
                         chat_id=chat_id,
-                        video=video_file,
-                        supports_streaming=True
+                        media=media_group,
+                        reply_to_message_id=reply_to_message_id
                     )
-            elif isinstance(media, Image):
-                with open(media_path, 'rb') as photo_file:
-                    await context.bot.send_photo(chat_id=chat_id, photo=photo_file)
-        except Exception as e:
-            logger.error(f"发送媒体失败: {e}")
-            continue
+                    media_groups.append(messages)
+                except Exception as e:
+                    logger.error(f"发送media_group失败: {e}")
+
+        # 在第一个media_group下发送文本消息（带caption和按钮）
+        if media_groups:
+            first_message = media_groups[0][0] if media_groups[0] else None
+            if first_message:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=caption,
+                    parse_mode="Markdown",
+                    reply_to_message_id=first_message.message_id,
+                    disable_web_page_preview=True,
+                    reply_markup=reply_markup
+                )
 
 
 @with_error_handling
