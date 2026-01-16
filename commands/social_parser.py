@@ -117,8 +117,12 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         # 如果启用了AI总结，添加AI总结按钮
         if _adapter.config and _adapter.config.enable_ai_summary:
             buttons[0].append(InlineKeyboardButton("📝 AI总结", callback_data=f"ai_summary:{parse_id}"))
+            logger.info(f"✅ AI总结按钮已添加: enable_ai_summary={_adapter.config.enable_ai_summary}")
+        else:
+            logger.info(f"⚠️ 未添加AI总结按钮: config={_adapter.config}, enable_ai_summary={_adapter.config.enable_ai_summary if _adapter.config else 'N/A'}")
 
         reply_markup = InlineKeyboardMarkup(buttons)
+        logger.info(f"📝 创建按钮: {len(buttons[0])}个按钮")
 
         # 发送媒体（带按钮）
         await _send_media(context, chat_id, result, caption, reply_to_message_id=update.message.message_id if update.message else None, reply_markup=reply_markup)

@@ -235,13 +235,45 @@ class ParseHubAdapter:
 
     async def _extract_url(self, text: str) -> Optional[str]:
         """从文本中提取URL"""
+        import re
+        import httpx
+
         try:
-            # 使用 ParseHub 的 get_raw_url 方法处理短链接和提取URL
-            url = await self.parsehub.get_raw_url(text)
-            logger.debug(f"提取URL: {text} -> {url}")
+            # 1. 先从文本中提取URL
+            url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+'
+            match = re.search(url_pattern, text)
+            if not match:
+                return None
+
+            url = match.group(0)
+            logger.debug(f"提取原始URL: {url}")
+
+            # 2. 检查是否为短链接（需要重定向）
+            short_domains = ['b23.tv', 't.co', 'bit.ly', 'youtu.be', 'tiktok.com/t/', 'douyin.com/']
+            is_short = any(domain in url for domain in short_domains)
+
+            if is_short:
+                # 跟随重定向获取真实URL
+                try:
+                    async with httpx.AsyncClient(follow_redirects=True, timeout=10) as client:
+                        response = await client.head(url)
+                        final_url = str(response.url)
+                        logger.info(f"短链接重定向: {url} -> {final_url}")
+                        url = final_url
+                except Exception as e:
+                    logger.warning(f"重定向失败，使用原URL: {e}")
+
+            # 3. 验证URL是否被支持
+            parser = self.parsehub.select_parser(url)
+            if not parser:
+                logger.error(f"不支持的平台: {url}")
+                return None
+
+            logger.debug(f"识别平台: {parser.__platform__}")
             return url
+
         except Exception as e:
-            logger.error(f"提取URL失败: {text}, 错误: {e}")
+            logger.error(f"提取URL失败: {text}, 错误: {e}", exc_info=True)
             return None
 
     def _get_cache_key(self, url: str) -> str:
