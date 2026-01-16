@@ -260,7 +260,7 @@ class ParseHubAdapter:
             # download_result.pr 是原始的 ParseResult
             pr = download_result.pr
             formatted = {
-                "title": pr.title or "无标题",
+                "title": pr.title or "",  # 保持原始值，不要在这里添加"无标题"
                 "desc": pr.desc or "",
                 "platform": platform,
                 "url": pr.raw_url,

@@ -88,7 +88,9 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                 temp_result = TempParseResult(cache_data)
 
                 # 生成AI总结
+                logger.info(f"📍 准备调用 generate_ai_summary")
                 ai_summary = await _adapter.generate_ai_summary(temp_result)
+                logger.info(f"📍 generate_ai_summary 调用完成")
 
                 logger.info(f"🔍 AI总结返回值类型: {type(ai_summary)}, 值: {repr(ai_summary)}, 布尔值: {bool(ai_summary)}")
 
