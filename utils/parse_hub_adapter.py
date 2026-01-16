@@ -128,17 +128,23 @@ class ParseHubAdapter:
             downloader_proxy = proxy or (self.config.downloader_proxy if self.config else None)
 
             # 根据平台选择 Cookie（ParseConfig会自动将字符串转换为dict）
+            # 注意：只有部分平台支持cookie（Twitter, Instagram, Bilibili, Kuaishou）
+            # Facebook/YouTube等基于yt-dlp的平台不支持cookie（ParseHub库限制）
             platform_cookie = None
             if self.config:
                 if platform_id == 'twitter' and self.config.twitter_cookie:
                     platform_cookie = self.config.twitter_cookie
+                    logger.info(f"Twitter cookie raw: {platform_cookie[:50]}...")
                 elif platform_id == 'instagram' and self.config.instagram_cookie:
                     platform_cookie = self.config.instagram_cookie
-                elif platform_id == 'facebook' and self.config.facebook_cookie:
-                    platform_cookie = self.config.facebook_cookie
+                elif platform_id == 'bilibili' and self.config.bilibili_cookie:
+                    platform_cookie = self.config.bilibili_cookie
+                elif platform_id == 'kuaishou' and self.config.kuaishou_cookie:
+                    platform_cookie = self.config.kuaishou_cookie
 
             # 创建配置（重要：每次都创建新的ParseHub实例，传入配置）
             parse_config = ParseConfig(proxy=parser_proxy, cookie=platform_cookie)
+            logger.info(f"ParseConfig cookie type: {type(parse_config.cookie)}, value: {parse_config.cookie}")
             download_config = DownloadConfig(proxy=downloader_proxy, save_dir=self.temp_dir)
 
             # 创建新的ParseHub实例并传入配置
@@ -159,7 +165,8 @@ class ParseHubAdapter:
                 await self.cache_manager.set(
                     cache_key,
                     {"result": download_result, "platform": platform_name},
-                    expire=cache_duration
+                    ttl=cache_duration,
+                    subdirectory="social_parser"
                 )
 
             # 记录统计

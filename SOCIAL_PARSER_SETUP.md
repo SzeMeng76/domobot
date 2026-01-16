@@ -116,11 +116,18 @@ TRANSCRIPTION_PROVIDER=openai              # 转录服务: openai, azure, fast_w
 # TRANSCRIPTION_API_KEY=                   # 转录API密钥（默认使用 OPENAI_API_KEY）
 # TRANSCRIPTION_BASE_URL=                  # 转录API地址（可选）
 
-# 平台特定Cookie配置 (可选 - 某些平台需要登录)
-# Twitter需要Cookie才能访问某些内容，格式: auth_token=xxx; ct0=xxx
-# TWITTER_COOKIE=
-# INSTAGRAM_COOKIE=
-# FACEBOOK_COOKIE=
+# 平台Cookie配置 (可选 - 用于解析受限内容)
+# ✅ 支持Cookie的平台：Twitter, Instagram, Bilibili, Kuaishou
+# ❌ 不支持：Facebook, YouTube（基于yt-dlp，ParseHub库未实现cookie支持）
+#
+# ⚠️ 重要：长Cookie必须用引号包裹，避免被截断！
+# 示例：TWITTER_COOKIE="auth_token=xxx; ct0=yyy"
+#
+# Twitter Cookie（格式：auth_token=xxx; ct0=xxx，必需：auth_token, ct0）
+# TWITTER_COOKIE="auth_token=your_token; ct0=your_ct0"
+# INSTAGRAM_COOKIE=""
+# BILIBILI_COOKIE=""
+# KUAISHOU_COOKIE=""
 ```
 
 ---
