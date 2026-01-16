@@ -128,11 +128,22 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             # 更新按钮为"已显示"状态（✅表示已显示，点击可恢复原内容）
             new_markup = _get_buttons_with_hide(query.message.reply_markup, url_hash)
 
-            await query.edit_message_caption(
-                caption=summary_caption,
-                parse_mode="Markdown",
-                reply_markup=new_markup
-            )
+            # 判断消息类型：有caption用edit_caption，无caption用edit_text
+            if query.message.caption:
+                # 图片/视频消息（有caption）
+                await query.edit_message_caption(
+                    caption=summary_caption,
+                    parse_mode="Markdown",
+                    reply_markup=new_markup
+                )
+            else:
+                # 纯文本消息（无caption）
+                await query.edit_message_text(
+                    text=summary_caption,
+                    parse_mode="Markdown",
+                    reply_markup=new_markup,
+                    disable_web_page_preview=True
+                )
 
             await query.answer("✅ 已显示AI总结", show_alert=False)
 
@@ -144,11 +155,22 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                 # 恢复按钮为"显示"状态
                 new_markup = _get_buttons_with_show(query.message.reply_markup, url_hash)
 
-                await query.edit_message_caption(
-                    caption=original_caption,
-                    parse_mode="Markdown",
-                    reply_markup=new_markup
-                )
+                # 判断消息类型：有caption用edit_caption，无caption用edit_text
+                if query.message.caption:
+                    # 图片/视频消息（有caption）
+                    await query.edit_message_caption(
+                        caption=original_caption,
+                        parse_mode="Markdown",
+                        reply_markup=new_markup
+                    )
+                else:
+                    # 纯文本消息（无caption）
+                    await query.edit_message_text(
+                        text=original_caption,
+                        parse_mode="Markdown",
+                        reply_markup=new_markup,
+                        disable_web_page_preview=True
+                    )
 
                 await query.answer("AI总结已隐藏", show_alert=False)
             else:
