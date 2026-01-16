@@ -65,16 +65,16 @@ jobs:
           GHCR_REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           DOCKER_IMAGE_GHCR="ghcr.io/$GHCR_REPO_LOWER"
 
-          # 新增的智能判断逻辑
+          # 新增的智能判断逻辑 (只推送到GHCR)
           if [[ $GITHUB_REF == refs/tags/* ]]; then
             # 如果是发布 (打tag)，就使用 latest 和版本号标签
             echo "是正式发布，使用 latest 和版本号标签: ${{ env.VERSION }}"
-            TAGS="$DOCKER_IMAGE_DOCKERHUB:latest,$DOCKER_IMAGE_DOCKERHUB:${{ env.VERSION }},$DOCKER_IMAGE_GHCR:latest,$DOCKER_IMAGE_GHCR:${{ env.VERSION }}"
+            TAGS="$DOCKER_IMAGE_GHCR:latest,$DOCKER_IMAGE_GHCR:${{ env.VERSION }}"
           else
             # 如果是推送到分支 (比如 mydev)，就使用分支名作为标签
             BRANCH_NAME=${GITHUB_REF#refs/heads/}
             echo "是开发分支推送，使用分支名 '${BRANCH_NAME}' 作为标签"
-            TAGS="$DOCKER_IMAGE_DOCKERHUB:${BRANCH_NAME},$DOCKER_IMAGE_GHCR:${BRANCH_NAME}"
+            TAGS="$DOCKER_IMAGE_GHCR:${BRANCH_NAME}"
           fi
           
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
@@ -88,12 +88,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 第八步：登录到 Docker Hub
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      # 第八步：登录到 Docker Hub (暂时禁用，只用GitHub Container Registry)
+      # - name: Log in to Docker Hub
+      #   uses: docker/login-action@v3
+      #   with:
+      #     username: ${{ secrets.DOCKERHUB_USERNAME }}
+      #     password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       # 第九步：登录到 GitHub Container Registry (GHCR)
       - name: Log in to GitHub Container Registry
