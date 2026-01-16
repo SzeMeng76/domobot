@@ -735,26 +735,7 @@ def main() -> None:
 
     # 设置异步初始化和清理回调
     async def init_and_run(app):
-        # 先启动反爬虫代理服务器（如果启用）
-        if os.getenv("ENABLE_ANTI_CRAWLER_PROXY", "true").lower() == "true":
-            try:
-                from utils.anti_crawler_proxy import AntiCrawlerProxy
-
-                proxy_host = os.getenv("ANTI_CRAWLER_PROXY_HOST", "127.0.0.1")
-                proxy_port = int(os.getenv("ANTI_CRAWLER_PROXY_PORT", "8765"))
-
-                logger.info(f"🎭 启动反爬虫代理服务器: {proxy_host}:{proxy_port}")
-                proxy = AntiCrawlerProxy(host=proxy_host, port=proxy_port)
-
-                # 直接await启动（阻塞直到服务器监听成功）
-                await proxy.start()
-                logger.info("✅ 反爬虫代理服务器已启动并监听")
-
-                # 不需要保存task - start()方法已经创建了后台runner
-            except Exception as e:
-                logger.warning(f"⚠️ 反爬虫代理服务器启动失败: {e}", exc_info=True)
-
-        # 然后启动bot应用
+        # 启动bot应用
         await setup_application(app, config)
         logger.info("✅ 机器人启动完成，开始服务...")
 

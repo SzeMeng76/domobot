@@ -106,10 +106,27 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         # 构建标题和描述（类似parse_hub_bot：有title或desc才显示，都没有才显示"无标题"）
         if formatted['title'] or formatted['desc']:
             caption_parts = []
-            if formatted['title']:
-                caption_parts.append(f"**{formatted['title']}**")
-            if formatted['desc']:
-                caption_parts.append(formatted['desc'][:500])  # 限制描述长度
+            title = formatted['title']
+            desc = formatted['desc']
+
+            # 去重：如果title包含desc或desc包含title，只显示一个
+            if title and desc:
+                # 检查是否重复（title包含desc的前50个字符，或desc包含title的前50个字符）
+                if desc[:50] in title or title[:50] in desc:
+                    # 重复了，只显示较长的那个
+                    if len(title) >= len(desc):
+                        caption_parts.append(f"**{title}**")
+                    else:
+                        caption_parts.append(desc[:500])
+                else:
+                    # 不重复，都显示
+                    caption_parts.append(f"**{title}**")
+                    caption_parts.append(desc[:500])
+            elif title:
+                caption_parts.append(f"**{title}**")
+            elif desc:
+                caption_parts.append(desc[:500])
+
             caption = "\n\n".join(caption_parts)
         else:
             caption = "无标题"

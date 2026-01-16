@@ -49,6 +49,13 @@ class ParseHubAdapter:
                 logger.info(f"✅ 配置抖音API: {config.douyin_api}")
             GlobalConfig.duration_limit = 0  # 不限制视频时长
 
+            # 配置伪装User-Agent（绕过反爬虫）
+            GlobalConfig.ua = (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+            )
+            logger.info(f"✅ 配置伪装User-Agent: Chrome/131.0.0.0")
+
     async def get_supported_platforms(self) -> List[str]:
         """获取支持的平台列表"""
         try:
@@ -147,10 +154,51 @@ class ParseHubAdapter:
                 else:
                     logger.info(f"⚠️ 平台 {platform_id} 未配置cookie或不匹配")
 
+            # 配置平台特定的headers（用于绕过反爬虫）
+            download_headers = {
+                'User-Agent': GlobalConfig.ua,
+            }
+
+            # 根据平台添加 Referer 和 Origin（类似内置代理的策略）
+            if platform_id == 'bilibili':
+                download_headers.update({
+                    'Referer': 'https://www.bilibili.com/',
+                    'Origin': 'https://www.bilibili.com',
+                })
+                logger.info(f"✅ 配置Bilibili headers: Referer + Origin")
+            elif platform_id == 'youtube':
+                download_headers.update({
+                    'Referer': 'https://www.youtube.com/',
+                    'Origin': 'https://www.youtube.com',
+                })
+                logger.info(f"✅ 配置YouTube headers: Referer + Origin")
+            elif platform_id == 'twitter':
+                download_headers.update({
+                    'Referer': 'https://twitter.com/',
+                    'Origin': 'https://twitter.com',
+                })
+                logger.info(f"✅ 配置Twitter headers: Referer + Origin")
+            elif platform_id == 'tiktok':
+                download_headers.update({
+                    'Referer': 'https://www.tiktok.com/',
+                    'Origin': 'https://www.tiktok.com',
+                })
+                logger.info(f"✅ 配置TikTok headers: Referer + Origin")
+            elif platform_id == 'xiaohongshu':
+                download_headers.update({
+                    'Referer': 'https://www.xiaohongshu.com/',
+                    'Origin': 'https://www.xiaohongshu.com',
+                })
+                logger.info(f"✅ 配置小红书 headers: Referer + Origin")
+
             # 创建配置（重要：每次都创建新的ParseHub实例，传入配置）
             parse_config = ParseConfig(proxy=parser_proxy, cookie=platform_cookie)
             logger.info(f"ParseConfig cookie type: {type(parse_config.cookie)}, value: {parse_config.cookie}")
-            download_config = DownloadConfig(proxy=downloader_proxy, save_dir=self.temp_dir)
+            download_config = DownloadConfig(
+                proxy=downloader_proxy,
+                save_dir=self.temp_dir,
+                headers=download_headers  # 传入平台特定headers
+            )
 
             # 创建新的ParseHub实例并传入配置
             parsehub = ParseHub(config=parse_config)

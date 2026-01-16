@@ -90,6 +90,8 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                 # 生成AI总结
                 ai_summary = await _adapter.generate_ai_summary(temp_result)
 
+                logger.info(f"🔍 AI总结返回值类型: {type(ai_summary)}, 值: {repr(ai_summary)}, 布尔值: {bool(ai_summary)}")
+
                 if not ai_summary:
                     await query.answer("❌ AI总结生成失败", show_alert=True)
                     return
