@@ -12,7 +12,7 @@ brotli==1.1.0  # Required for Brotli decompression (App Store uses br encoding)
 openai==2.15.0
 
 # Web Scraping
-beautifulsoup4>=4.12.3  # ParseHub requires >=4.12.3, yfinance requires >=4.11.1
+beautifulsoup4==4.12.2
 lxml==5.2.2
 
 # Google Play Scraper
