@@ -6,6 +6,19 @@ Monkey patch for ParseHub to fix issues:
 4. XhsParser empty download list: XhsParser crashes when download_list is empty
 """
 
+import logging
+import os
+import tempfile
+
+# Import at module level (before patch function) to ensure we patch the same classes
+# that other modules will import later
+from parsehub.parsers.base.yt_dlp_parser import YtParser
+from parsehub.provider_api.bilibili import BiliAPI
+from parsehub.parsers.parser.xhs_ import XhsParser
+
+logger = logging.getLogger(__name__)
+
+
 def patch_parsehub_yt_dlp():
     """
     Patch ParseHub's YtParser to:
@@ -15,15 +28,6 @@ def patch_parsehub_yt_dlp():
     4. Patch XhsParser to handle empty download list gracefully
     """
     try:
-        import logging
-        import os
-        import tempfile
-        logger = logging.getLogger(__name__)
-
-        from parsehub.parsers.base.yt_dlp_parser import YtParser
-        from parsehub.provider_api.bilibili import BiliAPI
-        from parsehub.parsers.parser.xhs_ import XhsParser
-
         logger.info("🔧 Starting ParseHub patch...")
 
         @property
