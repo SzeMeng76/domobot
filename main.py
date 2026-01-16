@@ -739,7 +739,6 @@ def main() -> None:
         if os.getenv("ENABLE_ANTI_CRAWLER_PROXY", "true").lower() == "true":
             try:
                 from utils.anti_crawler_proxy import AntiCrawlerProxy
-                import asyncio
 
                 proxy_host = os.getenv("ANTI_CRAWLER_PROXY_HOST", "127.0.0.1")
                 proxy_port = int(os.getenv("ANTI_CRAWLER_PROXY_PORT", "8765"))
@@ -747,14 +746,11 @@ def main() -> None:
                 logger.info(f"🎭 启动反爬虫代理服务器: {proxy_host}:{proxy_port}")
                 proxy = AntiCrawlerProxy(host=proxy_host, port=proxy_port)
 
-                # 在后台启动代理服务器
-                proxy_task = asyncio.create_task(proxy.start())
-                # 等待代理服务器启动完成
-                await asyncio.sleep(0.5)
-                logger.info("✅ 反爬虫代理服务器已启动")
+                # 直接await启动（阻塞直到服务器监听成功）
+                await proxy.start()
+                logger.info("✅ 反爬虫代理服务器已启动并监听")
 
-                # 保存task引用，防止被垃圾回收
-                app.bot_data['proxy_task'] = proxy_task
+                # 不需要保存task - start()方法已经创建了后台runner
             except Exception as e:
                 logger.warning(f"⚠️ 反爬虫代理服务器启动失败: {e}", exc_info=True)
 
