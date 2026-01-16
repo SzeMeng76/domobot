@@ -51,23 +51,31 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             else:
                 # 提取原始URL - 从按钮中获取（更可靠）
                 original_url = None
+                logger.info(f"🔍 开始提取URL from reply_markup")
                 if query.message.reply_markup and query.message.reply_markup.inline_keyboard:
-                    for row in query.message.reply_markup.inline_keyboard:
-                        for btn in row:
-                            if btn.url and "原链接" in btn.text:
+                    logger.info(f"🔍 找到 {len(query.message.reply_markup.inline_keyboard)} 行按钮")
+                    for row_idx, row in enumerate(query.message.reply_markup.inline_keyboard):
+                        logger.info(f"🔍 第{row_idx}行有 {len(row)} 个按钮")
+                        for btn_idx, btn in enumerate(row):
+                            logger.info(f"🔍 按钮[{row_idx},{btn_idx}]: text={btn.text}, url={getattr(btn, 'url', None)}")
+                            if hasattr(btn, 'url') and btn.url and "原链接" in btn.text:
                                 original_url = btn.url
+                                logger.info(f"✅ 从按钮中提取到URL: {original_url}")
                                 break
                         if original_url:
                             break
 
                 # 如果按钮中没找到，尝试从caption中提取
                 if not original_url:
+                    logger.info(f"⚠️ 按钮中未找到URL，尝试从caption提取")
                     import re
                     url_match = re.search(r'🔗 \[原链接\]\((https?://[^\)]+)\)', current_caption or '')
                     if url_match:
                         original_url = url_match.group(1)
+                        logger.info(f"✅ 从caption提取到URL: {original_url}")
 
                 if not original_url:
+                    logger.error(f"❌ 无法提取URL: caption={current_caption}")
                     await query.answer("❌ 无法找到原链接", show_alert=True)
                     return
 
