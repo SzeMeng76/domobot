@@ -115,11 +115,19 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         buttons = [[InlineKeyboardButton("🔗 原链接", url=formatted['url'])]]
 
         # 如果启用了AI总结，添加AI总结按钮
+        # 详细调试日志
+        logger.info(f"🔍 _adapter.config 类型: {type(_adapter.config)}")
+        logger.info(f"🔍 _adapter.config 是否为None: {_adapter.config is None}")
+        if _adapter.config:
+            logger.info(f"🔍 enable_ai_summary 值: {_adapter.config.enable_ai_summary}")
+            logger.info(f"🔍 enable_ai_summary 类型: {type(_adapter.config.enable_ai_summary)}")
+            logger.info(f"🔍 条件判断: _adapter.config={bool(_adapter.config)}, enable_ai_summary={bool(_adapter.config.enable_ai_summary)}")
+
         if _adapter.config and _adapter.config.enable_ai_summary:
             buttons[0].append(InlineKeyboardButton("📝 AI总结", callback_data=f"ai_summary:{parse_id}"))
-            logger.info(f"✅ AI总结按钮已添加: enable_ai_summary={_adapter.config.enable_ai_summary}")
+            logger.info(f"✅ AI总结按钮已添加")
         else:
-            logger.info(f"⚠️ 未添加AI总结按钮: config={_adapter.config}, enable_ai_summary={_adapter.config.enable_ai_summary if _adapter.config else 'N/A'}")
+            logger.info(f"⚠️ 未添加AI总结按钮")
 
         reply_markup = InlineKeyboardMarkup(buttons)
         logger.info(f"📝 创建按钮: {len(buttons[0])}个按钮")

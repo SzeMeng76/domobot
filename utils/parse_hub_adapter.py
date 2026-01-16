@@ -154,7 +154,15 @@ class ParseHubAdapter:
                 return None, None, 0
 
             # 下载媒体
-            download_result = await result.download(config=download_config)
+            try:
+                download_result = await result.download(config=download_config)
+            except Exception as download_error:
+                # 下载失败（例如小红书CDN 500错误），但解析成功
+                # 返回解析结果但没有下载的媒体文件
+                logger.warning(f"媒体下载失败但解析成功: {download_error}")
+                # 创建一个空的DownloadResult（只包含解析信息，没有实际文件）
+                from parsehub.types import DownloadResult
+                download_result = DownloadResult(pr=result, media=None)
 
             parse_time = time.time() - start_time
 
