@@ -43,6 +43,15 @@ def patch_parsehub_yt_dlp():
             if self.cfg.proxy:
                 params["proxy"] = self.cfg.proxy
 
+            # 配置JavaScript runtime（YouTube需要）
+            # yt-dlp默认只识别deno，需要手动指定node
+            params["extractor_args"] = {
+                "youtube": {
+                    "js_runtimes": ["node"]  # 使用Node.js作为JS runtime
+                }
+            }
+            logger.info(f"🔧 [Patch] Configured yt-dlp to use Node.js runtime")
+
             # Add headers (Referer/Origin) for anti-crawler
             # yt-dlp需要这些headers才能绕过各平台的反爬虫检测
             url_lower = url.lower()
@@ -93,8 +102,8 @@ def patch_parsehub_yt_dlp():
             # Add cookies if configured (FIX: YtParser doesn't handle cookies)
             temp_cookie_file = None
 
-            # YouTube特殊处理：从环境变量读取（因为ParseConfig会把文件路径解析成dict）
-            youtube_cookie_from_env = None
+            # YouTube特殊处理：从环境变量读取cookie文件路径
+            # （因为ParseConfig会把文件路径解析成dict）
             if "youtube.com" in url.lower() or "youtu.be" in url.lower():
                 youtube_cookie_from_env = os.getenv("YOUTUBE_COOKIE")
                 if youtube_cookie_from_env:

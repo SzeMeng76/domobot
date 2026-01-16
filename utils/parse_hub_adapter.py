@@ -641,14 +641,18 @@ class ParseHubAdapter:
         try:
             # 使用 ParseHub 内置的 summary() 方法
             # 注意：需要传递完整的配置参数
+            # 如果没有配置转录API，使用AI总结的API（Whisper和GPT可以用同一个API key）
+            transcription_api_key = self.config.transcription_api_key or self.config.openai_api_key
+            transcription_base_url = self.config.transcription_base_url or self.config.openai_base_url
+
             summary_result = await download_result.summary(
                 api_key=self.config.openai_api_key,
                 base_url=self.config.openai_base_url,
                 model=self.config.ai_summary_model,
                 provider="openai",
-                transcriptions_provider=self.config.transcription_provider,
-                transcriptions_api_key=self.config.transcription_api_key,
-                transcriptions_base_url=self.config.transcription_base_url,
+                transcriptions_provider=self.config.transcription_provider or "openai",
+                transcriptions_api_key=transcription_api_key,
+                transcriptions_base_url=transcription_base_url,
             )
 
             # summary_result.content 是总结文本
