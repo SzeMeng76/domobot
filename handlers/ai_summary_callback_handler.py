@@ -103,7 +103,7 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                 )
                 logger.info(f"✅ AI总结已缓存: cache:social_parser:ai_summary:{url_hash}")
 
-            # 缓存原始caption到内存（用于toggle）
+            # 缓存原始caption到内存（用于恢复）
             if message_id not in _message_cache:
                 _message_cache[message_id] = {
                     "original": current_caption,
@@ -113,19 +113,24 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             # 缓存AI总结到内存
             _message_cache[message_id]["summary"] = ai_summary
 
-            # 构建新caption（原始内容 + AI总结）
-            new_caption = _message_cache[message_id]["original"] + f"\n\n📝 *AI总结:*\n{ai_summary}"
+            # 替换模式：只显示AI总结（类似parse_hub_bot）
+            # 构建新caption：只包含AI总结和原链接
+            summary_caption = f"📝 *AI总结:*\n\n{ai_summary}"
 
-            # 更新按钮为"已显示"状态（✅表示已显示，点击可隐藏）
+            # 添加原链接（从缓存数据中获取）
+            if cache_data and cache_data.get('url'):
+                summary_caption += f"\n\n🔗 原链接: {cache_data['url']}"
+
+            # 更新按钮为"已显示"状态（✅表示已显示，点击可恢复原内容）
             new_markup = _get_buttons_with_hide(query.message.reply_markup, url_hash)
 
             await query.edit_message_caption(
-                caption=new_caption,
+                caption=summary_caption,
                 parse_mode="Markdown",
                 reply_markup=new_markup
             )
 
-            await query.answer("✅ AI总结已显示", show_alert=False)
+            await query.answer("✅ 已显示AI总结", show_alert=False)
 
         elif action == "unsummary":
             # 隐藏AI总结，恢复原始caption

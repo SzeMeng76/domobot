@@ -103,10 +103,16 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         # 格式化结果（result 现在是 DownloadResult）
         formatted = await _adapter.format_result(result, platform)
 
-        # 构建标题和描述
-        caption = f"**{formatted['title']}**"
-        if formatted['desc']:
-            caption += f"\n\n{formatted['desc'][:200]}"  # 限制描述长度
+        # 构建标题和描述（类似parse_hub_bot：有title或desc才显示，都没有才显示"无标题"）
+        if formatted['title'] or formatted['desc']:
+            caption_parts = []
+            if formatted['title']:
+                caption_parts.append(f"**{formatted['title']}**")
+            if formatted['desc']:
+                caption_parts.append(formatted['desc'][:500])  # 限制描述长度
+            caption = "\n\n".join(caption_parts)
+        else:
+            caption = "无标题"
 
         if formatted['url']:
             caption += f"\n\n🔗 [原链接]({formatted['url']})"
