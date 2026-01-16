@@ -64,11 +64,10 @@ def patch_parsehub_yt_dlp():
             if not isinstance(http_headers, dict):
                 http_headers = {}
 
-            # 只更新User-Agent（如果没有设置的话）
-            if "User-Agent" not in http_headers:
-                http_headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            # 不设置User-Agent，让yt-dlp使用random_user_agent()（更好的反爬虫）
+            # 参考: yt_dlp/utils/networking.py:162 - 'User-Agent': random_user_agent()
 
-            # 根据平台添加Referer和Origin
+            # 根据平台添加Referer和Origin（这些是必需的反爬虫headers）
             if "youtube.com" in url_lower or "youtu.be" in url_lower:
                 http_headers.update({
                     "Referer": "https://www.youtube.com/",
