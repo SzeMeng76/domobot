@@ -1,7 +1,8 @@
 """
-Monkey patch for ParseHub yt_dlp_parser to fix issues:
-1. Format selector: Invalid format causes Facebook/YouTube videos to fail
-2. Cookie handling: YtParser doesn't pass cookies to yt-dlp
+Monkey patch for ParseHub to fix issues:
+1. YtParser format selector: Invalid format causes Facebook/YouTube videos to fail
+2. YtParser cookie handling: YtParser doesn't pass cookies to yt-dlp
+3. BiliAPI anti-crawler: BiliAPI doesn't set Referer headers for API calls
 """
 
 def patch_parsehub_yt_dlp():
@@ -9,6 +10,7 @@ def patch_parsehub_yt_dlp():
     Patch ParseHub's YtParser to:
     1. Use correct format selector
     2. Pass cookies from ParseConfig to yt-dlp
+    3. Patch BiliAPI to add Referer headers for anti-crawler
     """
     try:
         import logging
@@ -17,6 +19,7 @@ def patch_parsehub_yt_dlp():
         logger = logging.getLogger(__name__)
 
         from parsehub.parsers.base.yt_dlp_parser import YtParser
+        from parsehub.provider_api.bilibili import BiliAPI
 
         logger.info("🔧 Starting ParseHub patch...")
 
@@ -39,6 +42,52 @@ def patch_parsehub_yt_dlp():
             # Add proxy if configured
             if self.cfg.proxy:
                 params["proxy"] = self.cfg.proxy
+
+            # Add headers (Referer/Origin) for anti-crawler
+            # yt-dlp需要这些headers才能绕过各平台的反爬虫检测
+            url_lower = url.lower()
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
+
+            if "youtube.com" in url_lower or "youtu.be" in url_lower:
+                headers.update({
+                    "Referer": "https://www.youtube.com/",
+                    "Origin": "https://www.youtube.com"
+                })
+                logger.info(f"🌐 [Patch] Added YouTube headers (Referer/Origin)")
+            elif "bilibili.com" in url_lower or "b23.tv" in url_lower:
+                headers.update({
+                    "Referer": "https://www.bilibili.com/",
+                    "Origin": "https://www.bilibili.com"
+                })
+                logger.info(f"🌐 [Patch] Added Bilibili headers (Referer/Origin)")
+            elif "twitter.com" in url_lower or "x.com" in url_lower:
+                headers.update({
+                    "Referer": "https://twitter.com/",
+                    "Origin": "https://twitter.com"
+                })
+                logger.info(f"🌐 [Patch] Added Twitter headers (Referer/Origin)")
+            elif "instagram.com" in url_lower:
+                headers.update({
+                    "Referer": "https://www.instagram.com/",
+                    "Origin": "https://www.instagram.com"
+                })
+                logger.info(f"🌐 [Patch] Added Instagram headers (Referer/Origin)")
+            elif "kuaishou.com" in url_lower:
+                headers.update({
+                    "Referer": "https://www.kuaishou.com/",
+                    "Origin": "https://www.kuaishou.com"
+                })
+                logger.info(f"🌐 [Patch] Added Kuaishou headers (Referer/Origin)")
+            elif "facebook.com" in url_lower or "fb.watch" in url_lower:
+                headers.update({
+                    "Referer": "https://www.facebook.com/",
+                    "Origin": "https://www.facebook.com"
+                })
+                logger.info(f"🌐 [Patch] Added Facebook headers (Referer/Origin)")
+
+            params["http_headers"] = headers
 
             # Add cookies if configured (FIX: YtParser doesn't handle cookies)
             temp_cookie_file = None
@@ -104,11 +153,27 @@ def patch_parsehub_yt_dlp():
                 error_msg = f"{type(e).__name__}: {str(e)}"
                 raise RuntimeError(error_msg) from None
 
-        # Apply patches
+        # Apply YtParser patches
         YtParser.params = fixed_params
         YtParser._extract_info = fixed_extract_info
+        logger.info("✅ YtParser patched: format selector + cookie handling + headers")
 
-        logger.info("✅ ParseHub patched: format selector + cookie handling")
+        # Patch BiliAPI to add Referer headers for anti-crawler
+        original_init = BiliAPI.__init__
+
+        def patched_bili_init(self, proxy: str = None):
+            """Patched BiliAPI.__init__ with Referer headers"""
+            original_init(self, proxy)
+            # 添加Referer和Origin headers，绕过Bilibili反爬虫检测
+            self.headers.update({
+                "Referer": "https://www.bilibili.com/",
+                "Origin": "https://www.bilibili.com"
+            })
+            logger.info("🌐 [Patch] BiliAPI headers updated with Referer/Origin")
+
+        BiliAPI.__init__ = patched_bili_init
+        logger.info("✅ BiliAPI patched: anti-crawler headers")
+
         return True
 
     except Exception as e:
