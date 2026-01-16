@@ -173,19 +173,30 @@ def patch_parsehub_yt_dlp():
         logger.info("✅ YtParser patched: format selector + cookie handling + headers")
 
         # Patch BiliAPI to add Referer headers for anti-crawler
-        original_init = BiliAPI.__init__
+        # 不能只patch __init__，因为_get_client可能复用旧client
+        # 需要patch _get_client方法，强制使用带Referer的headers
+        original_get_client = BiliAPI._get_client
 
-        def patched_bili_init(self, proxy: str = None):
-            """Patched BiliAPI.__init__ with Referer headers"""
-            original_init(self, proxy)
-            # 添加Referer和Origin headers，绕过Bilibili反爬虫检测
-            self.headers.update({
-                "Referer": "https://www.bilibili.com/",
-                "Origin": "https://www.bilibili.com"
-            })
-            logger.info("🌐 [Patch] BiliAPI headers updated with Referer/Origin")
+        def patched_get_client(self):
+            """Patched BiliAPI._get_client with anti-crawler headers"""
+            # 确保headers包含Referer和Origin
+            if "Referer" not in self.headers:
+                self.headers.update({
+                    "Referer": "https://www.bilibili.com/",
+                    "Origin": "https://www.bilibili.com"
+                })
+                logger.info("🌐 [Patch] BiliAPI headers updated with Referer/Origin")
 
-        BiliAPI.__init__ = patched_bili_init
+            # 如果client已存在且未关闭，先关闭旧client以应用新headers
+            if self._client is not None and not getattr(self._client, "is_closed", False):
+                import asyncio
+                # 同步上下文中无法调用异步aclose，直接重置
+                self._client = None
+
+            # 调用原始方法创建新client（会使用更新后的self.headers）
+            return original_get_client(self)
+
+        BiliAPI._get_client = patched_get_client
         logger.info("✅ BiliAPI patched: anti-crawler headers")
 
         return True
