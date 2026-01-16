@@ -287,7 +287,6 @@ async def addgroup_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     GROUP_PANEL,
     ADMIN_PANEL,
     ANTISPAM_PANEL,
-    SOCIAL_PARSER_PANEL,
     AWAITING_USER_ID_TO_ADD,
     AWAITING_USER_ID_TO_REMOVE,
     AWAITING_GROUP_ID_TO_ADD,
@@ -295,8 +294,7 @@ async def addgroup_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     AWAITING_ADMIN_ID_TO_ADD,
     AWAITING_ADMIN_ID_TO_REMOVE,
     AWAITING_ANTISPAM_GROUP_ID,
-    AWAITING_SOCIAL_PARSER_GROUP_ID,
-) = range(14)
+) = range(12)
 
 
 class AdminPanelHandler:
@@ -333,7 +331,6 @@ class AdminPanelHandler:
             [InlineKeyboardButton("👤 管理用户白名单", callback_data="manage_users")],
             [InlineKeyboardButton("👨‍👩‍👧‍👦 管理群组白名单", callback_data="manage_groups")],
             [InlineKeyboardButton("🛡️ AI反垃圾管理", callback_data="manage_antispam")],
-            [InlineKeyboardButton("📱 社交解析管理", callback_data="manage_social_parser")],
         ]
         if await is_super_admin(user_id):
             keyboard.insert(0, [InlineKeyboardButton("👥 管理管理员", callback_data="manage_admins")])
@@ -559,82 +556,6 @@ class AdminPanelHandler:
 
         await self._show_panel(query, text, InlineKeyboardMarkup(keyboard))
         return ANTISPAM_PANEL
-
-    async def show_social_parser_panel(
-        self, query: CallbackQuery, context: ContextTypes.DEFAULT_TYPE, status_message: str | None = None
-    ) -> int:
-        """显示社交媒体解析管理面板"""
-        # 获取适配器
-        parse_adapter = context.bot_data.get("parse_adapter")
-        if not parse_adapter:
-            await self._show_panel(query, "❌ 社交解析功能未启用", InlineKeyboardMarkup([[InlineKeyboardButton("🔙 返回", callback_data="back_to_main")]]))
-            return SOCIAL_PARSER_PANEL
-
-        # 获取当前选中的群组ID
-        selected_group_id = context.user_data.get("parser_selected_group_id")
-
-        if not selected_group_id:
-            # 显示群组选择列表
-            user_manager = get_user_manager(context)
-            if not user_manager:
-                await self._show_panel(query, "❌ 用户管理器未初始化", InlineKeyboardMarkup([[InlineKeyboardButton("🔙 返回", callback_data="back_to_main")]]))
-                return SOCIAL_PARSER_PANEL
-
-            groups = await user_manager.get_whitelisted_groups()
-
-            text = "📱 *社交媒体解析管理*\n\n"
-            if status_message:
-                text += f"{status_message}\n\n"
-
-            text += "请选择要管理的群组：\n\n"
-            if groups:
-                text += "\n".join([f"• {g['group_name']} (`{g['group_id']}`)" for g in groups[:10]])
-                text += f"\n\n共 {len(groups)} 个白名单群组"
-            else:
-                text += "📭 暂无白名单群组\n请先添加群组到白名单"
-
-            keyboard = [
-                [InlineKeyboardButton("🔍 输入群组ID", callback_data="parser_input_group")],
-                [InlineKeyboardButton("🔙 返回", callback_data="back_to_main")]
-            ]
-
-            await self._show_panel(query, text, InlineKeyboardMarkup(keyboard))
-            return SOCIAL_PARSER_PANEL
-
-        # 有选中的群组，显示该群组的解析配置
-        group_name = context.user_data.get("parser_selected_group_name", f"群组 {selected_group_id}")
-
-        # 获取配置
-        is_enabled = await parse_adapter.is_auto_parse_enabled(selected_group_id)
-
-        # 构建面板文本
-        status_text = "✅ 已启用" if is_enabled else "❌ 未启用"
-        text = f"📱 *社交媒体解析管理*\n\n"
-        if status_message:
-            text += f"{status_message}\n\n"
-
-        text += f"📊 状态: {status_text}\n"
-        text += f"🏢 群组: {group_name}\n"
-        text += f"🆔 ID: `{selected_group_id}`\n\n"
-        text += f"🌐 *功能说明:*\n"
-        text += f"• 启用后，群组成员发送支持的社交媒体链接时，Bot会自动解析并发送内容\n"
-        text += f"• 支持: 抖音、B站、YouTube、TikTok、小红书、Twitter等20\\+平台\n"
-        text += f"• 成员仍可使用 /parse 命令手动解析\n"
-
-        # 构建按钮
-        keyboard = []
-        if is_enabled:
-            keyboard.append([InlineKeyboardButton("❌ 禁用自动解析", callback_data="parser_disable")])
-        else:
-            keyboard.append([InlineKeyboardButton("✅ 启用自动解析", callback_data="parser_enable")])
-
-        keyboard.append([
-            InlineKeyboardButton("🔄 切换群组", callback_data="parser_change_group"),
-            InlineKeyboardButton("🔙 返回", callback_data="back_to_main")
-        ])
-
-        await self._show_panel(query, text, InlineKeyboardMarkup(keyboard))
-        return SOCIAL_PARSER_PANEL
 
     async def prompt_for_input(
         self, query: CallbackQuery, context: ContextTypes.DEFAULT_TYPE, prompt_text: str, next_state: int
@@ -892,10 +813,6 @@ class AdminPanelHandler:
     async def _to_antispam_panel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["current_panel"] = "antispam"
         return await self.show_antispam_panel(update.callback_query, context)
-
-    async def _to_social_parser_panel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        context.user_data["current_panel"] = "social_parser"
-        return await self.show_social_parser_panel(update.callback_query, context)
 
     async def _prompt_user_add(self, u, c):
         return await self.prompt_for_input(u.callback_query, c, "请输入要添加的用户ID", AWAITING_USER_ID_TO_ADD)
@@ -1406,70 +1323,6 @@ class AdminPanelHandler:
                 await self._show_panel(query, f"❌ 输入错误: {str(e)}\n\n请重新输入群组ID", InlineKeyboardMarkup([[InlineKeyboardButton("❌ 取消", callback_data="cancel_input")]]))
             return AWAITING_ANTISPAM_GROUP_ID
 
-    # ==================== 社交解析管理回调处理 ====================
-
-    async def _prompt_parser_input_group(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """提示输入群组ID"""
-        return await self.prompt_for_input(update.callback_query, context, "请输入要管理的群组ID (负数，如 -1001234567890)", AWAITING_SOCIAL_PARSER_GROUP_ID)
-
-    async def _handle_parser_change_group(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """切换群组"""
-        context.user_data.pop("parser_selected_group_id", None)
-        context.user_data.pop("parser_selected_group_name", None)
-        return await self.show_social_parser_panel(update.callback_query, context)
-
-    async def _handle_parser_enable(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """启用自动解析"""
-        group_id = context.user_data.get("parser_selected_group_id")
-        if not group_id:
-            return await self.show_social_parser_panel(update.callback_query, context)
-
-        parse_adapter = context.bot_data.get("parse_adapter")
-        if not parse_adapter:
-            return await self.show_social_parser_panel(update.callback_query, context, "❌ 功能未启用")
-
-        success = await parse_adapter.enable_auto_parse(group_id, update.effective_user.id)
-        return await self.show_social_parser_panel(update.callback_query, context, "✅ 已成功启用自动解析" if success else "❌ 启用失败")
-
-    async def _handle_parser_disable(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """禁用自动解析"""
-        group_id = context.user_data.get("parser_selected_group_id")
-        if not group_id:
-            return await self.show_social_parser_panel(update.callback_query, context)
-
-        parse_adapter = context.bot_data.get("parse_adapter")
-        if not parse_adapter:
-            return await self.show_social_parser_panel(update.callback_query, context, "❌ 功能未启用")
-
-        success = await parse_adapter.disable_auto_parse(group_id)
-        return await self.show_social_parser_panel(update.callback_query, context, "✅ 已成功禁用自动解析" if success else "❌ 禁用失败")
-
-    async def handle_parser_group_id(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """处理输入的群组ID"""
-        user_message = update.message
-        if user_message:
-            await _schedule_deletion(chat_id=user_message.chat_id, message_id=user_message.message_id, delay=0, context=context)
-        try:
-            group_id = int(update.message.text.strip())
-            if group_id >= 0:
-                raise ValueError("群组ID必须是负数")
-            context.user_data["parser_selected_group_id"] = group_id
-            try:
-                chat = await context.bot.get_chat(group_id)
-                context.user_data["parser_selected_group_name"] = chat.title
-            except:
-                context.user_data["parser_selected_group_name"] = f"群组 {group_id}"
-            query = context.user_data.get("admin_query")
-            if query:
-                return await self.show_social_parser_panel(query, context, f"✅ 已选择群组 {group_id}")
-            else:
-                return SOCIAL_PARSER_PANEL
-        except ValueError as e:
-            query = context.user_data.get("admin_query")
-            if query:
-                await self._show_panel(query, f"❌ 输入错误: {str(e)}\n\n请重新输入群组ID", InlineKeyboardMarkup([[InlineKeyboardButton("❌ 取消", callback_data="cancel_input")]]))
-            return AWAITING_SOCIAL_PARSER_GROUP_ID
-
     def get_conversation_handler(self) -> ConversationHandler:
         return ConversationHandler(
             entry_points=[CommandHandler("admin", self.show_main_panel)],
@@ -1479,7 +1332,6 @@ class AdminPanelHandler:
                     CallbackQueryHandler(self._to_group_panel, pattern="^manage_groups$"),
                     CallbackQueryHandler(self._to_admin_panel, pattern="^manage_admins$"),
                     CallbackQueryHandler(self._to_antispam_panel, pattern="^manage_antispam$"),
-                    CallbackQueryHandler(self._to_social_parser_panel, pattern="^manage_social_parser$"),
                     CallbackQueryHandler(self.close_panel, pattern="^close$"),
                 ],
                 USER_PANEL: [
@@ -1545,19 +1397,6 @@ class AdminPanelHandler:
                 ],
                 AWAITING_ANTISPAM_GROUP_ID: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_antispam_group_id),
-                    CallbackQueryHandler(self.cancel_input, pattern="^cancel_input$"),
-                    CommandHandler("admin", self.show_main_panel),  # 允许重新启动admin
-                ],
-                SOCIAL_PARSER_PANEL: [
-                    CallbackQueryHandler(self._prompt_parser_input_group, pattern="^parser_input_group$"),
-                    CallbackQueryHandler(self._handle_parser_change_group, pattern="^parser_change_group$"),
-                    CallbackQueryHandler(self._handle_parser_enable, pattern="^parser_enable$"),
-                    CallbackQueryHandler(self._handle_parser_disable, pattern="^parser_disable$"),
-                    CallbackQueryHandler(self._to_social_parser_panel, pattern="^manage_social_parser$"),
-                    CallbackQueryHandler(self.show_main_panel, pattern="^back_to_main$"),
-                ],
-                AWAITING_SOCIAL_PARSER_GROUP_ID: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_parser_group_id),
                     CallbackQueryHandler(self.cancel_input, pattern="^cancel_input$"),
                     CommandHandler("admin", self.show_main_panel),  # 允许重新启动admin
                 ],

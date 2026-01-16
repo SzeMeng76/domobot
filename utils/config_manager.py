@@ -187,43 +187,6 @@ class BotConfig:
         self.db_min_connections = 5  # 最小连接数
         self.db_max_connections = 20  # 最大连接数
 
-        # 社交媒体解析配置 (ParseHub)
-        self.parser_proxy = None  # 解析代理
-        self.downloader_proxy = None  # 下载代理
-        self.parser_cache_duration = 86400  # 解析缓存时间（默认24小时）
-        self.douyin_api = None  # 抖音API地址
-
-        # AI总结配置
-        self.enable_ai_summary = False
-        self.ai_summary_model = "gpt-5-mini"
-
-        # 图床配置
-        self.enable_image_host = False
-        self.image_host_service = "catbox"
-        self.catbox_userhash = None
-        self.zioooo_storage_id = None
-
-        # Telegraph配置
-        self.enable_telegraph = False
-        self.telegraph_token = None
-        self.telegraph_author = "DomoBot"
-
-        # 视频分割配置
-        self.enable_video_split = False
-        self.video_split_size = 45  # MB
-        self.ffmpeg_path = "ffmpeg"
-
-        # 转录配置
-        self.enable_transcription = False
-        self.transcription_provider = "openai"
-        self.transcription_api_key = None
-        self.transcription_base_url = None
-
-        # 平台Cookie配置
-        self.twitter_cookie = None
-        self.instagram_cookie = None
-        self.facebook_cookie = None
-
 
 class ConfigManager:
     """配置管理器"""
@@ -418,43 +381,6 @@ class ConfigManager:
         # MySQL 连接池配置
         self.config.db_min_connections = get_int_env("DB_MIN_CONNECTIONS", "5")
         self.config.db_max_connections = get_int_env("DB_MAX_CONNECTIONS", "20")
-
-        # 社交媒体解析配置 (ParseHub)
-        self.config.parser_proxy = os.getenv("PARSER_PROXY", None)
-        self.config.downloader_proxy = os.getenv("DOWNLOADER_PROXY", None)
-        self.config.parser_cache_duration = get_int_env("PARSER_CACHE_DURATION", "86400")
-        self.config.douyin_api = os.getenv("DOUYIN_API", None)
-
-        # AI总结配置
-        self.config.enable_ai_summary = get_bool_env("ENABLE_AI_SUMMARY", "False")
-        self.config.ai_summary_model = os.getenv("AI_SUMMARY_MODEL", os.getenv("OPENAI_MODEL", "gpt-5-mini"))
-
-        # 图床配置
-        self.config.enable_image_host = get_bool_env("ENABLE_IMAGE_HOST", "False")
-        self.config.image_host_service = os.getenv("IMAGE_HOST_SERVICE", "catbox")
-        self.config.catbox_userhash = os.getenv("CATBOX_USERHASH", None)
-        self.config.zioooo_storage_id = os.getenv("ZIOOOO_STORAGE_ID", None)
-
-        # Telegraph配置
-        self.config.enable_telegraph = get_bool_env("ENABLE_TELEGRAPH", "False")
-        self.config.telegraph_token = os.getenv("TELEGRAPH_TOKEN", None)
-        self.config.telegraph_author = os.getenv("TELEGRAPH_AUTHOR", "DomoBot")
-
-        # 视频分割配置
-        self.config.enable_video_split = get_bool_env("ENABLE_VIDEO_SPLIT", "False")
-        self.config.video_split_size = get_int_env("VIDEO_SPLIT_SIZE", "45")
-        self.config.ffmpeg_path = os.getenv("FFMPEG_PATH", "ffmpeg")
-
-        # 转录配置
-        self.config.enable_transcription = get_bool_env("ENABLE_TRANSCRIPTION", "False")
-        self.config.transcription_provider = os.getenv("TRANSCRIPTION_PROVIDER", "openai")
-        self.config.transcription_api_key = os.getenv("TRANSCRIPTION_API_KEY", self.config.openai_api_key)
-        self.config.transcription_base_url = os.getenv("TRANSCRIPTION_BASE_URL", self.config.openai_base_url)
-
-        # 平台Cookie配置
-        self.config.twitter_cookie = os.getenv("TWITTER_COOKIE", None)
-        self.config.instagram_cookie = os.getenv("INSTAGRAM_COOKIE", None)
-        self.config.facebook_cookie = os.getenv("FACEBOOK_COOKIE", None)
 
         # Webhook 配置
         self.config.webhook_url = os.getenv("WEBHOOK_URL", "")

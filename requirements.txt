@@ -60,12 +60,3 @@ googletrans==4.0.2
 # Yahoo Finance API
 yfinance>=0.2.66
 pandas>=2.3.2
-
-# Social Media Parser (ParseHub) - 社交媒体解析功能
-parsehub>=1.5.10  # 社交媒体聚合解析器，支持20+平台
-pillow>=12.1.0  # 图像处理库
-pillow-heif>=1.1.1  # HEIF/HEIC 图片格式支持
-lxml-html-clean>=0.4.3  # HTML 清理工具
-markdown>=3.10  # Markdown 转换器
-pyyaml>=6.0.3  # YAML配置文件解析
-tenacity>=9.1.2  # 重试机制（用于图床上传）

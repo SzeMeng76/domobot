@@ -22,8 +22,7 @@ Read this in other languages: [简体中文](./README.zh-CN.md)
 - 🍳 **Cooking Assistant:** Recipe search, categorized browsing, intelligent meal planning, and daily menu recommendations
 - 🎭 **Memes & Entertainment:** Random meme fetching with AI-generated descriptions, custom quantities (1-20), smart retry for quality content, auto-deletion, and intelligent caching
 - 📊 **Finance & Stocks:** Real-time stock prices, 15 ranking categories (gainers/losers, tech stocks, funds), analyst recommendations, financial statements, multi-market support (US/HK/CN/MY), intelligent search by symbol or company name
-- 📱 **Social Media Platforms:** View supported platforms list with `/platforms` command
-- 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`, `/dns`, `/recipe`, `/meme`, `/finance`, `/platforms`
+- 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`, `/dns`, `/recipe`, `/meme`, `/finance`
 - 👥 **Group Friendly:** Works in any Telegram group without requiring whitelist approval
 - 🔧 **Self-Service:** Use `/refresh` if new commands don't appear in your input suggestions
 
@@ -49,7 +48,6 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 -   🍳 **Public Cooking Assistant:** Available to all users - comprehensive recipe search and meal planning system with 1000+ recipes from HowToCook database. Features include **smart recipe search** with keyword matching, **categorized browsing** (荤菜, 素菜, 主食, 汤羹, 水产, 早餐, 甜品, etc.), **intelligent meal planning** with dietary restrictions and allergy considerations, **daily menu recommendations** with people count selection, **random recipe discovery**, and **Telegraph integration** for long recipes with complete ingredients and step-by-step instructions. All recipes include difficulty ratings, cooking time, serving sizes, and detailed nutritional guidance.
 -   🎭 **Public Memes:** Available to all users - fetch random memes from memes.bupt.site API with **AI-generated descriptions** for enhanced understanding. Features **smart retry mechanism** to ensure quality content when requesting single memes, custom quantities (1-20), intelligent caching system, auto-deletion scheduling (15 minutes), and fallback link display. Includes parameter validation, real-time status updates, and comprehensive error handling for reliable meme delivery. Description priority: manual review > AI description > none.
 -   📊 **Public Finance & Stocks:** Available to all users - comprehensive financial market data powered by Yahoo Finance. Features **real-time stock prices** with market data and technical indicators, **15 ranking categories** including day gainers/losers, most actives, growth tech stocks, undervalued stocks, and mutual fund rankings, **intelligent stock search** supporting ticker symbols and company names across multiple markets (US, HK, CN, MY), **analyst recommendations** with buy/sell/hold ratings, **financial statements** (income, balance sheet, cash flow), categorized inline button interface, intelligent caching with different TTL for various data types, and comprehensive error handling with auto-deletion. Supports flexible search queries like "AAPL", "Apple", "Tesla", "6033.KL", "Maybank" with multilingual matching.
--   📱 **Public Social Media Parser (Platform List Only):** Available to all users - use `/platforms` command to view the list of 20+ supported platforms.
 -   🗺️ **Map Services:** Intelligent location search and navigation system with **automatic language detection** - Google Maps API for English users and Amap (高德地图) API for Chinese users. Features **comprehensive location search** with detailed place information, ratings, and types, **nearby service recommendations** (restaurants, hospitals, banks, gas stations, supermarkets, schools, hotels), **route planning** with step-by-step directions and travel time estimates, **geocoding** for address-to-coordinates conversion, **reverse geocoding** for coordinates-to-address lookup, **interactive button interface** with single `/map` command, **session management** for multi-step operations, **Redis caching** with appropriate TTL for different data types, and **auto-deletion** for all messages. Supports text input, location sharing, and coordinate queries with comprehensive error handling. *(Whitelist required)*
 -   ✈️ **Flight Services:** Intelligent flight search and booking information powered by Google Flights API. Features **multi-language airport recognition** (Chinese, English, IATA codes), **global airport coverage** (Asia, Europe, Americas, Oceania), **smart airport matching** with automatic selection of optimal airports, **real-time flight data** with price analysis and booking options, **intelligent route planning** with time zone calculations and flight distance information, **comprehensive airline coverage** with multiple booking channels, and **Telegraph integration** for detailed flight lists. Supports mixed-language input like `北京 New York` or `吉隆坡 Bangkok` with automatic conversion to optimal airport pairs (PEK↔JFK, KUL↔BKK). *(Whitelist required)*
 -   🏨 **Hotel Services:** Intelligent hotel search and booking information powered by Google Hotels API. Features **multi-language location recognition** (Chinese, English, specific areas), **global hotel coverage** with support for major cities worldwide, **smart location matching** with automatic area selection, **real-time hotel data** with price analysis and booking options, **comprehensive accommodation information** including ratings, amenities, and descriptions, **flexible date handling** with automatic check-in/out date parsing, **interactive sorting and filtering** with price/rating options, **Telegraph integration** for detailed hotel lists, and **intelligent stay duration analysis**. Supports mixed-language input like `北京`, `Tokyo`, `Kepong`, `Times Square NYC` with automatic location resolution. *(Whitelist required)*
@@ -60,7 +58,6 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 -   💱 **Currency Conversion:** Real-time exchange rate lookups with mathematical expression support (e.g., `/rate USD 1+2*3`). *(Whitelist required)*
 -   🎮 **Steam Prices:** Multi-region price comparison for Steam games, bundles, and comprehensive search functionality. *(Whitelist required)*
 -   📱 **App Stores:** Application and in-app purchase price lookup for the App Store (detailed IAP items with pricing) and Google Play (IAP price ranges). *(Whitelist required)*
--   🎥 **Social Media Parser (Full Parsing):** Whitelist users/groups only - comprehensive content parser supporting 20+ platforms including TikTok, YouTube, Twitter/X, Instagram, Douyin, Bilibili, Xiaohongshu, and more. Features include **command mode** with `/parse <link>` for manual parsing, **auto-parse mode** (admin configurable per-group via `/admin` panel), **AI-powered summaries** using GPT-5-mini for content insights, **video splitting** for large files (>50MB) using FFmpeg, **image host upload** (Catbox/Litterbox/Zio.ooo) for oversized content, **video transcription** (OpenAI Whisper/Azure/FastWhisper) for audio-to-text, **Telegraph publishing** for long-form content, **platform-specific cookies** for Twitter/Instagram/Facebook authentication, and **intelligent proxy routing** with global and per-platform configuration. Supports reply-to-message parsing. All advanced features are optional and can be enabled via `.env` configuration. *(Whitelist required)*
 -   🔐 **Admin System:** A comprehensive admin permission system with user/group whitelisting.
 -   📊 **User Caching & Stats:** Caching user data and command usage statistics.
 -   🛡️ **AI Anti-Spam:** Intelligent spam detection system powered by OpenAI GPT-4o-mini with **group-level configuration**, automatic user verification based on join time and activity, customizable spam score thresholds, comprehensive logging and statistics, **global statistics dashboard**, **Telegraph-integrated log viewing**, and automatic data cleanup. Features smart detection for new users while respecting verified members, detailed spam analysis with reasoning and mock text, ban/mute actions, and complete admin panel integration with per-group and cross-group analytics.
@@ -193,9 +190,6 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /finance 6033.KL         # Search Malaysian stock (PETRONAS Gas)
 /finance Maybank         # Search by partial company name
 # Interactive features: Stock rankings (15 categories), analyst recommendations, financial statements
-
-# Social Media Parser
-/platforms               # View list of 20+ supported platforms (all users)
 ```
 
 #### Whitelist-Only Commands
@@ -262,15 +256,6 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 
 # Apple services
 /aps iCloud
-
-# Social Media Parser (Whitelist users/groups)
-/parse https://www.douyin.com/video/xxxxx  # Parse Douyin video
-/parse https://www.bilibili.com/video/xxxxx # Parse Bilibili video
-/parse https://youtu.be/xxxxx               # Parse YouTube video
-/parse https://twitter.com/user/status/xxxxx # Parse Twitter/X post
-/parse https://www.xiaohongshu.com/xxxxx    # Parse Xiaohongshu content
-# Or reply to a message containing a link and use /parse to parse it
-# Supports: Douyin, Kuaishou, Bilibili, YouTube, TikTok, Xiaohongshu, Twitter/X, Instagram, Facebook, Weibo, and 20+ platforms
 ```
 
 #### Admin Commands
@@ -287,12 +272,6 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 # - View recent detection logs with Telegraph integration for long lists
 # - Configure spam score thresholds and detection parameters
 # - Automatic weekly data cleanup (logs: 30 days, stats: 90 days, inactive users: 60 days)
-
-# Social Media Parser Management (via /admin panel)
-# - Enable/disable auto-parse for whitelisted groups
-# - Auto-parse detects and parses links automatically in enabled groups
-# - Supports 20+ platforms with automatic detection
-# - View parsing statistics and usage
 
 # Data Points Management
 /listpoints [limit]       # List known data points (default 10, with statistics)
@@ -328,7 +307,6 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /cleancache google_play   # Clear Google Play cache
 /cleancache apple_services # Clear Apple services cache
 /cleancache finance       # Clear finance & stock data cache
-/cleancache social_parser # Clear social media parser cache
 
 # Command List Management
 /refresh_all             # Admin: Refresh command lists for all users and groups

@@ -184,36 +184,3 @@ CREATE TABLE IF NOT EXISTS anti_spam_stats (
     INDEX idx_group_id (group_id),
     INDEX idx_date (date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='反垃圾统计表';
-
--- ============================================================================
--- 社交媒体解析功能相关表
--- ============================================================================
-
--- 群组自动解析配置表
-CREATE TABLE IF NOT EXISTS social_parser_config (
-    group_id BIGINT PRIMARY KEY COMMENT '群组ID',
-    auto_parse_enabled BOOLEAN DEFAULT FALSE COMMENT '是否启用自动解析',
-    enabled_by BIGINT NOT NULL COMMENT '启用者ID',
-    enabled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '启用时间',
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_auto_parse_enabled (auto_parse_enabled),
-    FOREIGN KEY (group_id) REFERENCES group_whitelist(group_id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='社交媒体解析配置表';
-
--- 解析统计表
-CREATE TABLE IF NOT EXISTS social_parser_stats (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    user_id BIGINT NOT NULL COMMENT '用户ID',
-    group_id BIGINT COMMENT '群组ID（私聊为NULL）',
-    platform VARCHAR(50) NOT NULL COMMENT '平台名称',
-    url TEXT NOT NULL COMMENT '解析的URL',
-    parse_success BOOLEAN DEFAULT TRUE COMMENT '是否解析成功',
-    parse_time_ms INT COMMENT '解析耗时（毫秒）',
-    error_message TEXT COMMENT '错误信息',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_user_id (user_id),
-    INDEX idx_group_id (group_id),
-    INDEX idx_platform (platform),
-    INDEX idx_created_at (created_at),
-    INDEX idx_parse_success (parse_success)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='社交媒体解析统计表';
