@@ -252,6 +252,38 @@ class ConfigManager:
             logger.error(f"Error loading configuration: {e}")
             raise
 
+    def _parse_netscape_cookies(self, cookie_file_path: str) -> dict:
+        """
+        解析 Netscape 格式的 Cookie 文件
+
+        Args:
+            cookie_file_path: Cookie 文件路径
+
+        Returns:
+            dict: Cookie 字典
+        """
+        cookies = {}
+        try:
+            with open(cookie_file_path, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    # 跳过注释和空行
+                    if not line or line.startswith('#'):
+                        continue
+
+                    # Netscape 格式: domain flag path secure expiration name value
+                    parts = line.split('\t')
+                    if len(parts) >= 7:
+                        name = parts[5]
+                        value = parts[6]
+                        cookies[name] = value
+
+            logger.info(f"✅ 成功解析 Netscape Cookie 文件，共 {len(cookies)} 个 Cookie")
+            return cookies
+        except Exception as e:
+            logger.error(f"解析 Netscape Cookie 文件失败: {e}")
+            return {}
+
     def _load_from_env_file(self):
         """从.env文件加载配置"""
         try:
@@ -458,7 +490,14 @@ class ConfigManager:
         self.config.instagram_cookie = os.getenv("INSTAGRAM_COOKIE", None)
         self.config.bilibili_cookie = os.getenv("BILIBILI_COOKIE", None)
         self.config.kuaishou_cookie = os.getenv("KUAISHOU_COOKIE", None)
-        self.config.youtube_cookie = os.getenv("YOUTUBE_COOKIE", None)
+
+        # YouTube Cookie: 支持字符串或Netscape文件路径
+        youtube_cookie = os.getenv("YOUTUBE_COOKIE", None)
+        if youtube_cookie and youtube_cookie.startswith("/") and os.path.exists(youtube_cookie):
+            # 如果是文件路径，读取文件内容并解析为dict
+            self.config.youtube_cookie = self._parse_netscape_cookies(youtube_cookie)
+        else:
+            self.config.youtube_cookie = youtube_cookie
 
         # Webhook 配置
         self.config.webhook_url = os.getenv("WEBHOOK_URL", "")
