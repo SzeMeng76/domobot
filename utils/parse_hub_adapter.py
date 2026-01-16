@@ -134,8 +134,8 @@ class ParseHubAdapter:
             downloader_proxy = proxy or (self.config.downloader_proxy if self.config else None)
 
             # 根据平台选择 Cookie（ParseConfig会自动将字符串转换为dict）
-            # 注意：只有部分平台支持cookie（Twitter, Instagram, Bilibili, Kuaishou）
-            # Facebook/YouTube等基于yt-dlp的平台不支持cookie（ParseHub库限制）
+            # 支持：Twitter, Instagram, Bilibili, Kuaishou, YouTube (通过patch)
+            # 不支持：Facebook (基于yt-dlp，ParseHub库限制)
             platform_cookie = None
             if self.config:
                 logger.info(f"🔍 平台: {platform_id}")
@@ -151,6 +151,9 @@ class ParseHubAdapter:
                 elif platform_id == 'kuaishou' and self.config.kuaishou_cookie:
                     platform_cookie = self.config.kuaishou_cookie
                     logger.info(f"✅ 使用Kuaishou cookie")
+                elif platform_id == 'youtube' and self.config.youtube_cookie:
+                    platform_cookie = self.config.youtube_cookie
+                    logger.info(f"✅ 使用YouTube cookie (通过patch传递给yt-dlp)")
                 else:
                     logger.info(f"⚠️ 平台 {platform_id} 未配置cookie或不匹配")
 
