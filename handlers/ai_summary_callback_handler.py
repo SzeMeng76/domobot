@@ -4,9 +4,11 @@ AI总结按钮callback handler
 点击按钮切换显示/隐藏AI总结内容
 """
 
+import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CallbackQueryHandler
-from utils.logger import logger
+
+logger = logging.getLogger(__name__)
 
 # Global adapter reference
 _adapter = None
