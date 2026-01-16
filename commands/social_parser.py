@@ -468,6 +468,22 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
         # 单个媒体文件，直接发送
         media = media_list[0]
         if isinstance(media, Video):
+            # 检查视频文件大小（Telegram限制50MB）
+            video_path = Path(media.path)
+            video_size_mb = video_path.stat().st_size / (1024 * 1024)
+
+            if video_size_mb > 50:
+                # 视频太大，只发送文本提示
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"{caption}\n\n⚠️ 视频文件过大 ({video_size_mb:.1f}MB)，无法直接发送",
+                    parse_mode="Markdown",
+                    reply_to_message_id=reply_to_message_id,
+                    disable_web_page_preview=True,
+                    reply_markup=reply_markup
+                )
+                return
+
             with open(str(media.path), 'rb') as video_file:
                 await context.bot.send_video(
                     chat_id=chat_id,
