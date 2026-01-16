@@ -735,36 +735,35 @@ def main() -> None:
 
     # 设置异步初始化和清理回调
     async def init_and_run(app):
+        # 先启动反爬虫代理服务器（如果启用）
+        if os.getenv("ENABLE_ANTI_CRAWLER_PROXY", "true").lower() == "true":
+            try:
+                from utils.anti_crawler_proxy import AntiCrawlerProxy
+                import asyncio
+
+                proxy_host = os.getenv("ANTI_CRAWLER_PROXY_HOST", "127.0.0.1")
+                proxy_port = int(os.getenv("ANTI_CRAWLER_PROXY_PORT", "8765"))
+
+                logger.info(f"🎭 启动反爬虫代理服务器: {proxy_host}:{proxy_port}")
+                proxy = AntiCrawlerProxy(host=proxy_host, port=proxy_port)
+
+                # 在后台启动代理服务器
+                proxy_task = asyncio.create_task(proxy.start())
+                # 等待代理服务器启动完成
+                await asyncio.sleep(0.5)
+                logger.info("✅ 反爬虫代理服务器已启动")
+
+                # 保存task引用，防止被垃圾回收
+                app.bot_data['proxy_task'] = proxy_task
+            except Exception as e:
+                logger.warning(f"⚠️ 反爬虫代理服务器启动失败: {e}", exc_info=True)
+
+        # 然后启动bot应用
         await setup_application(app, config)
         logger.info("✅ 机器人启动完成，开始服务...")
 
     application.post_init = init_and_run
     application.post_shutdown = cleanup_application
-
-    # ========================================
-    # 第三步：启动反爬虫代理服务器（如果启用）
-    # ========================================
-    proxy_task = None
-    if os.getenv("ENABLE_ANTI_CRAWLER_PROXY", "true").lower() == "true":
-        try:
-            from utils.anti_crawler_proxy import AntiCrawlerProxy
-            import asyncio
-
-            proxy_host = os.getenv("ANTI_CRAWLER_PROXY_HOST", "127.0.0.1")
-            proxy_port = int(os.getenv("ANTI_CRAWLER_PROXY_PORT", "8765"))
-
-            logger.info(f"🎭 启动反爬虫代理服务器: {proxy_host}:{proxy_port}")
-            proxy = AntiCrawlerProxy(host=proxy_host, port=proxy_port)
-
-            # 在后台启动代理服务器
-            async def start_proxy():
-                await proxy.start()
-
-            loop = asyncio.get_event_loop()
-            proxy_task = loop.create_task(start_proxy())
-            logger.info("✅ 反爬虫代理服务器已启动")
-        except Exception as e:
-            logger.warning(f"⚠️ 反爬虫代理服务器启动失败: {e}")
 
     # ========================================
     # 第四步：启动机器人
