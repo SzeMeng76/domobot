@@ -491,13 +491,10 @@ class ConfigManager:
         self.config.bilibili_cookie = os.getenv("BILIBILI_COOKIE", None)
         self.config.kuaishou_cookie = os.getenv("KUAISHOU_COOKIE", None)
 
-        # YouTube Cookie: 支持字符串或Netscape文件路径
-        youtube_cookie = os.getenv("YOUTUBE_COOKIE", None)
-        if youtube_cookie and youtube_cookie.startswith("/") and os.path.exists(youtube_cookie):
-            # 如果是文件路径，读取文件内容并解析为dict
-            self.config.youtube_cookie = self._parse_netscape_cookies(youtube_cookie)
-        else:
-            self.config.youtube_cookie = youtube_cookie
+        # YouTube Cookie: 保持Netscape文件路径字符串（不解析，直接传给yt-dlp）
+        self.config.youtube_cookie = os.getenv("YOUTUBE_COOKIE", None)
+        if self.config.youtube_cookie:
+            logger.info(f"✅ YouTube cookie配置: {self.config.youtube_cookie}")
 
         # Webhook 配置
         self.config.webhook_url = os.getenv("WEBHOOK_URL", "")

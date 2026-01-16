@@ -196,7 +196,11 @@ class ParseHubAdapter:
 
             # 创建配置（重要：每次都创建新的ParseHub实例，传入配置）
             parse_config = ParseConfig(proxy=parser_proxy, cookie=platform_cookie)
-            logger.info(f"ParseConfig cookie type: {type(parse_config.cookie)}, value: {parse_config.cookie}")
+            if platform_cookie:
+                cookie_preview = str(platform_cookie)[:100] if not isinstance(platform_cookie, dict) else f"dict with {len(platform_cookie)} keys"
+                logger.info(f"🍪 传递给ParseConfig的cookie - 类型: {type(platform_cookie)}, 预览: {cookie_preview}")
+            else:
+                logger.info(f"⚠️ 未传递cookie给ParseConfig")
             download_config = DownloadConfig(
                 proxy=downloader_proxy,
                 save_dir=self.temp_dir,
