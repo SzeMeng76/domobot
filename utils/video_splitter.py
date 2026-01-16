@@ -55,7 +55,7 @@ class VideoSplitter:
                 stderr=asyncio.subprocess.PIPE
             )
 
-            _, stderr = await proc.communicate()
+            _, stderr = await proc.await()
             stderr_text = stderr.decode('utf-8', errors='ignore')
 
             # 从输出中提取时长
