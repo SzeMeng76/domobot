@@ -59,6 +59,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./youtube_cookies.txt:/app/youtube_cookies.txt  # YouTube cookies
+      - ./youtube_oauth_token.json:/app/youtube_oauth_token.json  # YouTube OAuth token
     
     # --- 网络配置 ---
     networks:

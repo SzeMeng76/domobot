@@ -249,10 +249,28 @@ def patch_parsehub_yt_dlp():
                             }
                             logger.info(f"🌐 [pytubefix] Using YouTube proxy: {youtube_proxy[:30]}...")
 
+                        # Check if OAuth token is configured
+                        youtube_oauth_token = os.getenv("YOUTUBE_OAUTH_TOKEN")
+                        use_oauth = False
+                        token_file = None
+
+                        if youtube_oauth_token and os.path.exists(youtube_oauth_token):
+                            use_oauth = True
+                            token_file = youtube_oauth_token
+                            logger.info(f"🔐 [pytubefix] Using YouTube OAuth token: {youtube_oauth_token}")
+
                         # Use 'WEB' client to enable automatic po_token generation
                         # This bypasses YouTube's bot detection without manual token extraction
                         # nodejs dependency is automatically installed via nodejs-wheel-binaries
-                        yt = YouTube(self.media.path, client='WEB', proxies=proxies)
+                        # OAuth can be used as alternative to proxy (but requires Google account)
+                        yt = YouTube(
+                            self.media.path,
+                            client='WEB',
+                            proxies=proxies,
+                            use_oauth=use_oauth,
+                            allow_oauth_cache=True,
+                            token_file=token_file
+                        )
 
                         # Get highest resolution progressive stream (video + audio)
                         stream = yt.streams.filter(progressive=True, file_extension='mp4').order_by('resolution').desc().first()
