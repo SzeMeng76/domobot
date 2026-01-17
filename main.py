@@ -731,7 +731,13 @@ def main() -> None:
     # 第二步：创建并配置应用
     # ========================================
     logger.info(" 创建 Telegram Bot 应用...")
-    application = Application.builder().token(bot_token).build()
+    application = (
+        Application.builder()
+        .token(bot_token)
+        .read_timeout(60)  # 增加读取超时到60秒（发送大图片/视频时需要）
+        .write_timeout(60)  # 增加写入超时到60秒
+        .build()
+    )
 
     # 设置异步初始化和清理回调
     async def init_and_run(app):
