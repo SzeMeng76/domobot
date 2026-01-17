@@ -528,6 +528,146 @@ def patch_parsehub_yt_dlp():
         DouyinParser.parse = patched_douyin_parse
         logger.info("✅ DouyinParser patched: use TikHub as fallback when official parser fails")
 
+        # Patch DouyinParser to handle TikTok with TikHub API
+        original_douyin_parse_api = DouyinParser.parse_api
+
+        async def patched_douyin_parse_with_tiktok(self, url: str):
+            """Enhanced parse that uses TikHub for TikTok videos"""
+            from parsehub.types import VideoParseResult, ImageParseResult
+            from parsehub.types.error import ParseError
+
+            # Check if it's a TikTok URL
+            is_tiktok = "tiktok.com" in url.lower()
+
+            if not is_tiktok:
+                # For Douyin, use the existing patched version
+                return await patched_douyin_parse(self, url)
+
+            # For TikTok, use TikHub API
+            tikhub_api_key = os.getenv("TIKHUB_API_KEY")
+            if not tikhub_api_key:
+                logger.warning("⚠️ [TikTok] TIKHUB_API_KEY not configured, trying official parser...")
+                try:
+                    return await patched_douyin_parse(self, url)
+                except Exception as e:
+                    raise ParseError(f"TikTok解析失败且未配置TikHub API: {e}")
+
+            try:
+                url = await self.get_raw_url(url)
+                logger.info(f"🎬 [TikHub] Parsing TikTok video: {url[:80]}...")
+
+                # Extract video ID from TikTok URL
+                video_id_match = re.search(r'/video/(\d+)', url)
+                if not video_id_match:
+                    raise ParseError("无法从URL提取TikTok视频ID")
+
+                video_id = video_id_match.group(1)
+                logger.info(f"🎬 [TikHub] Fetching TikTok video ID: {video_id}")
+
+                # Call TikHub TikTok API (use app/v3 endpoint)
+                api_url = f"https://api.tikhub.io/api/v1/tiktok/app/v3/fetch_one_video?aweme_id={video_id}"
+                headers = {"Authorization": f"Bearer {tikhub_api_key}"}
+
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.get(api_url, headers=headers)
+
+                if response.status_code != 200:
+                    raise ParseError(f"TikHub API请求失败: HTTP {response.status_code}")
+
+                data = response.json()
+                if data.get("code") != 200:
+                    raise ParseError(f"TikHub API返回错误: {data.get('message', 'Unknown error')}")
+
+                if not data.get("data"):
+                    raise ParseError("TikHub API返回空数据")
+
+                aweme_detail = data["data"].get("aweme_detail")
+                if not aweme_detail:
+                    raise ParseError("TikHub返回数据中没有aweme_detail")
+
+                desc = aweme_detail.get("desc", "")
+                video = aweme_detail.get("video", {})
+
+                # Check if it's an image post (photo carousel)
+                image_post_info = aweme_detail.get("image_post_info")
+                if image_post_info:
+                    from parsehub.types import Image
+                    images = image_post_info.get("images", [])
+                    if images:
+                        image_list = []
+                        for img in images:
+                            image_url_list = img.get("display_image", {}).get("url_list", [])
+                            if image_url_list:
+                                image_list.append(Image(image_url_list[0]))
+
+                        logger.info(f"✅ [TikHub] Got TikTok image post with {len(image_list)} images")
+                        return ImageParseResult(
+                            raw_url=url,
+                            title=desc,
+                            photo=image_list,
+                        )
+
+                # Handle video post - use best quality from bit_rate list
+                bit_rates = video.get("bit_rate", [])
+                if bit_rates:
+                    # Sort by quality (highest first) and get best quality
+                    bit_rates.sort(key=lambda x: x.get("bit_rate", 0), reverse=True)
+                    best_video = bit_rates[0]
+                    play_addr = best_video.get("play_addr", {})
+                    url_list = play_addr.get("url_list", [])
+
+                    if url_list:
+                        download_url = url_list[0]
+                        width = play_addr.get("width", 0)
+                        height = play_addr.get("height", 0)
+                        duration = play_addr.get("duration", 0) // 1000  # Convert ms to seconds
+
+                        logger.info(f"✅ [TikHub] Got TikTok video ({best_video.get('gear_name', 'unknown')}, {width}x{height}, {duration}s)")
+
+                        from parsehub.types import Video
+                        return VideoParseResult(
+                            raw_url=url,
+                            title=desc,
+                            video=Video(
+                                download_url,
+                                width=width,
+                                height=height,
+                                duration=duration,
+                            ),
+                        )
+
+                # Fallback: try play_addr directly
+                play_addr = video.get("play_addr", {})
+                url_list = play_addr.get("url_list", [])
+                if url_list:
+                    download_url = url_list[0]
+                    duration = video.get("duration", 0) // 1000
+
+                    logger.info(f"✅ [TikHub] Got TikTok video (fallback URL)")
+
+                    from parsehub.types import Video
+                    return VideoParseResult(
+                        raw_url=url,
+                        title=desc,
+                        video=Video(download_url, duration=duration),
+                    )
+
+                raise ParseError("TikHub返回数据中没有可用的视频或图片")
+
+            except ParseError:
+                raise
+            except Exception as e:
+                logger.error(f"❌ [TikHub] TikTok解析失败: {e}")
+                # Try official parser as last resort
+                try:
+                    logger.info("🔄 [TikTok] Trying official parser as fallback...")
+                    return await patched_douyin_parse(self, url)
+                except Exception as fallback_error:
+                    raise ParseError(f"TikHub和官方解析器都失败: TikHub={e}, Official={fallback_error}")
+
+        DouyinParser.parse = patched_douyin_parse_with_tiktok
+        logger.info("✅ DouyinParser patched: TikHub support for TikTok videos and images")
+
         return True
 
     except Exception as e:
