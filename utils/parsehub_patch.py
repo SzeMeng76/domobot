@@ -174,118 +174,6 @@ def patch_parsehub_yt_dlp():
                 if temp_cookie_file and os.path.exists(temp_cookie_file.name):
                     os.unlink(temp_cookie_file.name)
 
-                # For YouTube URLs, try to get TikHub direct download URL
-                youtube_patterns = [
-                    r'(?:https?://)?(?:www\.)?(?:youtube\.com|youtu\.be)/',
-                    r'(?:https?://)?(?:www\.)?youtube\.com/watch\?v=',
-                    r'(?:https?://)?youtu\.be/'
-                ]
-                is_youtube = any(re.search(pattern, url, re.IGNORECASE) for pattern in youtube_patterns)
-
-                if is_youtube and result:
-                    try:
-                        # Extract video ID from URL
-                        video_id_match = re.search(r'(?:v=|/)([0-9A-Za-z_-]{11})(?:[?&]|$)', url)
-                        if video_id_match:
-                            video_id = video_id_match.group(1)
-
-                            # TikHub API key from config (via environment variable TIKHUB_API_KEY)
-                            # Note: We use os.getenv here because self.cfg is ParseConfig, not BotConfig
-                            # The API key should be set in environment variable TIKHUB_API_KEY
-                            tikhub_api_key = os.getenv("TIKHUB_API_KEY")
-                            if not tikhub_api_key:
-                                logger.debug(f"⚠️ [TikHub] TIKHUB_API_KEY not set, skipping TikHub API")
-                                return result
-
-                            logger.info(f"🎬 [TikHub] Fetching direct download URL for YouTube video: {video_id}")
-
-                            # Call TikHub API
-                            api_url = f"https://api.tikhub.io/api/v1/youtube/web/get_video_info?video_id={video_id}"
-                            headers = {"Authorization": f"Bearer {tikhub_api_key}"}
-
-                            with httpx.Client(timeout=30.0) as client:
-                                response = client.get(api_url, headers=headers)
-
-                            if response.status_code == 200:
-                                data = response.json()
-                                if data.get("code") == 200 and data.get("data"):
-                                    video_data = data["data"]
-                                    videos = video_data.get("videos", {}).get("items", [])
-
-                                    if videos:
-                                        # Find best video with audio (itag=18 is 360p with audio)
-                                        best_video = None
-                                        for v in videos:
-                                            if v.get("hasAudio"):
-                                                best_video = v
-                                                break
-
-                                        if not best_video:
-                                            # No video with audio, use first video
-                                            best_video = videos[0]
-
-                                        # Store TikHub direct URL in result
-                                        result["_tikhub_url"] = best_video["url"]
-                                        result["_tikhub_quality"] = best_video.get("quality", "unknown")
-                                        logger.info(f"✅ [TikHub] Got direct download URL ({best_video.get('quality', 'unknown')}, {best_video.get('sizeText', 'unknown')})")
-
-                                        # Use TikHub metadata as primary source (better than yt-dlp)
-                                        # yt-dlp result is fallback if TikHub fields are missing
-                                        logger.info(f"📊 [TikHub] Using TikHub metadata as primary source (yt-dlp as fallback)")
-
-                                        # Update result with TikHub metadata (only if available)
-                                        if video_data.get("title"):
-                                            result["title"] = video_data["title"]
-
-                                        if video_data.get("description"):
-                                            result["description"] = video_data["description"]
-
-                                        # Channel info
-                                        channel = video_data.get("channel", {})
-                                        if channel.get("name"):
-                                            result["uploader"] = channel["name"]
-                                            result["channel"] = channel["name"]
-                                        if channel.get("id"):
-                                            result["channel_id"] = channel["id"]
-                                        if channel.get("url"):
-                                            result["channel_url"] = channel["url"]
-
-                                        # Duration and stats
-                                        if video_data.get("lengthSeconds"):
-                                            result["duration"] = int(video_data["lengthSeconds"])
-                                        if video_data.get("viewCount"):
-                                            result["view_count"] = int(video_data["viewCount"])
-
-                                        # Thumbnails
-                                        thumbnails_data = video_data.get("thumbnails")
-                                        if thumbnails_data:
-                                            # Handle both dict{"items": []} and list formats
-                                            if isinstance(thumbnails_data, dict):
-                                                thumbnails = thumbnails_data.get("items", [])
-                                            elif isinstance(thumbnails_data, list):
-                                                thumbnails = thumbnails_data
-                                            else:
-                                                thumbnails = []
-
-                                            if thumbnails:
-                                                result["thumbnails"] = [{"url": t["url"], "width": t.get("width"), "height": t.get("height")} for t in thumbnails]
-                                                result["thumbnail"] = thumbnails[-1]["url"]  # Use highest quality
-
-                                        # Upload date
-                                        if video_data.get("publishedTimeText"):
-                                            result["upload_date_text"] = video_data["publishedTimeText"]
-
-                                        logger.info(f"✅ [TikHub] Updated result with TikHub metadata")
-                                    else:
-                                        logger.warning(f"⚠️ [TikHub] No videos found in API response")
-                                else:
-                                    logger.warning(f"⚠️ [TikHub] API returned error: {data.get('message', 'Unknown error')}")
-                            else:
-                                logger.warning(f"⚠️ [TikHub] API request failed: HTTP {response.status_code}")
-
-                    except Exception as e:
-                        logger.warning(f"⚠️ [TikHub] Failed to fetch direct URL: {e}")
-
                 return result
             except Exception as e:
                 # 清理临时cookie文件
@@ -300,78 +188,35 @@ def patch_parsehub_yt_dlp():
         YtParser._extract_info = fixed_extract_info
         logger.info("✅ YtParser patched: js_runtimes + cookie handling + headers")
 
-        # Patch YtParser._parse to use TikHub URL if available
-        original_yt_parse_internal = YtParser._parse
+        # Note: YtParser._parse doesn't need patching anymore - using original implementation
+        # YouTube downloads will be handled by pytubefix in the download method
+        logger.info("ℹ️ YtParser._parse: using original implementation (YouTube download via pytubefix)")
 
-        async def patched_yt_parse_internal(self, url):
-            """Patched _parse method that uses TikHub URL for download"""
-            import asyncio
-            from parsehub.types.error import ParseError
-            from parsehub.parsers.base.yt_dlp_parser import YtVideoInfo
-
-            try:
-                dl = await asyncio.wait_for(asyncio.to_thread(self._extract_info, url), timeout=30)
-            except TimeoutError as e:
-                raise ParseError("解析视频信息超时") from e
-            except Exception as e:
-                raise ParseError(f"解析视频信息失败: {str(e)}") from e
-
-            if dl.get("_type"):
-                dl = dl["entries"][0]
-                url = dl["webpage_url"]
-
-            title = dl["title"]
-            duration = dl.get("duration", 0) or 0
-            thumbnail = dl["thumbnail"]
-            description = dl["description"]
-            width = dl.get("width", 0) or 0
-            height = dl.get("height", 0) or 0
-
-            # Check if TikHub URL is available (from _extract_info)
-            download_url = url
-            if dl.get("_tikhub_url"):
-                download_url = dl["_tikhub_url"]
-                logger.info(f"📥 [TikHub] Using TikHub direct URL for download: {download_url[:80]}...")
-
-            return YtVideoInfo(
-                raw_video_info=dl,
-                title=title,
-                description=description,
-                thumbnail=thumbnail,
-                duration=duration,
-                url=download_url,  # Use TikHub URL if available
-                width=width,
-                height=height,
-                paramss=self.params,
-            )
-
-        YtParser._parse = patched_yt_parse_internal
-        logger.info("✅ YtParser._parse patched: use TikHub URL for download")
-
-        # Patch YtVideoParseResult.download to use direct URL instead of yt-dlp
+        # Patch YtVideoParseResult.download to use pytubefix for YouTube
         from parsehub.parsers.base.yt_dlp_parser import YtVideoParseResult
         from parsehub.types import DownloadResult, Video
         from parsehub.config import DownloadConfig
         from parsehub.types.error import DownloadError
-        from parsehub.utiles.download_file import download_file
         from pathlib import Path
         import time
+        import asyncio
 
         original_yt_video_download = YtVideoParseResult.download
 
         async def patched_yt_video_download(self, path=None, callback=None, callback_args=(), config=DownloadConfig()):
-            """Patched download that uses direct URL (TikHub) if available"""
+            """Patched download that uses pytubefix for YouTube"""
             logger.info(f"🔍 [Patch] patched_yt_video_download called: is_url={self.media.is_url}, path={self.media.path[:100] if self.media.path else 'None'}")
 
             if not self.media.is_url:
                 logger.info(f"⚠️ [Patch] media.is_url is False, returning media directly")
                 return self.media
 
-            # Check if media.path is a direct download URL (not a YouTube URL)
-            # If it's a googlevideo.com URL (TikHub), use direct download
-            logger.info(f"🔍 [Patch] Checking URL: has_path={bool(self.media.path)}, has_googlevideo={'googlevideo.com' in self.media.path if self.media.path else False}")
-            if self.media.path and ('googlevideo.com' in self.media.path or 'googleapis.com' in self.media.path):
-                logger.info(f"📥 [Patch] Using direct URL download (TikHub): {self.media.path[:80]}...")
+            # Check if this is a YouTube URL
+            url_lower = self.media.path.lower() if self.media.path else ""
+            is_youtube = any(domain in url_lower for domain in ['youtube.com', 'youtu.be'])
+
+            if is_youtube:
+                logger.info(f"📥 [Patch] Detected YouTube URL, using pytubefix: {self.media.path[:80]}...")
 
                 # Download directory
                 dir_ = (config.save_dir if path is None else Path(path)).joinpath(f"{time.time_ns()}")
@@ -381,39 +226,55 @@ def patch_parsehub_yt_dlp():
                     await callback(0, 0, "正在下载...", *callback_args)
 
                 try:
-                    # Use download_file for direct download
-                    video_path = await download_file(
-                        self.media.path,
-                        dir_ / f"video_{time.time_ns()}.mp4",
-                        headers=config.headers,
-                        proxies=config.proxy,
-                        progress=callback,
-                        progress_args=callback_args,
-                    )
+                    # Use pytubefix to download
+                    from pytubefix import YouTube
 
-                    logger.info(f"✅ [Patch] Direct download completed: {video_path}")
+                    def download_with_pytubefix():
+                        """Synchronous function to download with pytubefix"""
+                        yt = YouTube(self.media.path)
+
+                        # Get highest resolution progressive stream (video + audio)
+                        stream = yt.streams.filter(progressive=True, file_extension='mp4').order_by('resolution').desc().first()
+
+                        if not stream:
+                            # Fallback to highest resolution stream
+                            stream = yt.streams.get_highest_resolution()
+
+                        if not stream:
+                            raise DownloadError("No suitable stream found")
+
+                        # Download to directory
+                        logger.info(f"🎬 [pytubefix] Downloading: {yt.title} ({stream.resolution})")
+                        output_path = stream.download(output_path=str(dir_), filename=f"video_{time.time_ns()}.mp4")
+
+                        return output_path, yt
+
+                    # Run in thread to avoid blocking
+                    output_path, yt = await asyncio.to_thread(download_with_pytubefix)
+
+                    logger.info(f"✅ [Patch] pytubefix download completed: {output_path}")
 
                     return DownloadResult(
                         self,
                         Video(
-                            path=str(video_path),
-                            thumb_url=self.dl.thumbnail if hasattr(self, 'dl') else None,
-                            height=self.dl.height if hasattr(self, 'dl') else 0,
-                            width=self.dl.width if hasattr(self, 'dl') else 0,
-                            duration=self.dl.duration if hasattr(self, 'dl') else 0,
+                            path=str(output_path),
+                            thumb_url=yt.thumbnail_url if hasattr(yt, 'thumbnail_url') else None,
+                            height=0,  # pytubefix doesn't provide these easily
+                            width=0,
+                            duration=yt.length if hasattr(yt, 'length') else 0,
                         ),
                         dir_,
                     )
                 except Exception as e:
-                    logger.error(f"❌ [Patch] Direct download failed: {e}, falling back to yt-dlp")
+                    logger.error(f"❌ [Patch] pytubefix download failed: {e}, falling back to yt-dlp")
                     # Fallback to original yt-dlp download
                     return await original_yt_video_download(self, path, callback, callback_args, config)
             else:
-                # Not a direct URL, use original yt-dlp download
+                # Not a YouTube URL, use original yt-dlp download
                 return await original_yt_video_download(self, path, callback, callback_args, config)
 
         YtVideoParseResult.download = patched_yt_video_download
-        logger.info("✅ YtVideoParseResult.download patched: use direct URL when available")
+        logger.info("✅ YtVideoParseResult.download patched: use pytubefix for YouTube")
 
         # Patch BiliAPI to support cookies and add Referer headers
         # Problem: BiliAPI.__init__ doesn't accept cookie parameter
