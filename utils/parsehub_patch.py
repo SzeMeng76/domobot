@@ -736,12 +736,91 @@ def patch_parsehub_yt_dlp():
         TieBa.get_html = patched_tieba_get_html
         logger.info("✅ TieBa patched: Cookie and headers support to bypass security verification")
 
-        # Patch InstagramParser to support username/reel/ URL format
+        # Patch InstagramParser to support username/reel/ URL format and fix cookie passing
         from parsehub.parsers.parser.instagram import InstagramParser
 
         # Update regex to support both /reel/xxx and username/reel/xxx
         InstagramParser.__match__ = r"^(http(s)?://)(www\.|)instagram\.com/(p|reel|share|.*/p|.*/reel)/.*"
         logger.info("✅ InstagramParser patched: Support username/reel/ URL format")
+
+        # Patch Instagram parse method to pass cookie to _parse
+        original_instagram_parse = InstagramParser.parse
+
+        async def patched_instagram_parse(self, url: str):
+            """Patched parse that passes cookie to _parse method"""
+            from parsehub.types import VideoParseResult, ImageParseResult, MultimediaParseResult
+            from parsehub.types import Video, Image
+            from parsehub.types.error import ParseError
+
+            url = await self.get_raw_url(url)
+
+            shortcode = self.get_short_code(url)
+            if not shortcode:
+                raise ValueError("Instagram帖子链接无效")
+
+            # Pass cookie to _parse (FIX: original code doesn't pass cookie)
+            logger.info(f"✅ [Instagram] Passing cookie to _parse: {bool(self.cfg.cookie)}")
+            post = await self._parse(url, shortcode, self.cfg.cookie)
+
+            try:
+                dimensions: dict = post._field("dimensions")
+            except KeyError:
+                dimensions = {}
+            width, height = dimensions.get("width", 0) or 0, dimensions.get("height", 0) or 0
+
+            k = {"title": post.title, "desc": post.caption, "raw_url": url}
+            match post.typename:
+                case "GraphSidecar":
+                    media = [
+                        Video(i.video_url, thumb_url=i.display_url, width=i.width, height=i.height)
+                        if i.is_video
+                        else Image(i.display_url, width=i.width, height=i.height)
+                        for i in post.get_sidecar_nodes()
+                    ]
+                    return MultimediaParseResult(media=media, **k)
+                case "GraphImage":
+                    return ImageParseResult(photo=[Image(post.url, width=width, height=height)], **k)
+                case "GraphVideo":
+                    return VideoParseResult(
+                        video=Video(
+                            post.video_url,
+                            thumb_url=post.url,
+                            duration=int(post.video_duration),
+                            width=width,
+                            height=height,
+                        ),
+                        **k,
+                    )
+                case _:
+                    raise ParseError("不支持的类型")
+
+        InstagramParser.parse = patched_instagram_parse
+        logger.info("✅ InstagramParser patched: Fix cookie passing to _parse method")
+
+        # Patch MyInstaloaderContext to add better headers
+        from parsehub.provider_api.instagram import MyInstaloaderContext
+        import requests
+
+        original_get_anonymous_session = MyInstaloaderContext.get_anonymous_session
+
+        def patched_get_anonymous_session(self) -> requests.Session:
+            from yt_dlp.utils.networking import random_user_agent
+
+            session = original_get_anonymous_session(self)
+            # Add more realistic headers with random UA (better anti-crawler)
+            session.headers.update({
+                'User-Agent': random_user_agent(),
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Referer': 'https://www.instagram.com/',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+            })
+            return session
+
+        MyInstaloaderContext.get_anonymous_session = patched_get_anonymous_session
+        logger.info("✅ MyInstaloaderContext patched: Enhanced headers for better compatibility")
 
         return True
 
