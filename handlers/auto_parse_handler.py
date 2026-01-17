@@ -58,10 +58,11 @@ async def auto_parse_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     try:
         # 解析URL
-        result, platform, parse_time = await _adapter.parse_url(text, user_id, group_id)
+        result, platform, parse_time, error_msg = await _adapter.parse_url(text, user_id, group_id)
 
         if not result:
-            await status_msg.edit_text("❌ 自动解析失败")
+            error_text = f"❌ 自动解析失败: {error_msg}" if error_msg else "❌ 自动解析失败"
+            await status_msg.edit_text(error_text)
             return
 
         # 更新状态

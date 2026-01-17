@@ -19,6 +19,8 @@ def patch_parsehub_yt_dlp():
         import logging
         import os
         import tempfile
+        import re
+        import httpx
         logger = logging.getLogger(__name__)
 
         from parsehub.parsers.base.yt_dlp_parser import YtParser
@@ -345,6 +347,68 @@ def patch_parsehub_yt_dlp():
 
         YtParser._parse = patched_yt_parse_internal
         logger.info("✅ YtParser._parse patched: use TikHub URL for download")
+
+        # Patch YtVideoParseResult.download to use direct URL instead of yt-dlp
+        from parsehub.parsers.base.yt_dlp_parser import YtVideoParseResult
+        from parsehub.types import DownloadResult, Video, DownloadConfig
+        from parsehub.types.error import DownloadError
+        from parsehub.download import download_file
+        from pathlib import Path
+        import time
+
+        original_yt_video_download = YtVideoParseResult.download
+
+        async def patched_yt_video_download(self, path=None, callback=None, callback_args=(), config=DownloadConfig()):
+            """Patched download that uses direct URL (TikHub) if available"""
+            if not self.media.is_url:
+                return self.media
+
+            # Check if media.path is a direct download URL (not a YouTube URL)
+            # If it's a googlevideo.com URL (TikHub), use direct download
+            if self.media.path and ('googlevideo.com' in self.media.path or 'googleapis.com' in self.media.path):
+                logger.info(f"📥 [Patch] Using direct URL download (TikHub): {self.media.path[:80]}...")
+
+                # Download directory
+                dir_ = (config.save_dir if path is None else Path(path)).joinpath(f"{time.time_ns()}")
+                dir_.mkdir(parents=True, exist_ok=True)
+
+                if callback:
+                    await callback(0, 0, "正在下载...", *callback_args)
+
+                try:
+                    # Use download_file for direct download
+                    video_path = await download_file(
+                        self.media.path,
+                        dir_ / f"video_{time.time_ns()}.mp4",
+                        headers=config.headers,
+                        proxies=config.proxy,
+                        progress=callback,
+                        progress_args=callback_args,
+                    )
+
+                    logger.info(f"✅ [Patch] Direct download completed: {video_path}")
+
+                    return DownloadResult(
+                        self,
+                        Video(
+                            path=str(video_path),
+                            thumb_url=self.dl.thumbnail if hasattr(self, 'dl') else None,
+                            height=self.dl.height if hasattr(self, 'dl') else 0,
+                            width=self.dl.width if hasattr(self, 'dl') else 0,
+                            duration=self.dl.duration if hasattr(self, 'dl') else 0,
+                        ),
+                        dir_,
+                    )
+                except Exception as e:
+                    logger.error(f"❌ [Patch] Direct download failed: {e}, falling back to yt-dlp")
+                    # Fallback to original yt-dlp download
+                    return await original_yt_video_download(self, path, callback, callback_args, config)
+            else:
+                # Not a direct URL, use original yt-dlp download
+                return await original_yt_video_download(self, path, callback, callback_args, config)
+
+        YtVideoParseResult.download = patched_yt_video_download
+        logger.info("✅ YtVideoParseResult.download patched: use direct URL when available")
 
         # Patch BiliAPI to support cookies and add Referer headers
         # Problem: BiliAPI.__init__ doesn't accept cookie parameter

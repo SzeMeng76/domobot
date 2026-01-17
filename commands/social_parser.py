@@ -13,6 +13,18 @@ from telegram.ext import ContextTypes
 from parsehub.types import Video, Image, VideoParseResult, ImageParseResult, MultimediaParseResult
 from utils.command_factory import command_factory
 from utils.error_handling import with_error_handling
+
+
+def _escape_markdown(text: str) -> str:
+    """转义Markdown特殊字符"""
+    if not text:
+        return text
+    # Telegram Markdown需要转义的字符
+    special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    for char in special_chars:
+        text = text.replace(char, f'\\{char}')
+    return text
+
 from utils.message_manager import send_error, send_info, delete_user_command, _schedule_deletion
 from utils.permissions import Permission
 from utils.config_manager import get_config
@@ -119,17 +131,17 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 if desc[:50] in title or title[:50] in desc:
                     # 重复了，只显示较长的那个
                     if len(title) >= len(desc):
-                        caption_parts.append(f"**{title}**")
+                        caption_parts.append(f"**{_escape_markdown(title)}**")
                     else:
-                        caption_parts.append(desc[:500])
+                        caption_parts.append(_escape_markdown(desc[:500]))
                 else:
                     # 不重复，都显示
-                    caption_parts.append(f"**{title}**")
-                    caption_parts.append(desc[:500])
+                    caption_parts.append(f"**{_escape_markdown(title)}**")
+                    caption_parts.append(_escape_markdown(desc[:500]))
             elif title:
-                caption_parts.append(f"**{title}**")
+                caption_parts.append(f"**{_escape_markdown(title)}**")
             elif desc:
-                caption_parts.append(desc[:500])
+                caption_parts.append(_escape_markdown(desc[:500]))
 
             caption = "\n\n".join(caption_parts)
         else:
