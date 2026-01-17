@@ -145,7 +145,7 @@ class ParseHubAdapter:
                     logger.info(f"✅ 使用Twitter cookie: {platform_cookie[:50]}...")
                 elif platform_id == 'instagram' and self.config.instagram_cookie:
                     platform_cookie = self.config.instagram_cookie
-                    logger.info(f"✅ 使用Instagram cookie")
+                    logger.info(f"✅ 使用Instagram cookie: {platform_cookie[:50]}...")
                 elif platform_id == 'bilibili' and self.config.bilibili_cookie:
                     platform_cookie = self.config.bilibili_cookie
                     logger.info(f"✅ 使用Bilibili cookie: {platform_cookie[:50]}...")
