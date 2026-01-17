@@ -511,14 +511,26 @@ def patch_parsehub_yt_dlp():
                 download_url = url_list[0]
                 title = aweme_detail.get("desc", "")
 
-                file_size_mb = play_addr.get("data_size", 0) / 1024 / 1024
-                logger.info(f"✅ [TikHub] Got Douyin video ({best_video.get('gear_name', 'unknown')}, {file_size_mb:.2f}MB)")
+                # Get video metadata
+                width = play_addr.get("width", 0)
+                height = play_addr.get("height", 0)
+                # Get duration from video object (in milliseconds), convert to seconds
+                duration = video.get("duration", 0) // 1000
 
+                file_size_mb = play_addr.get("data_size", 0) / 1024 / 1024
+                logger.info(f"✅ [TikHub] Got Douyin video ({best_video.get('gear_name', 'unknown')}, {width}x{height}, {duration}s, {file_size_mb:.2f}MB)")
+
+                from parsehub.types import Video
                 return VideoParseResult(
                     raw_url=url,
                     title=title,
                     desc=title,
-                    video=download_url,
+                    video=Video(
+                        download_url,
+                        width=width,
+                        height=height,
+                        duration=duration,
+                    ),
                 )
 
             except Exception as e:
@@ -623,7 +635,8 @@ def patch_parsehub_yt_dlp():
                         download_url = url_list[0]
                         width = play_addr.get("width", 0)
                         height = play_addr.get("height", 0)
-                        duration = play_addr.get("duration", 0) // 1000  # Convert ms to seconds
+                        # Get duration from video object (in ms), convert to seconds
+                        duration = video.get("duration", 0) // 1000
 
                         logger.info(f"✅ [TikHub] Got TikTok video ({best_video.get('gear_name', 'unknown')}, {width}x{height}, {duration}s)")
 
