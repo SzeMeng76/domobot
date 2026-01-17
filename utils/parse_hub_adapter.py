@@ -368,7 +368,7 @@ class ParseHubAdapter:
             logger.debug(f"提取原始URL: {url}")
 
             # 2. 检查是否为短链接（需要重定向）
-            short_domains = ['b23.tv', 't.co', 'bit.ly', 'youtu.be', 'tiktok.com/t/', 'douyin.com/']
+            short_domains = ['b23.tv', 't.co', 'bit.ly', 'youtu.be', 'tiktok.com/t/', 'vt.tiktok.com', 'vm.tiktok.com', 'douyin.com/']
             is_short = any(domain in url for domain in short_domains)
 
             if is_short:

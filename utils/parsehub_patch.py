@@ -553,13 +553,16 @@ def patch_parsehub_yt_dlp():
                     raise ParseError(f"TikTok解析失败且未配置TikHub API: {e}")
 
             try:
+                # Get real URL (follows redirects for short URLs like vt.tiktok.com)
                 url = await self.get_raw_url(url)
                 logger.info(f"🎬 [TikHub] Parsing TikTok video: {url[:80]}...")
 
-                # Extract video ID from TikTok URL
+                # Extract video ID from TikTok URL (after redirect)
+                # Supports: https://www.tiktok.com/@username/video/1234567890
                 video_id_match = re.search(r'/video/(\d+)', url)
                 if not video_id_match:
-                    raise ParseError("无法从URL提取TikTok视频ID")
+                    logger.error(f"❌ [TikHub] Cannot extract video ID from URL: {url}")
+                    raise ParseError(f"无法从URL提取TikTok视频ID: {url}")
 
                 video_id = video_id_match.group(1)
                 logger.info(f"🎬 [TikHub] Fetching TikTok video ID: {video_id}")
