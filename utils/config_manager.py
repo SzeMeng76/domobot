@@ -225,6 +225,7 @@ class BotConfig:
         self.bilibili_cookie = None
         self.kuaishou_cookie = None
         self.youtube_cookie = None
+        self.tieba_cookie = None  # 贴吧完整Cookie字符串（绕过安全验证）
 
 
 class ConfigManager:
@@ -486,12 +487,13 @@ class ConfigManager:
         self.config.transcription_base_url = os.getenv("TRANSCRIPTION_BASE_URL", self.config.openai_base_url)
 
         # 平台Cookie配置（只支持部分平台）
-        # 支持: Twitter, Instagram, Bilibili, Kuaishou, YouTube (通过patch支持)
+        # 支持: Twitter, Instagram, Bilibili, Kuaishou, YouTube (通过patch支持), Tieba
         # 不支持: Facebook (基于yt-dlp，ParseHub库未实现)
         self.config.twitter_cookie = os.getenv("TWITTER_COOKIE", None)
         self.config.instagram_cookie = os.getenv("INSTAGRAM_COOKIE", None)
         self.config.bilibili_cookie = os.getenv("BILIBILI_COOKIE", None)
         self.config.kuaishou_cookie = os.getenv("KUAISHOU_COOKIE", None)
+        self.config.tieba_cookie = os.getenv("TIEBA_COOKIE", None)
 
         # YouTube Cookie: 保持Netscape文件路径字符串（不解析，直接传给yt-dlp）
         self.config.youtube_cookie = os.getenv("YOUTUBE_COOKIE", None)

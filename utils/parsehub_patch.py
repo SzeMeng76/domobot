@@ -709,6 +709,33 @@ def patch_parsehub_yt_dlp():
         DouyinParser.parse = patched_douyin_parse_with_tiktok
         logger.info("✅ DouyinParser patched: TikHub support for TikTok videos and images")
 
+        # Patch TieBa to support Cookie and better headers
+        from parsehub.provider_api.tieba import TieBa
+
+        original_tieba_get_html = TieBa.get_html
+
+        async def patched_tieba_get_html(self, t_url):
+            """Patched get_html with Cookie support and better headers"""
+            # Get cookie from environment variable or ParseConfig
+            cookie_str = os.getenv('TIEBA_COOKIE', None)
+
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                'Referer': 'https://tieba.baidu.com/',
+            }
+
+            if cookie_str:
+                headers['Cookie'] = cookie_str
+                logger.info(f"✅ [TieBa] Using Cookie to bypass security verification")
+
+            async with httpx.AsyncClient(proxy=self.proxy) as c:
+                return await c.get(t_url, headers=headers, timeout=15, follow_redirects=True)
+
+        TieBa.get_html = patched_tieba_get_html
+        logger.info("✅ TieBa patched: Cookie and headers support to bypass security verification")
+
         return True
 
     except Exception as e:

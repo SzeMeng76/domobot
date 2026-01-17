@@ -130,11 +130,12 @@ class ParseHubAdapter:
             platform_name = platform_id or "unknown"
 
             # 配置代理（优先使用传入的proxy，否则使用配置中的proxy）
-            parser_proxy = proxy or (self.config.parser_proxy if self.config else None)
+            # 注意：PARSER_PROXY 已弃用，改用 TIKTOK_REDIRECT_PROXY（仅用于TikTok短链接重定向）
+            parser_proxy = proxy  # 不再使用全局 parser_proxy 配置
             downloader_proxy = proxy or (self.config.downloader_proxy if self.config else None)
 
             # 根据平台选择 Cookie（ParseConfig会自动将字符串转换为dict）
-            # 支持：Twitter, Instagram, Bilibili, Kuaishou, YouTube (通过patch)
+            # 支持：Twitter, Instagram, Bilibili, Kuaishou, YouTube (通过patch), Tieba
             # 不支持：Facebook (基于yt-dlp，ParseHub库限制)
             platform_cookie = None
             if self.config:
@@ -151,6 +152,9 @@ class ParseHubAdapter:
                 elif platform_id == 'kuaishou' and self.config.kuaishou_cookie:
                     platform_cookie = self.config.kuaishou_cookie
                     logger.info(f"✅ 使用Kuaishou cookie")
+                elif platform_id == 'tieba' and self.config.tieba_cookie:
+                    platform_cookie = self.config.tieba_cookie
+                    logger.info(f"✅ 使用Tieba cookie (绕过安全验证): {platform_cookie[:50]}...")
                 elif platform_id == 'youtube' and self.config.youtube_cookie:
                     # YouTube cookie是文件路径，不能传给ParseConfig（会被解析成dict）
                     # 直接在parsehub_patch.py中通过环境变量 YOUTUBE_COOKIE 读取
@@ -378,9 +382,11 @@ class ParseHubAdapter:
                     headers = {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
                     }
-                    # 使用代理避免地区限制（如果配置了 PARSER_PROXY）
+                    # 使用代理避免地区限制（仅用于TikTok短链接重定向）
                     import os
-                    proxy = os.getenv('PARSER_PROXY')
+                    # 检查是否是TikTok短链接
+                    is_tiktok_short = any(domain in url for domain in ['vt.tiktok.com', 'vm.tiktok.com'])
+                    proxy = os.getenv('TIKTOK_REDIRECT_PROXY') if is_tiktok_short else None
                     proxies = {'http://': proxy, 'https://': proxy} if proxy else None
                     async with httpx.AsyncClient(follow_redirects=True, timeout=10, headers=headers, proxies=proxies) as client:
                         response = await client.head(url)
