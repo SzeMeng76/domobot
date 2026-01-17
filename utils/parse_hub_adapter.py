@@ -463,9 +463,28 @@ class ParseHubAdapter:
                         (group_id,)
                     )
                     result = await cursor.fetchone()
-                    return bool(result[0]) if result else False
+                    logger.debug(f"查询结果: result={result}, type={type(result)}")
+                    if not result:
+                        logger.debug(f"群组 {group_id} 没有配置记录，返回False")
+                        return False
+
+                    # 安全地获取值
+                    try:
+                        if isinstance(result, (tuple, list)):
+                            enabled = result[0]
+                        elif isinstance(result, dict):
+                            enabled = result.get('auto_parse_enabled', 0)
+                        else:
+                            logger.warning(f"未知的result类型: {type(result)}")
+                            enabled = 0
+
+                        logger.debug(f"群组 {group_id} auto_parse_enabled值: {enabled}")
+                        return bool(enabled)
+                    except (IndexError, KeyError, TypeError) as e:
+                        logger.error(f"解析result失败: {e}, result={result}")
+                        return False
         except Exception as e:
-            logger.error(f"检查自动解析状态失败: {e}")
+            logger.error(f"检查自动解析状态失败: {e}", exc_info=True)
             return False
 
     async def enable_auto_parse(self, group_id: int, enabled_by: int) -> bool:
