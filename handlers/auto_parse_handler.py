@@ -62,7 +62,15 @@ async def auto_parse_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         if not result:
             error_text = f"❌ 自动解析失败: {error_msg}" if error_msg else "❌ 自动解析失败"
-            await status_msg.edit_text(error_text)
+            error_msg_obj = await status_msg.edit_text(error_text)
+
+            # 调度删除错误消息和原始消息
+            from commands.social_parser import delete_user_command, _schedule_deletion, get_config
+            config = get_config()
+            # 删除错误消息（5秒后）
+            await _schedule_deletion(context, group_id, error_msg_obj.message_id, 5)
+            # 删除原始消息（用户发的链接）
+            await delete_user_command(context, group_id, message.message_id)
             return
 
         # 更新状态
@@ -148,7 +156,13 @@ async def auto_parse_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except Exception as e:
         logger.error(f"自动解析失败: {e}", exc_info=True)
         try:
-            await status_msg.edit_text("❌ 自动解析失败")
+            error_msg_obj = await status_msg.edit_text("❌ 自动解析失败")
+            # 调度删除错误消息和原始消息
+            from commands.social_parser import delete_user_command, _schedule_deletion
+            # 删除错误消息（5秒后）
+            await _schedule_deletion(context, group_id, error_msg_obj.message_id, 5)
+            # 删除原始消息（用户发的链接）
+            await delete_user_command(context, group_id, message.message_id)
         except Exception:
             pass
 
