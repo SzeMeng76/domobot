@@ -101,22 +101,17 @@ def patch_parsehub_yt_dlp():
             params["http_headers"] = http_headers
             logger.info(f"🔍 [Patch] Final http_headers: {http_headers}")
 
+            # YouTube特殊处理：使用专用代理（如果配置）
+            # YouTube 的 bot 检测非常严格，需要使用代理绕过
+            if "youtube.com" in url.lower() or "youtu.be" in url.lower():
+                youtube_proxy = os.getenv("YOUTUBE_PROXY")
+                if youtube_proxy:
+                    params["proxy"] = youtube_proxy
+                    logger.info(f"🌐 [Patch] Using YouTube proxy: {youtube_proxy[:30]}...")
+
             # Add cookies if configured (FIX: YtParser doesn't handle cookies)
             # 参考: yt_dlp/YoutubeDL.py:349 - cookiefile: File name or text stream from where cookies should be read
             temp_cookie_file = None
-
-            # YouTube特殊处理：从环境变量读取cookie文件路径
-            # （因为ParseConfig会把文件路径解析成dict）
-            # 优先级：环境变量 > ParseConfig
-            if ("youtube.com" in url.lower() or "youtu.be" in url.lower()) and "cookiefile" not in params:
-                youtube_cookie_from_env = os.getenv("YOUTUBE_COOKIE")
-                if youtube_cookie_from_env:
-                    logger.info(f"🍪 [Patch] YouTube cookie from env: {youtube_cookie_from_env}")
-                    if os.path.exists(youtube_cookie_from_env):
-                        params["cookiefile"] = youtube_cookie_from_env
-                        logger.info(f"🍪 [Patch] Using YouTube cookie file: {youtube_cookie_from_env}")
-                    else:
-                        logger.warning(f"⚠️ [Patch] YouTube cookie file not found: {youtube_cookie_from_env}")
 
             # 其他平台cookie处理（从ParseConfig传递）
             # 只有在cookiefile还没设置时才处理
@@ -231,7 +226,22 @@ def patch_parsehub_yt_dlp():
 
                     def download_with_pytubefix():
                         """Synchronous function to download with pytubefix"""
-                        yt = YouTube(self.media.path)
+                        # Check if YouTube proxy is configured
+                        youtube_proxy = os.getenv("YOUTUBE_PROXY")
+                        proxies = None
+                        if youtube_proxy:
+                            # Parse proxy URL to dict format for pytubefix
+                            # pytubefix expects: {'http': 'proxy_url', 'https': 'proxy_url'}
+                            proxies = {
+                                'http': youtube_proxy,
+                                'https': youtube_proxy
+                            }
+                            logger.info(f"🌐 [pytubefix] Using YouTube proxy: {youtube_proxy[:30]}...")
+
+                        # Use 'WEB' client to enable automatic po_token generation
+                        # This bypasses YouTube's bot detection without manual token extraction
+                        # nodejs dependency is automatically installed via nodejs-wheel-binaries
+                        yt = YouTube(self.media.path, client='WEB', proxies=proxies)
 
                         # Get highest resolution progressive stream (video + audio)
                         stream = yt.streams.filter(progressive=True, file_extension='mp4').order_by('resolution').desc().first()
