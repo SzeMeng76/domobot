@@ -353,7 +353,7 @@ def patch_parsehub_yt_dlp():
         from parsehub.types import DownloadResult, Video
         from parsehub.config import DownloadConfig
         from parsehub.types.error import DownloadError
-        from parsehub.download import download_file
+        from parsehub.utiles.download_file import download_file
         from pathlib import Path
         import time
 
