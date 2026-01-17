@@ -360,11 +360,15 @@ def patch_parsehub_yt_dlp():
 
         async def patched_yt_video_download(self, path=None, callback=None, callback_args=(), config=DownloadConfig()):
             """Patched download that uses direct URL (TikHub) if available"""
+            logger.info(f"🔍 [Patch] patched_yt_video_download called: is_url={self.media.is_url}, path={self.media.path[:100] if self.media.path else 'None'}")
+
             if not self.media.is_url:
+                logger.info(f"⚠️ [Patch] media.is_url is False, returning media directly")
                 return self.media
 
             # Check if media.path is a direct download URL (not a YouTube URL)
             # If it's a googlevideo.com URL (TikHub), use direct download
+            logger.info(f"🔍 [Patch] Checking URL: has_path={bool(self.media.path)}, has_googlevideo={'googlevideo.com' in self.media.path if self.media.path else False}")
             if self.media.path and ('googlevideo.com' in self.media.path or 'googleapis.com' in self.media.path):
                 logger.info(f"📥 [Patch] Using direct URL download (TikHub): {self.media.path[:80]}...")
 
@@ -421,10 +425,13 @@ def patch_parsehub_yt_dlp():
             original_bili_init(self, proxy)
             # 保存cookie供API调用使用
             self.cookie = cookie
-            # 添加Referer和Origin headers
+
+            # 添加必要的headers
+            from yt_dlp.utils.networking import random_user_agent
             self.headers.update({
                 "Referer": "https://www.bilibili.com/",
-                "Origin": "https://www.bilibili.com"
+                "Origin": "https://www.bilibili.com",
+                "User-Agent": random_user_agent()
             })
             if cookie:
                 logger.info(f"🌐 [Patch] BiliAPI initialized with cookie and anti-crawler headers")
