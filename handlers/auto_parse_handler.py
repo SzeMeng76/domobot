@@ -91,14 +91,57 @@ async def auto_parse_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         # 更新状态
         await status_msg.edit_text("📤 上传中...")
 
-        # 导入发送媒体的函数
-        from commands.social_parser import _send_media
+        # 导入必要的函数和类
+        from commands.social_parser import _send_media, get_url_hash, _schedule_deletion
+        from commands.social_parser import get_config
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-        # 发送媒体
-        await _send_media(context, group_id, result, caption, message.message_id)
+        # 生成URL的MD5哈希（用于callback_data和缓存key）
+        url_hash = get_url_hash(formatted['url'])
+
+        # 创建inline keyboard按钮
+        buttons = [[InlineKeyboardButton("🔗 原链接", url=formatted['url'])]]
+
+        # 如果启用了AI总结，添加AI总结按钮
+        reply_markup = None
+        if _adapter.config and _adapter.config.enable_ai_summary:
+            # 使用URL哈希作为callback_data
+            buttons[0].append(InlineKeyboardButton("📝 AI总结", callback_data=f"summary_{url_hash}"))
+            reply_markup = InlineKeyboardMarkup(buttons)
+
+            # 缓存解析数据到Redis（用于AI总结回调）
+            if _adapter.cache_manager:
+                cache_data = {
+                    'url': formatted['url'],
+                    'caption': caption,
+                    'title': formatted.get('title', ''),
+                    'desc': formatted.get('desc', ''),
+                    'platform': platform
+                }
+                await _adapter.cache_manager.set(
+                    f"summary:{url_hash}",
+                    cache_data,
+                    ttl=86400,  # 缓存24小时
+                    subdirectory="social_parser"
+                )
+        else:
+            reply_markup = InlineKeyboardMarkup(buttons)
+
+        # 发送媒体（带按钮）
+        sent_messages = await _send_media(context, group_id, result, caption, message.message_id, reply_markup)
 
         # 删除状态消息
         await status_msg.delete()
+
+        # 调度自动删除bot回复消息
+        config = get_config()
+        if sent_messages:
+            for msg in sent_messages:
+                await _schedule_deletion(context, group_id, msg.message_id, config.auto_delete_delay)
+
+        # 删除原始消息（用户发的链接）
+        from commands.social_parser import delete_user_command
+        await delete_user_command(context, group_id, message.message_id)
 
         logger.info(f"群组 {group_id} 自动解析成功: {platform} - {formatted['title']}")
 
