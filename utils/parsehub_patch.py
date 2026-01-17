@@ -226,6 +226,45 @@ def patch_parsehub_yt_dlp():
                                         result["_tikhub_url"] = best_video["url"]
                                         result["_tikhub_quality"] = best_video.get("quality", "unknown")
                                         logger.info(f"✅ [TikHub] Got direct download URL ({best_video.get('quality', 'unknown')}, {best_video.get('sizeText', 'unknown')})")
+
+                                        # Use TikHub metadata as primary source (better than yt-dlp)
+                                        # yt-dlp result is fallback if TikHub fields are missing
+                                        logger.info(f"📊 [TikHub] Using TikHub metadata as primary source (yt-dlp as fallback)")
+
+                                        # Update result with TikHub metadata (only if available)
+                                        if video_data.get("title"):
+                                            result["title"] = video_data["title"]
+
+                                        if video_data.get("description"):
+                                            result["description"] = video_data["description"]
+
+                                        # Channel info
+                                        channel = video_data.get("channel", {})
+                                        if channel.get("name"):
+                                            result["uploader"] = channel["name"]
+                                            result["channel"] = channel["name"]
+                                        if channel.get("id"):
+                                            result["channel_id"] = channel["id"]
+                                        if channel.get("url"):
+                                            result["channel_url"] = channel["url"]
+
+                                        # Duration and stats
+                                        if video_data.get("lengthSeconds"):
+                                            result["duration"] = int(video_data["lengthSeconds"])
+                                        if video_data.get("viewCount"):
+                                            result["view_count"] = int(video_data["viewCount"])
+
+                                        # Thumbnails
+                                        thumbnails = video_data.get("thumbnails", {}).get("items", [])
+                                        if thumbnails:
+                                            result["thumbnails"] = [{"url": t["url"], "width": t.get("width"), "height": t.get("height")} for t in thumbnails]
+                                            result["thumbnail"] = thumbnails[-1]["url"]  # Use highest quality
+
+                                        # Upload date
+                                        if video_data.get("publishedTimeText"):
+                                            result["upload_date_text"] = video_data["publishedTimeText"]
+
+                                        logger.info(f"✅ [TikHub] Updated result with TikHub metadata")
                                     else:
                                         logger.warning(f"⚠️ [TikHub] No videos found in API response")
                                 else:
@@ -235,6 +274,71 @@ def patch_parsehub_yt_dlp():
 
                     except Exception as e:
                         logger.warning(f"⚠️ [TikHub] Failed to fetch direct URL: {e}")
+
+                # For Douyin URLs, try to get TikHub direct download URL
+                douyin_patterns = [
+                    r'(?:https?://)?(?:www\.)?douyin\.com/',
+                    r'(?:https?://)?v\.douyin\.com/',
+                    r'modal_id=(\d+)'
+                ]
+                is_douyin = any(re.search(pattern, url, re.IGNORECASE) for pattern in douyin_patterns)
+
+                if is_douyin and result:
+                    try:
+                        # Extract aweme_id from URL
+                        # Patterns: modal_id=xxx or /video/xxx
+                        aweme_id_match = re.search(r'modal_id=(\d+)', url)
+                        if not aweme_id_match:
+                            aweme_id_match = re.search(r'/video/(\d+)', url)
+
+                        if aweme_id_match:
+                            aweme_id = aweme_id_match.group(1)
+
+                            # TikHub API key from environment variable
+                            tikhub_api_key = os.getenv("TIKHUB_API_KEY")
+                            if not tikhub_api_key:
+                                logger.debug(f"⚠️ [TikHub] TIKHUB_API_KEY not set, skipping TikHub API for Douyin")
+                                return result
+
+                            logger.info(f"🎬 [TikHub] Fetching direct download URL for Douyin video: {aweme_id}")
+
+                            # Call TikHub Douyin API
+                            api_url = f"https://api.tikhub.io/api/v1/douyin/web/fetch_one_video?aweme_id={aweme_id}"
+                            headers = {"Authorization": f"Bearer {tikhub_api_key}"}
+
+                            with httpx.Client(timeout=30.0) as client:
+                                response = client.get(api_url, headers=headers)
+
+                            if response.status_code == 200:
+                                data = response.json()
+                                if data.get("code") == 200 and data.get("data"):
+                                    aweme_detail = data["data"]["aweme_detail"]
+                                    video = aweme_detail.get("video", {})
+                                    bit_rates = video.get("bit_rate", [])
+
+                                    if bit_rates:
+                                        # Use best quality (first item in bit_rate array)
+                                        best_video = bit_rates[0]
+                                        play_addr = best_video.get("play_addr", {})
+                                        url_list = play_addr.get("url_list", [])
+
+                                        if url_list:
+                                            # Store TikHub direct URL in result
+                                            result["_tikhub_url"] = url_list[0]
+                                            result["_tikhub_quality"] = best_video.get("gear_name", "unknown")
+                                            file_size_mb = play_addr.get("data_size", 0) / 1024 / 1024
+                                            logger.info(f"✅ [TikHub] Got Douyin direct download URL ({best_video.get('gear_name', 'unknown')}, {file_size_mb:.2f}MB)")
+                                        else:
+                                            logger.warning(f"⚠️ [TikHub] No download URLs found in Douyin response")
+                                    else:
+                                        logger.warning(f"⚠️ [TikHub] No video bit_rate found in API response")
+                                else:
+                                    logger.warning(f"⚠️ [TikHub] Douyin API returned error: {data.get('message', 'Unknown error')}")
+                            else:
+                                logger.warning(f"⚠️ [TikHub] Douyin API request failed: HTTP {response.status_code}")
+
+                    except Exception as e:
+                        logger.warning(f"⚠️ [TikHub] Failed to fetch Douyin direct URL: {e}")
 
                 return result
             except Exception as e:
