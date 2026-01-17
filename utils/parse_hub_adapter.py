@@ -387,8 +387,9 @@ class ParseHubAdapter:
                     # 检查是否是TikTok短链接
                     is_tiktok_short = any(domain in url for domain in ['vt.tiktok.com', 'vm.tiktok.com'])
                     proxy = os.getenv('TIKTOK_REDIRECT_PROXY') if is_tiktok_short else None
-                    proxies = {'http://': proxy, 'https://': proxy} if proxy else None
-                    async with httpx.AsyncClient(follow_redirects=True, timeout=10, headers=headers, proxies=proxies) as client:
+                    if proxy:
+                        logger.info(f"✅ [TikTok短链接] 使用代理重定向: {proxy[:30]}...")
+                    async with httpx.AsyncClient(follow_redirects=True, timeout=10, headers=headers, proxy=proxy) as client:
                         response = await client.head(url)
                         final_url = str(response.url)
                         logger.info(f"短链接重定向: {url} -> {final_url}")
