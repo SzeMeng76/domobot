@@ -45,8 +45,26 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         current_caption = query.message.caption or query.message.text
 
         if action == "summary":
-            # 显示AI总结
-            await query.answer("📝 生成中...")
+            # 立即answer移除加载圈
+            await query.answer()
+
+            # 立即编辑消息显示"生成中..."状态
+            # 判断消息类型并立即显示加载状态
+            loading_text = "📝 AI总结生成中，请稍候..."
+            try:
+                if query.message.caption:
+                    await query.edit_message_caption(
+                        caption=loading_text,
+                        reply_markup=query.message.reply_markup
+                    )
+                else:
+                    await query.edit_message_text(
+                        text=loading_text,
+                        reply_markup=query.message.reply_markup,
+                        link_preview_options=LinkPreviewOptions(is_disabled=True)
+                    )
+            except Exception as e:
+                logger.warning(f"更新加载状态失败: {e}")
 
             # URL哈希已从callback_data提取
             logger.info(f"🔑 URL哈希: {url_hash}")

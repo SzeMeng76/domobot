@@ -28,7 +28,9 @@ def patch_parsehub_yt_dlp():
         logger.info("🔧 Starting ParseHub patch...")
 
         def fixed_extract_info(self, url):
-            """Fixed _extract_info that passes cookies to yt-dlp"""
+            """Fixed _extract_info that passes cookies to yt-dlp and stores TikHub download URL"""
+            import re
+            import httpx
             from yt_dlp import YoutubeDL
 
             params = self.params.copy()
@@ -169,6 +171,70 @@ def patch_parsehub_yt_dlp():
                 # 清理临时cookie文件
                 if temp_cookie_file and os.path.exists(temp_cookie_file.name):
                     os.unlink(temp_cookie_file.name)
+
+                # For YouTube URLs, try to get TikHub direct download URL
+                youtube_patterns = [
+                    r'(?:https?://)?(?:www\.)?(?:youtube\.com|youtu\.be)/',
+                    r'(?:https?://)?(?:www\.)?youtube\.com/watch\?v=',
+                    r'(?:https?://)?youtu\.be/'
+                ]
+                is_youtube = any(re.search(pattern, url, re.IGNORECASE) for pattern in youtube_patterns)
+
+                if is_youtube and result:
+                    try:
+                        # Extract video ID from URL
+                        video_id_match = re.search(r'(?:v=|/)([0-9A-Za-z_-]{11})(?:[?&]|$)', url)
+                        if video_id_match:
+                            video_id = video_id_match.group(1)
+
+                            # TikHub API key from config (via environment variable TIKHUB_API_KEY)
+                            # Note: We use os.getenv here because self.cfg is ParseConfig, not BotConfig
+                            # The API key should be set in environment variable TIKHUB_API_KEY
+                            tikhub_api_key = os.getenv("TIKHUB_API_KEY")
+                            if not tikhub_api_key:
+                                logger.debug(f"⚠️ [TikHub] TIKHUB_API_KEY not set, skipping TikHub API")
+                                return result
+
+                            logger.info(f"🎬 [TikHub] Fetching direct download URL for YouTube video: {video_id}")
+
+                            # Call TikHub API
+                            api_url = f"https://api.tikhub.io/api/v1/youtube/web/get_video_info?video_id={video_id}"
+                            headers = {"Authorization": f"Bearer {tikhub_api_key}"}
+
+                            with httpx.Client(timeout=30.0) as client:
+                                response = client.get(api_url, headers=headers)
+
+                            if response.status_code == 200:
+                                data = response.json()
+                                if data.get("code") == 200 and data.get("data"):
+                                    video_data = data["data"]
+                                    videos = video_data.get("videos", {}).get("items", [])
+
+                                    if videos:
+                                        # Find best video with audio (itag=18 is 360p with audio)
+                                        best_video = None
+                                        for v in videos:
+                                            if v.get("hasAudio"):
+                                                best_video = v
+                                                break
+
+                                        if not best_video:
+                                            # No video with audio, use first video
+                                            best_video = videos[0]
+
+                                        # Store TikHub direct URL in result
+                                        result["_tikhub_url"] = best_video["url"]
+                                        result["_tikhub_quality"] = best_video.get("quality", "unknown")
+                                        logger.info(f"✅ [TikHub] Got direct download URL ({best_video.get('quality', 'unknown')}, {best_video.get('sizeText', 'unknown')})")
+                                    else:
+                                        logger.warning(f"⚠️ [TikHub] No videos found in API response")
+                                else:
+                                    logger.warning(f"⚠️ [TikHub] API returned error: {data.get('message', 'Unknown error')}")
+                            else:
+                                logger.warning(f"⚠️ [TikHub] API request failed: HTTP {response.status_code}")
+
+                    except Exception as e:
+                        logger.warning(f"⚠️ [TikHub] Failed to fetch direct URL: {e}")
 
                 return result
             except Exception as e:
