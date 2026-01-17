@@ -63,6 +63,7 @@ pandas>=2.3.2
 
 # Social Media Parser (ParseHub) - 社交媒体解析功能
 parsehub>=1.5.10  # 社交媒体聚合解析器，支持20+平台
+pytubefix>=10.3.6  # YouTube 下载库（替代 TikHub YouTube API）
 pillow>=12.1.0  # 图像处理库
 pillow-heif>=1.1.1  # HEIF/HEIC 图片格式支持
 lxml-html-clean>=0.4.3  # HTML 清理工具
