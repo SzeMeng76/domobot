@@ -95,7 +95,7 @@ class RedisTaskScheduler:
         # 计算下次执行时间
         import datetime
 
-        now = datetime.datetime.utcnow()
+        now = datetime.datetime.now(datetime.timezone.utc)
         days_ahead = weekday - now.weekday()
         if days_ahead <= 0:
             days_ahead += 7
@@ -184,6 +184,11 @@ class RedisTaskScheduler:
             elif task_type == "rate_refresh":
                 # 汇率刷新任务每30分钟执行一次
                 next_run = time.time() + (30 * 60)
+                await self.schedule_task(task_id, task_type, next_run, data)
+            elif task_type == "temp_files_cleanup":
+                # 临时文件清理任务每天执行一次
+                repeat_interval = data.get("repeat_interval", 86400)  # 默认24小时
+                next_run = time.time() + repeat_interval
                 await self.schedule_task(task_id, task_type, next_run, data)
 
         except Exception as e:

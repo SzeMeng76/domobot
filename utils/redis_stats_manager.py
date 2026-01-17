@@ -33,7 +33,7 @@ class RedisStatsManager:
         """
         try:
             # 获取当前日期
-            today = datetime.utcnow().strftime("%Y-%m-%d")
+            today = datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
 
             # 1. 增加命令总计数
             await self.redis.hincrby("stats:commands:total", command, 1)
@@ -85,7 +85,7 @@ class RedisStatsManager:
 
             elif period == "today":
                 # 获取今日统计
-                today = datetime.utcnow().strftime("%Y-%m-%d")
+                today = datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
                 stats = await self.redis.hgetall(f"stats:commands:daily:{today}")
                 return {cmd: int(count) for cmd, count in stats.items()}
 
@@ -93,7 +93,7 @@ class RedisStatsManager:
                 # 获取最近7天统计
                 week_stats = {}
                 for i in range(7):
-                    date = (datetime.utcnow() - timedelta(days=i)).strftime("%Y-%m-%d")
+                    date = (datetime.now(datetime.timezone.utc) - timedelta(days=i)).strftime("%Y-%m-%d")
                     daily_stats = await self.redis.hgetall(f"stats:commands:daily:{date}")
 
                     for cmd, count in daily_stats.items():
@@ -154,7 +154,7 @@ class RedisStatsManager:
         """
         try:
             if date is None:
-                date = datetime.utcnow().strftime("%Y-%m-%d")
+                date = datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
 
             return await self.redis.pfcount(f"stats:dau:{date}")
 

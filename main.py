@@ -454,7 +454,7 @@ async def setup_application(application: Application, config) -> None:
 
         # 添加每周清理任务（周日 UTC 6:00）
         import datetime
-        now = datetime.datetime.utcnow()
+        now = datetime.datetime.now(datetime.timezone.utc)
         weekday = 6  # 周日
         hour = 6
         minute = 0
@@ -477,7 +477,7 @@ async def setup_application(application: Application, config) -> None:
 
     # 添加临时文件清理任务（每天UTC 4:00清理24小时前的文件）
     if "parse_adapter" in application.bot_data:
-        async def handle_temp_files_cleanup():
+        async def handle_temp_files_cleanup(task_id: str, data: dict):
             """处理临时文件清理"""
             try:
                 parse_adapter = application.bot_data.get("parse_adapter")
@@ -504,7 +504,7 @@ async def setup_application(application: Application, config) -> None:
             task_id="temp_files_daily_cleanup",
             task_type="temp_files_cleanup",
             execute_at=next_run.timestamp(),
-            repeat_interval=86400  # 每24小时重复
+            data={"repeat_interval": 86400}  # 每24小时重复
         )
 
         logger.info(f"🗑️ 已配置 临时文件 每天UTC 4:00 定时清理（保留：24小时）")
