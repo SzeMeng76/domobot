@@ -275,71 +275,6 @@ def patch_parsehub_yt_dlp():
                     except Exception as e:
                         logger.warning(f"⚠️ [TikHub] Failed to fetch direct URL: {e}")
 
-                # For Douyin URLs, try to get TikHub direct download URL
-                douyin_patterns = [
-                    r'(?:https?://)?(?:www\.)?douyin\.com/',
-                    r'(?:https?://)?v\.douyin\.com/',
-                    r'modal_id=(\d+)'
-                ]
-                is_douyin = any(re.search(pattern, url, re.IGNORECASE) for pattern in douyin_patterns)
-
-                if is_douyin and result:
-                    try:
-                        # Extract aweme_id from URL
-                        # Patterns: modal_id=xxx or /video/xxx
-                        aweme_id_match = re.search(r'modal_id=(\d+)', url)
-                        if not aweme_id_match:
-                            aweme_id_match = re.search(r'/video/(\d+)', url)
-
-                        if aweme_id_match:
-                            aweme_id = aweme_id_match.group(1)
-
-                            # TikHub API key from environment variable
-                            tikhub_api_key = os.getenv("TIKHUB_API_KEY")
-                            if not tikhub_api_key:
-                                logger.debug(f"⚠️ [TikHub] TIKHUB_API_KEY not set, skipping TikHub API for Douyin")
-                                return result
-
-                            logger.info(f"🎬 [TikHub] Fetching direct download URL for Douyin video: {aweme_id}")
-
-                            # Call TikHub Douyin API
-                            api_url = f"https://api.tikhub.io/api/v1/douyin/web/fetch_one_video?aweme_id={aweme_id}"
-                            headers = {"Authorization": f"Bearer {tikhub_api_key}"}
-
-                            with httpx.Client(timeout=30.0) as client:
-                                response = client.get(api_url, headers=headers)
-
-                            if response.status_code == 200:
-                                data = response.json()
-                                if data.get("code") == 200 and data.get("data"):
-                                    aweme_detail = data["data"]["aweme_detail"]
-                                    video = aweme_detail.get("video", {})
-                                    bit_rates = video.get("bit_rate", [])
-
-                                    if bit_rates:
-                                        # Use best quality (first item in bit_rate array)
-                                        best_video = bit_rates[0]
-                                        play_addr = best_video.get("play_addr", {})
-                                        url_list = play_addr.get("url_list", [])
-
-                                        if url_list:
-                                            # Store TikHub direct URL in result
-                                            result["_tikhub_url"] = url_list[0]
-                                            result["_tikhub_quality"] = best_video.get("gear_name", "unknown")
-                                            file_size_mb = play_addr.get("data_size", 0) / 1024 / 1024
-                                            logger.info(f"✅ [TikHub] Got Douyin direct download URL ({best_video.get('gear_name', 'unknown')}, {file_size_mb:.2f}MB)")
-                                        else:
-                                            logger.warning(f"⚠️ [TikHub] No download URLs found in Douyin response")
-                                    else:
-                                        logger.warning(f"⚠️ [TikHub] No video bit_rate found in API response")
-                                else:
-                                    logger.warning(f"⚠️ [TikHub] Douyin API returned error: {data.get('message', 'Unknown error')}")
-                            else:
-                                logger.warning(f"⚠️ [TikHub] Douyin API request failed: HTTP {response.status_code}")
-
-                    except Exception as e:
-                        logger.warning(f"⚠️ [TikHub] Failed to fetch Douyin direct URL: {e}")
-
                 return result
             except Exception as e:
                 # 清理临时cookie文件
@@ -353,6 +288,54 @@ def patch_parsehub_yt_dlp():
         # Only patch _extract_info method which handles js_runtimes internally
         YtParser._extract_info = fixed_extract_info
         logger.info("✅ YtParser patched: js_runtimes + cookie handling + headers")
+
+        # Patch YtParser._parse to use TikHub URL if available
+        original_yt_parse_internal = YtParser._parse
+
+        async def patched_yt_parse_internal(self, url):
+            """Patched _parse method that uses TikHub URL for download"""
+            import asyncio
+            from parsehub.types.error import ParseError
+            from parsehub.parsers.base.yt_dlp_parser import YtVideoInfo
+
+            try:
+                dl = await asyncio.wait_for(asyncio.to_thread(self._extract_info, url), timeout=30)
+            except TimeoutError as e:
+                raise ParseError("解析视频信息超时") from e
+            except Exception as e:
+                raise ParseError(f"解析视频信息失败: {str(e)}") from e
+
+            if dl.get("_type"):
+                dl = dl["entries"][0]
+                url = dl["webpage_url"]
+
+            title = dl["title"]
+            duration = dl.get("duration", 0) or 0
+            thumbnail = dl["thumbnail"]
+            description = dl["description"]
+            width = dl.get("width", 0) or 0
+            height = dl.get("height", 0) or 0
+
+            # Check if TikHub URL is available (from _extract_info)
+            download_url = url
+            if dl.get("_tikhub_url"):
+                download_url = dl["_tikhub_url"]
+                logger.info(f"📥 [TikHub] Using TikHub direct URL for download: {download_url[:80]}...")
+
+            return YtVideoInfo(
+                raw_video_info=dl,
+                title=title,
+                description=description,
+                thumbnail=thumbnail,
+                duration=duration,
+                url=download_url,  # Use TikHub URL if available
+                width=width,
+                height=height,
+                paramss=self.params,
+            )
+
+        YtParser._parse = patched_yt_parse_internal
+        logger.info("✅ YtParser._parse patched: use TikHub URL for download")
 
         # Patch BiliAPI to support cookies and add Referer headers
         # Problem: BiliAPI.__init__ doesn't accept cookie parameter
@@ -479,6 +462,78 @@ def patch_parsehub_yt_dlp():
 
         XhsParser.parse = patched_xhs_parse
         logger.info("✅ XhsParser patched: handle empty download list")
+
+        # Patch DouyinParser to use TikHub API for direct download
+        from parsehub.parsers.parser import DouyinParser
+
+        original_douyin_video_parse = DouyinParser.video_parse
+
+        @staticmethod
+        async def patched_douyin_video_parse(url, result):
+            """Patched video_parse that uses TikHub URL and metadata if available"""
+            from parsehub.types import VideoParseResult
+
+            download_url = result.video
+            title = result.desc  # Default from official parser
+            desc = result.desc
+
+            # Try to get TikHub direct download URL and metadata
+            tikhub_api_key = os.getenv("TIKHUB_API_KEY")
+            if tikhub_api_key:
+                try:
+                    # Extract aweme_id from URL
+                    aweme_id_match = re.search(r'modal_id=(\d+)', url)
+                    if not aweme_id_match:
+                        aweme_id_match = re.search(r'/video/(\d+)', url)
+
+                    if aweme_id_match:
+                        aweme_id = aweme_id_match.group(1)
+                        logger.info(f"🎬 [TikHub] Fetching Douyin direct download URL and metadata: {aweme_id}")
+
+                        # Call TikHub Douyin API
+                        api_url = f"https://api.tikhub.io/api/v1/douyin/web/fetch_one_video?aweme_id={aweme_id}"
+                        headers = {"Authorization": f"Bearer {tikhub_api_key}"}
+
+                        with httpx.Client(timeout=30.0) as client:
+                            response = client.get(api_url, headers=headers)
+
+                        if response.status_code == 200:
+                            data = response.json()
+                            if data.get("code") == 200 and data.get("data"):
+                                aweme_detail = data["data"]["aweme_detail"]
+                                video = aweme_detail.get("video", {})
+                                bit_rates = video.get("bit_rate", [])
+
+                                if bit_rates:
+                                    # Use best quality (first item)
+                                    best_video = bit_rates[0]
+                                    play_addr = best_video.get("play_addr", {})
+                                    url_list = play_addr.get("url_list", [])
+
+                                    if url_list:
+                                        download_url = url_list[0]
+                                        file_size_mb = play_addr.get("data_size", 0) / 1024 / 1024
+                                        logger.info(f"✅ [TikHub] Got Douyin direct URL ({best_video.get('gear_name', 'unknown')}, {file_size_mb:.2f}MB)")
+                                        logger.info(f"📥 [TikHub] Using TikHub URL for Douyin download: {download_url[:80]}...")
+
+                                # Use TikHub metadata (better than official API)
+                                if aweme_detail.get("desc"):
+                                    title = aweme_detail["desc"]
+                                    desc = aweme_detail["desc"]
+                                    logger.info(f"📊 [TikHub] Using TikHub metadata for Douyin")
+
+                except Exception as e:
+                    logger.warning(f"⚠️ [TikHub] Failed to fetch Douyin URL/metadata: {e}")
+
+            return VideoParseResult(
+                raw_url=url,
+                title=title,
+                desc=desc,
+                video=download_url,
+            )
+
+        DouyinParser.video_parse = patched_douyin_video_parse
+        logger.info("✅ DouyinParser patched: use TikHub URL for download")
 
         return True
 
