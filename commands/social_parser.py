@@ -13,8 +13,9 @@ from telegram.ext import ContextTypes
 from parsehub.types import Video, Image, VideoParseResult, ImageParseResult, MultimediaParseResult
 from utils.command_factory import command_factory
 from utils.error_handling import with_error_handling
-from utils.message_manager import send_error, send_info, delete_user_command
+from utils.message_manager import send_error, send_info, delete_user_command, _schedule_deletion
 from utils.permissions import Permission
+from utils.config_manager import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -177,10 +178,16 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             logger.info(f"✅ 已缓存解析数据: cache:social_parser:summary:{url_hash}")
 
         # 发送媒体（带按钮）
-        await _send_media(context, chat_id, result, caption, reply_to_message_id=update.message.message_id if update.message else None, reply_markup=reply_markup)
+        sent_messages = await _send_media(context, chat_id, result, caption, reply_to_message_id=update.message.message_id if update.message else None, reply_markup=reply_markup)
 
         # 删除状态消息
         await status_msg.delete()
+
+        # 调度自动删除bot回复消息
+        config = get_config()
+        if sent_messages:
+            for msg in sent_messages:
+                await _schedule_deletion(context, chat_id, msg.message_id, config.auto_delete_delay)
 
         # 删除用户命令
         if update.message:
@@ -196,21 +203,21 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def _send_media(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None, reply_markup=None):
-    """发送媒体文件"""
+    """发送媒体文件，返回发送的消息列表"""
     try:
         # download_result.pr 是原始的 ParseResult
         if isinstance(download_result.pr, VideoParseResult):
             # 发送视频
-            await _send_video(context, chat_id, download_result, caption, reply_to_message_id, reply_markup)
+            return await _send_video(context, chat_id, download_result, caption, reply_to_message_id, reply_markup)
         elif isinstance(download_result.pr, ImageParseResult):
             # 发送图片
-            await _send_images(context, chat_id, download_result, caption, reply_to_message_id, reply_markup)
+            return await _send_images(context, chat_id, download_result, caption, reply_to_message_id, reply_markup)
         elif isinstance(download_result.pr, MultimediaParseResult):
             # 发送混合媒体
-            await _send_multimedia(context, chat_id, download_result, caption, reply_to_message_id, reply_markup)
+            return await _send_multimedia(context, chat_id, download_result, caption, reply_to_message_id, reply_markup)
         else:
             # 只发送文本
-            await context.bot.send_message(
+            msg = await context.bot.send_message(
                 chat_id=chat_id,
                 text=caption,
                 parse_mode="Markdown",
@@ -218,18 +225,19 @@ async def _send_media(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
                 disable_web_page_preview=True,
                 reply_markup=reply_markup
             )
+            return [msg]
     except Exception as e:
         logger.error(f"发送媒体失败: {e}")
         raise
 
 
 async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None, reply_markup=None):
-    """发送视频（支持视频分割和图床上传）"""
+    """发送视频（支持视频分割和图床上传），返回发送的消息列表"""
     media = download_result.media
 
     # 如果没有媒体文件（下载失败），只发送文本
     if not media or not hasattr(media, 'path') or not media.path:
-        await context.bot.send_message(
+        msg = await context.bot.send_message(
             chat_id=chat_id,
             text=f"{caption}\n\n⚠️ 媒体下载失败",
             parse_mode="Markdown",
@@ -237,7 +245,7 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
             disable_web_page_preview=True,
             reply_markup=reply_markup
         )
-        return
+        return [msg]
 
     video_path = Path(media.path)
 
@@ -252,23 +260,26 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
         video_parts = await _adapter.split_large_video(video_path)
         if len(video_parts) > 1:
             # 分割成功，逐个发送
-            await context.bot.send_message(
+            sent_messages = []
+            msg = await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"{caption}\n\n📁 视频已分割为 {len(video_parts)} 个片段",
                 parse_mode="Markdown",
                 reply_to_message_id=reply_to_message_id,
                 disable_web_page_preview=True
             )
+            sent_messages.append(msg)
 
             for i, part in enumerate(video_parts, 1):
                 with open(part, 'rb') as video_file:
-                    await context.bot.send_video(
+                    msg = await context.bot.send_video(
                         chat_id=chat_id,
                         video=video_file,
                         caption=f"片段 {i}/{len(video_parts)}",
                         supports_streaming=True
                     )
-            return
+                    sent_messages.append(msg)
+            return sent_messages
 
         # 分割失败或未启用，尝试上传到图床
         image_host_url = await _adapter.upload_to_image_host(video_path)
@@ -276,7 +287,7 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
             # 上传成功
             message_text = f"{caption}\n\n⚠️ 视频文件过大 ({video_size_mb:.1f}MB)\n📤 已上传到图床\n🔗 [点击查看视频]({image_host_url})"
             if media.thumb_url:
-                await context.bot.send_photo(
+                msg = await context.bot.send_photo(
                     chat_id=chat_id,
                     photo=media.thumb_url,
                     caption=message_text,
@@ -284,18 +295,18 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
                     reply_to_message_id=reply_to_message_id
                 )
             else:
-                await context.bot.send_message(
+                msg = await context.bot.send_message(
                     chat_id=chat_id,
                     text=message_text,
                     parse_mode="Markdown",
                     reply_to_message_id=reply_to_message_id,
                     disable_web_page_preview=False
                 )
-            return
+            return [msg]
 
         # 都失败了，只发送缩略图和提示
         if media.thumb_url:
-            await context.bot.send_photo(
+            msg = await context.bot.send_photo(
                 chat_id=chat_id,
                 photo=media.thumb_url,
                 caption=f"{caption}\n\n⚠️ 视频文件过大 ({video_size_mb:.1f}MB)，无法直接发送",
@@ -303,18 +314,18 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
                 reply_to_message_id=reply_to_message_id
             )
         else:
-            await context.bot.send_message(
+            msg = await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"{caption}\n\n⚠️ 视频文件过大，无法直接发送",
                 parse_mode="Markdown",
                 reply_to_message_id=reply_to_message_id,
                 disable_web_page_preview=True
             )
-        return
+        return [msg]
 
     # 文件大小正常，直接发送
     with open(video_path, 'rb') as video_file:
-        await context.bot.send_video(
+        msg = await context.bot.send_video(
             chat_id=chat_id,
             video=video_file,
             caption=caption,
@@ -326,10 +337,11 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
             supports_streaming=True,
             reply_markup=reply_markup
         )
+    return [msg]
 
 
 async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None, reply_markup=None):
-    """发送图片"""
+    """发送图片，返回发送的消息列表"""
     media_list = download_result.media
     if not isinstance(media_list, list):
         media_list = [media_list]
@@ -339,7 +351,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
 
     if len(media_list) == 0:
         # 没有图片（下载失败），只发送文本
-        await context.bot.send_message(
+        msg = await context.bot.send_message(
             chat_id=chat_id,
             text=f"{caption}\n\n⚠️ 媒体下载失败（CDN错误），仅显示文字内容",
             parse_mode="Markdown",
@@ -347,11 +359,12 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
             disable_web_page_preview=True,
             reply_markup=reply_markup
         )
+        return [msg]
     elif len(media_list) == 1:
         # 单张图片
         image_path = str(media_list[0].path)
         with open(image_path, 'rb') as photo_file:
-            await context.bot.send_photo(
+            msg = await context.bot.send_photo(
                 chat_id=chat_id,
                 photo=photo_file,
                 caption=caption,
@@ -359,6 +372,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                 reply_to_message_id=reply_to_message_id,
                 reply_markup=reply_markup
             )
+        return [msg]
     elif len(media_list) <= 10:
         # 多张图片（使用媒体组，最多10张）
         from telegram import InputMediaPhoto
@@ -377,7 +391,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
         )
 
         # 单独发送文本消息带caption和按钮
-        await context.bot.send_message(
+        text_msg = await context.bot.send_message(
             chat_id=chat_id,
             text=caption,
             parse_mode="Markdown",
@@ -385,6 +399,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
             disable_web_page_preview=True,
             reply_markup=reply_markup
         )
+        return list(messages) + [text_msg]
     else:
         # 超过10张，上传到图床并发送Telegraph链接（类似parse_hub_bot）
         if _adapter.config and _adapter.config.enable_image_host:
@@ -407,7 +422,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
 
                     if telegraph_url:
                         # 发送Telegraph链接
-                        await context.bot.send_message(
+                        msg = await context.bot.send_message(
                             chat_id=chat_id,
                             text=f"{caption}\n\n📷 共{len(media_list)}张图片\n🔗 [查看完整图集]({telegraph_url})",
                             parse_mode="Markdown",
@@ -415,12 +430,12 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                             disable_web_page_preview=False,
                             reply_markup=reply_markup
                         )
-                        return
+                        return [msg]
             except Exception as e:
                 logger.error(f"上传图床失败: {e}")
 
         # 图床失败或未启用，降级为分批发送
-        await context.bot.send_message(
+        info_msg = await context.bot.send_message(
             chat_id=chat_id,
             text=f"{caption}\n\n📷 共{len(media_list)}张图片，分批发送中...",
             parse_mode="Markdown",
@@ -429,6 +444,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
             reply_markup=reply_markup
         )
 
+        sent_messages = [info_msg]
         from telegram import InputMediaPhoto
         for batch_start in range(0, len(media_list), 10):
             batch = media_list[batch_start:batch_start + 10]
@@ -437,11 +453,14 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                 image_path = str(img.path)
                 with open(image_path, 'rb') as photo_file:
                     media_group.append(InputMediaPhoto(media=photo_file.read()))
-            await context.bot.send_media_group(chat_id=chat_id, media=media_group)
+            batch_messages = await context.bot.send_media_group(chat_id=chat_id, media=media_group)
+            sent_messages.extend(batch_messages)
+
+        return sent_messages
 
 
 async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None, reply_markup=None):
-    """发送混合媒体（参考parse_hub_bot的实现，使用media_group分批发送）"""
+    """发送混合媒体（参考parse_hub_bot的实现，使用media_group分批发送），返回发送的消息列表"""
     from telegram import InputMediaPhoto, InputMediaVideo
 
     media_list = download_result.media
@@ -455,7 +474,7 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
 
     if count == 0:
         # 没有媒体文件，只发送文本
-        await context.bot.send_message(
+        msg = await context.bot.send_message(
             chat_id=chat_id,
             text=f"{caption}\n\n⚠️ 媒体下载失败",
             parse_mode="Markdown",
@@ -463,7 +482,7 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
             disable_web_page_preview=True,
             reply_markup=reply_markup
         )
-        return
+        return [msg]
     elif count == 1:
         # 单个媒体文件，直接发送
         media = media_list[0]
@@ -474,7 +493,7 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
 
             if video_size_mb > 50:
                 # 视频太大，只发送文本提示
-                await context.bot.send_message(
+                msg = await context.bot.send_message(
                     chat_id=chat_id,
                     text=f"{caption}\n\n⚠️ 视频文件过大 ({video_size_mb:.1f}MB)，无法直接发送",
                     parse_mode="Markdown",
@@ -482,10 +501,10 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
                     disable_web_page_preview=True,
                     reply_markup=reply_markup
                 )
-                return
+                return [msg]
 
             with open(str(media.path), 'rb') as video_file:
-                await context.bot.send_video(
+                msg = await context.bot.send_video(
                     chat_id=chat_id,
                     video=video_file,
                     caption=caption,
@@ -494,9 +513,10 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
                     supports_streaming=True,
                     reply_markup=reply_markup
                 )
+            return [msg]
         elif isinstance(media, Image):
             with open(str(media.path), 'rb') as photo_file:
-                await context.bot.send_photo(
+                msg = await context.bot.send_photo(
                     chat_id=chat_id,
                     photo=photo_file,
                     caption=caption,
@@ -504,6 +524,7 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
                     reply_to_message_id=reply_to_message_id,
                     reply_markup=reply_markup
                 )
+            return [msg]
     else:
         # 多个媒体文件，使用media_group分批发送（每批最多10个）
         # 参考: parse_hub_bot/methods/tg_parse_hub.py:809
@@ -539,10 +560,15 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
                     logger.error(f"发送media_group失败: {e}")
 
         # 在第一个media_group下发送文本消息（带caption和按钮）
+        sent_messages = []
         if media_groups:
+            # 收集所有发送的媒体消息
+            for group in media_groups:
+                sent_messages.extend(group)
+
             first_message = media_groups[0][0] if media_groups[0] else None
             if first_message:
-                await context.bot.send_message(
+                text_msg = await context.bot.send_message(
                     chat_id=chat_id,
                     text=caption,
                     parse_mode="Markdown",
@@ -550,6 +576,9 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
                     disable_web_page_preview=True,
                     reply_markup=reply_markup
                 )
+                sent_messages.append(text_msg)
+
+        return sent_messages
 
 
 @with_error_handling
