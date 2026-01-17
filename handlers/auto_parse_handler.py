@@ -71,10 +71,18 @@ async def auto_parse_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         # 格式化结果
         formatted = await _adapter.format_result(result, platform)
 
+        # 导入转义函数
+        from commands.social_parser import _escape_markdown
+
         # 构建标题和描述
-        caption = f"**{formatted['title']}**"
+        caption_parts = []
+        if formatted['title']:
+            caption_parts.append(f"**{_escape_markdown(formatted['title'])}**")
         if formatted['desc']:
-            caption += f"\n\n{formatted['desc'][:200]}"
+            caption_parts.append(_escape_markdown(formatted['desc'][:200]))
+
+        caption = "\n\n".join(caption_parts) if caption_parts else "无标题"
+
         if formatted['url']:
             caption += f"\n\n🔗 [原链接]({formatted['url']})"
         caption += f"\n\n📱 平台: {platform.upper()}"
