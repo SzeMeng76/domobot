@@ -622,7 +622,33 @@ def patch_parsehub_yt_dlp():
                             photo=image_list,
                         )
 
-                # Handle video post - use best quality from bit_rate list
+                # Handle video post - prefer H.264 codec for better compatibility
+                # TikTok bit_rate list uses ByteVC1/ByteVC2 which may not be compatible with all players
+                play_addr_h264 = video.get("play_addr_h264", {})
+                url_list_h264 = play_addr_h264.get("url_list", [])
+
+                if url_list_h264:
+                    # Use H.264 encoded video for maximum compatibility
+                    download_url = url_list_h264[0]
+                    width = play_addr_h264.get("width", 0)
+                    height = play_addr_h264.get("height", 0)
+                    duration = video.get("duration", 0) // 1000
+
+                    logger.info(f"✅ [TikHub] Got TikTok video (H.264, {width}x{height}, {duration}s)")
+
+                    from parsehub.types import Video
+                    return VideoParseResult(
+                        raw_url=url,
+                        title=desc,
+                        video=Video(
+                            download_url,
+                            width=width,
+                            height=height,
+                            duration=duration,
+                        ),
+                    )
+
+                # Fallback: use bit_rate list if H.264 not available
                 bit_rates = video.get("bit_rate", [])
                 if bit_rates:
                     # Sort by quality (highest first) and get best quality
@@ -635,7 +661,6 @@ def patch_parsehub_yt_dlp():
                         download_url = url_list[0]
                         width = play_addr.get("width", 0)
                         height = play_addr.get("height", 0)
-                        # Get duration from video object (in ms), convert to seconds
                         duration = video.get("duration", 0) // 1000
 
                         logger.info(f"✅ [TikHub] Got TikTok video ({best_video.get('gear_name', 'unknown')}, {width}x{height}, {duration}s)")
