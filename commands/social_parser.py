@@ -247,11 +247,20 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
     """发送视频（支持视频分割和图床上传），返回发送的消息列表"""
     media = download_result.media
 
-    # 如果没有媒体文件（下载失败），只发送文本
+    # 如果没有媒体文件
     if not media or not hasattr(media, 'path') or not media.path:
+        # 检查是否应该有视频但下载失败了
+        # 如果 parse_result 是 VideoParseResult 且有 video 字段，说明应该有视频但下载失败
+        should_have_media = False
+        if hasattr(download_result, 'pr') and isinstance(download_result.pr, VideoParseResult):
+            # 检查是否有video URL
+            if hasattr(download_result.pr, 'video') and download_result.pr.video:
+                should_have_media = True
+
+        error_msg = "\n\n⚠️ 媒体下载失败" if should_have_media else ""
         msg = await context.bot.send_message(
             chat_id=chat_id,
-            text=f"{caption}\n\n⚠️ 媒体下载失败",
+            text=f"{caption}{error_msg}",
             parse_mode="MarkdownV2",
             reply_to_message_id=reply_to_message_id,
             disable_web_page_preview=True,
@@ -362,10 +371,17 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
     media_list = [m for m in media_list if m is not None and hasattr(m, 'path') and m.path]
 
     if len(media_list) == 0:
-        # 没有图片（下载失败），只发送文本
+        # 检查是否应该有图片但下载失败了
+        should_have_media = False
+        if hasattr(download_result, 'pr') and isinstance(download_result.pr, ImageParseResult):
+            # 检查是否有photo列表
+            if hasattr(download_result.pr, 'photo') and download_result.pr.photo:
+                should_have_media = True
+
+        error_msg = "\n\n⚠️ 媒体下载失败（CDN错误），仅显示文字内容" if should_have_media else ""
         msg = await context.bot.send_message(
             chat_id=chat_id,
-            text=f"{caption}\n\n⚠️ 媒体下载失败（CDN错误），仅显示文字内容",
+            text=f"{caption}{error_msg}",
             parse_mode="MarkdownV2",
             reply_to_message_id=reply_to_message_id,
             disable_web_page_preview=True,
