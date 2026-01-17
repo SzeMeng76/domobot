@@ -350,7 +350,8 @@ def patch_parsehub_yt_dlp():
 
         # Patch YtVideoParseResult.download to use direct URL instead of yt-dlp
         from parsehub.parsers.base.yt_dlp_parser import YtVideoParseResult
-        from parsehub.types import DownloadResult, Video, DownloadConfig
+        from parsehub.types import DownloadResult, Video
+        from parsehub.config import DownloadConfig
         from parsehub.types.error import DownloadError
         from parsehub.download import download_file
         from pathlib import Path

@@ -232,7 +232,7 @@ async def _send_media(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
             msg = await context.bot.send_message(
                 chat_id=chat_id,
                 text=caption,
-                parse_mode="Markdown",
+                parse_mode="MarkdownV2",
                 reply_to_message_id=reply_to_message_id,
                 disable_web_page_preview=True,
                 reply_markup=reply_markup
@@ -252,7 +252,7 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
         msg = await context.bot.send_message(
             chat_id=chat_id,
             text=f"{caption}\n\n⚠️ 媒体下载失败",
-            parse_mode="Markdown",
+            parse_mode="MarkdownV2",
             reply_to_message_id=reply_to_message_id,
             disable_web_page_preview=True,
             reply_markup=reply_markup
@@ -276,7 +276,7 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
             msg = await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"{caption}\n\n📁 视频已分割为 {len(video_parts)} 个片段",
-                parse_mode="Markdown",
+                parse_mode="MarkdownV2",
                 reply_to_message_id=reply_to_message_id,
                 disable_web_page_preview=True
             )
@@ -303,14 +303,14 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
                     chat_id=chat_id,
                     photo=media.thumb_url,
                     caption=message_text,
-                    parse_mode="Markdown",
+                    parse_mode="MarkdownV2",
                     reply_to_message_id=reply_to_message_id
                 )
             else:
                 msg = await context.bot.send_message(
                     chat_id=chat_id,
                     text=message_text,
-                    parse_mode="Markdown",
+                    parse_mode="MarkdownV2",
                     reply_to_message_id=reply_to_message_id,
                     disable_web_page_preview=False
                 )
@@ -322,14 +322,14 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
                 chat_id=chat_id,
                 photo=media.thumb_url,
                 caption=f"{caption}\n\n⚠️ 视频文件过大 ({video_size_mb:.1f}MB)，无法直接发送",
-                parse_mode="Markdown",
+                parse_mode="MarkdownV2",
                 reply_to_message_id=reply_to_message_id
             )
         else:
             msg = await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"{caption}\n\n⚠️ 视频文件过大，无法直接发送",
-                parse_mode="Markdown",
+                parse_mode="MarkdownV2",
                 reply_to_message_id=reply_to_message_id,
                 disable_web_page_preview=True
             )
@@ -341,7 +341,7 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
             chat_id=chat_id,
             video=video_file,
             caption=caption,
-            parse_mode="Markdown",
+            parse_mode="MarkdownV2",
             width=media.width or 0,
             height=media.height or 0,
             duration=media.duration or 0,
@@ -366,7 +366,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
         msg = await context.bot.send_message(
             chat_id=chat_id,
             text=f"{caption}\n\n⚠️ 媒体下载失败（CDN错误），仅显示文字内容",
-            parse_mode="Markdown",
+            parse_mode="MarkdownV2",
             reply_to_message_id=reply_to_message_id,
             disable_web_page_preview=True,
             reply_markup=reply_markup
@@ -380,7 +380,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                 chat_id=chat_id,
                 photo=photo_file,
                 caption=caption,
-                parse_mode="Markdown",
+                parse_mode="MarkdownV2",
                 reply_to_message_id=reply_to_message_id,
                 reply_markup=reply_markup
             )
@@ -406,7 +406,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
         text_msg = await context.bot.send_message(
             chat_id=chat_id,
             text=caption,
-            parse_mode="Markdown",
+            parse_mode="MarkdownV2",
             reply_to_message_id=messages[0].message_id,  # 回复到第一张图片
             disable_web_page_preview=True,
             reply_markup=reply_markup
@@ -437,7 +437,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                         msg = await context.bot.send_message(
                             chat_id=chat_id,
                             text=f"{caption}\n\n📷 共{len(media_list)}张图片\n🔗 [查看完整图集]({telegraph_url})",
-                            parse_mode="Markdown",
+                            parse_mode="MarkdownV2",
                             reply_to_message_id=reply_to_message_id,
                             disable_web_page_preview=False,
                             reply_markup=reply_markup
@@ -450,7 +450,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
         info_msg = await context.bot.send_message(
             chat_id=chat_id,
             text=f"{caption}\n\n📷 共{len(media_list)}张图片，分批发送中...",
-            parse_mode="Markdown",
+            parse_mode="MarkdownV2",
             reply_to_message_id=reply_to_message_id,
             disable_web_page_preview=True,
             reply_markup=reply_markup
@@ -489,7 +489,7 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
         msg = await context.bot.send_message(
             chat_id=chat_id,
             text=f"{caption}\n\n⚠️ 媒体下载失败",
-            parse_mode="Markdown",
+            parse_mode="MarkdownV2",
             reply_to_message_id=reply_to_message_id,
             disable_web_page_preview=True,
             reply_markup=reply_markup
@@ -508,7 +508,7 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
                 msg = await context.bot.send_message(
                     chat_id=chat_id,
                     text=f"{caption}\n\n⚠️ 视频文件过大 ({video_size_mb:.1f}MB)，无法直接发送",
-                    parse_mode="Markdown",
+                    parse_mode="MarkdownV2",
                     reply_to_message_id=reply_to_message_id,
                     disable_web_page_preview=True,
                     reply_markup=reply_markup
@@ -520,7 +520,7 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
                     chat_id=chat_id,
                     video=video_file,
                     caption=caption,
-                    parse_mode="Markdown",
+                    parse_mode="MarkdownV2",
                     reply_to_message_id=reply_to_message_id,
                     supports_streaming=True,
                     reply_markup=reply_markup
@@ -532,7 +532,7 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
                     chat_id=chat_id,
                     photo=photo_file,
                     caption=caption,
-                    parse_mode="Markdown",
+                    parse_mode="MarkdownV2",
                     reply_to_message_id=reply_to_message_id,
                     reply_markup=reply_markup
                 )
@@ -583,7 +583,7 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
                 text_msg = await context.bot.send_message(
                     chat_id=chat_id,
                     text=caption,
-                    parse_mode="Markdown",
+                    parse_mode="MarkdownV2",
                     reply_to_message_id=first_message.message_id,
                     disable_web_page_preview=True,
                     reply_markup=reply_markup
@@ -613,7 +613,7 @@ async def platforms_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text=text,
-        parse_mode="Markdown"
+        parse_mode="MarkdownV2"
     )
 
     if update.message:
