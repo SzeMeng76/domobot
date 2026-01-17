@@ -306,7 +306,7 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
         image_host_url = await _adapter.upload_to_image_host(video_path)
         if image_host_url:
             # 上传成功
-            message_text = f"{caption}\n\n⚠️ 视频文件过大 ({video_size_mb:.1f}MB)\n📤 已上传到图床\n🔗 [点击查看视频]({image_host_url})"
+            message_text = f"{caption}\n\n⚠️ 视频文件过大 \\({video_size_mb:.1f}MB\\)\n📤 已上传到图床\n🔗 [点击查看视频]({image_host_url})"
             if media.thumb_url:
                 msg = await context.bot.send_photo(
                     chat_id=chat_id,
@@ -330,7 +330,7 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
             msg = await context.bot.send_photo(
                 chat_id=chat_id,
                 photo=media.thumb_url,
-                caption=f"{caption}\n\n⚠️ 视频文件过大 ({video_size_mb:.1f}MB)，无法直接发送",
+                caption=f"{caption}\n\n⚠️ 视频文件过大 \\({video_size_mb:.1f}MB\\)，无法直接发送",
                 parse_mode="MarkdownV2",
                 reply_to_message_id=reply_to_message_id
             )
@@ -523,7 +523,7 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
                 # 视频太大，只发送文本提示
                 msg = await context.bot.send_message(
                     chat_id=chat_id,
-                    text=f"{caption}\n\n⚠️ 视频文件过大 ({video_size_mb:.1f}MB)，无法直接发送",
+                    text=f"{caption}\n\n⚠️ 视频文件过大 \\({video_size_mb:.1f}MB\\)，无法直接发送",
                     parse_mode="MarkdownV2",
                     reply_to_message_id=reply_to_message_id,
                     disable_web_page_preview=True,
