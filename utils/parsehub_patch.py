@@ -736,6 +736,13 @@ def patch_parsehub_yt_dlp():
         TieBa.get_html = patched_tieba_get_html
         logger.info("✅ TieBa patched: Cookie and headers support to bypass security verification")
 
+        # Patch InstagramParser to support username/reel/ URL format
+        from parsehub.parsers.parser.instagram import InstagramParser
+
+        # Update regex to support both /reel/xxx and username/reel/xxx
+        InstagramParser.__match__ = r"^(http(s)?://)(www\.|)instagram\.com/(p|reel|share|.*/p|.*/reel)/.*"
+        logger.info("✅ InstagramParser patched: Support username/reel/ URL format")
+
         return True
 
     except Exception as e:
