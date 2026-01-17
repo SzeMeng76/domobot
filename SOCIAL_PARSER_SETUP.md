@@ -244,8 +244,8 @@ TWITTER_COOKIE=auth_token=xxx; ct0=xxx
 # Instagram Cookie（可选）
 INSTAGRAM_COOKIE=sessionid=xxx
 
-# Facebook Cookie（可选）
-FACEBOOK_COOKIE=c_user=xxx; xs=xxx
+# YouTube Cookie（推荐 - 帮助yt-dlp解析元数据）
+YOUTUBE_COOKIE=/path/to/youtube_cookies.txt
 ```
 
 **如何获取Cookie**：
@@ -253,6 +253,56 @@ FACEBOOK_COOKIE=c_user=xxx; xs=xxx
 2. 打开开发者工具（F12）
 3. 进入 Application/Storage → Cookies
 4. 复制需要的Cookie值
+
+**YouTube Cookie特殊说明**：
+- 推荐使用浏览器扩展 "Get cookies.txt LOCALLY" 导出Netscape格式
+- Cookie文件帮助yt-dlp解析视频元数据，绕过登录验证
+- Docker环境需在 docker-compose.yml 中挂载文件
+
+---
+
+#### 7. **YouTube OAuth认证** 🔐
+使用Google账号认证绕过YouTube bot检测，替代昂贵的代理方案。
+
+**⚠️ 重要提示**：
+- 使用OAuth有封号风险，建议使用专门的Google账号
+- OAuth免费但需要Google账号
+- 优先级：OAuth > Cookie > Proxy
+
+**配置步骤**：
+
+1. **本地生成OAuth Token**：
+```bash
+# 安装 pytubefix
+pip install pytubefix
+
+# 运行生成脚本
+python -c "from pytubefix import YouTube; yt=YouTube('https://youtube.com/watch?v=dQw4w9WgXcQ', use_oauth=True, allow_oauth_cache=True, token_file='youtube_oauth_token.json'); print(yt.title)"
+```
+
+2. **完成Google授权**：
+   - 脚本会显示设备码（如：BPD-JYY-DYJL）
+   - 浏览器打开 https://www.google.com/device
+   - 输入设备码并用Google账号授权
+   - 完成后在终端按回车
+
+3. **部署到服务器**：
+```env
+# .env 文件配置
+YOUTUBE_OAUTH_TOKEN=/app/youtube_oauth_token.json
+```
+
+4. **Docker配置**（在 docker-compose.yml 添加）：
+```yaml
+volumes:
+  - ./youtube_oauth_token.json:/app/youtube_oauth_token.json
+```
+
+**工作原理**：
+- pytubefix使用 `client='WEB'` 自动生成 po_token 绕过bot检测
+- OAuth token提供额外的Google账号认证
+- Token文件可重复使用，无需每次授权
+- 服务器端使用token文件，无需浏览器交互
 
 ---
 
@@ -434,11 +484,31 @@ pip install -r requirements.txt
 **原因**：
 - Telegram 限制视频文件大小 50MB
 - 网络问题导致下载失败
+- Telegram API超时（图片已上传但响应超时）
 
 **解决**：
 - Bot会自动处理大文件，发送缩略图和链接
 - 检查服务器网络连接
 - 查看日志文件：`logs/bot.log`
+- 已增加API超时时间到60秒处理慢速网络
+
+### 3.5. 临时文件占用空间
+
+**问题**：担心临时文件累积占用磁盘空间
+
+**解决**：Bot已内置自动清理机制
+- ✅ 每天UTC 4:00自动清理超过24小时的临时文件
+- ✅ 清理目录：`/tmp/domobot_parse/`
+- ✅ 无需手动干预
+
+**手动清理**（如需立即清理）：
+```bash
+# Linux/Docker
+rm -rf /tmp/domobot_parse/*
+
+# 或使用Python清理函数
+python -c "from utils.parse_hub_adapter import ParseHubAdapter; import asyncio; asyncio.run(ParseHubAdapter().cleanup_temp_files(older_than_hours=0))"
+```
 
 ### 4. 数据库错误
 
@@ -461,13 +531,26 @@ mysql -u your_user -p your_database < database/init.sql
 
 ParseHub 适配器内置24小时缓存，相同链接在缓存期内会直接返回结果。
 
-### 2. 临时文件清理
+### 2. 临时文件自动清理 ✅
 
-适配器会自动清理24小时前的临时文件。如需调整：
+Bot已内置自动清理机制，无需手动配置：
 
+**自动清理任务**：
+- ⏰ 每天UTC 4:00自动执行
+- 🗑️ 清理超过24小时的临时文件
+- 📁 清理目录：`/tmp/domobot_parse/`
+- 🔄 自动重复，无需干预
+
+**手动调整清理时间**（可选）：
 ```python
-# 在定时任务中添加
-await parse_adapter.cleanup_temp_files(older_than_hours=12)  # 12小时
+# 在 main.py 中修改清理间隔
+await parse_adapter.cleanup_temp_files(older_than_hours=12)  # 改为12小时
+```
+
+**查看清理日志**：
+```bash
+# 查看定时任务日志
+grep "临时文件清理" logs/bot.log
 ```
 
 ### 3. 数据库维护

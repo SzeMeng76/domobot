@@ -475,6 +475,41 @@ async def setup_application(application: Application, config) -> None:
         logger.info(f"🗑️ 已配置 AI反垃圾数据 每周日UTC 6:00 定时清理（保留：日志30天，统计90天，用户60天）")
         cleanup_tasks_added += 1
 
+    # 添加临时文件清理任务（每天UTC 4:00清理24小时前的文件）
+    if "parse_adapter" in application.bot_data:
+        async def handle_temp_files_cleanup():
+            """处理临时文件清理"""
+            try:
+                parse_adapter = application.bot_data.get("parse_adapter")
+                if parse_adapter:
+                    await parse_adapter.cleanup_temp_files(older_than_hours=24)
+                    logger.info("✅ 临时文件清理完成")
+            except Exception as e:
+                logger.error(f"临时文件清理失败: {e}")
+
+        # 注册处理器
+        task_scheduler.register_handler("temp_files_cleanup", handle_temp_files_cleanup)
+
+        # 计算下次执行时间（明天UTC 4:00）
+        import datetime
+        now = datetime.datetime.now(datetime.timezone.utc)
+        hour, minute = 4, 0  # UTC 4:00
+
+        # 如果当前时间已过今天的清理时间，则安排到明天
+        days_ahead = 1 if now.hour >= hour else 0
+        next_run = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        next_run = next_run + datetime.timedelta(days=days_ahead)
+
+        await task_scheduler.schedule_task(
+            task_id="temp_files_daily_cleanup",
+            task_type="temp_files_cleanup",
+            execute_at=next_run.timestamp(),
+            repeat_interval=86400  # 每24小时重复
+        )
+
+        logger.info(f"🗑️ 已配置 临时文件 每天UTC 4:00 定时清理（保留：24小时）")
+        cleanup_tasks_added += 1
+
     # 启动任务调度器（包含汇率刷新任务）
     task_scheduler.start()
     if cleanup_tasks_added > 0:
