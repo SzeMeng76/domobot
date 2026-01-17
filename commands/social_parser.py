@@ -9,6 +9,8 @@ import time
 from pathlib import Path
 from telegram import Update
 from telegram.ext import ContextTypes
+from PIL import Image as PILImage
+import pillow_heif
 
 from parsehub.types import Video, Image, VideoParseResult, ImageParseResult, MultimediaParseResult
 from utils.command_factory import command_factory
@@ -30,6 +32,66 @@ from utils.permissions import Permission
 from utils.config_manager import get_config
 
 logger = logging.getLogger(__name__)
+
+# Register HEIF opener for Pillow
+pillow_heif.register_heif_opener()
+
+
+def _convert_image_to_webp(image_path: Path) -> Path:
+    """
+    Convert image to WebP format for better Telegram compatibility.
+    Handles heif, heic, and other formats that may cause Telegram image_process_failed error.
+
+    Reference: parse_hub_bot only converts HEIF/HEIC to WebP, other formats are sent directly.
+    WebP is preferred over JPEG because it has smaller file size with better quality.
+
+    Args:
+        image_path: Path to the image file
+
+    Returns:
+        Path to the converted image (or original if no conversion needed)
+    """
+    try:
+        # Check file extension
+        suffix = image_path.suffix.lower()
+
+        # JPG, PNG, WebP are directly supported by Telegram
+        if suffix in ['.jpg', '.jpeg', '.png', '.webp']:
+            return image_path
+
+        # HEIF/HEIC need conversion (Telegram doesn't support them)
+        if suffix not in ['.heif', '.heic']:
+            # Other formats: try to send directly first
+            return image_path
+
+        logger.info(f"🔄 Converting {suffix} image to WebP: {image_path.name}")
+
+        # Open image
+        img = PILImage.open(image_path)
+
+        # Convert to RGBA if necessary (WebP supports transparency)
+        if img.mode not in ('RGBA', 'RGB'):
+            img = img.convert('RGBA')
+
+        # Create new path with .webp extension
+        new_path = image_path.with_suffix('.webp')
+
+        # Save as WebP with high quality
+        img.save(new_path, 'WEBP', quality=95, method=6)
+
+        logger.info(f"✅ Image converted: {image_path.name} -> {new_path.name}")
+
+        # Delete original file to save space
+        try:
+            image_path.unlink()
+        except Exception as e:
+            logger.warning(f"Failed to delete original image: {e}")
+
+        return new_path
+
+    except Exception as e:
+        logger.error(f"❌ Image conversion failed: {e}, using original file")
+        return image_path
 
 
 def get_url_hash(url: str) -> str:
@@ -394,7 +456,9 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
         return [msg]
     elif len(media_list) == 1:
         # 单张图片
-        image_path = str(media_list[0].path)
+        # Convert to WebP if needed to avoid Telegram image_process_failed error
+        converted_path = _convert_image_to_webp(Path(media_list[0].path))
+        image_path = str(converted_path)
         with open(image_path, 'rb') as photo_file:
             msg = await context.bot.send_photo(
                 chat_id=chat_id,
@@ -411,7 +475,9 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
 
         media_group = []
         for img in media_list[:10]:
-            image_path = str(img.path)
+            # Convert to WebP if needed to avoid Telegram image_process_failed error
+            converted_path = _convert_image_to_webp(Path(img.path))
+            image_path = str(converted_path)
             with open(image_path, 'rb') as photo_file:
                 media_group.append(InputMediaPhoto(media=photo_file.read()))
 
