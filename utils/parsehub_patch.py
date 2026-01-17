@@ -101,13 +101,24 @@ def patch_parsehub_yt_dlp():
             params["http_headers"] = http_headers
             logger.info(f"🔍 [Patch] Final http_headers: {http_headers}")
 
-            # YouTube特殊处理：使用专用代理（如果配置）
-            # YouTube 的 bot 检测非常严格，需要使用代理绕过
+            # YouTube特殊处理：使用专用代理和cookie（如果配置）
+            # YouTube 的 bot 检测非常严格，需要使用代理和cookie绕过
             if "youtube.com" in url.lower() or "youtu.be" in url.lower():
                 youtube_proxy = os.getenv("YOUTUBE_PROXY")
                 if youtube_proxy:
                     params["proxy"] = youtube_proxy
                     logger.info(f"🌐 [Patch] Using YouTube proxy: {youtube_proxy[:30]}...")
+
+                # YouTube Cookie 支持：从环境变量读取 cookie 文件路径
+                # Cookie 可以帮助 yt-dlp 解析元数据，绕过登录验证
+                youtube_cookie_from_env = os.getenv("YOUTUBE_COOKIE")
+                if youtube_cookie_from_env and "cookiefile" not in params:
+                    logger.info(f"🍪 [Patch] YouTube cookie from env: {youtube_cookie_from_env}")
+                    if os.path.exists(youtube_cookie_from_env):
+                        params["cookiefile"] = youtube_cookie_from_env
+                        logger.info(f"🍪 [Patch] Using YouTube cookie file: {youtube_cookie_from_env}")
+                    else:
+                        logger.warning(f"⚠️ [Patch] YouTube cookie file not found: {youtube_cookie_from_env}")
 
             # Add cookies if configured (FIX: YtParser doesn't handle cookies)
             # 参考: yt_dlp/YoutubeDL.py:349 - cookiefile: File name or text stream from where cookies should be read

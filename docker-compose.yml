@@ -58,6 +58,7 @@ services:
     # 挂载数据目录以支持本地JSON数据存储
     volumes:
       - ./data:/app/data
+      - ./youtube_cookies.txt:/app/youtube_cookies.txt  # YouTube cookies
     
     # --- 网络配置 ---
     networks:
