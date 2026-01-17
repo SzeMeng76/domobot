@@ -374,10 +374,24 @@ class ParseHubAdapter:
             if is_short:
                 # 跟随重定向获取真实URL
                 try:
-                    async with httpx.AsyncClient(follow_redirects=True, timeout=10) as client:
+                    # 添加 User-Agent 避免被 TikTok 重定向到 notfound 页面
+                    headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+                    }
+                    # 使用代理避免地区限制（如果配置了 PARSER_PROXY）
+                    import os
+                    proxy = os.getenv('PARSER_PROXY')
+                    proxies = {'http://': proxy, 'https://': proxy} if proxy else None
+                    async with httpx.AsyncClient(follow_redirects=True, timeout=10, headers=headers, proxies=proxies) as client:
                         response = await client.head(url)
                         final_url = str(response.url)
                         logger.info(f"短链接重定向: {url} -> {final_url}")
+
+                        # 检查是否重定向到 notfound 页面（地区限制）
+                        if '/notfound' in final_url.lower():
+                            logger.error(f"视频不可用（可能地区限制）: {final_url}")
+                            return None
+
                         url = final_url
                 except Exception as e:
                     logger.warning(f"重定向失败，使用原URL: {e}")
