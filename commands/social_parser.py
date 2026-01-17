@@ -626,9 +626,15 @@ async def platforms_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await send_error(context, update.effective_chat.id, "❌ 获取平台列表失败")
         return
 
-    text = "🌐 *支持的平台列表：*\n\n"
-    text += "\n".join([f"• {platform}" for platform in platforms])
-    text += f"\n\n共支持 *{len(platforms)}* 个平台"
+    text = "🌐 *支持的平台列表*\n\n"
+
+    for idx, platform in enumerate(platforms, 1):
+        # ParseHub 返回格式: "平台名: 类型1|类型2"
+        escaped_platform = _escape_markdown(platform)
+        text += f"*{idx}\\.* {escaped_platform}\n"
+
+    text += f"\n共支持 *{len(platforms)}* 个平台\n"
+    text += f"_使用 /parse \\+ URL 进行解析_"
 
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
