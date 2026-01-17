@@ -306,7 +306,9 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
         image_host_url = await _adapter.upload_to_image_host(video_path)
         if image_host_url:
             # 上传成功
-            message_text = f"{caption}\n\n⚠️ 视频文件过大 \\({video_size_mb:.1f}MB\\)\n📤 已上传到图床\n🔗 [点击查看视频]({image_host_url})"
+            # 格式化文件大小并转义特殊字符
+            size_text = f"{video_size_mb:.1f}".replace(".", "\\.")
+            message_text = f"{caption}\n\n⚠️ 视频文件过大 \\({size_text}MB\\)\n📤 已上传到图床\n🔗 [点击查看视频]({image_host_url})"
             if media.thumb_url:
                 msg = await context.bot.send_photo(
                     chat_id=chat_id,
@@ -326,11 +328,13 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
             return [msg]
 
         # 都失败了，只发送缩略图和提示
+        # 格式化文件大小并转义特殊字符
+        size_text = f"{video_size_mb:.1f}".replace(".", "\\.")
         if media.thumb_url:
             msg = await context.bot.send_photo(
                 chat_id=chat_id,
                 photo=media.thumb_url,
-                caption=f"{caption}\n\n⚠️ 视频文件过大 \\({video_size_mb:.1f}MB\\)，无法直接发送",
+                caption=f"{caption}\n\n⚠️ 视频文件过大 \\({size_text}MB\\)，无法直接发送",
                 parse_mode="MarkdownV2",
                 reply_to_message_id=reply_to_message_id
             )
