@@ -74,3 +74,4 @@ lxml-html-clean>=0.4.3  # HTML 清理工具
 markdown>=3.10  # Markdown 转换器
 pyyaml>=6.0.3  # YAML配置文件解析
 tenacity>=9.1.2  # 重试机制（用于图床上传）
+telegraph>=2.2.0  # Telegraph API 库（用于发布长文本）

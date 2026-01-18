@@ -5,7 +5,7 @@ Telegraph 发布辅助工具
 
 import logging
 from typing import Optional
-import httpx
+from telegraph.aio import Telegraph
 
 logger = logging.getLogger(__name__)
 
@@ -23,51 +23,30 @@ class TelegraphPublisher:
         """
         self.access_token = access_token
         self.author_name = author_name
-        self.api_url = "https://api.telegra.ph"
+        self.telegraph = Telegraph(access_token=access_token)
 
     async def ensure_account(self) -> bool:
         """确保有有效的账户，如果没有则创建"""
         # 如果已有token，先验证是否有效
         if self.access_token:
             try:
-                async with httpx.AsyncClient(timeout=30.0) as client:
-                    response = await client.post(
-                        f"{self.api_url}/getAccountInfo",
-                        json={
-                            "access_token": self.access_token,
-                            "fields": ["short_name"]
-                        }
-                    )
-                    result = response.json()
-                    if result.get("ok"):
-                        logger.debug("✅ Telegraph token有效")
-                        return True
-                    else:
-                        logger.warning(f"Telegraph token无效: {result.get('error')}，将创建新账户")
-                        self.access_token = None
+                account_info = await self.telegraph.get_account_info(["short_name"])
+                if account_info:
+                    logger.debug("✅ Telegraph token有效")
+                    return True
             except Exception as e:
-                logger.warning(f"验证Telegraph token失败: {e}，将创建新账户")
+                logger.warning(f"Telegraph token无效: {e}，将创建新账户")
                 self.access_token = None
+                self.telegraph = Telegraph(access_token=None)
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    f"{self.api_url}/createAccount",
-                    json={
-                        "short_name": self.author_name,
-                        "author_name": self.author_name,
-                    }
-                )
-                response.raise_for_status()
-
-                result = response.json()
-                if result.get("ok"):
-                    self.access_token = result["result"]["access_token"]
-                    logger.info(f"✅ Telegraph账户创建成功")
-                    return True
-                else:
-                    logger.error(f"创建Telegraph账户失败: {result}")
-                    return False
+            account = await self.telegraph.create_account(
+                short_name=self.author_name,
+                author_name=self.author_name
+            )
+            self.access_token = self.telegraph.get_access_token()
+            logger.info(f"✅ Telegraph账户创建成功")
+            return True
 
         except Exception as e:
             logger.error(f"创建Telegraph账户失败: {e}")
@@ -97,32 +76,17 @@ class TelegraphPublisher:
             return None
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                data = {
-                    "access_token": self.access_token,
-                    "title": title,
-                    "html_content": content,  # 直接使用HTML内容
-                    "author_name": author_name or self.author_name,
-                    "return_content": False
-                }
+            # 使用telegraph库的create_page，自动处理html_content转换
+            response = await self.telegraph.create_page(
+                title=title,
+                html_content=content,
+                author_name=author_name or self.author_name,
+                author_url=author_url
+            )
 
-                if author_url:
-                    data["author_url"] = author_url
-
-                response = await client.post(
-                    f"{self.api_url}/createPage",
-                    data=data  # 使用form-data格式
-                )
-                response.raise_for_status()
-
-                result = response.json()
-                if result.get("ok"):
-                    url = result["result"]["url"]
-                    logger.info(f"✅ Telegraph页面创建成功: {url}")
-                    return url
-                else:
-                    logger.error(f"创建Telegraph页面失败: {result}")
-                    return None
+            url = response["url"]
+            logger.info(f"✅ Telegraph页面创建成功: {url}")
+            return url
 
         except Exception as e:
             logger.error(f"创建Telegraph页面失败: {e}")
