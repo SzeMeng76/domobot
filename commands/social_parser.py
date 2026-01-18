@@ -32,8 +32,7 @@ def _format_text(text: str) -> str:
     """
     智能格式化文本内容，自动处理长文本
 
-    - 超过1000字：截断到900字并添加省略号
-    - 超过500字或超过10行：保留全文但不截断（Telegram自动折叠）
+    - 超过900字：截断到800字并添加省略号（用于Telegraph摘要）
     - 其他：直接返回原文
 
     Args:
@@ -47,9 +46,9 @@ def _format_text(text: str) -> str:
 
     text = text.strip()
 
-    # 超过1000字：截断
-    if len(text) > 1000:
-        text = text[:900] + "......"
+    # 超过900字：截断（用于Telegraph摘要显示）
+    if len(text) > 900:
+        text = text[:800] + "......"
 
     return text
 
@@ -347,7 +346,7 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
                 raw_text += pr.desc
 
         # 超过1000字，自动发布到Telegraph
-        if len(raw_text) > 1000:
+        if len(raw_text) > 500:
             try:
                 logger.info(f"检测到长文本 ({len(raw_text)}字)，自动发布到Telegraph")
                 from markdown import markdown
@@ -629,7 +628,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                 raw_text += pr.desc
 
         # 超过1000字，自动发布到Telegraph
-        if len(raw_text) > 1000:
+        if len(raw_text) > 500:
             try:
                 logger.info(f"检测到长文本 ({len(raw_text)}字)，自动发布到Telegraph")
                 html_content = markdown(raw_text)
@@ -790,7 +789,7 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
                 raw_text += pr.desc
 
         # 超过1000字，自动发布到Telegraph
-        if len(raw_text) > 1000:
+        if len(raw_text) > 500:
             try:
                 logger.info(f"检测到长文本 ({len(raw_text)}字)，自动发布到Telegraph")
                 from markdown import markdown
