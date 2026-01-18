@@ -114,10 +114,12 @@ class TelegraphPublisher:
             content_nodes = self._html_to_nodes(content)
 
             async with httpx.AsyncClient(timeout=30.0) as client:
+                import json
+
                 data = {
                     "access_token": self.access_token,
                     "title": title,
-                    "content": content_nodes,  # 使用Node数组
+                    "content": json.dumps(content_nodes),  # 序列化为JSON字符串
                     "author_name": author_name or self.author_name,
                     "return_content": False
                 }
@@ -127,7 +129,7 @@ class TelegraphPublisher:
 
                 response = await client.post(
                     f"{self.api_url}/createPage",
-                    json=data
+                    data=data  # 使用form-data格式
                 )
                 response.raise_for_status()
 
