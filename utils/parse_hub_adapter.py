@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class ParseHubAdapter:
     """ParseHub 适配器类"""
 
-    def __init__(self, cache_manager=None, user_manager=None, config=None):
+    def __init__(self, cache_manager=None, user_manager=None, config=None, pyrogram_helper=None):
         """
         初始化适配器
 
@@ -34,10 +34,12 @@ class ParseHubAdapter:
             cache_manager: Redis 缓存管理器
             user_manager: MySQL 用户管理器
             config: Bot配置对象
+            pyrogram_helper: Pyrogram客户端（用于大文件上传）
         """
         self.cache_manager = cache_manager
         self.user_manager = user_manager
         self.config = config
+        self.pyrogram_helper = pyrogram_helper  # 存储Pyrogram helper
         self.parsehub = ParseHub()
         self.temp_dir = Path(tempfile.gettempdir()) / "domobot_parse"
         self.temp_dir.mkdir(exist_ok=True)

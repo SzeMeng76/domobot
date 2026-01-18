@@ -315,7 +315,7 @@ async def setup_application(application: Application, config) -> None:
     # 将核心组件存储到 bot_data 中
     # 初始化社交媒体解析适配器
     from utils.parse_hub_adapter import ParseHubAdapter
-    parse_adapter = ParseHubAdapter(cache_manager, user_cache_manager, config)
+    parse_adapter = ParseHubAdapter(cache_manager, user_cache_manager, config, pyrogram_helper)
 
     application.bot_data["cache_manager"] = cache_manager
     application.bot_data["rate_converter"] = rate_converter
