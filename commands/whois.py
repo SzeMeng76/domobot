@@ -783,12 +783,22 @@ class WhoisService:
                                 if chinese_key not in whois_data:
                                     whois_data[chinese_key] = value
 
-                if whois_data:
+                # 检查是否有实际数据(未注册的域名只会返回域名字段本身)
+                if whois_data and len(whois_data) > 1:
                     result['success'] = True
                     result['data'] = whois_data
                     logger.debug(f".ng域名Web查询成功: {domain}")
+                elif whois_data and len(whois_data) == 1 and '域名' in whois_data:
+                    # 只有域名字段,说明域名未注册
+                    result['success'] = True
+                    result['data'] = {
+                        '域名': domain,
+                        '状态': '未注册 (可注册)',
+                        '注册链接': f'https://register.ng/search/{domain}'
+                    }
+                    logger.debug(f".ng域名未注册: {domain}")
                 else:
-                    result['error'] = "域名未注册或查询失败"
+                    result['error'] = "域名查询失败或数据异常"
 
         except Exception as e:
             logger.error(f".ng域名Web查询失败: {e}")
