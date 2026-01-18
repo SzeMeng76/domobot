@@ -27,8 +27,27 @@ class TelegraphPublisher:
 
     async def ensure_account(self) -> bool:
         """确保有有效的账户，如果没有则创建"""
+        # 如果已有token，先验证是否有效
         if self.access_token:
-            return True
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.post(
+                        f"{self.api_url}/getAccountInfo",
+                        json={
+                            "access_token": self.access_token,
+                            "fields": ["short_name"]
+                        }
+                    )
+                    result = response.json()
+                    if result.get("ok"):
+                        logger.debug("✅ Telegraph token有效")
+                        return True
+                    else:
+                        logger.warning(f"Telegraph token无效: {result.get('error')}，将创建新账户")
+                        self.access_token = None
+            except Exception as e:
+                logger.warning(f"验证Telegraph token失败: {e}，将创建新账户")
+                self.access_token = None
 
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:

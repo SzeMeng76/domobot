@@ -228,6 +228,16 @@ class PyrogramHelper:
                 if keyboard:
                     pyrogram_reply_markup = PyrogramInlineKeyboardMarkup(keyboard)
 
+            # 转换parse_mode: MarkdownV2 → markdown (Pyrogram不支持MarkdownV2)
+            pyrogram_parse_mode = None
+            if parse_mode:
+                if parse_mode.lower() == "markdownv2":
+                    # MarkdownV2 → markdown: 需要移除转义符
+                    caption = caption.replace(r'\|', '|').replace(r'\[', '[').replace(r'\]', ']').replace(r'\(', '(').replace(r'\)', ')').replace(r'\.', '.').replace(r'\-', '-').replace(r'\+', '+').replace(r'\=', '=').replace(r'\{', '{').replace(r'\}', '}').replace(r'\!', '!').replace(r'\#', '#')
+                    pyrogram_parse_mode = "markdown"
+                elif parse_mode.lower() in ["markdown", "html"]:
+                    pyrogram_parse_mode = parse_mode.lower()
+
             message = await self.client.send_video(
                 chat_id=chat_id,
                 video=video_path,
@@ -240,7 +250,7 @@ class PyrogramHelper:
                 supports_streaming=True,
                 progress=progress_callback,
                 reply_markup=pyrogram_reply_markup,
-                parse_mode=parse_mode
+                parse_mode=pyrogram_parse_mode
             )
 
             logger.info(f"✅ 大文件上传成功: {video_path}")
