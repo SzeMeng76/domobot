@@ -154,16 +154,16 @@ class RateConverter:
         # First, check without a lock for the most common case (in-memory cache is fresh)
         current_time = time.time()
         if not force_refresh and self.rates and (current_time - self.rates_timestamp < self.cache_duration):
-            # 如果需要 GitHub 源但还没有，则异步获取
+            # 如果需要 GitHub 源但还没有，则同步加载（避免 fallback 时没有数据）
             if fetch_github_sources and not self.platform_rates:
-                asyncio.create_task(self._load_github_sources())
+                await self._load_github_sources()
             return
 
         async with self._lock:
             # Re-check condition inside the lock to handle race conditions
             if not force_refresh and self.rates and (current_time - self.rates_timestamp < self.cache_duration):
                 if fetch_github_sources and not self.platform_rates:
-                    asyncio.create_task(self._load_github_sources())
+                    await self._load_github_sources()
                 return
 
             cache_key = "exchange_rates"

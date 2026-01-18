@@ -702,11 +702,14 @@ async def platforms_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     text += f"\n共支持 *{len(platforms)}* 个平台\n"
     text += f"_使用 /parse \\+ URL 进行解析_"
 
-    await context.bot.send_message(
+    reply_msg = await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text=text,
         parse_mode="MarkdownV2"
     )
+
+    # 调度删除回复消息（30秒后）
+    await _schedule_deletion(context, update.effective_chat.id, reply_msg.message_id, delay=30)
 
     if update.message:
         await delete_user_command(context, update.effective_chat.id, update.message.message_id)
