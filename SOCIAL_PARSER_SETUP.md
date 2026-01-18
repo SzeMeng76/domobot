@@ -156,6 +156,82 @@ TRANSCRIPTION_PROVIDER=openai              # 转录服务: openai, azure, fast_w
 
 ---
 
+## 🔧 内置增强补丁 (Monkey Patch)
+
+本项目包含 **ParseHub增强补丁** (`utils/parsehub_patch.py`)，自动修复官方ParseHub的11个已知问题，提升解析成功率和稳定性。
+
+### 修复的问题
+
+**YouTube/Facebook解析增强**:
+1. ✅ 修复yt-dlp格式选择器错误
+2. ✅ 自动传递Cookie到yt-dlp
+3. ✅ 添加反爬虫headers (Referer/Origin)
+4. ✅ pytubefix集成，支持OAuth下载
+
+**Bilibili解析增强**:
+5. ✅ 支持从环境变量读取Cookie
+6. ✅ 添加Referer headers绕过反爬虫
+
+**小红书解析增强**:
+7. ✅ 处理空下载列表，避免崩溃
+8. ✅ TikHub API fallback支持
+
+**抖音解析增强**:
+9. ✅ TikHub API fallback支持（官方失败时）
+
+**TikTok解析增强**:
+10. ✅ 完整TikHub API集成（官方不支持）
+
+**Instagram解析增强**:
+11. ✅ 支持 username/reel/ URL格式
+12. ✅ 修复Cookie传递问题
+13. ✅ 增强headers兼容性
+
+**百度贴吧解析增强**:
+14. ✅ Cookie和headers支持，绕过安全验证
+
+### 工作原理
+
+补丁在程序启动时自动加载（`main.py`），通过Monkey Patching方式修改ParseHub内部方法：
+
+```python
+# 自动在启动时加载
+from utils.parsehub_patch import patch_parsehub_yt_dlp
+patch_parsehub_yt_dlp()
+```
+
+**特点**:
+- 🔄 自动加载，无需手动配置
+- 🛡️ 不修改ParseHub源码，安全可靠
+- 📈 显著提升解析成功率
+- 🔍 详细日志输出，便于调试
+
+**日志示例**:
+```
+🔧 Starting ParseHub patch...
+✅ YtParser patched: js_runtimes + cookie handling + headers
+✅ BiliAPI patched: cookie support + anti-crawler headers
+✅ XhsParser patched: handle empty download list
+✅ DouyinParser patched: TikHub fallback support
+✅ InstagramParser patched: Enhanced URL format support
+```
+
+### 支持的平台优化
+
+| 平台 | 优化内容 | 效果 |
+|------|---------|------|
+| YouTube | Cookie传递 + pytubefix集成 | 绕过bot检测 |
+| Bilibili | Referer headers + Cookie支持 | 绕过反爬虫 |
+| 小红书 | 空列表处理 + TikHub fallback | 避免崩溃 |
+| 抖音 | TikHub fallback | 提高成功率 |
+| TikTok | 完整TikHub支持 | 官方不支持，补丁实现 |
+| Instagram | URL格式 + Cookie传递 | 支持更多链接 |
+| 贴吧 | Cookie + headers | 绕过登录验证 |
+
+**无需用户干预** - 补丁自动工作，享受更高的解析成功率！
+
+---
+
 ## 🎯 功能说明
 
 ### 核心功能（开箱即用）✅
@@ -249,9 +325,34 @@ TRANSCRIPTION_PROVIDER=openai
 ```
 
 **支持的服务**：
-- **OpenAI Whisper** - 最准确，需要 API 密钥
-- **Azure Speech** - 企业级，需要 Azure 订阅
-- **FastWhisper** - 本地运行，需要安装 `faster-whisper`
+- **OpenAI Whisper** - 最准确，需要 OpenAI API 密钥（付费）
+- **Azure Speech** - 企业级，需要 Azure 订阅（付费）
+- **fast_whisper** - 需要自建 insanely-fast-whisper API 服务（免费但需部署）
+
+**配置方法**：
+```env
+# 方式1: 使用OpenAI Whisper（推荐，简单）
+ENABLE_TRANSCRIPTION=true
+TRANSCRIPTION_PROVIDER=openai
+# TRANSCRIPTION_API_KEY 默认使用 OPENAI_API_KEY
+
+# 方式2: 使用Azure Speech
+ENABLE_TRANSCRIPTION=true
+TRANSCRIPTION_PROVIDER=azure
+TRANSCRIPTION_API_KEY=your_azure_key
+TRANSCRIPTION_BASE_URL=your_azure_endpoint
+
+# 方式3: 使用自建fast_whisper服务
+ENABLE_TRANSCRIPTION=true
+TRANSCRIPTION_PROVIDER=fast_whisper
+TRANSCRIPTION_BASE_URL=http://localhost:6006  # 你的API服务地址
+```
+
+**fast_whisper 服务部署**：
+- 项目地址: https://github.com/JigsawStack/insanely-fast-whisper-api
+- 需要GPU支持，建议NVIDIA显卡
+- 运行后会在本地端口（默认6006）提供API服务
+- 免费但需要自己维护服务器
 
 **效果**：视频发送时会附带转录文字（限制300字）
 
@@ -429,8 +530,11 @@ pip install -r requirements.txt
 - `tenacity>=9.1.2` - 重试机制（用于图床上传）
 
 **可选依赖**（按需安装）：
-- `faster-whisper` - 本地语音转录（如果使用 FastWhisper）
-- `azure-cognitiveservices-speech` - Azure语音转录（如果使用 Azure）
+- `azure-cognitiveservices-speech` - Azure语音转录（如果使用 Azure Speech）
+
+**注意**:
+- OpenAI Whisper 转录使用 `openai` 包（已在核心依赖中）
+- fast_whisper 转录需要自建API服务，不需要额外Python包
 
 ---
 
