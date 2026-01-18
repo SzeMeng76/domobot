@@ -14,17 +14,90 @@ logger = logging.getLogger(__name__)
 class AntiSpamHandler:
     """反垃圾消息处理器"""
 
-    def __init__(self, spam_manager, spam_detector):
+    def __init__(self, spam_manager, spam_detector, pyrogram_helper=None):
         """
         初始化处理器
 
         Args:
             spam_manager: AntiSpamManager实例
             spam_detector: AntiSpamDetector实例
+            pyrogram_helper: PyrogramHelper实例（可选，用于获取DC ID）
         """
         self.manager = spam_manager
         self.detector = spam_detector
+        self.pyrogram_helper = pyrogram_helper
         logger.info("AntiSpamHandler initialized")
+        if pyrogram_helper:
+            logger.info("DC ID detection enabled via Pyrogram")
+
+    async def _calculate_user_risk_score(self, user, context: ContextTypes.DEFAULT_TYPE) -> tuple[int, list[str]]:
+        """
+        计算用户风险评分
+        注意：DC ID 需要 MTProto API (Pyrogram/Telethon)，Bot API 不提供
+
+        Returns:
+            (risk_score, risk_factors)
+            risk_score: 0-100
+            risk_factors: 风险因素列表
+        """
+        risk_score = 0
+        risk_factors = []
+
+        try:
+            # 1. 检查头像（Bot API 支持）
+            photos = await context.bot.get_user_profile_photos(user.id, limit=1)
+            if photos.total_count == 0:
+                risk_score += 30
+                risk_factors.append("无头像")
+                logger.debug(f"User {user.id} has no profile photo")
+
+            # 2. 检查 Bio（通过 get_chat 获取）
+            try:
+                chat_info = await context.bot.get_chat(user.id)
+                if not chat_info.bio:
+                    risk_score += 25
+                    risk_factors.append("无个人简介")
+                    logger.debug(f"User {user.id} has no bio")
+            except Exception as e:
+                logger.debug(f"Failed to get chat info for user {user.id}: {e}")
+                # 无法获取 bio 可能是隐私设置，不算高风险
+                pass
+
+            # 3. 检查用户名
+            if not user.username:
+                risk_score += 20
+                risk_factors.append("无用户名")
+                logger.debug(f"User {user.id} has no username")
+
+            # 4. 检查是否为 Premium 用户（Premium 用户风险较低）
+            if user.is_premium:
+                risk_score = max(0, risk_score - 25)  # 降低风险
+                logger.debug(f"User {user.id} is Premium - reduced risk")
+
+            # 5. 检查 DC ID（如果 Pyrogram 可用）
+            if self.pyrogram_helper:
+                dc_id = await self.pyrogram_helper.get_user_dc_id(user.id)
+                if dc_id is not None:
+                    # DC4: 荷兰数据中心，尼日利亚广告商常见
+                    # DC5: 新加坡数据中心，亚洲/非洲用户
+                    if dc_id == 4:
+                        risk_score += 25  # DC4 高风险
+                        risk_factors.append(f"DC{dc_id}数据中心（欧洲/非洲）")
+                        logger.debug(f"User {user.id} is from DC{dc_id} (high risk)")
+                    elif dc_id == 5:
+                        risk_score += 10  # DC5 中等风险（包含大量正常亚洲用户）
+                        risk_factors.append(f"DC{dc_id}数据中心（亚洲）")
+                        logger.debug(f"User {user.id} is from DC{dc_id} (medium risk)")
+                    else:
+                        # DC1/DC2/DC3 相对低风险
+                        logger.debug(f"User {user.id} is from DC{dc_id} (low risk)")
+                else:
+                    logger.debug(f"User {user.id} has no DC ID (likely no profile photo)")
+
+        except Exception as e:
+            logger.error(f"Failed to calculate risk score for user {user.id}: {e}")
+
+        return min(risk_score, 100), risk_factors
 
     async def is_admin(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
         """检查用户是否为管理员"""
@@ -82,6 +155,16 @@ class AntiSpamHandler:
                 update.effective_user.username,
                 update.effective_user.first_name
             )
+
+            # 计算用户风险评分
+            risk_score, risk_factors = await self._calculate_user_risk_score(
+                update.effective_user, context
+            )
+            user_info['risk_score'] = risk_score
+            user_info['risk_factors'] = risk_factors
+
+            if risk_score > 50:
+                logger.info(f"High risk user {user_id}: score={risk_score}, factors={risk_factors}")
 
             # 增加发言次数
             await self.manager.increment_speech_count(user_id, group_id)

@@ -51,16 +51,29 @@ class AntiSpamDetector:
         logger.info(f"AntiSpamDetector initialized with model: {model}")
 
     def _build_user_info_prompt(self, user_info: Dict) -> str:
-        """构建用户信息提示词"""
+        """构建用户信息提示词（包含风险评分）"""
         joined_time = user_info.get('joined_time')
         days_since_join = (datetime.now() - joined_time).days if joined_time else 0
         speech_count = user_info.get('number_of_speeches', 0)
 
-        return f"""用户信息：
+        # 计算风险评分
+        risk_score = user_info.get('risk_score', 0)
+        risk_factors = user_info.get('risk_factors', [])
+
+        user_profile = f"""用户信息：
 - 入群天数：{days_since_join}天
 - 发言次数：{speech_count}次
 - 用户名：{user_info.get('username', '未知')}
-- 昵称：{user_info.get('first_name', '未知')}"""
+- 昵称：{user_info.get('first_name', '未知')}
+- 风险评分：{risk_score}/100"""
+
+        if risk_factors:
+            user_profile += f"\n- 风险因素：{', '.join(risk_factors)}"
+            # 特别标注高风险 DC
+            if any('DC4' in factor or 'DC5' in factor for factor in risk_factors):
+                user_profile += "\n  ⚠️ 注意：用户来自高风险数据中心"
+
+        return user_profile
 
     def _get_text_detection_prompt(self, user_info_text: str, message_text: str,
                                    days_since_join: int, speech_count: int) -> str:
@@ -86,6 +99,9 @@ class AntiSpamDetector:
 3. 非法支付、赌博、禁止物品贩卖
 4. 非法服务（飞机会员、刷单、赌台、网赚等）
 5. 使用谐音、错别字、特殊符号混淆的变体
+6. **尼日利亚相关服务广告**（NIGERIAN BANKS, NIN, BVN, ESIM, PASSPORT, GMAIL, SUBSCRIPTIONS等）
+7. 全大写、大量emoji、24/7 ACTIVE等典型广告特征
+8. 高风险用户（无头像、无bio、无用户名）发送的商业信息
 
 请以JSON格式返回结果：
 {{

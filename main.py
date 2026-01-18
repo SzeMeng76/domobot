@@ -266,6 +266,27 @@ async def setup_application(application: Application, config) -> None:
 
     httpx_client = get_http_client()
 
+    # 初始化 Pyrogram Helper（用于获取 DC ID）
+    pyrogram_helper = None
+    if config.telegram_api_id and config.telegram_api_hash:
+        logger.info("🌐 初始化Pyrogram客户端（用于DC ID检测）...")
+        try:
+            from utils.pyrogram_client import PyrogramHelper
+
+            pyrogram_helper = PyrogramHelper(
+                api_id=config.telegram_api_id,
+                api_hash=config.telegram_api_hash,
+                bot_token=config.bot_token
+            )
+            await pyrogram_helper.start()
+            logger.info("✅ Pyrogram客户端初始化完成")
+        except ImportError:
+            logger.warning("⚠️ Pyrogram未安装，DC ID检测功能将不可用。安装方法: pip install pyrogram tgcrypto")
+        except Exception as e:
+            logger.warning(f"⚠️ Pyrogram客户端初始化失败: {e}")
+    else:
+        logger.info("ℹ️ 未配置TELEGRAM_API_ID和TELEGRAM_API_HASH，DC ID检测功能将不可用")
+
     # 初始化 AI 反垃圾组件（如果启用）
     anti_spam_manager = None
     anti_spam_detector = None
@@ -282,7 +303,11 @@ async def setup_application(application: Application, config) -> None:
             model=config.openai_model,
             base_url=config.openai_base_url if config.openai_base_url else None
         )
-        anti_spam_handler = AntiSpamHandler(anti_spam_manager, anti_spam_detector)
+        anti_spam_handler = AntiSpamHandler(
+            anti_spam_manager,
+            anti_spam_detector,
+            pyrogram_helper=pyrogram_helper  # 传入 Pyrogram helper
+        )
         logger.info("✅ AI反垃圾功能初始化完成")
     elif config.anti_spam_enabled:
         logger.warning("⚠️ AI反垃圾功能已启用但缺少OPENAI_API_KEY，功能将不可用")
@@ -299,6 +324,7 @@ async def setup_application(application: Application, config) -> None:
     application.bot_data["stats_manager"] = stats_manager
     application.bot_data["anti_spam_handler"] = anti_spam_handler  # 存储反垃圾处理器
     application.bot_data["parse_adapter"] = parse_adapter  # 存储社交解析适配器
+    application.bot_data["pyrogram_helper"] = pyrogram_helper  # 存储Pyrogram helper（用于DC ID查询）
     logger.info("✅ 核心组件初始化完成")
 
     # ========================================
@@ -682,7 +708,14 @@ async def cleanup_application(application: Application) -> None:
 
     try:
         # ========================================
-        # 第一步：关闭网络连接
+        # 第一步：关闭 Pyrogram 客户端
+        # ========================================
+        if "pyrogram_helper" in application.bot_data and application.bot_data["pyrogram_helper"]:
+            await application.bot_data["pyrogram_helper"].stop()
+            logger.info("✅ Pyrogram客户端已关闭")
+
+        # ========================================
+        # 第二步：关闭网络连接
         # ========================================
         from utils.http_client import close_global_client
 
@@ -690,7 +723,7 @@ async def cleanup_application(application: Application) -> None:
         logger.info("✅ httpx客户端已关闭")
 
         # ========================================
-        # 第二步：停止调度器
+        # 第三步：停止调度器
         # ========================================
         if "task_scheduler" in application.bot_data:
             application.bot_data["task_scheduler"].stop()
@@ -701,7 +734,7 @@ async def cleanup_application(application: Application) -> None:
             logger.info("✅ 消息删除调度器已停止")
 
         # ========================================
-        # 第三步：关闭任务管理器
+        # 第四步：关闭任务管理器
         # ========================================
         from utils.task_manager import shutdown_task_manager
 
@@ -709,7 +742,7 @@ async def cleanup_application(application: Application) -> None:
         logger.info("✅ 任务管理器已关闭")
 
         # ========================================
-        # 第四步：关闭数据库连接
+        # 第五步：关闭数据库连接
         # ========================================
         if "cache_manager" in application.bot_data:
             await application.bot_data["cache_manager"].close()

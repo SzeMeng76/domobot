@@ -42,6 +42,10 @@ class BotConfig:
         self.anti_spam_enabled: bool = True
         self.anti_spam_default_threshold: int = 80
 
+        # Pyrogram 配置（用于获取 DC ID）
+        self.telegram_api_id: int = 0
+        self.telegram_api_hash: str = ""
+
         # Webhook 配置
         self.webhook_url = ""
         self.webhook_listen = "0.0.0.0"
@@ -443,6 +447,10 @@ class ConfigManager:
         # AI反垃圾功能配置
         self.config.anti_spam_enabled = get_bool_env("ANTI_SPAM_ENABLED", "True")
         self.config.anti_spam_default_threshold = get_int_env("ANTI_SPAM_DEFAULT_THRESHOLD", "80")
+
+        # Pyrogram 配置（用于获取 DC ID）
+        self.config.telegram_api_id = get_int_env("TELEGRAM_API_ID", "0")
+        self.config.telegram_api_hash = os.getenv("TELEGRAM_API_HASH", "")
 
         # MySQL 配置
         self.config.db_host = os.getenv("DB_HOST", "localhost")

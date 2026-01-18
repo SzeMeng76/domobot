@@ -599,6 +599,32 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await _schedule_deletion(context, chat.id, sent_message.message_id, 180)
             return
 
+        # 尝试获取 DC ID 和 Premium 状态（如果 Pyrogram 可用）
+        dc_id = None
+        dc_location = ""
+        is_premium = None
+        pyrogram_helper = context.bot_data.get("pyrogram_helper")
+
+        if pyrogram_helper:
+            try:
+                user_info = await pyrogram_helper.get_user_info(target_user_id)
+                if user_info:
+                    dc_id = user_info.get('dc_id')
+                    is_premium = user_info.get('is_premium', False)
+
+                    if dc_id:
+                        # DC 位置映射
+                        dc_locations = {
+                            1: "美国迈阿密 🇺🇸",
+                            2: "荷兰阿姆斯特丹 🇳🇱",
+                            3: "美国迈阿密 🇺🇸",
+                            4: "荷兰阿姆斯特丹 🇳🇱",
+                            5: "新加坡 🇸🇬"
+                        }
+                        dc_location = dc_locations.get(dc_id, "未知")
+            except Exception as e:
+                logger.debug(f"Failed to get user info from Pyrogram: {e}")
+
         # 获取用户信息（如果有的话）
         if target_user:
             username = target_user.username or "无法获取"
@@ -654,6 +680,19 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"🏷️ *昵称*：{safe_full_name}\n"
                 f"📛 *用户名*：@{safe_username}\n"
                 f"👤 *用户ID*: `{target_user_id}`\n"
+            )
+
+            # 添加 DC ID 信息（如果可用）
+            if dc_id:
+                result_text += f"🌐 *数据中心*：DC{dc_id} ({dc_location})\n"
+
+            # 添加 Premium 状态（如果可用）
+            if is_premium is not None:
+                premium_emoji = "⭐" if is_premium else ""
+                premium_text = "是 ⭐" if is_premium else "否"
+                result_text += f"💎 *Premium用户*：{premium_text}\n"
+
+            result_text += (
                 f"📅 *估算注册日期*：{formatted_date}\n"
                 f"⏰ *账号年龄*：{age_str}\n"
                 f"🏆 *级别*：{level}\n\n"
@@ -664,6 +703,18 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             result_text = (
                 f"🔍 *用户信息查询*\n\n"
                 f"👤 *用户ID*: `{target_user_id}`\n"
+            )
+
+            # 添加 DC ID 信息（如果可用）
+            if dc_id:
+                result_text += f"🌐 *数据中心*：DC{dc_id} ({dc_location})\n"
+
+            # 添加 Premium 状态（如果可用）
+            if is_premium is not None:
+                premium_text = "是 ⭐" if is_premium else "否"
+                result_text += f"💎 *Premium用户*：{premium_text}\n"
+
+            result_text += (
                 f"📅 *估算注册日期*：{formatted_date}\n"
                 f"⏰ *账号年龄*：{age_str}\n"
                 f"🏆 *级别*：{level}"

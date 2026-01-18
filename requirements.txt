@@ -1,6 +1,10 @@
 # Core Telegram Bot Framework (with all optional dependencies)
 python-telegram-bot[all]==22.2
 
+# Pyrogram (for DC ID detection via MTProto API)
+pyrogram>=2.0.106
+tgcrypto>=1.2.5  # Speeds up Pyrogram
+
 # Environment Configuration
 python-dotenv>=1.0.1  # ParseHub requires >=1.0.1
 
