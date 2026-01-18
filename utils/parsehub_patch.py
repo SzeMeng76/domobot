@@ -881,6 +881,30 @@ def patch_parsehub_yt_dlp():
         FacebookParse.__match__ = r"^(http(s)?://)?.+facebook.com/(watch/?\?v|share/[v,r]|.+/videos/|reel/).*"
         logger.info("✅ FacebookParse patched: Support watch/?v= URL format (with optional slash)")
 
+        # Patch FacebookParse.parse to skip get_raw_url which strips query parameters
+        # Problem: get_raw_url() strips ?v= parameters, causing "Unsupported URL: https://www.facebook.com/watch/"
+        # Solution: For watch/?v= URLs, bypass get_raw_url and pass directly to yt-dlp (yt-dlp handles redirects)
+        original_facebook_parse = FacebookParse.parse
+
+        async def patched_facebook_parse(self, url: str):
+            """Patched parse that bypasses get_raw_url for watch/?v= URLs"""
+            logger.info(f"🔍 [Facebook] Parsing URL: {url}")
+
+            # Check if URL has query parameters (watch/?v= format)
+            if "?v=" in url:
+                # Skip get_raw_url to preserve query parameters
+                # yt-dlp will handle any redirects automatically
+                logger.info(f"✅ [Facebook] Bypassing get_raw_url to preserve ?v= parameter")
+                from parsehub.parsers.base.yt_dlp_parser import YtParser
+                return await YtParser.parse(self, url)
+            else:
+                # Use original implementation for other Facebook URLs (videos/, reel/, etc.)
+                logger.info(f"🔍 [Facebook] Using get_raw_url for non-query URL")
+                return await original_facebook_parse(self, url)
+
+        FacebookParse.parse = patched_facebook_parse
+        logger.info("✅ FacebookParse.parse patched: Bypass get_raw_url for URLs with query parameters")
+
         return True
 
     except Exception as e:
