@@ -881,29 +881,58 @@ def patch_parsehub_yt_dlp():
         FacebookParse.__match__ = r"^(http(s)?://)?.+facebook.com/(watch/?\?v|share/[v,r]|.+/videos/|reel/).*"
         logger.info("✅ FacebookParse patched: Support watch/?v= URL format (with optional slash)")
 
-        # Patch FacebookParse.parse to skip get_raw_url which strips query parameters
-        # Problem: get_raw_url() strips ?v= parameters, causing "Unsupported URL: https://www.facebook.com/watch/"
-        # Solution: For watch/?v= URLs, bypass get_raw_url and pass directly to yt-dlp (yt-dlp handles redirects)
+        # Patch ParseHub.parse to skip get_raw_url for Facebook watch/?v= URLs
+        # Root cause: ParseHub.parse() calls get_raw_url() BEFORE calling parser.parse()
+        # This strips query parameters from Facebook URLs
+        from parsehub.main import ParseHub
+        original_parsehub_parse = ParseHub.parse
+
+        async def patched_parsehub_parse(self, url: str):
+            """Patched ParseHub.parse that skips get_raw_url for Facebook watch/?v= URLs"""
+            parser = self.select_parser(url)
+            if not parser:
+                raise ValueError("不支持的平台")
+
+            p = parser(parse_config=self.config)
+
+            # Check if this is a Facebook watch/?v= URL
+            if isinstance(p, FacebookParse) and "?v=" in url:
+                logger.info(f"✅ [ParseHub] Detected Facebook watch/?v= URL, skipping get_raw_url")
+                logger.info(f"✅ [ParseHub] Passing URL directly to parser: {url}")
+                # Skip get_raw_url to preserve query parameters
+                return await p.parse(url)
+            else:
+                # Use original implementation (calls get_raw_url first)
+                url = await p.get_raw_url(url)
+                return await p.parse(url)
+
+        ParseHub.parse = patched_parsehub_parse
+        logger.info("✅ ParseHub.parse patched: Skip get_raw_url for Facebook watch/?v= URLs")
+
+        # Also patch FacebookParse.parse to skip its internal get_raw_url call
         original_facebook_parse = FacebookParse.parse
 
         async def patched_facebook_parse(self, url: str):
-            """Patched parse that bypasses get_raw_url for watch/?v= URLs"""
-            logger.info(f"🔍 [Facebook] Parsing URL: {url}")
-
-            # Check if URL has query parameters (watch/?v= format)
+            """Patched FacebookParse.parse that skips get_raw_url for watch/?v= URLs"""
             if "?v=" in url:
-                # Skip get_raw_url to preserve query parameters
-                # yt-dlp will handle any redirects automatically
-                logger.info(f"✅ [Facebook] Bypassing get_raw_url to preserve ?v= parameter")
-                from parsehub.parsers.base.yt_dlp_parser import YtParser
-                return await YtParser.parse(self, url)
+                logger.info(f"✅ [Facebook] Detected ?v= parameter, calling _parse directly (skip get_raw_url)")
+                # Skip all get_raw_url calls and call _parse directly
+                # YtParser.parse also calls get_raw_url, so we bypass it too
+                from parsehub.parsers.base.yt_dlp_parser import YtVideoParseResult
+                video_info = await self._parse(url)
+                return YtVideoParseResult(
+                    video=video_info.url,
+                    title=video_info.title,
+                    desc=video_info.description,
+                    raw_url=url,
+                    dl=video_info,
+                )
             else:
-                # Use original implementation for other Facebook URLs (videos/, reel/, etc.)
-                logger.info(f"🔍 [Facebook] Using get_raw_url for non-query URL")
+                # Use original implementation for other Facebook URLs
                 return await original_facebook_parse(self, url)
 
         FacebookParse.parse = patched_facebook_parse
-        logger.info("✅ FacebookParse.parse patched: Bypass get_raw_url for URLs with query parameters")
+        logger.info("✅ FacebookParse.parse patched: Skip internal get_raw_url for watch/?v= URLs")
 
         return True
 
