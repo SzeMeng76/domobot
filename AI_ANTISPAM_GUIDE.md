@@ -51,6 +51,11 @@ OPENAI_MODEL=gpt-5-mini
 # AI反垃圾功能开关
 ANTI_SPAM_ENABLED=true
 ANTI_SPAM_DEFAULT_THRESHOLD=80
+
+# Telegram API配置（可选 - 用于DC ID检测，需Pyrogram）
+# 从 https://my.telegram.org/apps 获取
+# TELEGRAM_API_ID=12345678                  # Telegram API ID
+# TELEGRAM_API_HASH=abcdef1234567890abcdef  # Telegram API Hash
 ```
 
 **获取 OpenAI API Key:**
@@ -321,6 +326,44 @@ AI 会检测以下特征：
 3. 非法支付、赌博、禁止物品
 4. 非法服务（刷单、网赚等）
 5. 使用谐音、错别字混淆的变体
+
+### 用户风险评分系统
+
+除了AI内容检测，系统还会综合评估用户的账号特征，计算风险分数（0-100）：
+
+**风险因素**（增加风险分数）：
+- **新账号**：创建时间 < 30天 → +30分
+- **无用户名**：没有设置 @username → +15分
+- **无头像**：未设置头像 → +10分
+- **无简介**：个人简介为空 → +5分
+- **可疑DC ID**：数据中心位于高风险地区 → +20分（需配置Telegram API）
+
+**降低风险因素**：
+- **Premium用户**：Telegram Premium会员 → -25分
+- **验证徽章**：有蓝V认证 → -30分
+
+**DC ID检测（可选功能）**：
+- 需要配置 `TELEGRAM_API_ID` 和 `TELEGRAM_API_HASH`
+- 通过Pyrogram获取用户数据中心ID
+- 某些DC ID（如DC 2/5）垃圾账号较多，会增加风险分数
+- **不配置也能正常工作**，只是缺少DC ID这一项评估
+
+**获取Telegram API凭证**：
+1. 访问 https://my.telegram.org/apps
+2. 登录Telegram账号
+3. 创建新应用获取 `api_id` 和 `api_hash`
+4. 添加到 `.env` 文件：
+   ```env
+   TELEGRAM_API_ID=12345678
+   TELEGRAM_API_HASH=abcdef1234567890abcdef
+   ```
+
+**最终判定**：
+```
+综合分数 = 风险分数 + AI内容分数
+如果 综合分数 ≥ 阈值(80) → 封禁
+如果 综合分数 < 阈值(80) → 通过
+```
 
 ---
 

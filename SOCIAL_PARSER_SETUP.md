@@ -80,15 +80,23 @@ EOF
 # 社交媒体解析功能配置 (ParseHub)
 # =============================================================================
 
-# 基础代理配置 (可选 - 国外服务器无需配置)
-# PARSER_PROXY=http://127.0.0.1:7890        # 全局解析代理
-# DOWNLOADER_PROXY=http://127.0.0.1:7890    # 全局下载代理
+# 基础代理配置 (可选 - 仅用于IP更换，反爬虫headers由ParseHub自动注入)
+# PARSER_PROXY=http://your-proxy:port      # 可选：解析使用的代理
+# DOWNLOADER_PROXY=http://your-proxy:port  # 可选：下载使用的代理
+
+# YouTube专用代理 (强烈推荐 - YouTube bot检测严格，需要代理绕过)
+# YOUTUBE_PROXY=http://your-proxy:port     # YouTube解析和下载专用代理（支持http/https/socks5）
 
 # 缓存配置
 PARSER_CACHE_DURATION=86400                # 解析结果缓存时间（秒，默认24小时）
 
-# 抖音API配置 (可选)
+# 抖音API配置 (可选 - 提供更稳定的抖音解析)
 # DOUYIN_API=                               # 抖音API地址
+
+# TikHub API配置 (可选 - 用于TikTok/Douyin/小红书解析)
+# 支持TikTok视频解析（国际版抖音，官方ParseHub不支持）
+# 支持Douyin/小红书视频解析（当官方ParseHub失败时作为备选方案）
+# TIKHUB_API_KEY=your_tikhub_api_key_here  # TikHub API密钥（从 https://api.tikhub.io 获取）
 
 # AI总结功能配置 (可选 - 使用你已有的 OPENAI_API_KEY)
 ENABLE_AI_SUMMARY=false                    # 是否启用AI总结功能
@@ -117,17 +125,33 @@ TRANSCRIPTION_PROVIDER=openai              # 转录服务: openai, azure, fast_w
 # TRANSCRIPTION_BASE_URL=                  # 转录API地址（可选）
 
 # 平台Cookie配置 (可选 - 用于解析受限内容)
-# ✅ 支持Cookie的平台：Twitter, Instagram, Bilibili, Kuaishou
-# ❌ 不支持：Facebook, YouTube（基于yt-dlp，ParseHub库未实现cookie支持）
+# 支持Cookie的平台：Twitter, Instagram, Bilibili, Kuaishou, YouTube
+# 不支持：Facebook（基于yt-dlp，ParseHub库未实现cookie支持）
 #
 # ⚠️ 重要：长Cookie必须用引号包裹，避免被截断！
 # 示例：TWITTER_COOKIE="auth_token=xxx; ct0=yyy"
 #
 # Twitter Cookie（格式：auth_token=xxx; ct0=xxx，必需：auth_token, ct0）
 # TWITTER_COOKIE="auth_token=your_token; ct0=your_ct0"
+#
+# Instagram Cookie（格式：sessionid=xxx）
 # INSTAGRAM_COOKIE=""
+#
+# Bilibili Cookie（格式：SESSDATA=xxx; bili_jct=xxx）
 # BILIBILI_COOKIE=""
+#
+# Kuaishou Cookie（格式：did=xxx; kpn=xxx）
 # KUAISHOU_COOKIE=""
+#
+# YouTube Cookie（用于绕过"Sign in to confirm you're not a bot"错误）
+# 方式1: 使用浏览器扩展导出Netscape格式文件
+#   - 安装扩展: Get cookies.txt LOCALLY
+#   - 访问 youtube.com 并登录
+#   - 导出为 youtube_cookies.txt
+#   - 配置文件路径: YOUTUBE_COOKIE=/path/to/youtube_cookies.txt
+# 方式2: 手动输入Cookie字符串（不推荐，太长）
+#   - YOUTUBE_COOKIE="SID=xxx; HSID=yyy; ..."
+# YOUTUBE_COOKIE=/app/cookies/youtube_cookies.txt
 ```
 
 ---
@@ -306,12 +330,79 @@ volumes:
 
 ---
 
+#### 8. **YouTube专用代理** 🌐
+针对YouTube的bot检测问题，使用专用代理进行解析和下载。
+
+**启用方法**：
+```env
+# YouTube专用代理（优先级高于全局代理）
+YOUTUBE_PROXY=http://your-proxy:port
+```
+
+**支持的代理协议**：
+- HTTP: `http://proxy:port`
+- HTTPS: `https://proxy:port`
+- SOCKS5: `socks5://proxy:port`
+
+**使用场景**：
+- YouTube bot检测严格时使用
+- 国内服务器访问YouTube
+- OAuth/Cookie失效时的备选方案
+
+**优先级**：`YOUTUBE_PROXY` > `PARSER_PROXY`（全局代理）
+
+---
+
+#### 9. **TikHub API集成** 🚀
+使用TikHub API解析TikTok、抖音、小红书视频，提供稳定的备选方案。
+
+**启用方法**：
+```env
+# TikHub API密钥
+TIKHUB_API_KEY=your_tikhub_api_key_here
+```
+
+**获取API密钥**：
+1. 访问 https://api.tikhub.io
+2. 注册账号并获取API密钥
+3. 配置到 `.env` 文件
+
+**支持的平台**：
+- ✅ **TikTok** (国际版抖音) - 主要解析方式，官方ParseHub不支持
+- ✅ **Douyin** (抖音) - 当官方ParseHub失败时的备选方案
+- ✅ **XHS** (小红书) - 当官方ParseHub失败时的备选方案
+- ❌ **不支持YouTube** - YouTube使用yt-dlp + Cookie/OAuth/Proxy方案
+
+**工作机制**：
+- TikTok：优先使用TikHub API（官方不支持），支持视频和图集
+- Douyin/小红书：先尝试官方ParseHub，失败后fallback到TikHub
+- 稳定性高，成功率接近100%
+- 无需代理、Cookie或OAuth
+
+**费用**：
+- 付费API服务，具体价格见官网
+- 适合对TikTok解析有需求的场景
+
+---
+
 ### 配置优先级说明
 
 **代理配置**：
 - 不配置 = 不使用代理（国外服务器推荐）
-- 配置全局代理 = 所有平台使用
+- 配置全局代理 (`PARSER_PROXY`) = 所有平台使用
+- 配置YouTube专用代理 (`YOUTUBE_PROXY`) = 仅YouTube使用，优先级高于全局代理
 - 平台Cookie + 代理 = 最佳效果
+
+**YouTube解析优先级**：
+1. **OAuth Token** (`YOUTUBE_OAUTH_TOKEN`) - 免费，需Google账号，有封号风险
+2. **Cookie文件** (`YOUTUBE_COOKIE`) - 免费，需手动导出，定期过期
+3. **YouTube代理** (`YOUTUBE_PROXY`) - 付费代理，稳定但需成本
+4. **全局代理** (`PARSER_PROXY`) - 最后选择
+
+**TikTok/Douyin/小红书解析优先级**：
+1. **TikHub API** (`TIKHUB_API_KEY`) - TikTok主要方案，Douyin/XHS备选方案
+2. **官方ParseHub解析** - Douyin/XHS优先使用，免费
+3. **全局代理** (`PARSER_PROXY`) - 辅助所有平台
 
 **功能开关**：
 - 所有高级功能默认 **禁用**
