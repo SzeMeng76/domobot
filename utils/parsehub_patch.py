@@ -393,11 +393,11 @@ def patch_parsehub_yt_dlp():
         original_xhs_parse = XhsParser.parse
 
         async def patched_xhs_parse(self, url: str):
-            """Patched XhsParser.parse to handle empty download list"""
+            """Patched XhsParser.parse to handle empty download list and use TikHub as fallback"""
             from parsehub.types import VideoParseResult, ImageParseResult, MultimediaParseResult, Video, Image
             from parsehub.parsers.parser.xhs_ import XHS, Log
 
-            # 调用原始逻辑获取数据
+            # 调用原始逻辑获取数据（标题、描述等元数据）
             url = await self.get_raw_url(url)
             async with XHS(user_agent="", cookie="") as xhs:
                 x_result = await xhs.extract(url, False, log=Log)
@@ -417,9 +417,58 @@ def patch_parsehub_yt_dlp():
             elif result["作品类型"] == "视频":
                 download_list = result.get("下载地址", [])
                 if not download_list or len(download_list) == 0:
-                    logger.warning(f"🌐 [Patch] XHS video has no download URLs, returning empty VideoParseResult")
-                    return VideoParseResult(video=None, **k)
+                    logger.warning(f"🌐 [Patch] XHS video has no download URLs from official parser, trying TikHub...")
+
+                    # 尝试使用 TikHub API 获取视频 URL
+                    tikhub_api_key = os.getenv("TIKHUB_API_KEY")
+                    if not tikhub_api_key:
+                        raise ParseError("小红书视频解析失败：无法获取下载地址（未配置TikHub API）")
+
+                    try:
+                        # 从 URL 提取 note_id
+                        # URL 格式: https://www.xiaohongshu.com/discovery/item/69649bec000000000d00bfbb?...
+                        import re
+                        note_id_match = re.search(r'/item/([a-f0-9]+)', url)
+                        if not note_id_match:
+                            raise ParseError(f"无法从URL提取note_id: {url}")
+
+                        note_id = note_id_match.group(1)
+                        logger.info(f"🎬 [TikHub] Fetching XHS video via TikHub: {note_id}")
+
+                        # 调用 TikHub API
+                        api_url = f"https://api.tikhub.io/api/v1/xiaohongshu/app/get_note_info_v2?note_id={note_id}"
+                        headers = {"Authorization": f"Bearer {tikhub_api_key}"}
+
+                        async with httpx.AsyncClient(timeout=30.0) as client:
+                            response = await client.get(api_url, headers=headers)
+
+                        if response.status_code != 200:
+                            raise ParseError(f"TikHub API请求失败: HTTP {response.status_code}")
+
+                        data = response.json()
+                        if data.get("code") != 200:
+                            raise ParseError(f"TikHub API返回错误: {data.get('message', 'Unknown error')}")
+
+                        # 提取视频 URL（数据结构: data.data.videoInfo.videoUrl）
+                        inner_data = data.get("data", {}).get("data", {})
+                        video_info = inner_data.get("videoInfo", {})
+                        video_url = video_info.get("videoUrl")
+
+                        if not video_url:
+                            raise ParseError("TikHub返回数据中没有视频URL")
+
+                        logger.info(f"✅ [TikHub] Got XHS video URL: {video_url[:80]}")
+
+                        # 返回结果：使用官方解析的标题/描述 + TikHub的视频URL
+                        return VideoParseResult(video=video_url, **k)
+
+                    except ParseError:
+                        raise
+                    except Exception as e:
+                        logger.error(f"❌ [TikHub] XHS解析失败: {e}")
+                        raise ParseError(f"小红书视频解析失败：官方和TikHub都无法获取下载地址 (TikHub error: {e})")
                 else:
+                    # 官方解析成功，直接返回
                     return VideoParseResult(video=download_list[0], **k)
 
             # 图文类型：检查下载地址是否为空
