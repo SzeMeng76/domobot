@@ -529,17 +529,13 @@ async def get_app_prices(
             app_price_cny = 0.0
         else:
             app_price_str = f"{price} {currency}"
-            if country_code != "CN" and rate_converter and rate_converter.rates:
-                if currency.upper() in rate_converter.rates:
-                    cny_price = await rate_converter.convert(
-                        float(price), currency.upper(), "CNY"
-                    )
-                    if cny_price is not None:
-                        app_price_cny = cny_price
-                    else:
-                        app_price_cny = None
-                else:
-                    app_price_cny = None
+            if country_code != "CN":
+                # 使用统一的降级转换函数
+                from commands.rate_command import convert_currency_with_fallback
+                cny_price = await convert_currency_with_fallback(
+                    float(price), currency.upper(), "CNY"
+                )
+                app_price_cny = cny_price  # None if conversion failed
             else:
                 app_price_cny = None
 
@@ -582,15 +578,15 @@ async def get_app_prices(
             # 使用检测到的货币代码（而非主应用货币）进行转换
             cny_price = None
             if price_value > 0 and country_code != "CN":
-                if rate_converter and rate_converter.rates:
-                    # 使用 detected_currency 而不是主应用的 currency
-                    actual_currency = detected_currency if detected_currency else currency
-                    logger.info(f"[IAP Debug] Converting {price_value} {actual_currency} to CNY")
-                    if actual_currency.upper() in rate_converter.rates:
-                        cny_price = await rate_converter.convert(
-                            price_value, actual_currency.upper(), "CNY"
-                        )
-                        logger.info(f"[IAP Debug] Conversion result: {cny_price} CNY")
+                # 使用统一的降级转换函数
+                from commands.rate_command import convert_currency_with_fallback
+                actual_currency = detected_currency if detected_currency else currency
+                logger.info(f"[IAP Debug] Converting {price_value} {actual_currency} to CNY")
+                cny_price = await convert_currency_with_fallback(
+                    price_value, actual_currency.upper(), "CNY"
+                )
+                if cny_price:
+                    logger.info(f"[IAP Debug] Conversion result: {cny_price} CNY")
 
             in_app_purchases.append(
                 {"name": iap["name"], "price_str": price_str, "cny_price": cny_price}

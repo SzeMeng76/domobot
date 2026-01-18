@@ -26,6 +26,75 @@ logger = logging.getLogger(__name__)
 rate_converter: RateConverter | None = None
 
 
+async def convert_currency_with_fallback(amount: float, from_currency: str, to_currency: str) -> float | None:
+    """
+    汇率转换，支持备用源降级（优先 Neutrino）
+    可被其他模块导入使用
+
+    Args:
+        amount: 金额
+        from_currency: 起始货币
+        to_currency: 目标货币
+
+    Returns:
+        转换后的金额，失败返回 None
+    """
+    if not rate_converter or not rate_converter.rates:
+        return None
+
+    from_currency = from_currency.upper()
+    to_currency = to_currency.upper()
+
+    # 检查主源是否支持
+    primary_supported = from_currency in rate_converter.rates and to_currency in rate_converter.rates
+
+    if not primary_supported:
+        # 主源不支持，尝试加载 GitHub 备用源（优先 Neutrino）
+        logger.info(f"Primary source doesn't support {from_currency}/{to_currency}, trying fallback sources")
+        await rate_converter.get_rates(fetch_github_sources=True)
+
+        # 按优先级顺序检查备用源
+        preferred_order = ["Neutrino", "Coinbase", "Wise", "Visa", "UnionPay"]
+        fallback_supported = False
+
+        if rate_converter.platform_rates:
+            for preferred_platform in preferred_order:
+                if preferred_platform in rate_converter.platform_rates:
+                    platform_data = rate_converter.platform_rates[preferred_platform]
+                    rates = platform_data["rates"]
+                    if from_currency in rates and to_currency in rates:
+                        # 临时合并到主源
+                        if from_currency not in rate_converter.rates:
+                            rate_converter.rates[from_currency] = rates[from_currency]
+                        if to_currency not in rate_converter.rates:
+                            rate_converter.rates[to_currency] = rates[to_currency]
+                        logger.info(f"✅ Using {preferred_platform} as backup for {from_currency}/{to_currency}")
+                        fallback_supported = True
+                        break
+
+            # 如果优先平台都不支持，尝试其他平台
+            if not fallback_supported:
+                for platform_name, platform_data in rate_converter.platform_rates.items():
+                    if platform_name in preferred_order:
+                        continue
+                    rates = platform_data["rates"]
+                    if from_currency in rates and to_currency in rates:
+                        if from_currency not in rate_converter.rates:
+                            rate_converter.rates[from_currency] = rates[from_currency]
+                        if to_currency not in rate_converter.rates:
+                            rate_converter.rates[to_currency] = rates[to_currency]
+                        logger.info(f"✅ Using {platform_name} as backup for {from_currency}/{to_currency}")
+                        fallback_supported = True
+                        break
+
+        if not fallback_supported:
+            logger.warning(f"No source supports {from_currency}/{to_currency}")
+            return None
+
+    # 执行转换
+    return await rate_converter.convert(amount, from_currency, to_currency)
+
+
 def set_rate_converter(converter: RateConverter):
     global rate_converter
     rate_converter = converter
@@ -243,22 +312,21 @@ async def rate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             await delete_user_command(context, update.message.chat_id, update.message.message_id)
             return
 
-    if from_currency not in rate_converter.rates:
-        error_message = f"❌ 不支持的起始货币: {from_currency}"
-        await message.delete()
-        await send_error(context, update.message.chat_id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
-        await delete_user_command(context, update.message.chat_id, update.message.message_id)
-        return
-    if to_currency not in rate_converter.rates:
-        error_message = f"❌ 不支持的目标货币: {to_currency}"
+    # 检查货币是否支持（使用统一的降级函数预检查）
+    # 先尝试直接转换，如果失败会自动降级到备用源
+    test_result = await convert_currency_with_fallback(1.0, from_currency, to_currency)
+
+    if test_result is None:
+        # 所有源都不支持
+        error_message = f"❌ 不支持的货币对: {from_currency}/{to_currency}"
         await message.delete()
         await send_error(context, update.message.chat_id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
         await delete_user_command(context, update.message.chat_id, update.message.message_id)
         return
 
     try:
-        # 直接转换，无需额外的 get_rates() 调用
-        converted_amount = await rate_converter.convert(amount, from_currency, to_currency)
+        # 使用统一的降级转换函数
+        converted_amount = await convert_currency_with_fallback(amount, from_currency, to_currency)
         if converted_amount is None:
             error_message = "❌ 转换失败，请检查货币代码。"
             await message.delete()

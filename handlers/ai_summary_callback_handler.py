@@ -151,12 +151,14 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                 # 图片/视频消息（有caption）
                 await query.edit_message_caption(
                     caption=summary_caption,
+                    parse_mode="HTML",
                     reply_markup=new_markup
                 )
             else:
                 # 纯文本消息（无caption）
                 await query.edit_message_text(
                     text=summary_caption,
+                    parse_mode="HTML",
                     reply_markup=new_markup,
                     link_preview_options=LinkPreviewOptions(is_disabled=True)
                 )

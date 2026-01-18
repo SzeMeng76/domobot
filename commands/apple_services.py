@@ -119,7 +119,9 @@ async def convert_price_to_cny(price: str, country_code: str, context: ContextTy
     if price_value <= 0:
         return ""
 
-    cny_price = await rate_converter.convert(price_value, country_info["currency"], "CNY")
+    # 使用统一的降级转换函数
+    from commands.rate_command import convert_currency_with_fallback
+    cny_price = await convert_currency_with_fallback(price_value, country_info["currency"], "CNY")
     if cny_price is not None:
         return f" ≈ ¥{cny_price:.2f} CNY"
     else:

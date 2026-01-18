@@ -111,13 +111,13 @@ async def parse_and_convert_iap_price(price_str: str, rate_converter) -> tuple[s
                 # Map symbol to code
                 currency_code = symbol_to_code.get(currency_symbol, 'USD')
             
-            # Check if currency is supported by rate converter (like App Store does)
-            if currency_code in rate_converter.rates:
-                cny_price = await rate_converter.convert(price_float, currency_code, "CNY")
-                if cny_price is not None:
-                    converted_prices.append(f"¥{cny_price:.2f}")
+            # Convert currency to CNY using fallback function
+            from commands.rate_command import convert_currency_with_fallback
+            cny_price = await convert_currency_with_fallback(price_float, currency_code, "CNY")
+            if cny_price is not None:
+                converted_prices.append(f"¥{cny_price:.2f}")
             else:
-                logger.warning(f"Currency {currency_code} not supported by rate converter")
+                logger.warning(f"Currency {currency_code} conversion failed (no source supports it)")
         
         if converted_prices:
             if len(converted_prices) == 1:
