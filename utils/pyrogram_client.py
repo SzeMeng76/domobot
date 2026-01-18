@@ -14,7 +14,7 @@ class PyrogramHelper:
     仅用于查询用户 DC ID，不处理消息
     """
 
-    def __init__(self, api_id: int, api_hash: str, bot_token: str):
+    def __init__(self, api_id: int, api_hash: str, bot_token: str, workdir: str = "sessions"):
         """
         初始化 Pyrogram 客户端
 
@@ -22,12 +22,19 @@ class PyrogramHelper:
             api_id: Telegram API ID (从 https://my.telegram.org 获取)
             api_hash: Telegram API Hash
             bot_token: Bot Token (与 python-telegram-bot 共用)
+            workdir: session文件存储目录（默认sessions/，参考parse_hub_bot）
         """
+        from pathlib import Path
+
         self.api_id = api_id
         self.api_hash = api_hash
         self.bot_token = bot_token
         self.client = None
         self.is_started = False
+
+        # 创建session目录
+        self.workdir = Path(workdir)
+        self.workdir.mkdir(parents=True, exist_ok=True)
 
     async def start(self):
         """启动 Pyrogram 客户端"""
@@ -43,7 +50,7 @@ class PyrogramHelper:
                 api_id=self.api_id,
                 api_hash=self.api_hash,
                 bot_token=self.bot_token,
-                in_memory=True,  # 不保存会话到文件
+                workdir=str(self.workdir),  # 保存session到目录（参考parse_hub_bot）
             )
 
             await self.client.start()
@@ -139,3 +146,104 @@ class PyrogramHelper:
         except Exception as e:
             logger.error(f"Failed to get user info for {user_id}: {e}")
             return None
+
+    async def send_large_video(
+        self,
+        chat_id: int,
+        video_path: str,
+        caption: str = "",
+        reply_to_message_id: Optional[int] = None,
+        width: int = 0,
+        height: int = 0,
+        duration: int = 0,
+        thumb: Optional[str] = None,
+        progress_callback = None
+    ):
+        """
+        使用 Pyrogram 发送大视频文件（支持最大2GB）
+
+        适用场景：
+        - 视频大小 > 50MB（python-telegram-bot限制）
+        - 视频大小 ≤ 2GB（Pyrogram MTProto API限制）
+
+        Args:
+            chat_id: 聊天ID
+            video_path: 视频文件路径
+            caption: 视频说明文字
+            reply_to_message_id: 回复的消息ID
+            width: 视频宽度
+            height: 视频高度
+            duration: 视频时长（秒）
+            thumb: 缩略图路径
+            progress_callback: 上传进度回调函数
+
+        Returns:
+            发送的消息对象
+
+        Note:
+            使用 MTProto API 直连 Telegram，突破 Bot API 的 50MB 限制
+        """
+        if not self.is_started or not self.client:
+            raise RuntimeError("Pyrogram client not started")
+
+        try:
+            logger.info(f"📤 使用 Pyrogram 上传大文件: {video_path}")
+
+            message = await self.client.send_video(
+                chat_id=chat_id,
+                video=video_path,
+                caption=caption,
+                reply_to_message_id=reply_to_message_id,
+                width=width,
+                height=height,
+                duration=duration,
+                thumb=thumb,
+                supports_streaming=True,
+                progress=progress_callback
+            )
+
+            logger.info(f"✅ 大文件上传成功: {video_path}")
+            return message
+
+        except Exception as e:
+            logger.error(f"❌ Pyrogram上传失败: {e}")
+            raise
+
+    async def send_large_photo(
+        self,
+        chat_id: int,
+        photo_path: str,
+        caption: str = "",
+        reply_to_message_id: Optional[int] = None
+    ):
+        """
+        使用 Pyrogram 发送大图片文件
+
+        Args:
+            chat_id: 聊天ID
+            photo_path: 图片文件路径
+            caption: 图片说明文字
+            reply_to_message_id: 回复的消息ID
+
+        Returns:
+            发送的消息对象
+        """
+        if not self.is_started or not self.client:
+            raise RuntimeError("Pyrogram client not started")
+
+        try:
+            logger.info(f"📤 使用 Pyrogram 上传图片: {photo_path}")
+
+            message = await self.client.send_photo(
+                chat_id=chat_id,
+                photo=photo_path,
+                caption=caption,
+                reply_to_message_id=reply_to_message_id
+            )
+
+            logger.info(f"✅ 图片上传成功: {photo_path}")
+            return message
+
+        except Exception as e:
+            logger.error(f"❌ Pyrogram上传图片失败: {e}")
+            raise

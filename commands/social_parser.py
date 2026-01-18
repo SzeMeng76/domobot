@@ -388,23 +388,97 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
     video_size_mb = video_path.stat().st_size / (1024 * 1024)
 
     if video_size_mb > 50:
-        # 文件太大，尝试分割或上传到图床
-        logger.info(f"视频文件过大 ({video_size_mb:.1f}MB)，尝试高级处理...")
+        # 大文件处理：优先级瀑布流
+        # 50MB-2GB: Pyrogram → 分割 → 图床
+        # >2GB: 分割 → 图床
+        logger.info(f"视频文件过大 ({video_size_mb:.1f}MB)，启动优先级瀑布流处理...")
 
-        # 尝试视频分割
-        video_parts = await _adapter.split_large_video(video_path)
-        if len(video_parts) > 1:
-            # 分割成功，逐个发送
-            sent_messages = []
-            msg = await context.bot.send_message(
+        # 步骤1: 先发送预览（缩略图 + 信息），让用户先看到内容
+        size_text = f"{video_size_mb:.1f}".replace(".", "\\.")
+        preview_caption = f"{caption}\n\n📦 文件大小: {size_text}MB\n📤 大文件上传中，请稍候\\.\\.\\."
+
+        preview_msg = None
+        if media.thumb_url:
+            # 有缩略图，先发送缩略图
+            try:
+                preview_msg = await context.bot.send_photo(
+                    chat_id=chat_id,
+                    photo=media.thumb_url,
+                    caption=preview_caption,
+                    parse_mode="MarkdownV2",
+                    reply_to_message_id=reply_to_message_id,
+                    reply_markup=reply_markup
+                )
+            except Exception as e:
+                logger.warning(f"发送预览缩略图失败: {e}")
+
+        if not preview_msg:
+            # 无缩略图或发送失败，发送纯文本
+            preview_msg = await context.bot.send_message(
                 chat_id=chat_id,
-                text=f"{caption}\n\n📁 视频已分割为 {len(video_parts)} 个片段",
+                text=preview_caption,
                 parse_mode="MarkdownV2",
                 reply_to_message_id=reply_to_message_id,
                 disable_web_page_preview=True
             )
-            sent_messages.append(msg)
 
+        # 步骤2: 优先尝试Pyrogram上传（仅50MB-2GB文件）
+        if 50 < video_size_mb <= 2048:  # 2GB = 2048MB
+            try:
+                logger.info(f"🚀 尝试Pyrogram上传 {video_size_mb:.1f}MB 视频...")
+
+                # 获取Pyrogram客户端
+                pyrogram_helper = getattr(_adapter, 'pyrogram_helper', None)
+
+                if pyrogram_helper and pyrogram_helper.is_started:
+                    # 使用Pyrogram发送大视频
+                    from utils.pyrogram_client import PyrogramHelper
+
+                    video_msg = await pyrogram_helper.send_large_video(
+                        chat_id=chat_id,
+                        video_path=str(video_path),
+                        caption=caption,
+                        reply_to_message_id=reply_to_message_id,
+                        width=media.width or 0,
+                        height=media.height or 0,
+                        duration=media.duration or 0,
+                        thumb=media.thumb_url
+                    )
+
+                    # 上传成功，删除预览消息
+                    try:
+                        await preview_msg.delete()
+                    except:
+                        pass
+
+                    logger.info(f"✅ Pyrogram上传成功: {video_size_mb:.1f}MB")
+                    return [video_msg]
+                else:
+                    logger.warning("Pyrogram客户端未启动，跳过Pyrogram上传")
+
+            except Exception as e:
+                logger.warning(f"⚠️ Pyrogram上传失败: {e}，降级到分割/图床方案")
+
+        # 步骤3: 尝试视频分割（如果启用FFmpeg）
+        logger.info("🔪 尝试视频分割...")
+        video_parts = await _adapter.split_large_video(video_path)
+        if len(video_parts) > 1:
+            # 分割成功，更新预览消息
+            try:
+                if media.thumb_url:
+                    await preview_msg.edit_caption(
+                        caption=f"{caption}\n\n📁 视频已分割为 {len(video_parts)} 个片段",
+                        parse_mode="MarkdownV2"
+                    )
+                else:
+                    await preview_msg.edit_text(
+                        text=f"{caption}\n\n📁 视频已分割为 {len(video_parts)} 个片段",
+                        parse_mode="MarkdownV2"
+                    )
+            except Exception as e:
+                logger.debug(f"更新预览消息失败: {e}")
+
+            sent_messages = [preview_msg]
             for i, part in enumerate(video_parts, 1):
                 with open(part, 'rb') as video_file:
                     msg = await context.bot.send_video(
@@ -414,53 +488,56 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
                         supports_streaming=True
                     )
                     sent_messages.append(msg)
+
+            logger.info(f"✅ 视频分割成功: {len(video_parts)} 个片段")
             return sent_messages
 
-        # 分割失败或未启用，尝试上传到图床
+        # 步骤4: 兜底方案 - 上传到图床
+        logger.info("📤 尝试图床上传...")
         image_host_url = await _adapter.upload_to_image_host(video_path)
         if image_host_url:
-            # 上传成功
-            # 格式化文件大小并转义特殊字符
+            # 图床上传成功，更新预览消息
             size_text = f"{video_size_mb:.1f}".replace(".", "\\.")
-            message_text = f"{caption}\n\n⚠️ 视频文件过大 \\({size_text}MB\\)\n📤 已上传到图床\n🔗 [点击查看视频]({image_host_url})"
+            success_caption = f"{caption}\n\n⚠️ 视频文件过大 \\({size_text}MB\\)\n📤 已上传到图床\n🔗 [点击查看视频]({image_host_url})"
+
+            try:
+                if media.thumb_url:
+                    await preview_msg.edit_caption(
+                        caption=success_caption,
+                        parse_mode="MarkdownV2"
+                    )
+                else:
+                    await preview_msg.edit_text(
+                        text=success_caption,
+                        parse_mode="MarkdownV2",
+                        disable_web_page_preview=False
+                    )
+            except Exception as e:
+                logger.debug(f"更新预览消息失败: {e}")
+
+            logger.info(f"✅ 图床上传成功: {image_host_url}")
+            return [preview_msg]
+
+        # 步骤5: 所有方案都失败，更新预览消息为失败提示
+        logger.warning("❌ 所有上传方案均失败")
+        size_text = f"{video_size_mb:.1f}".replace(".", "\\.")
+        fail_caption = f"{caption}\n\n⚠️ 视频文件过大 \\({size_text}MB\\)，所有上传方案均失败"
+
+        try:
             if media.thumb_url:
-                msg = await context.bot.send_photo(
-                    chat_id=chat_id,
-                    photo=media.thumb_url,
-                    caption=message_text,
-                    parse_mode="MarkdownV2",
-                    reply_to_message_id=reply_to_message_id
+                await preview_msg.edit_caption(
+                    caption=fail_caption,
+                    parse_mode="MarkdownV2"
                 )
             else:
-                msg = await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=message_text,
-                    parse_mode="MarkdownV2",
-                    reply_to_message_id=reply_to_message_id,
-                    disable_web_page_preview=False
+                await preview_msg.edit_text(
+                    text=fail_caption,
+                    parse_mode="MarkdownV2"
                 )
-            return [msg]
+        except Exception as e:
+            logger.debug(f"更新预览消息失败: {e}")
 
-        # 都失败了，只发送缩略图和提示
-        # 格式化文件大小并转义特殊字符
-        size_text = f"{video_size_mb:.1f}".replace(".", "\\.")
-        if media.thumb_url:
-            msg = await context.bot.send_photo(
-                chat_id=chat_id,
-                photo=media.thumb_url,
-                caption=f"{caption}\n\n⚠️ 视频文件过大 \\({size_text}MB\\)，无法直接发送",
-                parse_mode="MarkdownV2",
-                reply_to_message_id=reply_to_message_id
-            )
-        else:
-            msg = await context.bot.send_message(
-                chat_id=chat_id,
-                text=f"{caption}\n\n⚠️ 视频文件过大，无法直接发送",
-                parse_mode="MarkdownV2",
-                reply_to_message_id=reply_to_message_id,
-                disable_web_page_preview=True
-            )
-        return [msg]
+        return [preview_msg]
 
     # 文件大小正常，直接发送
     with open(video_path, 'rb') as video_file:

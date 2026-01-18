@@ -58,6 +58,7 @@ services:
     # 挂载数据目录以支持本地JSON数据存储
     volumes:
       - ./data:/app/data
+      - ./sessions:/app/sessions  # Pyrogram session文件持久化（参考parse_hub_bot）
       - ./youtube_cookies.txt:/app/youtube_cookies.txt  # YouTube cookies
       - ./youtube_oauth_token.json:/app/youtube_oauth_token.json  # YouTube OAuth token
     
