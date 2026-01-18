@@ -334,7 +334,10 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
     """发送视频（支持视频分割和图床上传），返回发送的消息列表"""
     media = download_result.media
 
-    # 如果没有媒体文件，检查是否是长文本（超过1000字自动Telegraph）
+    # 调试日志：检查media状态
+    logger.info(f"[DEBUG _send_video] media={media}, type={type(media)}, has_path={hasattr(media, 'path') if media else 'N/A'}, path={getattr(media, 'path', 'N/A') if media else 'N/A'}")
+
+    # 如果没有媒体文件，检查是否是长文本（超过500字自动Telegraph）
     if not media or not hasattr(media, 'path') or not media.path:
         # 获取原始文本内容（未转义的）
         raw_text = ""

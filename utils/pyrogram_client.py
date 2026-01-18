@@ -189,6 +189,20 @@ class PyrogramHelper:
         try:
             logger.info(f"📤 使用 Pyrogram 上传大文件: {video_path}")
 
+            # 处理缩略图：Pyrogram只接受本地文件路径，不接受URL
+            # 如果thumb是URL，忽略它（让Pyrogram自动生成缩略图）
+            thumb_path = None
+            if thumb:
+                # 检查是否是本地文件路径（不是URL）
+                if not thumb.startswith(('http://', 'https://')):
+                    from pathlib import Path
+                    if Path(thumb).exists():
+                        thumb_path = thumb
+                    else:
+                        logger.debug(f"缩略图路径不存在，忽略: {thumb}")
+                else:
+                    logger.debug(f"缩略图是URL，忽略（Pyrogram不支持URL）: {thumb}")
+
             message = await self.client.send_video(
                 chat_id=chat_id,
                 video=video_path,
@@ -197,7 +211,7 @@ class PyrogramHelper:
                 width=width,
                 height=height,
                 duration=duration,
-                thumb=thumb,
+                thumb=thumb_path,  # 使用处理后的缩略图路径
                 supports_streaming=True,
                 progress=progress_callback
             )
