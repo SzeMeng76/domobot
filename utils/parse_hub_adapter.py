@@ -740,34 +740,46 @@ class ParseHubAdapter:
 
     async def publish_to_telegraph(self, result: ParseResult, content_html: str) -> Optional[str]:
         """
-        发布内容到 Telegraph
+        发布内容到 Telegraph（自动判断，无需配置开关）
+
+        参考 parse_hub_bot 实现：
+        - 微信文章自动发布
+        - 酷安图文自动发布
+        - 超过9张图片自动发布
 
         Args:
-            result: 解析结果
+            result: 解析结果（可以为None）
             content_html: HTML内容
 
         Returns:
             Telegraph URL，失败返回None
         """
-        if not self.config or not self.config.enable_telegraph:
-            return None
-
         try:
             from utils.telegraph_helper import TelegraphPublisher
 
+            # 获取 telegraph token（如果已配置）
+            telegraph_token = self.config.telegraph_token if self.config else None
+            author_name = self.config.telegraph_author if self.config else "DomoBot"
+
             publisher = TelegraphPublisher(
-                access_token=self.config.telegraph_token,
-                author_name=self.config.telegraph_author
+                access_token=telegraph_token,
+                author_name=author_name
             )
 
+            # 获取标题
+            title = "解析内容"
+            if result and hasattr(result, 'title') and result.title:
+                title = result.title
+
             url = await publisher.create_page(
-                title=result.title or "解析内容",
+                title=title,
                 content=content_html
             )
 
-            if url and not self.config.telegraph_token:
-                # 保存自动创建的token
+            # 保存自动创建的token（如果是第一次使用）
+            if url and self.config and not self.config.telegraph_token:
                 self.config.telegraph_token = publisher.access_token
+                logger.info(f"Telegraph token已自动创建并保存")
 
             return url
 

@@ -27,6 +27,32 @@ def _escape_markdown(text: str) -> str:
         text = text.replace(char, f'\\{char}')
     return text
 
+
+def _format_text(text: str) -> str:
+    """
+    智能格式化文本内容，自动处理长文本
+
+    - 超过1000字：截断到900字并添加省略号
+    - 超过500字或超过10行：保留全文但不截断（Telegram自动折叠）
+    - 其他：直接返回原文
+
+    Args:
+        text: 原始文本
+
+    Returns:
+        格式化后的文本
+    """
+    if not text:
+        return text
+
+    text = text.strip()
+
+    # 超过1000字：截断
+    if len(text) > 1000:
+        text = text[:900] + "......"
+
+    return text
+
 from utils.message_manager import send_error, send_info, delete_user_command, _schedule_deletion
 from utils.permissions import Permission
 from utils.config_manager import get_config
@@ -195,15 +221,15 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                     if len(title) >= len(desc):
                         caption_parts.append(f"**{_escape_markdown(title)}**")
                     else:
-                        caption_parts.append(_escape_markdown(desc[:500]))
+                        caption_parts.append(_escape_markdown(_format_text(desc)))
                 else:
                     # 不重复，都显示
                     caption_parts.append(f"**{_escape_markdown(title)}**")
-                    caption_parts.append(_escape_markdown(desc[:500]))
+                    caption_parts.append(_escape_markdown(_format_text(desc)))
             elif title:
                 caption_parts.append(f"**{_escape_markdown(title)}**")
             elif desc:
-                caption_parts.append(_escape_markdown(desc[:500]))
+                caption_parts.append(_escape_markdown(_format_text(desc)))
 
             caption = "\n\n".join(caption_parts)
         else:
@@ -309,20 +335,46 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
     """发送视频（支持视频分割和图床上传），返回发送的消息列表"""
     media = download_result.media
 
-    # 如果没有媒体文件
+    # 如果没有媒体文件，检查是否是长文本（超过1000字自动Telegraph）
     if not media or not hasattr(media, 'path') or not media.path:
-        # 检查是否应该有视频但下载失败了
-        # 如果 parse_result 是 VideoParseResult 且有 video 字段，说明应该有视频但下载失败
-        should_have_media = False
-        if hasattr(download_result, 'pr') and isinstance(download_result.pr, VideoParseResult):
-            # 检查是否有video URL
-            if hasattr(download_result.pr, 'video') and download_result.pr.video:
-                should_have_media = True
+        # 获取原始文本内容（未转义的）
+        raw_text = ""
+        if hasattr(download_result, 'pr'):
+            pr = download_result.pr
+            if hasattr(pr, 'title') and pr.title:
+                raw_text += pr.title + "\n\n"
+            if hasattr(pr, 'desc') and pr.desc:
+                raw_text += pr.desc
 
-        error_msg = "\n\n⚠️ 媒体下载失败" if should_have_media else ""
+        # 超过1000字，自动发布到Telegraph
+        if len(raw_text) > 1000:
+            try:
+                logger.info(f"检测到长文本 ({len(raw_text)}字)，自动发布到Telegraph")
+                from markdown import markdown
+                # 将文本转换为HTML
+                html_content = markdown(raw_text)
+                pr = download_result.pr if hasattr(download_result, 'pr') else None
+                telegraph_url = await _adapter.publish_to_telegraph(pr, html_content)
+
+                if telegraph_url:
+                    # Telegraph成功，发送摘要+链接
+                    summary = _format_text(raw_text)  # 截断到900字
+                    msg = await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=f"{_escape_markdown(summary)}\n\n📰 [查看完整内容]({telegraph_url})",
+                        parse_mode="MarkdownV2",
+                        reply_to_message_id=reply_to_message_id,
+                        disable_web_page_preview=False,
+                        reply_markup=reply_markup
+                    )
+                    return [msg]
+            except Exception as e:
+                logger.warning(f"长文本Telegraph发布失败，降级为普通文本: {e}")
+
+        # 普通文本或Telegraph失败，直接发送
         msg = await context.bot.send_message(
             chat_id=chat_id,
-            text=f"{caption}{error_msg}",
+            text=caption,
             parse_mode="MarkdownV2",
             reply_to_message_id=reply_to_message_id,
             disable_web_page_preview=True,
@@ -429,6 +481,58 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
 
 async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None, reply_markup=None):
     """发送图片，返回发送的消息列表"""
+    from parsehub.parsers.parser import WXImageParseResult, CoolapkImageParseResult
+    from markdown import markdown
+
+    # 检查是否是微信文章或酷安图文 - 自动使用 Telegraph
+    if hasattr(download_result, 'pr'):
+        parse_result = download_result.pr
+
+        # 微信公众号文章
+        if isinstance(parse_result, WXImageParseResult):
+            try:
+                logger.info("检测到微信文章，自动发布到Telegraph")
+                # 将微信文章内容转换为HTML并发布到Telegraph
+                if hasattr(parse_result, 'wx') and hasattr(parse_result.wx, 'markdown_content'):
+                    html_content = markdown(parse_result.wx.markdown_content.replace("mmbiz.qpic.cn", "mmbiz.qpic.cn.in"))
+                    telegraph_url = await _adapter.publish_to_telegraph(parse_result, html_content)
+
+                    if telegraph_url:
+                        msg = await context.bot.send_message(
+                            chat_id=chat_id,
+                            text=f"{caption}\n\n📰 [查看完整文章]({telegraph_url})",
+                            parse_mode="MarkdownV2",
+                            reply_to_message_id=reply_to_message_id,
+                            disable_web_page_preview=False,
+                            reply_markup=reply_markup
+                        )
+                        return [msg]
+            except Exception as e:
+                logger.error(f"微信文章Telegraph发布失败: {e}")
+
+        # 酷安图文内容
+        elif isinstance(parse_result, CoolapkImageParseResult):
+            try:
+                if hasattr(parse_result, 'coolapk') and hasattr(parse_result.coolapk, 'markdown_content'):
+                    markdown_content = parse_result.coolapk.markdown_content
+                    if markdown_content:
+                        logger.info("检测到酷安图文，自动发布到Telegraph")
+                        html_content = markdown(markdown_content.replace("image.coolapk.com", "qpic.cn.in/image.coolapk.com"))
+                        telegraph_url = await _adapter.publish_to_telegraph(parse_result, html_content)
+
+                        if telegraph_url:
+                            msg = await context.bot.send_message(
+                                chat_id=chat_id,
+                                text=f"{caption}\n\n📰 [查看完整内容]({telegraph_url})",
+                                parse_mode="MarkdownV2",
+                                reply_to_message_id=reply_to_message_id,
+                                disable_web_page_preview=False,
+                                reply_markup=reply_markup
+                            )
+                            return [msg]
+            except Exception as e:
+                logger.error(f"酷安图文Telegraph发布失败: {e}")
+
     media_list = download_result.media
     if not isinstance(media_list, list):
         media_list = [media_list]
@@ -436,18 +540,44 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
     # 过滤掉None的媒体对象（下载失败的）
     media_list = [m for m in media_list if m is not None and hasattr(m, 'path') and m.path]
 
+    # 如果没有媒体文件，检查是否是长文本（超过1000字自动Telegraph）
     if len(media_list) == 0:
-        # 检查是否应该有图片但下载失败了
-        should_have_media = False
-        if hasattr(download_result, 'pr') and isinstance(download_result.pr, ImageParseResult):
-            # 检查是否有photo列表
-            if hasattr(download_result.pr, 'photo') and download_result.pr.photo:
-                should_have_media = True
+        # 获取原始文本内容（未转义的）
+        raw_text = ""
+        if hasattr(download_result, 'pr'):
+            pr = download_result.pr
+            if hasattr(pr, 'title') and pr.title:
+                raw_text += pr.title + "\n\n"
+            if hasattr(pr, 'desc') and pr.desc:
+                raw_text += pr.desc
 
-        error_msg = "\n\n⚠️ 媒体下载失败（CDN错误），仅显示文字内容" if should_have_media else ""
+        # 超过1000字，自动发布到Telegraph
+        if len(raw_text) > 1000:
+            try:
+                logger.info(f"检测到长文本 ({len(raw_text)}字)，自动发布到Telegraph")
+                html_content = markdown(raw_text)
+                pr = download_result.pr if hasattr(download_result, 'pr') else None
+                telegraph_url = await _adapter.publish_to_telegraph(pr, html_content)
+
+                if telegraph_url:
+                    # Telegraph成功，发送摘要+链接
+                    summary = _format_text(raw_text)  # 截断到900字
+                    msg = await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=f"{_escape_markdown(summary)}\n\n📰 [查看完整内容]({telegraph_url})",
+                        parse_mode="MarkdownV2",
+                        reply_to_message_id=reply_to_message_id,
+                        disable_web_page_preview=False,
+                        reply_markup=reply_markup
+                    )
+                    return [msg]
+            except Exception as e:
+                logger.warning(f"长文本Telegraph发布失败，降级为普通文本: {e}")
+
+        # 普通文本或Telegraph失败，直接发送
         msg = await context.bot.send_message(
             chat_id=chat_id,
-            text=f"{caption}{error_msg}",
+            text=caption,
             parse_mode="MarkdownV2",
             reply_to_message_id=reply_to_message_id,
             disable_web_page_preview=True,
@@ -499,38 +629,39 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
         )
         return list(messages) + [text_msg]
     else:
-        # 超过10张，上传到图床并发送Telegraph链接（类似parse_hub_bot）
-        if _adapter.config and _adapter.config.enable_image_host:
-            try:
-                # 上传图片到图床
-                logger.info(f"上传 {len(media_list)} 张图片到图床...")
-                uploaded_urls = []
-                for img in media_list:
-                    img_url = await _adapter.upload_to_image_host(img.path)
-                    if img_url:
-                        uploaded_urls.append(img_url)
+        # 超过10张图片，自动尝试图床+Telegraph（参考parse_hub_bot逻辑）
+        logger.info(f"检测到 {len(media_list)} 张图片（>10张），尝试图床+Telegraph")
+        try:
+            # 上传图片到图床
+            uploaded_urls = []
+            for img in media_list:
+                img_url = await _adapter.upload_to_image_host(img.path)
+                if img_url:
+                    uploaded_urls.append(img_url)
 
-                if uploaded_urls:
-                    # 创建HTML内容
-                    html_content = f"<p>{download_result.pr.desc or ''}</p><br><br>"
-                    html_content += "".join([f'<img src="{url}">' for url in uploaded_urls])
+            if uploaded_urls:
+                # 创建HTML内容
+                desc = download_result.pr.desc if hasattr(download_result, 'pr') else ""
+                html_content = f"<p>{desc or ''}</p><br><br>"
+                html_content += "".join([f'<img src="{url}">' for url in uploaded_urls])
 
-                    # 发布到Telegraph
-                    telegraph_url = await _adapter.publish_to_telegraph(download_result.pr, html_content)
+                # 发布到Telegraph
+                pr = download_result.pr if hasattr(download_result, 'pr') else None
+                telegraph_url = await _adapter.publish_to_telegraph(pr, html_content) if pr else None
 
-                    if telegraph_url:
-                        # 发送Telegraph链接
-                        msg = await context.bot.send_message(
-                            chat_id=chat_id,
-                            text=f"{caption}\n\n📷 共{len(media_list)}张图片\n🔗 [查看完整图集]({telegraph_url})",
-                            parse_mode="MarkdownV2",
-                            reply_to_message_id=reply_to_message_id,
-                            disable_web_page_preview=False,
-                            reply_markup=reply_markup
-                        )
-                        return [msg]
-            except Exception as e:
-                logger.error(f"上传图床失败: {e}")
+                if telegraph_url:
+                    # Telegraph成功，发送链接
+                    msg = await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=f"{caption}\n\n📷 共 {len(media_list)} 张图片\n🔗 [查看完整图集]({telegraph_url})",
+                        parse_mode="MarkdownV2",
+                        reply_to_message_id=reply_to_message_id,
+                        disable_web_page_preview=False,
+                        reply_markup=reply_markup
+                    )
+                    return [msg]
+        except Exception as e:
+            logger.warning(f"图床+Telegraph失败，降级为分批发送: {e}")
 
         # 图床失败或未启用，降级为分批发送
         info_msg = await context.bot.send_message(
@@ -570,11 +701,45 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
 
     count = len(media_list)
 
+    # 如果没有媒体文件，检查是否是长文本（超过1000字自动Telegraph）
     if count == 0:
-        # 没有媒体文件，只发送文本
+        # 获取原始文本内容（未转义的）
+        raw_text = ""
+        if hasattr(download_result, 'pr'):
+            pr = download_result.pr
+            if hasattr(pr, 'title') and pr.title:
+                raw_text += pr.title + "\n\n"
+            if hasattr(pr, 'desc') and pr.desc:
+                raw_text += pr.desc
+
+        # 超过1000字，自动发布到Telegraph
+        if len(raw_text) > 1000:
+            try:
+                logger.info(f"检测到长文本 ({len(raw_text)}字)，自动发布到Telegraph")
+                from markdown import markdown
+                html_content = markdown(raw_text)
+                pr = download_result.pr if hasattr(download_result, 'pr') else None
+                telegraph_url = await _adapter.publish_to_telegraph(pr, html_content)
+
+                if telegraph_url:
+                    # Telegraph成功，发送摘要+链接
+                    summary = _format_text(raw_text)  # 截断到900字
+                    msg = await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=f"{_escape_markdown(summary)}\n\n📰 [查看完整内容]({telegraph_url})",
+                        parse_mode="MarkdownV2",
+                        reply_to_message_id=reply_to_message_id,
+                        disable_web_page_preview=False,
+                        reply_markup=reply_markup
+                    )
+                    return [msg]
+            except Exception as e:
+                logger.warning(f"长文本Telegraph发布失败，降级为普通文本: {e}")
+
+        # 普通文本或Telegraph失败，直接发送
         msg = await context.bot.send_message(
             chat_id=chat_id,
-            text=f"{caption}\n\n⚠️ 媒体下载失败",
+            text=caption,
             parse_mode="MarkdownV2",
             reply_to_message_id=reply_to_message_id,
             disable_web_page_preview=True,
