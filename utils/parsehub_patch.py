@@ -881,31 +881,6 @@ def patch_parsehub_yt_dlp():
         FacebookParse.__match__ = r"^(http(s)?://)?.+facebook.com/(watch/?\?v|share/[v,r]|.+/videos/|reel/).*"
         logger.info("✅ FacebookParse patched: Support watch/?v= URL format (with optional slash)")
 
-        # Patch FacebookParse.parse to avoid get_raw_url breaking URLs
-        original_facebook_parse = FacebookParse.parse
-
-        async def patched_facebook_parse(self, url: str):
-            """Patched parse that handles URL properly"""
-            from parsehub.types.error import ParseError
-
-            # Log original URL
-            logger.info(f"🔍 [Facebook] Original URL: {url}")
-
-            # Check if URL has query parameters (watch/?v=)
-            if "watch/" in url and "?v=" in url:
-                # Skip get_raw_url for watch/?v= URLs to prevent parameter loss
-                logger.info(f"🔍 [Facebook] Skipping get_raw_url for watch/?v= URL")
-                # Directly parse without get_raw_url
-                from parsehub.parsers.base.yt_dlp_parser import YtParser
-                return await YtParser.parse(self, url)
-            else:
-                # Use original implementation for other Facebook URLs
-                logger.info(f"🔍 [Facebook] Using get_raw_url for redirect following")
-                return await original_facebook_parse(self, url)
-
-        FacebookParse.parse = patched_facebook_parse
-        logger.info("✅ FacebookParse.parse patched: Avoid get_raw_url breaking watch/?v= URLs")
-
         return True
 
     except Exception as e:

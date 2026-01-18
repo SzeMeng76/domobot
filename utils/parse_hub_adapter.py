@@ -363,7 +363,9 @@ class ParseHubAdapter:
 
         try:
             # 1. 先从文本中提取URL
-            url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+'
+            # Fixed: Support query parameters (?v=, &param=, etc.) and fragments (#hash)
+            # Original regex stopped at '?' character, breaking Facebook watch/?v= URLs
+            url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+(?:\?[^\s<>"{}|\\^`\[\]]*)?(?:#[^\s<>"{}|\\^`\[\]]*)?'
             match = re.search(url_pattern, text)
             if not match:
                 return None
