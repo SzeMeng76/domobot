@@ -229,14 +229,18 @@ class PyrogramHelper:
                     pyrogram_reply_markup = PyrogramInlineKeyboardMarkup(keyboard)
 
             # 转换parse_mode: MarkdownV2 → markdown (Pyrogram不支持MarkdownV2)
+            from pyrogram import enums
+
             pyrogram_parse_mode = None
             if parse_mode:
                 if parse_mode.lower() == "markdownv2":
                     # MarkdownV2 → markdown: 需要移除转义符
                     caption = caption.replace(r'\|', '|').replace(r'\[', '[').replace(r'\]', ']').replace(r'\(', '(').replace(r'\)', ')').replace(r'\.', '.').replace(r'\-', '-').replace(r'\+', '+').replace(r'\=', '=').replace(r'\{', '{').replace(r'\}', '}').replace(r'\!', '!').replace(r'\#', '#')
-                    pyrogram_parse_mode = "markdown"
-                elif parse_mode.lower() in ["markdown", "html"]:
-                    pyrogram_parse_mode = parse_mode.lower()
+                    pyrogram_parse_mode = enums.ParseMode.MARKDOWN
+                elif parse_mode.lower() == "markdown":
+                    pyrogram_parse_mode = enums.ParseMode.MARKDOWN
+                elif parse_mode.lower() == "html":
+                    pyrogram_parse_mode = enums.ParseMode.HTML
 
             message = await self.client.send_video(
                 chat_id=chat_id,
