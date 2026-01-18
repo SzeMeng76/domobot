@@ -158,37 +158,25 @@ TRANSCRIPTION_PROVIDER=openai              # 转录服务: openai, azure, fast_w
 
 ## 🔧 内置增强补丁 (Monkey Patch)
 
-本项目包含 **ParseHub增强补丁** (`utils/parsehub_patch.py`)，自动修复官方ParseHub的11个已知问题，提升解析成功率和稳定性。
+本项目包含 **ParseHub增强补丁** (`utils/parsehub_patch.py`)，自动修复官方ParseHub的15个已知问题，提升解析成功率和稳定性。
 
 ### 修复的问题
 
-**YouTube/Facebook解析增强**:
 1. ✅ 修复yt-dlp格式选择器错误
 2. ✅ 自动传递Cookie到yt-dlp
 3. ✅ 添加反爬虫headers (Referer/Origin)
 4. ✅ pytubefix集成，支持OAuth下载
-
-**Bilibili解析增强**:
-5. ✅ 支持从环境变量读取Cookie
-6. ✅ 添加Referer headers绕过反爬虫
-
-**小红书解析增强**:
-7. ✅ 处理空下载列表，避免崩溃
-8. ✅ TikHub API fallback支持
-
-**抖音解析增强**:
-9. ✅ TikHub API fallback支持（官方失败时）
-
-**TikTok解析增强**:
-10. ✅ 完整TikHub API集成（官方不支持）
-
-**Instagram解析增强**:
-11. ✅ 支持 username/reel/ URL格式
-12. ✅ 修复Cookie传递问题
-13. ✅ 增强headers兼容性
-
-**百度贴吧解析增强**:
-14. ✅ Cookie和headers支持，绕过安全验证
+5. ✅ 修复Facebook watch/?v= URL格式识别问题（支持带斜杠的短链接）
+6. ✅ 支持从环境变量读取Cookie (Bilibili)
+7. ✅ 添加Referer headers绕过反爬虫 (Bilibili)
+8. ✅ 处理空下载列表，避免崩溃 (小红书)
+9. ✅ TikHub API fallback支持 (小红书)
+10. ✅ TikHub API fallback支持 (抖音)
+11. ✅ 完整TikHub API集成 (TikTok，官方不支持)
+12. ✅ 支持 username/reel/ URL格式 (Instagram)
+13. ✅ 修复Cookie传递问题 (Instagram)
+14. ✅ 增强headers兼容性 (Instagram)
+15. ✅ Cookie和headers支持，绕过安全验证 (百度贴吧)
 
 ### 工作原理
 
@@ -214,6 +202,7 @@ patch_parsehub_yt_dlp()
 ✅ XhsParser patched: handle empty download list
 ✅ DouyinParser patched: TikHub fallback support
 ✅ InstagramParser patched: Enhanced URL format support
+✅ FacebookParse patched: Support watch/?v= URL format (with optional slash)
 ```
 
 ### 支持的平台优化
@@ -221,6 +210,7 @@ patch_parsehub_yt_dlp()
 | 平台 | 优化内容 | 效果 |
 |------|---------|------|
 | YouTube | Cookie传递 + pytubefix集成 | 绕过bot检测 |
+| Facebook | 修复watch/?v= URL格式 | 支持带斜杠的短链接 |
 | Bilibili | Referer headers + Cookie支持 | 绕过反爬虫 |
 | 小红书 | 空列表处理 + TikHub fallback | 避免崩溃 |
 | 抖音 | TikHub fallback | 提高成功率 |

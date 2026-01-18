@@ -4,6 +4,7 @@ Monkey patch for ParseHub to fix issues:
 2. YtParser cookie handling: YtParser doesn't pass cookies to yt-dlp
 3. BiliAPI anti-crawler: BiliAPI doesn't set Referer headers for API calls
 4. XhsParser empty download list: XhsParser crashes when download_list is empty
+5. FacebookParse regex: watch/?v= URLs not recognized (Facebook redirects /watch?v= to /watch/?v=)
 """
 
 
@@ -870,6 +871,15 @@ def patch_parsehub_yt_dlp():
 
         MyInstaloaderContext.get_anonymous_session = patched_get_anonymous_session
         logger.info("✅ MyInstaloaderContext patched: Enhanced headers for better compatibility")
+
+        # Patch FacebookParse to support watch/?v= URL format (with optional slash)
+        from parsehub.parsers.parser.facebook import FacebookParse
+
+        # Original regex: r"^(http(s)?://)?.+facebook.com/(watch\?v|share/[v,r]|.+/videos/|reel/).*"
+        # Problem: watch\?v doesn't match watch/?v= (Facebook's actual URL format)
+        # Fix: watch/?\?v makes the slash optional
+        FacebookParse.__match__ = r"^(http(s)?://)?.+facebook.com/(watch/?\?v|share/[v,r]|.+/videos/|reel/).*"
+        logger.info("✅ FacebookParse patched: Support watch/?v= URL format (with optional slash)")
 
         return True
 
