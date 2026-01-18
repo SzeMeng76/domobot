@@ -157,7 +157,9 @@ class PyrogramHelper:
         height: int = 0,
         duration: int = 0,
         thumb: Optional[str] = None,
-        progress_callback = None
+        progress_callback = None,
+        reply_markup = None,
+        parse_mode: Optional[str] = None
     ):
         """
         使用 Pyrogram 发送大视频文件（支持最大2GB）
@@ -176,6 +178,8 @@ class PyrogramHelper:
             duration: 视频时长（秒）
             thumb: 缩略图路径
             progress_callback: 上传进度回调函数
+            reply_markup: InlineKeyboardMarkup 按钮
+            parse_mode: 解析模式 (MarkdownV2, Markdown, HTML)
 
         Returns:
             发送的消息对象
@@ -203,6 +207,27 @@ class PyrogramHelper:
                 else:
                     logger.debug(f"缩略图是URL，忽略（Pyrogram不支持URL）: {thumb}")
 
+            # 转换reply_markup: python-telegram-bot → Pyrogram格式
+            pyrogram_reply_markup = None
+            if reply_markup:
+                from pyrogram.types import InlineKeyboardMarkup as PyrogramInlineKeyboardMarkup
+                from pyrogram.types import InlineKeyboardButton as PyrogramInlineKeyboardButton
+
+                # 转换按钮格式
+                keyboard = []
+                for row in reply_markup.inline_keyboard:
+                    button_row = []
+                    for button in row:
+                        if button.url:
+                            button_row.append(PyrogramInlineKeyboardButton(button.text, url=button.url))
+                        elif button.callback_data:
+                            button_row.append(PyrogramInlineKeyboardButton(button.text, callback_data=button.callback_data))
+                    if button_row:
+                        keyboard.append(button_row)
+
+                if keyboard:
+                    pyrogram_reply_markup = PyrogramInlineKeyboardMarkup(keyboard)
+
             message = await self.client.send_video(
                 chat_id=chat_id,
                 video=video_path,
@@ -213,7 +238,9 @@ class PyrogramHelper:
                 duration=duration,
                 thumb=thumb_path,  # 使用处理后的缩略图路径
                 supports_streaming=True,
-                progress=progress_callback
+                progress=progress_callback,
+                reply_markup=pyrogram_reply_markup,
+                parse_mode=parse_mode
             )
 
             logger.info(f"✅ 大文件上传成功: {video_path}")

@@ -54,6 +54,19 @@ class TelegraphPublisher:
             logger.error(f"创建Telegraph账户失败: {e}")
             return False
 
+    def _html_to_nodes(self, html_content: str) -> list:
+        """
+        将HTML转换为Telegraph Node格式
+
+        Telegraph API需要Node数组，不是纯HTML字符串
+        简单实现：将HTML包装成一个<p>标签的Node
+        """
+        # 替换换行符为<br>标签
+        html_content = html_content.replace('\n', '<br>')
+
+        # 返回Node数组格式
+        return [{"tag": "p", "children": [html_content]}]
+
     async def create_page(
         self,
         title: str,
@@ -66,7 +79,7 @@ class TelegraphPublisher:
 
         Args:
             title: 页面标题
-            content: 页面内容（HTML格式）
+            content: 页面内容（HTML格式或纯文本）
             author_name: 作者名称
             author_url: 作者链接
 
@@ -78,11 +91,14 @@ class TelegraphPublisher:
             return None
 
         try:
+            # 将HTML转换为Telegraph Node格式
+            content_nodes = self._html_to_nodes(content)
+
             async with httpx.AsyncClient(timeout=30.0) as client:
                 data = {
                     "access_token": self.access_token,
                     "title": title,
-                    "content": content,
+                    "content": content_nodes,  # 使用Node数组
                     "author_name": author_name or self.author_name,
                     "return_content": False
                 }

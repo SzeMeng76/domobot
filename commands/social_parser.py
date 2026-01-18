@@ -444,7 +444,9 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
                         width=media.width or 0,
                         height=media.height or 0,
                         duration=media.duration or 0,
-                        thumb=media.thumb_url
+                        thumb=media.thumb_url,
+                        reply_markup=reply_markup,
+                        parse_mode="MarkdownV2"
                     )
 
                     # 上传成功，删除预览消息

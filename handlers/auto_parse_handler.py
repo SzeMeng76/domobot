@@ -145,7 +145,10 @@ async def auto_parse_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         config = get_config()
         if sent_messages:
             for msg in sent_messages:
-                await _schedule_deletion(context, group_id, msg.message_id, config.auto_delete_delay)
+                # 兼容Pyrogram和python-telegram-bot的消息对象
+                msg_id = getattr(msg, 'message_id', None) or getattr(msg, 'id', None)
+                if msg_id:
+                    await _schedule_deletion(context, group_id, msg_id, config.auto_delete_delay)
 
         # 删除原始消息（用户发的链接）
         from commands.social_parser import delete_user_command
