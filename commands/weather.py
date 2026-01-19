@@ -99,6 +99,221 @@ async def _get_api_response(endpoint: str, params: Dict) -> Optional[Dict]:
         logging.error(f"和风天气 API ({endpoint}) 请求异常: {e}")
     return None
 
+# ============================================================================
+# 天气预警 API（新版 weather-alert）
+# ============================================================================
+
+async def get_weather_alerts(lat: float, lon: float) -> Optional[Dict]:
+    """
+    获取天气预警信息（使用新版 weather-alert API）
+
+    Args:
+        lat: 纬度
+        lon: 经度
+
+    Returns:
+        预警数据字典，包含 alerts 数组
+    """
+    config = get_config()
+    if not config.qweather_api_key:
+        logging.error("和风天气 API Key 未配置")
+        return None
+
+    try:
+        # 新版API使用不同的base URL和认证方式
+        base_url = "https://api.qweather.com/weatheralert/v1/current"
+        url = f"{base_url}/{lat:.2f}/{lon:.2f}"
+
+        params = {"key": config.qweather_api_key}
+
+        response = await httpx_client.get(url, params=params, timeout=20)
+        if response.status_code == 200:
+            data = response.json()
+            # 新版API返回格式：{"metadata": {...}, "alerts": [...]}
+            if data and "alerts" in data:
+                return data
+        else:
+            logging.warning(f"天气预警 API 请求失败: HTTP {response.status_code}")
+    except Exception as e:
+        logging.error(f"天气预警 API 请求异常: {e}")
+    return None
+
+def format_weather_alerts(alerts_data: Dict, location_name: str) -> str:
+    """
+    格式化天气预警信息
+
+    Args:
+        alerts_data: 预警API返回的数据
+        location_name: 地点名称
+
+    Returns:
+        格式化的预警文本
+    """
+    alerts = alerts_data.get("alerts", [])
+
+    if not alerts:
+        return f"✅ *{escape_markdown(location_name, version=2)}* 当前无天气预警。"
+
+    result = [f"⚠️ *{escape_markdown(location_name, version=2)} 天气预警* （共 {len(alerts)} 条）\n"]
+
+    # 颜色等级emoji映射
+    color_emoji = {
+        "red": "🔴",
+        "orange": "🟠",
+        "yellow": "🟡",
+        "blue": "🔵"
+    }
+
+    for i, alert in enumerate(alerts, 1):
+        event_type = alert.get("eventType", {}).get("name", "未知")
+        severity = alert.get("severity", "moderate")
+        color_code = alert.get("color", {}).get("code", "")
+        headline = alert.get("headline", "")
+        description = alert.get("description", "")
+        sender = alert.get("senderName", "")
+
+        # 获取颜色emoji
+        emoji = color_emoji.get(color_code, "⚠️")
+
+        # 截断描述文字（最多200字符）
+        desc_short = description[:200] + "..." if len(description) > 200 else description
+
+        result.append(f"{emoji} *预警 #{i}: {escape_markdown(event_type, version=2)}*")
+        result.append(f"├─ 标题: {escape_markdown(headline, version=2)}")
+        result.append(f"├─ 等级: {escape_markdown(severity, version=2)} {emoji}")
+        result.append(f"├─ 发布: {escape_markdown(sender, version=2)}")
+        result.append(f"└─ 详情: {escape_markdown(desc_short, version=2)}\n")
+
+    return "\n".join(result)
+
+# ============================================================================
+# 台风追踪 API
+# ============================================================================
+
+async def get_active_typhoons(basin: str = "NP") -> Optional[Dict]:
+    """
+    获取活跃台风列表
+
+    Args:
+        basin: 海洋流域代码，默认NP（西北太平洋）
+
+    Returns:
+        台风列表数据
+    """
+    config = get_config()
+    if not config.qweather_api_key:
+        logging.error("和风天气 API Key 未配置")
+        return None
+
+    try:
+        base_url = "https://api.qweather.com/v7/tropical/storm-active"
+        params = {
+            "key": config.qweather_api_key,
+            "basin": basin
+        }
+
+        response = await httpx_client.get(base_url, params=params, timeout=20)
+        if response.status_code == 200:
+            data = response.json()
+            if data and data.get("code") == "200":
+                return data
+        else:
+            logging.warning(f"活跃台风 API 请求失败: HTTP {response.status_code}")
+    except Exception as e:
+        logging.error(f"活跃台风 API 请求异常: {e}")
+    return None
+
+async def get_typhoon_track(storm_id: str) -> Optional[Dict]:
+    """
+    获取台风路径信息
+
+    Args:
+        storm_id: 台风ID（格式：NP_2501）
+
+    Returns:
+        台风路径数据
+    """
+    config = get_config()
+    if not config.qweather_api_key:
+        logging.error("和风天气 API Key 未配置")
+        return None
+
+    try:
+        base_url = "https://api.qweather.com/v7/tropical/storm-track"
+        params = {
+            "key": config.qweather_api_key,
+            "stormid": storm_id
+        }
+
+        response = await httpx_client.get(base_url, params=params, timeout=20)
+        if response.status_code == 200:
+            data = response.json()
+            if data and data.get("code") == "200":
+                return data
+        else:
+            logging.warning(f"台风路径 API 请求失败: HTTP {response.status_code}")
+    except Exception as e:
+        logging.error(f"台风路径 API 请求异常: {e}")
+    return None
+
+def format_typhoon_info(typhoon_data: Dict) -> str:
+    """
+    格式化台风信息
+
+    Args:
+        typhoon_data: 台风路径数据
+
+    Returns:
+        格式化的台风信息文本
+    """
+    if not typhoon_data or not typhoon_data.get("track"):
+        return "❌ 无法获取台风数据。"
+
+    is_active = typhoon_data.get("isActive", "0") == "1"
+    track = typhoon_data.get("track", [])
+
+    if not track:
+        return "❌ 台风路径数据为空。"
+
+    # 获取最新数据点
+    latest = track[-1]
+
+    time = latest.get("time", "N/A")
+    lat = latest.get("lat", "N/A")
+    lon = latest.get("lon", "N/A")
+    type_code = latest.get("type", "N/A")
+    pressure = latest.get("pressure", "N/A")
+    wind_speed = latest.get("windSpeed", "N/A")
+    move_speed = latest.get("moveSpeed", "N/A")
+    move_dir = latest.get("moveDir", "N/A")
+
+    # 台风类型映射
+    type_map = {
+        "TD": "热带低压",
+        "TS": "热带风暴",
+        "STS": "强热带风暴",
+        "TY": "台风",
+        "STY": "强台风",
+        "SuperTY": "超强台风"
+    }
+    type_name = type_map.get(type_code, type_code)
+
+    status = "🌀 活跃" if is_active else "✅ 已消散"
+
+    result = [
+        f"🌀 *台风信息*\n",
+        f"状态: {status}",
+        f"等级: {escape_markdown(type_name, version=2)} \\({type_code}\\)",
+        f"位置: {lat}°N, {lon}°E",
+        f"中心气压: {pressure} hPa",
+        f"最大风速: {wind_speed} m/s",
+        f"移动速度: {move_speed} km/h",
+        f"移动方向: {escape_markdown(move_dir, version=2)}",
+        f"更新时间: {escape_markdown(time, version=2)}"
+    ]
+
+    return "\n".join(result)
+
 async def get_location_id(location: str) -> Optional[Dict]:
     cache_key = f"weather_location_{location.lower()}"
     cached_data = await cache_manager.load_cache(cache_key, subdirectory="weather")
@@ -526,7 +741,40 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await delete_user_command(context, update.effective_chat.id, update.message.message_id)
 
     if not context.args:
-        await send_message_with_auto_delete(context, update.effective_chat.id, HELP_TEXT, parse_mode=ParseMode.MARKDOWN_V2)
+        # 显示主菜单
+        keyboard = [
+            [
+                InlineKeyboardButton("🌤️ 查询天气", callback_data="weather_menu_search"),
+                InlineKeyboardButton("🌀 台风追踪", callback_data="typhoon_list")
+            ],
+            [
+                InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
+            ]
+        ]
+
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        menu_text = """🌤️ *天气查询菜单*
+
+*功能选择：*
+• 🌤️ 查询天气 \\- 查询指定城市的实时天气
+• 🌀 台风追踪 \\- 查看当前活跃台风信息
+
+*直接查询：*
+发送 `/tq 城市名` 即可快速查询天气
+例如：`/tq 吉隆坡`"""
+
+        message = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=menu_text,
+            parse_mode=ParseMode.MARKDOWN_V2,
+            reply_markup=reply_markup
+        )
+
+        # 调度删除消息
+        from utils.message_manager import _schedule_deletion
+        config = get_config()
+        await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
         return
 
     location = context.args[0]
@@ -578,6 +826,10 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             [
                 InlineKeyboardButton("🌧️ 分钟降水", callback_data=f"weather_rain_{location}"),
                 InlineKeyboardButton("📋 生活指数", callback_data=f"weather_indices_{location}")
+            ],
+            [
+                InlineKeyboardButton("⚠️ 天气预警", callback_data=f"weather_alert_{location}"),
+                InlineKeyboardButton("🌀 台风追踪", callback_data="typhoon_list")
             ],
             [
                 InlineKeyboardButton("🔄 刷新", callback_data=f"weather_now_{location}"),
@@ -750,6 +1002,32 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
             await query.message.delete()
             return
 
+        # 处理菜单搜索
+        if data == "weather_menu_search":
+            help_text = """🌤️ *天气查询说明*
+
+请使用以下格式查询天气：
+`/tq 城市名`
+
+*示例：*
+• `/tq 吉隆坡` \\- 查询吉隆坡实时天气
+• `/tq 北京` \\- 查询北京实时天气
+• `/tq 上海 3` \\- 查询上海3天预报
+
+查询后可通过按钮查看：
+• 🤖 AI日报、📅 多日预报
+• ⏰ 小时预报、🌧️ 分钟降水
+• 📋 生活指数、⚠️ 天气预警"""
+
+            await query.edit_message_text(
+                help_text,
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
+                ]])
+            )
+            return
+
         # 解析回调数据 - 格式: weather_action_location
         parts = data.split('_', 2)
         if len(parts) < 3:
@@ -813,6 +1091,10 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
                 [
                     InlineKeyboardButton("🌧️ 分钟降水", callback_data=f"weather_rain_{location}"),
                     InlineKeyboardButton("📋 生活指数", callback_data=f"weather_indices_{location}")
+                ],
+                [
+                    InlineKeyboardButton("⚠️ 天气预警", callback_data=f"weather_alert_{location}"),
+                    InlineKeyboardButton("🌀 台风追踪", callback_data="typhoon_list")
                 ],
                 [
                     InlineKeyboardButton("🔄 刷新", callback_data=f"weather_now_{location}"),
@@ -938,6 +1220,24 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
                 ]
             ]
 
+        elif action == "alert":
+            # 天气预警
+            lat = float(location_data['lat'])
+            lon = float(location_data['lon'])
+            alerts_data = await get_weather_alerts(lat, lon)
+
+            if alerts_data:
+                result_text = format_weather_alerts(alerts_data, location_name)
+            else:
+                result_text = f"❌ 获取 *{safe_location_name}* 的天气预警失败。"
+
+            keyboard = [
+                [
+                    InlineKeyboardButton("🔙 返回实时", callback_data=f"weather_now_{location}"),
+                    InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
+                ]
+            ]
+
         else:
             await query.edit_message_text("❌ 未知的操作")
             return
@@ -960,6 +1260,112 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
             ]])
         )
 
+async def typhoon_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理台风追踪的回调"""
+    query = update.callback_query
+    if not query:
+        return
+
+    await query.answer()
+    data = query.data
+
+    try:
+        # 处理台风列表查询
+        if data == "typhoon_list":
+            # 显示加载状态
+            await query.edit_message_text(
+                "🌀 正在查询活跃台风\\.\\.\\.",
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+
+            # 获取活跃台风列表
+            active_data = await get_active_typhoons(basin="NP")  # 西北太平洋
+
+            if not active_data or not active_data.get("storms"):
+                # 没有活跃台风
+                await query.edit_message_text(
+                    "✅ *当前西北太平洋无活跃台风*\n\n"
+                    "💡 提示：台风季节通常为 5\\-11 月",
+                    parse_mode=ParseMode.MARKDOWN_V2,
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
+                    ]])
+                )
+                return
+
+            # 有活跃台风，显示列表
+            storms = active_data.get("storms", [])
+            result_text = f"🌀 *当前活跃台风* （共 {len(storms)} 个）\n\n"
+
+            for storm in storms:
+                storm_id = storm.get("stormId", "N/A")
+                name = storm.get("name", "未命名")
+                basin_name = storm.get("basinName", "N/A")
+
+                result_text += f"• *{escape_markdown(name, version=2)}*\n"
+                result_text += f"  ID: {escape_markdown(storm_id, version=2)}\n"
+                result_text += f"  区域: {escape_markdown(basin_name, version=2)}\n\n"
+
+            # 创建按钮 - 为每个台风创建一个查看详情按钮
+            keyboard = []
+            for storm in storms:
+                storm_id = storm.get("stormId", "")
+                name = storm.get("name", "未命名")
+                if storm_id:
+                    keyboard.append([
+                        InlineKeyboardButton(
+                            f"📊 查看 {name} 详情",
+                            callback_data=f"typhoon_detail_{storm_id}"
+                        )
+                    ])
+
+            keyboard.append([InlineKeyboardButton("❌ 关闭", callback_data="weather_close")])
+
+            await query.edit_message_text(
+                result_text,
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+
+        # 解析回调数据 - 格式: typhoon_detail_{storm_id}
+        elif data.startswith("typhoon_detail_"):
+            storm_id = data.replace("typhoon_detail_", "")
+
+            # 显示加载状态
+            await query.edit_message_text(
+                f"🌀 正在获取台风详情\\.\\.\\.",
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+
+            # 获取台风路径数据
+            track_data = await get_typhoon_track(storm_id)
+
+            if track_data:
+                result_text = format_typhoon_info(track_data)
+            else:
+                result_text = f"❌ 获取台风 {escape_markdown(storm_id, version=2)} 的详情失败。"
+
+            # 返回按钮
+            keyboard = [[InlineKeyboardButton("❌ 关闭", callback_data="weather_close")]]
+
+            await query.edit_message_text(
+                result_text,
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+
+        else:
+            await query.edit_message_text("❌ 未知的操作")
+
+    except Exception as e:
+        logging.error(f"台风回调处理失败: {e}")
+        await query.edit_message_text(
+            "❌ 处理请求时发生错误，请稍后重试",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
+            ]])
+        )
+
 command_factory.register_command(
     "tq",
     weather_command,
@@ -974,6 +1380,15 @@ command_factory.register_callback(
     permission=Permission.USER,
     description="天气功能回调处理器"
 )
+
+# 注册台风回调处理器（不注册独立命令，只通过菜单按钮访问）
+command_factory.register_callback(
+    "^typhoon_",
+    typhoon_callback_handler,
+    permission=Permission.USER,
+    description="台风追踪回调处理器"
+)
+
 # 已迁移到统一缓存管理命令 /cleancache
 # command_factory.register_command(
 #     "tq_cleancache", 
