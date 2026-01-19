@@ -178,11 +178,13 @@ def format_weather_alerts(alerts_data: Dict, location_name: str) -> str:
         # 截断描述文字（最多200字符）
         desc_short = description[:200] + "..." if len(description) > 200 else description
 
+        # 预警详情不转义，保持原文可读性（日期、温度等）
+        # 只对标题等简短字段转义
         result.append(f"{emoji} *预警 #{i}: {escape_markdown(event_type, version=2)}*")
         result.append(f"├─ 标题: {escape_markdown(headline, version=2)}")
         result.append(f"├─ 等级: {escape_markdown(severity, version=2)} {emoji}")
         result.append(f"├─ 发布: {escape_markdown(sender, version=2)}")
-        result.append(f"└─ 详情: {escape_markdown(desc_short, version=2)}\n")
+        result.append(f"└─ 详情: {desc_short}\n")
 
     return "\n".join(result)
 
