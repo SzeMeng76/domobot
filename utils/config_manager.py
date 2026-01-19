@@ -19,6 +19,7 @@ class BotConfig:
     def __init__(self):
         # 新增和风天气配置
         self.qweather_api_key: str = ""
+
         self.cmc_api_key: str = ""
         self.bin_api_key: str = ""
         
@@ -425,6 +426,7 @@ class ConfigManager:
 
         # 和风天气 API 配置
         self.config.qweather_api_key = os.getenv("QWEATHER_API_KEY", "")
+
         self.config.cmc_api_key = os.getenv("CMC_API_KEY", "")
         self.config.bin_api_key = os.getenv("BIN_API_KEY", "")
         
