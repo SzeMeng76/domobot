@@ -64,7 +64,9 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                         link_preview_options=LinkPreviewOptions(is_disabled=True)
                     )
             except Exception as e:
-                logger.warning(f"更新加载状态失败: {e}")
+                # 忽略"消息未修改"错误（Message is not modified）
+                if "Message is not modified" not in str(e):
+                    logger.warning(f"更新加载状态失败: {e}")
 
             # URL哈希已从callback_data提取
             logger.info(f"🔑 URL哈希: {url_hash}")
@@ -137,7 +139,9 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
             # 替换模式：只显示AI总结（类似parse_hub_bot）
             # 构建新caption：只包含AI总结和原链接
-            summary_caption = f"📝 AI总结:\n\n{ai_summary}"
+            # 清理AI总结中的不支持的HTML标签
+            cleaned_summary = ai_summary.replace('<br>', '\n').replace('<br/>', '\n').replace('<br />', '\n')
+            summary_caption = f"📝 AI总结:\n\n{cleaned_summary}"
 
             # 添加原链接（从缓存数据中获取）
             if cache_data and cache_data.get('url'):
