@@ -3,7 +3,7 @@ import urllib.parse
 import logging
 from typing import Optional, Tuple, Dict, List
 
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 from telegram.helpers import escape_markdown
@@ -315,6 +315,31 @@ def format_air_quality(air_data: dict) -> str:
     ]
     return "\n".join(lines)
 
+def create_weather_main_keyboard(location: str) -> InlineKeyboardMarkup:
+    """创建天气查询主菜单键盘"""
+    keyboard = [
+        [
+            InlineKeyboardButton("🌤️ 实时天气", callback_data=f"weather_now_{location}"),
+            InlineKeyboardButton("📅 3天预报", callback_data=f"weather_3d_{location}")
+        ],
+        [
+            InlineKeyboardButton("📊 7天预报", callback_data=f"weather_7d_{location}"),
+            InlineKeyboardButton("📈 15天预报", callback_data=f"weather_15d_{location}")
+        ],
+        [
+            InlineKeyboardButton("⏰ 24小时预报", callback_data=f"weather_24h_{location}"),
+            InlineKeyboardButton("🕐 72小时预报", callback_data=f"weather_72h_{location}")
+        ],
+        [
+            InlineKeyboardButton("🌧️ 分钟降水", callback_data=f"weather_rain_{location}"),
+            InlineKeyboardButton("📋 生活指数", callback_data=f"weather_indices_{location}")
+        ],
+        [
+            InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
+        ]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
 def format_realtime_weather(realtime_data: dict, location_name: str) -> str:
     now = realtime_data.get("now", {})
     icon = WEATHER_ICONS.get(now.get("icon"), "❓")
@@ -364,7 +389,7 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     location = context.args[0]
     param = context.args[1].lower() if len(context.args) > 1 else None
-    
+
     safe_location = escape_markdown(location, version=2)
     message = await context.bot.send_message(chat_id=update.effective_chat.id, text=f"🔍 正在查询 *{safe_location}* 的天气\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
 
@@ -372,26 +397,52 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not location_data:
         await message.edit_text(f"❌ 找不到城市 *{safe_location}*，请检查拼写。", parse_mode=ParseMode.MARKDOWN_V2)
         return
-    
+
     location_id = location_data['id']
     location_name = f"{location_data['name']}, {location_data['adm1']}"
     safe_location_name = escape_markdown(location_name, version=2)
 
     result_text = ""
+    reply_markup = None
     
     if not param:
         realtime_data = await _get_api_response("weather/now", {"location": location_id})
         air_data = await _get_api_response("air/now", {"location": location_id})
-        
+
         if realtime_data:
             result_text = format_realtime_weather(realtime_data, location_name)
         else:
             result_text = f"❌ 获取 *{safe_location_name}* 实时天气失败。\n"
-        
-        if air_data:
+
+        # 只有当空气质量数据有效时才显示
+        if air_data and air_data.get('now') and air_data.get('now').get('aqi'):
             result_text += format_air_quality(air_data)
-        else:
-            result_text += f"\n*空气质量*: 获取失败"
+        # 对于没有空气质量数据的地区，不显示任何信息（静默处理）
+
+        # 创建功能按钮
+        keyboard = [
+            [
+                InlineKeyboardButton("📅 3天预报", callback_data=f"weather_3d_{location}"),
+                InlineKeyboardButton("📊 7天预报", callback_data=f"weather_7d_{location}")
+            ],
+            [
+                InlineKeyboardButton("📈 15天预报", callback_data=f"weather_15d_{location}"),
+                InlineKeyboardButton("⏰ 24小时预报", callback_data=f"weather_24h_{location}")
+            ],
+            [
+                InlineKeyboardButton("🕐 72小时预报", callback_data=f"weather_72h_{location}"),
+                InlineKeyboardButton("🌧️ 分钟降水", callback_data=f"weather_rain_{location}")
+            ],
+            [
+                InlineKeyboardButton("📋 生活指数", callback_data=f"weather_indices_{location}"),
+                InlineKeyboardButton("📋 3天指数", callback_data=f"weather_indices3_{location}")
+            ],
+            [
+                InlineKeyboardButton("🔄 刷新", callback_data=f"weather_now_{location}"),
+                InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
 
     elif param.endswith('h') and param[:-1].isdigit() and 1 <= int(param[:-1]) <= 168:
         hours = int(param[:-1])
@@ -446,10 +497,11 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 result_text = f"\n❌ 获取 *{safe_location_name}* 的天气信息失败。"
 
     await message.edit_text(
-    foldable_text_with_markdown_v2(result_text), # <--- 在这里把它包起来！
-    parse_mode=ParseMode.MARKDOWN_V2, 
-    disable_web_page_preview=True
-)
+        foldable_text_with_markdown_v2(result_text),
+        parse_mode=ParseMode.MARKDOWN_V2,
+        disable_web_page_preview=True,
+        reply_markup=reply_markup
+    )
 
     # 调度删除机器人回复消息，使用配置的延迟时间
     from utils.message_manager import _schedule_deletion
@@ -540,12 +592,201 @@ async def tq_clean_realtime_cache_command(update: Update, context: ContextTypes.
         error_message = f"❌ 清理实时天气缓存时发生错误: {e!s}"
         await send_error(context, update.effective_chat.id, foldable_text_v2(error_message), parse_mode="MarkdownV2")
         await delete_user_command(context, update.effective_chat.id, update.message.message_id)
-        
+
+async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理天气查询的回调"""
+    query = update.callback_query
+    if not query:
+        return
+
+    await query.answer()
+    data = query.data
+
+    try:
+        if data == "weather_close":
+            # 关闭消息
+            await query.message.delete()
+            return
+
+        # 解析回调数据 - 格式: weather_action_location
+        parts = data.split('_', 2)
+        if len(parts) < 3:
+            await query.edit_message_text("❌ 无效的请求")
+            return
+
+        action = parts[1]
+        location = parts[2]
+
+        # 显示加载状态
+        safe_location = escape_markdown(location, version=2)
+        await query.edit_message_text(
+            f"🔍 正在查询 *{safe_location}* 的天气\\.\\.\\.",
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+
+        # 获取位置信息
+        location_data = await get_location_id(location)
+        if not location_data:
+            await query.edit_message_text(
+                f"❌ 找不到城市 *{safe_location}*，请检查拼写。",
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+            return
+
+        location_id = location_data['id']
+        location_name = f"{location_data['name']}, {location_data['adm1']}"
+        safe_location_name = escape_markdown(location_name, version=2)
+
+        result_text = ""
+        keyboard = []
+
+        # 根据action执行不同操作
+        if action == "now":
+            # 实时天气
+            realtime_data = await _get_api_response("weather/now", {"location": location_id})
+            air_data = await _get_api_response("air/now", {"location": location_id})
+
+            if realtime_data:
+                result_text = format_realtime_weather(realtime_data, location_name)
+            else:
+                result_text = f"❌ 获取 *{safe_location_name}* 实时天气失败。\n"
+
+            if air_data and air_data.get('now') and air_data.get('now').get('aqi'):
+                result_text += format_air_quality(air_data)
+
+            # 创建功能按钮
+            keyboard = [
+                [
+                    InlineKeyboardButton("📅 3天预报", callback_data=f"weather_3d_{location}"),
+                    InlineKeyboardButton("📊 7天预报", callback_data=f"weather_7d_{location}")
+                ],
+                [
+                    InlineKeyboardButton("📈 15天预报", callback_data=f"weather_15d_{location}"),
+                    InlineKeyboardButton("⏰ 24小时预报", callback_data=f"weather_24h_{location}")
+                ],
+                [
+                    InlineKeyboardButton("🕐 72小时预报", callback_data=f"weather_72h_{location}"),
+                    InlineKeyboardButton("🌧️ 分钟降水", callback_data=f"weather_rain_{location}")
+                ],
+                [
+                    InlineKeyboardButton("📋 生活指数", callback_data=f"weather_indices_{location}"),
+                    InlineKeyboardButton("📋 3天指数", callback_data=f"weather_indices3_{location}")
+                ],
+                [
+                    InlineKeyboardButton("🔄 刷新", callback_data=f"weather_now_{location}"),
+                    InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
+                ]
+            ]
+
+        elif action in ["3d", "7d", "15d", "30d"]:
+            # 多日预报
+            days = int(action[:-1])
+            endpoint = f"weather/{action}"
+            data = await _get_api_response(endpoint, {"location": location_id})
+
+            if data and data.get("daily"):
+                result_text = f"🌍 *{safe_location_name}* 未来 {days} 天天气预报：\n\n"
+                result_text += format_daily_weather(data["daily"][:days])
+            else:
+                result_text = f"❌ 获取 *{safe_location_name}* 的天气预报失败。"
+
+            keyboard = [
+                [
+                    InlineKeyboardButton("🔙 返回实时", callback_data=f"weather_now_{location}"),
+                    InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
+                ]
+            ]
+
+        elif action in ["24h", "72h", "168h"]:
+            # 逐小时预报
+            hours = int(action[:-1])
+            endpoint = f"weather/{action}"
+            data = await _get_api_response(endpoint, {"location": location_id})
+
+            if data and data.get("hourly"):
+                result_text = f"🌍 *{safe_location_name}* 未来 {hours} 小时天气预报：\n\n"
+                result_text += format_hourly_weather(data["hourly"][:hours])
+            else:
+                result_text = f"❌ 获取 *{safe_location_name}* 的逐小时天气失败。"
+
+            keyboard = [
+                [
+                    InlineKeyboardButton("🔙 返回实时", callback_data=f"weather_now_{location}"),
+                    InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
+                ]
+            ]
+
+        elif action == "rain":
+            # 分钟级降水
+            coords = f"{location_data['lon']},{location_data['lat']}"
+            data = await _get_api_response("minutely/5m", {"location": coords})
+
+            if data:
+                result_text = f"🌍 *{safe_location_name}* 未来2小时分钟级降水预报：\n"
+                result_text += format_minutely_rainfall(data)
+            else:
+                result_text = f"❌ 获取 *{safe_location_name}* 的分钟级降水失败。"
+
+            keyboard = [
+                [
+                    InlineKeyboardButton("🔙 返回实时", callback_data=f"weather_now_{location}"),
+                    InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
+                ]
+            ]
+
+        elif action in ["indices", "indices3"]:
+            # 生活指数
+            days_param = "3d" if action == "indices3" else "1d"
+            data = await _get_api_response(f"indices/{days_param}", {"location": location_id, "type": "0"})
+
+            if data:
+                result_text = f"🌍 *{safe_location_name}* 的天气指数预报："
+                result_text += format_indices_data(data)
+            else:
+                result_text = f"❌ 获取 *{safe_location_name}* 的生活指数失败。"
+
+            keyboard = [
+                [
+                    InlineKeyboardButton("🔙 返回实时", callback_data=f"weather_now_{location}"),
+                    InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
+                ]
+            ]
+
+        else:
+            await query.edit_message_text("❌ 未知的操作")
+            return
+
+        # 发送结果
+        reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+        await query.edit_message_text(
+            foldable_text_with_markdown_v2(result_text),
+            parse_mode=ParseMode.MARKDOWN_V2,
+            disable_web_page_preview=True,
+            reply_markup=reply_markup
+        )
+
+    except Exception as e:
+        logging.error(f"天气回调处理失败: {e}")
+        await query.edit_message_text(
+            "❌ 处理请求时发生错误，请稍后重试",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
+            ]])
+        )
+
 command_factory.register_command(
     "tq",
     weather_command,
     permission=Permission.USER,
     description="查询天气预报，支持多日、小时、指数等"
+)
+
+# 注册回调处理器
+command_factory.register_callback(
+    "^weather_",
+    weather_callback_handler,
+    permission=Permission.USER,
+    description="天气功能回调处理器"
 )
 # 已迁移到统一缓存管理命令 /cleancache
 # command_factory.register_command(

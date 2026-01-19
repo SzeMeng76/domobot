@@ -62,8 +62,8 @@ feedparser==6.0.12
 googletrans==4.0.2
 
 # Yahoo Finance API
-yfinance>=0.2.66
-pandas>=2.3.2
+yfinance>=1.0.0  # Latest stable version as of Dec 2025
+pandas>=2.3.3  # Latest stable version as of Jan 2026
 
 # Social Media Parser (ParseHub) - 社交媒体解析功能
 parsehub>=1.5.10  # 社交媒体聚合解析器，支持20+平台
