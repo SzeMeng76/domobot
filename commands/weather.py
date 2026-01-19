@@ -563,7 +563,7 @@ def create_weather_main_keyboard(location: str) -> InlineKeyboardMarkup:
     ]
     return InlineKeyboardMarkup(keyboard)
 
-async def generate_ai_weather_report(location_name: str, realtime_data: dict, daily_data: dict, hourly_data: dict, indices_data: dict, air_data: dict = None) -> Optional[str]:
+async def generate_ai_weather_report(location_name: str, realtime_data: dict, daily_data: dict, hourly_data: dict, indices_data: dict, air_data: dict = None, alerts_data: dict = None) -> Optional[str]:
     """使用 AI 生成个性化天气日报"""
     if not OPENAI_AVAILABLE:
         logging.warning("OpenAI not available, cannot generate AI weather report")
@@ -617,6 +617,18 @@ async def generate_ai_weather_report(location_name: str, realtime_data: dict, da
             category = air_data.get('now', {}).get('category', 'N/A')
             air_quality = f"空气质量 {aqi} ({category})"
 
+        # 天气预警
+        alerts_summary = ""
+        if alerts_data and alerts_data.get('alerts'):
+            alerts_list = alerts_data.get('alerts', [])
+            alerts_summary = "\n【天气预警】⚠️\n"
+            for alert in alerts_list[:3]:  # 最多显示3条预警
+                event_type = alert.get('eventType', {}).get('name', '未知')
+                severity = alert.get('severity', 'moderate')
+                headline = alert.get('headline', '')
+                description = alert.get('description', '')[:100]  # 限制长度
+                alerts_summary += f"- {event_type} ({severity})\n  标题：{headline}\n  详情：{description}...\n"
+
         # 构建 AI prompt
         weather_data_summary = f"""
 当前时间：{current_date} {current_time}
@@ -629,7 +641,7 @@ async def generate_ai_weather_report(location_name: str, realtime_data: dict, da
 湿度：{humidity}%
 风向风力：{wind_dir} {wind_scale}级
 {air_quality}
-
+{alerts_summary}
 【未来几小时】
 {', '.join(hourly_summary)}
 
@@ -649,23 +661,26 @@ async def generate_ai_weather_report(location_name: str, realtime_data: dict, da
 
 你的播报风格：
 1. 开场问候：根据时间问候（早上好/下午好/晚上好），用"敏敏来送上..."开场
-2. 语气活泼可爱，使用emoji和口语化表达（比如"热腾腾"、"小火炉"、"洗澡惊喜"等）
-3. 重点突出：温度、天气状况、体感差异、明天重要变化
-4. 生活建议：基于指数给出实用建议（穿衣、运动、出行等）
-5. 温馨结尾：用"敏敏播报完毕"结束，祝福用户
+2. ⚠️ 天气预警优先：如果有天气预警，必须在开场后立即提醒！用亲切但认真的语气强调，比如"今天有XX预警，大家一定要注意安全哦！"
+3. 语气活泼可爱，使用emoji和口语化表达（比如"热腾腾"、"小火炉"、"洗澡惊喜"等）
+4. 重点突出：温度、天气状况、体感差异、明天重要变化
+5. 生活建议：基于指数给出实用建议（穿衣、运动、出行等）
+6. 温馨结尾：用"敏敏播报完毕"结束，祝福用户
 
 格式要求：
 - 第一行：🤖 [地点] 天气日报
 - 第二行：敏敏的天气播报小站！🌈
 - 第三行：[日期时间]
 - 空一行后开始正文
+- 如果有天气预警：第一段专门说预警，用友好但严肃的语气提醒注意事项
 - 正文3-4段，每段2-3句话
 
 注意：
 - 保持友好可爱的语气，但不要过度幼稚
 - 重要信息（温度、天气状况）要清晰呈现
 - 适当使用emoji增加趣味性（每段1-3个）
-- 如果有极端天气（高温、暴雨等）要特别提醒
+- 如果有极端天气（高温、暴雨等）或预警要特别提醒
+- **天气预警是最重要的信息，一定要突出提醒用户注意安全**
 - **重要：只输出纯文本，不要使用任何Markdown格式符号（如*、_、`、[、]等），只使用emoji和普通文字**"""
 
         user_prompt = f"请根据以下天气数据，生成一份可爱活泼的天气日报：\n\n{weather_data_summary}"
@@ -1190,6 +1205,11 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
                 indices_data = await _get_api_response("indices/1d", {"location": location_id, "type": "0"})
                 air_data = await _get_api_response("air/now", {"location": location_id})
 
+                # 获取天气预警数据
+                lat = float(location_data['lat'])
+                lon = float(location_data['lon'])
+                alerts_data = await get_weather_alerts(lat, lon)
+
                 if not realtime_data or not daily_data or not hourly_data or not indices_data:
                     result_text = f"❌ 获取 *{safe_location_name}* 的天气数据失败，无法生成 AI 日报。"
                 else:
@@ -1205,7 +1225,8 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
                         daily_data,
                         hourly_data,
                         indices_data,
-                        air_data
+                        air_data,
+                        alerts_data
                     )
 
                     if ai_report:
