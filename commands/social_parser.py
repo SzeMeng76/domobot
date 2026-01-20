@@ -738,15 +738,26 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                     uploaded_urls.append(img_url)
 
             if uploaded_urls:
-                # 创建HTML内容（优化图片显示）
+                # 创建HTML内容（使用原生lazy loading优化移动端加载）
                 desc = download_result.pr.desc if hasattr(download_result, 'pr') else ""
 
                 # 添加描述
-                html_content = f"<p>{desc or ''}</p>" if desc else ""
+                html_content = ""
+                if desc:
+                    html_content += f"<p>{desc}</p>"
 
-                # 添加图片，每张图片用 figure 包裹，添加间距
-                for url in uploaded_urls:
-                    html_content += f'<figure><img src="{url}"/></figure>'
+                # 使用HTML5原生懒加载：前3张立即加载，后续图片lazy load
+                # 这样可以避免Telegram移动端一次性加载所有图片导致闪烁
+                for idx, url in enumerate(uploaded_urls):
+                    if idx < 3:
+                        # 前3张图片：立即加载（loading="eager"）
+                        html_content += f'<figure><img src="{url}" loading="eager"/></figure>'
+                    else:
+                        # 后续图片：懒加载（loading="lazy"，浏览器原生支持）
+                        html_content += f'<figure><img src="{url}" loading="lazy"/></figure>'
+
+                # 添加底部提示
+                html_content += f'<p><i>共 {len(uploaded_urls)} 张图片 · 使用浏览器打开体验更佳</i></p>'
 
                 # 发布到Telegraph
                 pr = download_result.pr if hasattr(download_result, 'pr') else None
