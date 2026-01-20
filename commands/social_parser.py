@@ -683,14 +683,31 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
     elif len(media_list) <= 10:
         # 多张图片（使用媒体组，最多10张）
         from telegram import InputMediaPhoto
+        import imghdr
 
         media_group = []
         for img in media_list[:10]:
-            # Convert to WebP if needed to avoid Telegram image_process_failed error
-            converted_path = _convert_image_to_webp(Path(img.path))
-            image_path = str(converted_path)
-            with open(image_path, 'rb') as photo_file:
-                media_group.append(InputMediaPhoto(media=photo_file.read()))
+            try:
+                # Convert to WebP if needed to avoid Telegram image_process_failed error
+                converted_path = _convert_image_to_webp(Path(img.path))
+                image_path = str(converted_path)
+
+                # Verify file is actually an image
+                if not imghdr.what(image_path):
+                    logger.warning(f"⚠️ Skipping invalid image file: {image_path}")
+                    continue
+
+                with open(image_path, 'rb') as photo_file:
+                    media_group.append(InputMediaPhoto(media=photo_file.read()))
+
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to process image {img.path}: {e}, skipping")
+                continue
+
+        # Check if we have any valid images
+        if not media_group:
+            logger.error("❌ No valid images to send")
+            raise ValueError("All images failed validation")
 
         # 发送媒体组（不带caption）
         messages = await context.bot.send_media_group(
@@ -721,10 +738,15 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                     uploaded_urls.append(img_url)
 
             if uploaded_urls:
-                # 创建HTML内容
+                # 创建HTML内容（优化图片显示）
                 desc = download_result.pr.desc if hasattr(download_result, 'pr') else ""
-                html_content = f"<p>{desc or ''}</p><br><br>"
-                html_content += "".join([f'<img src="{url}">' for url in uploaded_urls])
+
+                # 添加描述
+                html_content = f"<p>{desc or ''}</p>" if desc else ""
+
+                # 添加图片，每张图片用 figure 包裹，添加间距
+                for url in uploaded_urls:
+                    html_content += f'<figure><img src="{url}"/></figure>'
 
                 # 发布到Telegraph
                 pr = download_result.pr if hasattr(download_result, 'pr') else None
