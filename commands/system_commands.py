@@ -225,7 +225,7 @@ async def get_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     5: "新加坡 🇸🇬"
                 }
                 dc_location = dc_locations.get(dc_id, "未知")
-                reply_text += f"🌐 *数据中心*: DC{dc_id} \\({dc_location}\\)\n"
+                reply_text += f"🌐 *数据中心*: DC{dc_id} ({dc_location})\n"
 
             # 显示成员数
             if chat_info.get('members_count'):
@@ -259,7 +259,13 @@ async def get_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             # 显示加入链接
             if chat_info.get('join_link'):
-                reply_text += f"🔗 *加入链接*: {chat_info['join_link']}"
+                join_link = chat_info['join_link']
+                # 转义链接中的特殊字符
+                join_link_escaped = join_link.replace('_', '\\_').replace('.', '\\.').replace('-', '\\-')
+                reply_text += f"🔗 *加入链接*: {join_link_escaped}"
+            else:
+                # 私有群组且无法获取邀请链接
+                reply_text += f"🔒 *加入方式*: 私有群组，需邀请链接"
         else:
             # 如果无法获取详细信息，只显示基本信息
             if chat.title:

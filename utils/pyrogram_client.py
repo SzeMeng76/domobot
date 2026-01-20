@@ -280,12 +280,17 @@ class PyrogramHelper:
 
             # 生成加入链接
             if chat.username:
-                join_link = f"t.me/{chat.username}"
-            elif chat.id < 0:
-                chat_id_str = str(chat.id).replace('-100', '')
-                join_link = f"t.me/c/{chat_id_str}/1"
+                # 公开群组/频道：使用用户名链接
+                join_link = f"https://t.me/{chat.username}"
             else:
-                join_link = None
+                # 私有群组/频道：需要通过邀请链接加入
+                # 尝试获取邀请链接（需要管理员权限）
+                try:
+                    invite_link = await self.client.export_chat_invite_link(chat.id)
+                    join_link = invite_link
+                except Exception:
+                    # 如果无法获取邀请链接，返回 None
+                    join_link = None
 
             chat_info = {
                 "chat_id": chat.id,
