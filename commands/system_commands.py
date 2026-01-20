@@ -184,8 +184,87 @@ async def get_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 显示当前对话和用户的ID
     reply_text += f"👤 *您的用户ID*: `{user.id}`\n"
+
+    # 如果在群组中，显示详细群组信息
     if chat.type != "private":
-        reply_text += f"👨‍👩‍👧‍👦 *当前群组ID*: `{chat.id}`"
+        reply_text += f"\n📢 *当前群组信息*\n\n"
+        reply_text += f"🆔 *群组ID*: `{chat.id}`\n"
+
+        # 尝试从 Pyrogram 获取详细信息
+        pyrogram_helper = context.bot_data.get("pyrogram_helper")
+        chat_info = None
+
+        if pyrogram_helper:
+            try:
+                chat_info = await pyrogram_helper.get_chat_info(chat.id)
+            except Exception as e:
+                logger.debug(f"Failed to get chat info from Pyrogram: {e}")
+
+        if chat_info:
+            # 显示群组名称
+            if chat_info.get('title'):
+                safe_title = safe_format_username(chat_info['title'])
+                reply_text += f"📌 *群组名称*: {safe_title}\n"
+
+            # 显示用户名
+            if chat_info.get('username'):
+                reply_text += f"📛 *用户名*: @{chat_info['username']}\n"
+
+            # 显示群组类型
+            if chat_info.get('type'):
+                reply_text += f"🏷️ *类型*: {chat_info['type']}\n"
+
+            # 显示 DC 位置
+            if chat_info.get('dc_id'):
+                dc_id = chat_info['dc_id']
+                dc_locations = {
+                    1: "美国迈阿密 🇺🇸",
+                    2: "荷兰阿姆斯特丹 🇳🇱",
+                    3: "美国迈阿密 🇺🇸",
+                    4: "荷兰阿姆斯特丹 🇳🇱",
+                    5: "新加坡 🇸🇬"
+                }
+                dc_location = dc_locations.get(dc_id, "未知")
+                reply_text += f"🌐 *数据中心*: DC{dc_id} \\({dc_location}\\)\n"
+
+            # 显示成员数
+            if chat_info.get('members_count'):
+                members = chat_info['members_count']
+                # 格式化大数字（添加千位分隔符）
+                members_formatted = f"{members:,}".replace(',', '\\,')
+                reply_text += f"👥 *成员数*: {members_formatted}\n"
+
+            # 显示认证状态
+            if chat_info.get('is_verified'):
+                reply_text += f"✅ *认证状态*: 已认证 ✓\n"
+
+            # 显示安全状态
+            if chat_info.get('is_frozen'):
+                reply_text += f"🚨 *群组状态*: ❄️ 已冻结\n"
+            elif chat_info.get('is_scam'):
+                reply_text += f"🚨 *群组状态*: ⚠️ 诈骗群组 \\(Telegram已标记\\)\n"
+            elif chat_info.get('is_fake'):
+                reply_text += f"🚨 *群组状态*: ⚠️ 虚假群组 \\(Telegram已标记\\)\n"
+            elif chat_info.get('is_restricted'):
+                reply_text += f"⚠️ *群组状态*: 受限\n"
+            else:
+                reply_text += f"🛡️ *群组状态*: 正常\n"
+
+            # 显示简介（限制长度）
+            if chat_info.get('description'):
+                description = chat_info['description']
+                desc_display = description if len(description) <= 100 else description[:100] + "\\.\\.\\."
+                safe_desc = safe_format_username(desc_display)
+                reply_text += f"📝 *简介*: {safe_desc}\n"
+
+            # 显示加入链接
+            if chat_info.get('join_link'):
+                reply_text += f"🔗 *加入链接*: {chat_info['join_link']}"
+        else:
+            # 如果无法获取详细信息，只显示基本信息
+            if chat.title:
+                safe_title = safe_format_username(chat.title)
+                reply_text += f"📌 *群组名称*: {safe_title}"
 
     await send_search_result(context, chat.id, foldable_text_with_markdown_v2(reply_text), parse_mode="MarkdownV2")
     await delete_user_command(context, chat.id, message.message_id)

@@ -238,6 +238,78 @@ class PyrogramHelper:
             logger.debug(f"Failed to get user info by username @{username}: {e}")
             return None
 
+    async def get_chat_info(self, chat_id) -> Optional[dict]:
+        """
+        获取群组/频道完整信息
+
+        Args:
+            chat_id: 群组/频道 ID 或用户名
+
+        Returns:
+            群组信息字典，包含:
+            - chat_id: 群组 ID
+            - type: 类型 (group/supergroup/channel)
+            - title: 群组名称
+            - username: 用户名 (可能为 None)
+            - description: 简介 (可能为 None)
+            - dc_id: DC ID (可能为 None)
+            - members_count: 成员数 (可能为 None)
+            - is_verified: 是否为认证群组
+            - is_scam: 是否被标记为诈骗
+            - is_fake: 是否被标记为虚假
+            - is_restricted: 是否受限
+            - is_frozen: 是否被冻结
+            - join_link: 加入链接
+        """
+        if not self.is_started or not self.client:
+            logger.warning("Pyrogram client not started, cannot get chat info")
+            return None
+
+        try:
+            from pyrogram.enums import ChatType
+
+            chat = await self.client.get_chat(chat_id)
+
+            # 映射聊天类型
+            chat_type_map = {
+                ChatType.SUPERGROUP: "超级群组",
+                ChatType.GROUP: "群组",
+                ChatType.CHANNEL: "频道"
+            }
+            chat_type = chat_type_map.get(chat.type, "未知")
+
+            # 生成加入链接
+            if chat.username:
+                join_link = f"t.me/{chat.username}"
+            elif chat.id < 0:
+                chat_id_str = str(chat.id).replace('-100', '')
+                join_link = f"t.me/c/{chat_id_str}/1"
+            else:
+                join_link = None
+
+            chat_info = {
+                "chat_id": chat.id,
+                "type": chat_type,
+                "title": getattr(chat, 'title', None),
+                "username": getattr(chat, 'username', None),
+                "description": getattr(chat, 'description', None),
+                "dc_id": getattr(chat, 'dc_id', None),
+                "members_count": getattr(chat, 'members_count', None),
+                "is_verified": getattr(chat, 'is_verified', False),
+                "is_scam": getattr(chat, 'is_scam', False),
+                "is_fake": getattr(chat, 'is_fake', False),
+                "is_restricted": getattr(chat, 'is_restricted', False),
+                "is_frozen": getattr(chat, 'is_frozen', False),
+                "join_link": join_link,
+            }
+
+            logger.info(f"✅ Successfully fetched chat info for {chat_id}")
+            return chat_info
+
+        except Exception as e:
+            logger.debug(f"Failed to get chat info for {chat_id}: {e}")
+            return None
+
     async def send_large_video(
         self,
         chat_id: int,
