@@ -260,9 +260,8 @@ async def get_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # 显示加入链接
             if chat_info.get('join_link'):
                 join_link = chat_info['join_link']
-                # 转义链接中的特殊字符
-                join_link_escaped = join_link.replace('_', '\\_').replace('.', '\\.').replace('-', '\\-')
-                reply_text += f"🔗 *加入链接*: {join_link_escaped}"
+                # MarkdownV2 中链接不需要额外转义
+                reply_text += f"🔗 *加入链接*: {join_link}"
             else:
                 # 私有群组且无法获取邀请链接
                 reply_text += f"🔒 *加入方式*: 私有群组，需邀请链接"
