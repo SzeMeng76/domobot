@@ -113,38 +113,129 @@ class PyrogramHelper:
 
     async def get_user_info(self, user_id: int) -> Optional[dict]:
         """
-        获取用户完整信息（包括 DC ID）
+        获取用户完整信息（包括 DC ID、Bio、安全标志、在线状态）
 
         Args:
             user_id: Telegram 用户 ID
 
         Returns:
             用户信息字典，包含:
+            - user_id: 用户 ID
             - dc_id: DC ID (可能为 None)
             - username: 用户名 (可能为 None)
             - first_name: 名字
             - last_name: 姓氏 (可能为 None)
             - is_premium: 是否为 Premium 用户
+            - is_verified: 是否为认证账号（蓝V）
+            - is_scam: 是否被标记为诈骗账号
+            - is_fake: 是否被标记为虚假账号
+            - is_frozen: 是否被冻结
+            - bio: 个人简介 (可能为 None)
+            - status: 在线状态 (可能为 None)
         """
         if not self.is_started or not self.client:
             logger.warning("Pyrogram client not started, cannot get user info")
             return None
 
         try:
+            # 第一次调用：获取基本用户信息
             user = await self.client.get_users(user_id)
 
+            # 第二次调用：获取完整信息（包括 bio）
+            bio = None
+            try:
+                full_user = await self.client.get_chat(user_id)
+                bio = getattr(full_user, 'bio', None)
+            except Exception as e:
+                logger.debug(f"Failed to get full user info (bio): {e}")
+
             user_info = {
+                "user_id": user.id,
                 "dc_id": getattr(user, "dc_id", None),
                 "username": user.username,
                 "first_name": user.first_name or "",
                 "last_name": user.last_name or "",
                 "is_premium": getattr(user, "is_premium", False),
+                "is_verified": getattr(user, "is_verified", False),
+                "is_scam": getattr(user, "is_scam", False),
+                "is_fake": getattr(user, "is_fake", False),
+                "is_frozen": getattr(user, "is_frozen", False),
+                "bio": bio,
+                "status": getattr(user, "status", None),
             }
 
             return user_info
 
         except Exception as e:
             logger.error(f"Failed to get user info for {user_id}: {e}")
+            return None
+
+    async def get_user_info_by_username(self, username: str) -> Optional[dict]:
+        """
+        通过用户名直接从 Telegram 获取用户信息（不依赖缓存）
+
+        Args:
+            username: 用户名（可以带或不带@符号）
+
+        Returns:
+            用户信息字典，包含:
+            - user_id: 用户 ID
+            - dc_id: DC ID (可能为 None)
+            - username: 用户名 (可能为 None)
+            - first_name: 名字
+            - last_name: 姓氏 (可能为 None)
+            - is_premium: 是否为 Premium 用户
+            - is_verified: 是否为认证账号（蓝V）
+            - is_scam: 是否被标记为诈骗账号
+            - is_fake: 是否被标记为虚假账号
+            - is_frozen: 是否被冻结
+            - bio: 个人简介 (可能为 None)
+            - status: 在线状态 (可能为 None)
+
+        Note:
+            - 使用 Pyrogram MTProto API 直接从 Telegram 服务器查询
+            - 不依赖本地缓存，实时获取最新用户信息
+            - 支持公开用户名的查询
+        """
+        if not self.is_started or not self.client:
+            logger.warning("Pyrogram client not started, cannot get user info by username")
+            return None
+
+        try:
+            # 移除可能的@符号
+            clean_username = username.lstrip("@")
+
+            # 第一次调用：获取基本用户信息
+            user = await self.client.get_users(clean_username)
+
+            # 第二次调用：获取完整信息（包括 bio）
+            bio = None
+            try:
+                full_user = await self.client.get_chat(clean_username)
+                bio = getattr(full_user, 'bio', None)
+            except Exception as e:
+                logger.debug(f"Failed to get full user info (bio) for @{clean_username}: {e}")
+
+            user_info = {
+                "user_id": user.id,
+                "dc_id": getattr(user, "dc_id", None),
+                "username": user.username,
+                "first_name": user.first_name or "",
+                "last_name": user.last_name or "",
+                "is_premium": getattr(user, "is_premium", False),
+                "is_verified": getattr(user, "is_verified", False),
+                "is_scam": getattr(user, "is_scam", False),
+                "is_fake": getattr(user, "is_fake", False),
+                "is_frozen": getattr(user, "is_frozen", False),
+                "bio": bio,
+                "status": getattr(user, "status", None),
+            }
+
+            logger.info(f"✅ Successfully fetched user info for @{clean_username} via Pyrogram")
+            return user_info
+
+        except Exception as e:
+            logger.debug(f"Failed to get user info by username @{username}: {e}")
             return None
 
     async def send_large_video(

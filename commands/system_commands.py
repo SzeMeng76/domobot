@@ -1,6 +1,7 @@
 # type: ignore
 import re
 import asyncio
+import logging
 from datetime import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -11,6 +12,38 @@ from utils.command_factory import command_factory
 from utils.formatter import foldable_text_with_markdown_v2
 from utils.message_manager import delete_user_command, send_search_result
 from utils.permissions import Permission
+
+logger = logging.getLogger(__name__)
+
+
+def format_user_status(status):
+    """
+    格式化用户在线状态
+
+    Args:
+        status: Pyrogram UserStatus 对象
+
+    Returns:
+        格式化后的状态字符串，带 emoji
+    """
+    if not status:
+        return None
+
+    try:
+        from pyrogram.enums import UserStatus
+
+        status_map = {
+            UserStatus.ONLINE: "🟢 在线中",
+            UserStatus.OFFLINE: "🔴 离线",
+            UserStatus.RECENTLY: "🟡 最近在线",
+            UserStatus.LAST_WEEK: "🟠 一周内在线",
+            UserStatus.LAST_MONTH: "🔴 一个月内在线",
+            UserStatus.LONG_AGO: "⚫ 很久未上线"
+        }
+
+        return status_map.get(status, None)
+    except Exception:
+        return None
 
 
 # Telegraph 相关配置和函数
@@ -464,102 +497,113 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # 处理@用户名
             elif param.startswith("@"):
                 username = param[1:]  # 去掉@符号
+
+                # 优先尝试从缓存获取（快速）
                 if user_cache_manager:
                     cached_user = await user_cache_manager.get_user_by_username(username)
                     if cached_user:
                         target_user_id = cached_user.get("user_id")
                         # 从缓存中构建用户对象信息
                         target_user = CachedUser(cached_user)
-                    else:
-                        safe_username = safe_format_username(username)
+
+                # 如果缓存中没有，尝试使用 Pyrogram 直接查询（可靠）
+                if not target_user_id:
+                    pyrogram_helper = context.bot_data.get("pyrogram_helper")
+                    if pyrogram_helper:
                         try:
-                            await context.bot.edit_message_text(
-                                chat_id=chat.id,
-                                message_id=sent_message.message_id,
-                                text=f"❌ 缓存中未找到用户 @{safe_username}\n\n"
-                                     "💡 *可能原因*:\n"
-                                     "• 用户未在监控群组中发过消息\n"
-                                     "• 用户名拼写错误\n"
-                                     "• 用户缓存中暂无此用户信息\n\n"
-                                     "✅ *建议*:\n"
-                                     "• 让用户在群内发一条消息后再试\n"
-                                     "• 使用数字ID查询: `/when 123456789`\n"
-                                     "• 回复用户消息后使用 `/when`",
-                                parse_mode="Markdown"
-                            )
-                        except Exception:
-                            # 如果Markdown失败，使用纯文本
-                            await context.bot.edit_message_text(
-                                chat_id=chat.id,
-                                message_id=sent_message.message_id,
-                                text=f"❌ 缓存中未找到用户 @{username}\n\n"
-                                     "建议:\n"
-                                     "• 让用户在群内发一条消息后再试\n"
-                                     "• 使用数字ID查询\n"
-                                     "• 回复用户消息后使用 /when"
-                            )
-                        # 调度删除机器人回复消息
-                        from utils.message_manager import _schedule_deletion
-                        await _schedule_deletion(context, chat.id, sent_message.message_id, 180)
-                        return
-                else:
-                    await context.bot.edit_message_text(
-                        chat_id=chat.id,
-                        message_id=sent_message.message_id,
-                        text="❌ 用户缓存管理器未启用\n\n"
-                             "无法使用用户名查询功能，请使用数字ID查询",
-                        parse_mode="Markdown"
-                    )
+                            user_info = await pyrogram_helper.get_user_info_by_username(username)
+                            if user_info:
+                                target_user_id = user_info.get("user_id")
+                                # 从 Pyrogram 结果构建用户对象
+                                target_user = CachedUser(user_info)
+                                logger.info(f"✅ Found user @{username} via Pyrogram (ID: {target_user_id})")
+                        except Exception as e:
+                            logger.debug(f"Pyrogram username query failed: {e}")
+
+                # 如果两种方式都失败了，返回错误
+                if not target_user_id:
+                    safe_username = safe_format_username(username)
+                    try:
+                        await context.bot.edit_message_text(
+                            chat_id=chat.id,
+                            message_id=sent_message.message_id,
+                            text=f"❌ 未找到用户 @{safe_username}\n\n"
+                                 "💡 *可能原因*:\n"
+                                 "• 用户名拼写错误\n"
+                                 "• 用户名不存在或已被更改\n"
+                                 "• 用户隐私设置限制查询\n\n"
+                                 "✅ *建议*:\n"
+                                 "• 检查用户名拼写是否正确\n"
+                                 "• 使用数字ID查询: `/when 123456789`\n"
+                                 "• 回复用户消息后使用 `/when`",
+                            parse_mode="Markdown"
+                        )
+                    except Exception:
+                        # 如果Markdown失败，使用纯文本
+                        await context.bot.edit_message_text(
+                            chat_id=chat.id,
+                            message_id=sent_message.message_id,
+                            text=f"❌ 未找到用户 @{username}\n\n"
+                                 "建议:\n"
+                                 "• 检查用户名拼写\n"
+                                 "• 使用数字ID查询\n"
+                                 "• 回复用户消息后使用 /when"
+                        )
                     # 调度删除机器人回复消息
                     from utils.message_manager import _schedule_deletion
                     await _schedule_deletion(context, chat.id, sent_message.message_id, 180)
                     return
             # 处理纯用户名（不带@）
             elif not param.isdigit() and re.match(r'^[a-zA-Z0-9_]+$', param):
+                # 优先尝试从缓存获取（快速）
                 if user_cache_manager:
                     cached_user = await user_cache_manager.get_user_by_username(param)
                     if cached_user:
                         target_user_id = cached_user.get("user_id")
                         # 从缓存中构建用户对象信息
                         target_user = CachedUser(cached_user)
-                    else:
-                        safe_param = safe_format_username(param)
+
+                # 如果缓存中没有，尝试使用 Pyrogram 直接查询（可靠）
+                if not target_user_id:
+                    pyrogram_helper = context.bot_data.get("pyrogram_helper")
+                    if pyrogram_helper:
                         try:
-                            await context.bot.edit_message_text(
-                                chat_id=chat.id,
-                                message_id=sent_message.message_id,
-                                text=f"❌ 缓存中未找到用户 {safe_param}\n\n"
-                                     "💡 *提示*: 用户名查询支持以下格式:\n"
-                                     "• `/when @username`\n"
-                                     "• `/when username`\n"
-                                     "• `/when 123456789` (数字ID)\n\n"
-                                     "如果用户名查询失败，建议使用数字ID查询",
-                                parse_mode="Markdown"
-                            )
-                        except Exception:
-                            # 如果Markdown失败，使用纯文本
-                            await context.bot.edit_message_text(
-                                chat_id=chat.id,
-                                message_id=sent_message.message_id,
-                                text=f"❌ 缓存中未找到用户 {param}\n\n"
-                                     "提示: 用户名查询支持以下格式:\n"
-                                     "• /when @username\n"
-                                     "• /when username\n"
-                                     "• /when 123456789 (数字ID)\n\n"
-                                     "如果用户名查询失败，建议使用数字ID查询"
-                            )
-                        # 调度删除机器人回复消息
-                        from utils.message_manager import _schedule_deletion
-                        await _schedule_deletion(context, chat.id, sent_message.message_id, 180)
-                        return
-                else:
-                    await context.bot.edit_message_text(
-                        chat_id=chat.id,
-                        message_id=sent_message.message_id,
-                        text="❌ 用户缓存管理器未启用\n\n"
-                             "无法使用用户名查询功能，请使用数字ID查询",
-                        parse_mode="Markdown"
-                    )
+                            user_info = await pyrogram_helper.get_user_info_by_username(param)
+                            if user_info:
+                                target_user_id = user_info.get("user_id")
+                                # 从 Pyrogram 结果构建用户对象
+                                target_user = CachedUser(user_info)
+                                logger.info(f"✅ Found user {param} via Pyrogram (ID: {target_user_id})")
+                        except Exception as e:
+                            logger.debug(f"Pyrogram username query failed: {e}")
+
+                # 如果两种方式都失败了，返回错误
+                if not target_user_id:
+                    safe_param = safe_format_username(param)
+                    try:
+                        await context.bot.edit_message_text(
+                            chat_id=chat.id,
+                            message_id=sent_message.message_id,
+                            text=f"❌ 未找到用户 {safe_param}\n\n"
+                                 "💡 *提示*: 用户名查询支持以下格式:\n"
+                                 "• `/when @username`\n"
+                                 "• `/when username`\n"
+                                 "• `/when 123456789` (数字ID)\n\n"
+                                 "如果用户名查询失败，建议使用数字ID查询",
+                            parse_mode="Markdown"
+                        )
+                    except Exception:
+                        # 如果Markdown失败，使用纯文本
+                        await context.bot.edit_message_text(
+                            chat_id=chat.id,
+                            message_id=sent_message.message_id,
+                            text=f"❌ 未找到用户 {param}\n\n"
+                                 "提示: 用户名查询支持以下格式:\n"
+                                 "• /when @username\n"
+                                 "• /when username\n"
+                                 "• /when 123456789 (数字ID)\n\n"
+                                 "如果用户名查询失败，建议使用数字ID查询"
+                        )
                     # 调度删除机器人回复消息
                     from utils.message_manager import _schedule_deletion
                     await _schedule_deletion(context, chat.id, sent_message.message_id, 180)
@@ -599,10 +643,16 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await _schedule_deletion(context, chat.id, sent_message.message_id, 180)
             return
 
-        # 尝试获取 DC ID 和 Premium 状态（如果 Pyrogram 可用）
+        # 尝试获取完整用户信息（如果 Pyrogram 可用）
         dc_id = None
         dc_location = ""
         is_premium = None
+        is_verified = None
+        is_scam = None
+        is_fake = None
+        is_frozen = None
+        bio = None
+        user_status = None
         pyrogram_helper = context.bot_data.get("pyrogram_helper")
 
         if pyrogram_helper:
@@ -611,6 +661,12 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if user_info:
                     dc_id = user_info.get('dc_id')
                     is_premium = user_info.get('is_premium', False)
+                    is_verified = user_info.get('is_verified', False)
+                    is_scam = user_info.get('is_scam', False)
+                    is_fake = user_info.get('is_fake', False)
+                    is_frozen = user_info.get('is_frozen', False)
+                    bio = user_info.get('bio')
+                    user_status = user_info.get('status')
 
                     if dc_id:
                         # DC 位置映射
@@ -686,11 +742,43 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if dc_id:
                 result_text += f"🌐 *数据中心*：DC{dc_id} ({dc_location})\n"
 
+            # 添加在线状态（如果可用）
+            if user_status:
+                formatted_status = format_user_status(user_status)
+                if formatted_status:
+                    result_text += f"📡 *在线状态*：{formatted_status}\n"
+
             # 添加 Premium 状态（如果可用）
             if is_premium is not None:
-                premium_emoji = "⭐" if is_premium else ""
                 premium_text = "是 ⭐" if is_premium else "否"
                 result_text += f"💎 *Premium用户*：{premium_text}\n"
+
+            # 添加认证状态（如果可用）
+            if is_verified is not None:
+                verified_text = "已认证 ✓" if is_verified else "未认证"
+                result_text += f"✅ *认证状态*：{verified_text}\n"
+
+            # 添加账号安全状态（如果可用）
+            if is_scam or is_fake or is_frozen:
+                if is_frozen:
+                    result_text += f"🚨 *账号状态*：❄️ 账号已冻结\n"
+                elif is_scam:
+                    result_text += f"🚨 *账号状态*：⚠️ 诈骗账号 (Telegram已标记)\n"
+                elif is_fake:
+                    result_text += f"🚨 *账号状态*：⚠️ 虚假账号 (Telegram已标记)\n"
+            elif is_verified is not None:
+                # 只有在有认证信息的情况下才显示正常状态
+                result_text += f"🛡️ *账号状态*：正常\n"
+
+            # 添加个人简介（如果可用）
+            if bio:
+                # 限制 bio 长度，避免消息过长
+                bio_display = bio if len(bio) <= 100 else bio[:100] + "..."
+                safe_bio = safe_format_username(bio_display)
+                result_text += f"📝 *个人简介*：{safe_bio}\n"
+            elif is_verified is not None:
+                # 只有在有 Pyrogram 数据的情况下才显示"无"
+                result_text += f"📝 *个人简介*：无\n"
 
             result_text += (
                 f"📅 *估算注册日期*：{formatted_date}\n"
@@ -709,10 +797,40 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if dc_id:
                 result_text += f"🌐 *数据中心*：DC{dc_id} ({dc_location})\n"
 
+            # 添加在线状态（如果可用）
+            if user_status:
+                formatted_status = format_user_status(user_status)
+                if formatted_status:
+                    result_text += f"📡 *在线状态*：{formatted_status}\n"
+
             # 添加 Premium 状态（如果可用）
             if is_premium is not None:
                 premium_text = "是 ⭐" if is_premium else "否"
                 result_text += f"💎 *Premium用户*：{premium_text}\n"
+
+            # 添加认证状态（如果可用）
+            if is_verified is not None:
+                verified_text = "已认证 ✓" if is_verified else "未认证"
+                result_text += f"✅ *认证状态*：{verified_text}\n"
+
+            # 添加账号安全状态（如果可用）
+            if is_scam or is_fake or is_frozen:
+                if is_frozen:
+                    result_text += f"🚨 *账号状态*：❄️ 账号已冻结\n"
+                elif is_scam:
+                    result_text += f"🚨 *账号状态*：⚠️ 诈骗账号 (Telegram已标记)\n"
+                elif is_fake:
+                    result_text += f"🚨 *账号状态*：⚠️ 虚假账号 (Telegram已标记)\n"
+            elif is_verified is not None:
+                result_text += f"🛡️ *账号状态*：正常\n"
+
+            # 添加个人简介（如果可用）
+            if bio:
+                bio_display = bio if len(bio) <= 100 else bio[:100] + "..."
+                safe_bio = safe_format_username(bio_display)
+                result_text += f"📝 *个人简介*：{safe_bio}\n"
+            elif is_verified is not None:
+                result_text += f"📝 *个人简介*：无\n"
 
             result_text += (
                 f"📅 *估算注册日期*：{formatted_date}\n"
