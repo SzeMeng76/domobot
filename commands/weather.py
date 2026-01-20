@@ -803,6 +803,10 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     location_data = await get_location_id(location)
     if not location_data:
         await message.edit_text(f"❌ 找不到城市 *{safe_location}*，请检查拼写。", parse_mode=ParseMode.MARKDOWN_V2)
+        # 调度删除错误消息
+        from utils.message_manager import _schedule_deletion
+        config = get_config()
+        await _schedule_deletion(context, update.effective_chat.id, message.message_id, 10)  # 错误消息10秒后删除
         return
 
     location_id = location_data['id']
@@ -1048,7 +1052,15 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
         # 解析回调数据 - 格式: weather_action_location
         parts = data.split('_', 2)
         if len(parts) < 3:
-            await query.edit_message_text("❌ 无效的请求")
+            await query.edit_message_text(
+                "❌ 无效的请求",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
+                ]])
+            )
+            # 调度删除错误消息
+            from utils.message_manager import _schedule_deletion
+            await _schedule_deletion(context, query.message.chat_id, query.message.message_id, 10)
             return
 
         action = parts[1]
@@ -1066,8 +1078,14 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
         if not location_data:
             await query.edit_message_text(
                 f"❌ 找不到城市 *{safe_location}*，请检查拼写。",
-                parse_mode=ParseMode.MARKDOWN_V2
+                parse_mode=ParseMode.MARKDOWN_V2,
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
+                ]])
             )
+            # 调度删除错误消息
+            from utils.message_manager import _schedule_deletion
+            await _schedule_deletion(context, query.message.chat_id, query.message.message_id, 10)  # 错误消息10秒后删除
             return
 
         location_id = location_data['id']
@@ -1262,7 +1280,15 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
             ]
 
         else:
-            await query.edit_message_text("❌ 未知的操作")
+            await query.edit_message_text(
+                "❌ 未知的操作",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
+                ]])
+            )
+            # 调度删除错误消息
+            from utils.message_manager import _schedule_deletion
+            await _schedule_deletion(context, query.message.chat_id, query.message.message_id, 10)
             return
 
         # 发送结果
@@ -1282,6 +1308,9 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
                 InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
             ]])
         )
+        # 调度删除错误消息
+        from utils.message_manager import _schedule_deletion
+        await _schedule_deletion(context, query.message.chat_id, query.message.message_id, 10)
 
 async def typhoon_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理台风追踪的回调"""
@@ -1378,7 +1407,15 @@ async def typhoon_callback_handler(update: Update, context: ContextTypes.DEFAULT
             )
 
         else:
-            await query.edit_message_text("❌ 未知的操作")
+            await query.edit_message_text(
+                "❌ 未知的操作",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
+                ]])
+            )
+            # 调度删除错误消息
+            from utils.message_manager import _schedule_deletion
+            await _schedule_deletion(context, query.message.chat_id, query.message.message_id, 10)
 
     except Exception as e:
         logging.error(f"台风回调处理失败: {e}")
@@ -1388,6 +1425,9 @@ async def typhoon_callback_handler(update: Update, context: ContextTypes.DEFAULT
                 InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
             ]])
         )
+        # 调度删除错误消息
+        from utils.message_manager import _schedule_deletion
+        await _schedule_deletion(context, query.message.chat_id, query.message.message_id, 10)
 
 command_factory.register_command(
     "tq",

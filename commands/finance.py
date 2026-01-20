@@ -119,9 +119,246 @@ def align_timezone(target_time: pd.Timestamp, reference_index: pd.DatetimeIndex)
 
 class FinanceService:
     """金融服务类"""
-    
+
     def __init__(self):
         pass
+
+    async def get_earnings_calendar(self, days: int = 7, limit: int = 50) -> Optional[List[Dict]]:
+        """获取财报日历 - 批量查看未来N天的公司财报"""
+        cache_key = f"calendar_earnings_{days}_{limit}"
+
+        if cache_manager:
+            config = get_config()
+            cached_data = await cache_manager.load_cache(
+                cache_key,
+                max_age_seconds=config.finance_cache_duration * 2,  # 财报日历缓存10分钟
+                subdirectory="finance"
+            )
+            if cached_data:
+                logger.info(f"使用缓存的财报日历数据: {days}天")
+                return cached_data
+
+        try:
+            from yfinance import Calendars
+            from datetime import timedelta
+
+            start = datetime.now()
+            end = start + timedelta(days=days)
+
+            calendars = Calendars(start=start, end=end)
+            df = calendars.get_earnings_calendar(limit=limit, filter_most_active=True)
+
+            if df is None or df.empty:
+                return None
+
+            results = []
+            for idx, row in df.iterrows():
+                try:
+                    event_date = row.get('Event Start Date')
+                    if pd.notna(event_date):
+                        data = {
+                            'symbol': str(idx),
+                            'company': str(row.get('Company', idx))[:30],  # 限制长度
+                            'date': event_date.strftime('%Y-%m-%d') if hasattr(event_date, 'strftime') else str(event_date),
+                            'time': str(row.get('Timing', '')) if pd.notna(row.get('Timing')) else '',
+                            'eps_estimate': float(row.get('EPS Estimate')) if pd.notna(row.get('EPS Estimate')) else None,
+                            'eps_actual': float(row.get('Reported EPS')) if pd.notna(row.get('Reported EPS')) else None,
+                            'surprise_pct': float(row.get('Surprise(%)')) if pd.notna(row.get('Surprise(%)')) else None,
+                            'marketcap': int(row.get('Marketcap', 0)) if pd.notna(row.get('Marketcap')) else 0
+                        }
+                        results.append(data)
+                except Exception as e:
+                    logger.warning(f"解析财报日历数据失败 {idx}: {e}")
+                    continue
+
+            if cache_manager and results:
+                await cache_manager.save_cache(cache_key, results, subdirectory="finance")
+
+            return results if results else None
+
+        except Exception as e:
+            logger.error(f"获取财报日历失败: {e}", exc_info=True)
+            return None
+
+    async def get_ipo_calendar(self, days: int = 30, limit: int = 50) -> Optional[List[Dict]]:
+        """获取IPO日历 - 新股上市信息"""
+        cache_key = f"calendar_ipo_{days}_{limit}"
+
+        if cache_manager:
+            config = get_config()
+            cached_data = await cache_manager.load_cache(
+                cache_key,
+                max_age_seconds=config.finance_cache_duration * 6,  # IPO日历缓存30分钟
+                subdirectory="finance"
+            )
+            if cached_data:
+                logger.info(f"使用缓存的IPO日历数据: {days}天")
+                return cached_data
+
+        try:
+            from yfinance import Calendars
+            from datetime import timedelta
+
+            start = datetime.now()
+            end = start + timedelta(days=days)
+
+            calendars = Calendars(start=start, end=end)
+            df = calendars.get_ipo_info_calendar(limit=limit)
+
+            if df is None or df.empty:
+                return None
+
+            results = []
+            for idx, row in df.iterrows():
+                try:
+                    ipo_date = row.get('Date')
+                    data = {
+                        'symbol': str(idx),
+                        'company': str(row.get('Company Name', idx))[:30],
+                        'exchange': str(row.get('Exchange', '')) if pd.notna(row.get('Exchange')) else '',
+                        'date': ipo_date.strftime('%Y-%m-%d') if pd.notna(ipo_date) and hasattr(ipo_date, 'strftime') else '',
+                        'filing_date': row.get('Filing Date').strftime('%Y-%m-%d') if pd.notna(row.get('Filing Date')) and hasattr(row.get('Filing Date'), 'strftime') else '',
+                        'price_from': float(row.get('Price From')) if pd.notna(row.get('Price From')) else None,
+                        'price_to': float(row.get('Price To')) if pd.notna(row.get('Price To')) else None,
+                        'price': float(row.get('Price')) if pd.notna(row.get('Price')) else None,
+                        'shares': int(row.get('Shares')) if pd.notna(row.get('Shares')) else None,
+                        'currency': str(row.get('Currency', 'USD')) if pd.notna(row.get('Currency')) else 'USD',
+                        'deal_type': str(row.get('Deal Type', '')) if pd.notna(row.get('Deal Type')) else ''
+                    }
+                    results.append(data)
+                except Exception as e:
+                    logger.warning(f"解析IPO日历数据失败 {idx}: {e}")
+                    continue
+
+            if cache_manager and results:
+                await cache_manager.save_cache(cache_key, results, subdirectory="finance")
+
+            return results if results else None
+
+        except Exception as e:
+            logger.error(f"获取IPO日历失败: {e}", exc_info=True)
+            return None
+
+    async def get_economic_events_calendar(self, days: int = 7, limit: int = 50) -> Optional[List[Dict]]:
+        """获取经济事件日历 - 宏观经济数据发布"""
+        cache_key = f"calendar_economic_{days}_{limit}"
+
+        if cache_manager:
+            config = get_config()
+            cached_data = await cache_manager.load_cache(
+                cache_key,
+                max_age_seconds=config.finance_cache_duration * 4,  # 经济事件日历缓存20分钟
+                subdirectory="finance"
+            )
+            if cached_data:
+                logger.info(f"使用缓存的经济事件日历数据: {days}天")
+                return cached_data
+
+        try:
+            from yfinance import Calendars
+            from datetime import timedelta
+
+            start = datetime.now()
+            end = start + timedelta(days=days)
+
+            calendars = Calendars(start=start, end=end)
+            df = calendars.get_economic_events_calendar(limit=limit)
+
+            if df is None or df.empty:
+                return None
+
+            results = []
+            for idx, row in df.iterrows():
+                try:
+                    event_time = row.get('Event Time')
+                    data = {
+                        'event': str(idx),
+                        'region': str(row.get('Region', '')) if pd.notna(row.get('Region')) else '',
+                        'time': event_time.strftime('%Y-%m-%d %H:%M') if pd.notna(event_time) and hasattr(event_time, 'strftime') else str(event_time) if pd.notna(event_time) else '',
+                        'period': str(row.get('For', '')) if pd.notna(row.get('For')) else '',
+                        'actual': float(row.get('Actual')) if pd.notna(row.get('Actual')) else None,
+                        'expected': float(row.get('Expected')) if pd.notna(row.get('Expected')) else None,
+                        'last': float(row.get('Last')) if pd.notna(row.get('Last')) else None,
+                        'revised': float(row.get('Revised')) if pd.notna(row.get('Revised')) else None
+                    }
+                    results.append(data)
+                except Exception as e:
+                    logger.warning(f"解析经济事件日历数据失败 {idx}: {e}")
+                    continue
+
+            if cache_manager and results:
+                await cache_manager.save_cache(cache_key, results, subdirectory="finance")
+
+            return results if results else None
+
+        except Exception as e:
+            logger.error(f"获取经济事件日历失败: {e}", exc_info=True)
+            return None
+
+    async def get_splits_calendar(self, days: int = 30, limit: int = 50) -> Optional[List[Dict]]:
+        """获取拆股日历 - 批量查看拆股事件"""
+        cache_key = f"calendar_splits_{days}_{limit}"
+
+        if cache_manager:
+            config = get_config()
+            cached_data = await cache_manager.load_cache(
+                cache_key,
+                max_age_seconds=config.finance_cache_duration * 6,  # 拆股日历缓存30分钟
+                subdirectory="finance"
+            )
+            if cached_data:
+                logger.info(f"使用缓存的拆股日历数据: {days}天")
+                return cached_data
+
+        try:
+            from yfinance import Calendars
+            from datetime import timedelta
+
+            start = datetime.now()
+            end = start + timedelta(days=days)
+
+            calendars = Calendars(start=start, end=end)
+            df = calendars.get_splits_calendar(limit=limit)
+
+            if df is None or df.empty:
+                return None
+
+            results = []
+            for idx, row in df.iterrows():
+                try:
+                    split_date = row.get('Payable On')
+                    old_share = float(row.get('Old Shares')) if pd.notna(row.get('Old Shares')) else 1
+                    new_share = float(row.get('New Shares')) if pd.notna(row.get('New Shares')) else 1
+
+                    # 计算拆股比例文本
+                    if new_share > old_share:
+                        ratio_text = f"{int(new_share)}:{int(old_share)}"
+                    else:
+                        ratio_text = f"{int(old_share)}:{int(new_share)}"
+
+                    data = {
+                        'symbol': str(idx),
+                        'company': str(row.get('Company Name', idx))[:30],
+                        'date': split_date.strftime('%Y-%m-%d') if pd.notna(split_date) and hasattr(split_date, 'strftime') else str(split_date) if pd.notna(split_date) else '',
+                        'old_shares': old_share,
+                        'new_shares': new_share,
+                        'ratio': new_share / old_share if old_share != 0 else 1,
+                        'ratio_text': ratio_text,
+                        'optionable': str(row.get('Optionable', '')) if pd.notna(row.get('Optionable')) else ''
+                    }
+                    results.append(data)
+                except Exception as e:
+                    logger.warning(f"解析拆股日历数据失败 {idx}: {e}")
+                    continue
+
+            if cache_manager and results:
+                await cache_manager.save_cache(cache_key, results, subdirectory="finance")
+
+            return results if results else None
+
+        except Exception as e:
+            logger.error(f"获取拆股日历失败: {e}", exc_info=True)
+            return None
         
     async def get_stock_info(self, symbol: str) -> Optional[Dict]:
         """获取单只股票信息"""
@@ -893,6 +1130,176 @@ def format_dividends_splits(dividends_data: Dict) -> str:
     result += f"_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
     return result
 
+def format_earnings_calendar(calendar_data: List[Dict]) -> str:
+    """格式化财报日历"""
+    if not calendar_data:
+        return "❌ 暂无财报日历数据"
+
+    result = f"📅 *财报日历 (未来7天)*\n\n"
+    result += f"共 `{len(calendar_data)}` 家公司即将发布财报\n\n"
+
+    # 按日期分组
+    by_date = {}
+    for item in calendar_data[:20]:  # 限制显示前20个
+        date = item['date']
+        if date not in by_date:
+            by_date[date] = []
+        by_date[date].append(item)
+
+    for date in sorted(by_date.keys()):
+        items = by_date[date]
+        result += f"📆 *{date}*\n"
+
+        for item in items[:5]:  # 每天最多显示5个
+            symbol = item['symbol']
+            company = item['company']
+            time_str = item.get('time', '')
+            eps_est = item.get('eps_estimate')
+
+            result += f"  • *{symbol}* - {company}\n"
+            if time_str:
+                result += f"    ⏰ {time_str}"
+            if eps_est is not None:
+                result += f" | EPS预期: `${eps_est:.2f}`"
+            result += "\n"
+
+        if len(items) > 5:
+            result += f"    _...还有 {len(items) - 5} 家公司_\n"
+        result += "\n"
+
+    result += f"_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
+    return result
+
+def format_ipo_calendar(calendar_data: List[Dict]) -> str:
+    """格式化IPO日历"""
+    if not calendar_data:
+        return "❌ 暂无IPO日历数据"
+
+    result = f"🚀 *IPO日历 (未来30天)*\n\n"
+    result += f"共 `{len(calendar_data)}` 只新股即将上市\n\n"
+
+    for i, item in enumerate(calendar_data[:15], 1):  # 最多显示15个
+        symbol = item['symbol']
+        company = item['company']
+        date = item.get('date', '')
+        exchange = item.get('exchange', '')
+        price_from = item.get('price_from')
+        price_to = item.get('price_to')
+        price = item.get('price')
+        shares = item.get('shares')
+        currency = item.get('currency', 'USD')
+        currency_symbol = get_currency_symbol(currency)
+
+        result += f"`{i:2d}.` *{symbol}* - {company}\n"
+        if date:
+            result += f"     📆 上市日期: `{date}`\n"
+        if exchange:
+            result += f"     🏛️ 交易所: `{exchange}`\n"
+
+        # 价格信息
+        if price:
+            result += f"     💰 发行价: `{currency_symbol}{price:.2f}`\n"
+        elif price_from and price_to:
+            result += f"     💰 价格区间: `{currency_symbol}{price_from:.2f} - {currency_symbol}{price_to:.2f}`\n"
+
+        if shares:
+            if shares >= 1_000_000:
+                shares_str = f"{shares / 1_000_000:.1f}M"
+            else:
+                shares_str = f"{shares:,}"
+            result += f"     📊 发行股数: `{shares_str}`\n"
+
+        result += "\n"
+
+    if len(calendar_data) > 15:
+        result += f"_...还有 {len(calendar_data) - 15} 只新股未显示_\n\n"
+
+    result += f"_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
+    return result
+
+def format_economic_events_calendar(calendar_data: List[Dict]) -> str:
+    """格式化经济事件日历"""
+    if not calendar_data:
+        return "❌ 暂无经济事件日历数据"
+
+    result = f"🌍 *经济事件日历 (未来7天)*\n\n"
+    result += f"共 `{len(calendar_data)}` 项经济数据即将发布\n\n"
+
+    # 按日期分组
+    by_date = {}
+    for item in calendar_data[:30]:  # 限制显示前30个
+        time_str = item.get('time', '')
+        if time_str:
+            date = time_str.split(' ')[0] if ' ' in time_str else time_str[:10]
+        else:
+            date = 'Unknown'
+
+        if date not in by_date:
+            by_date[date] = []
+        by_date[date].append(item)
+
+    for date in sorted(by_date.keys()):
+        items = by_date[date]
+        result += f"📆 *{date}*\n"
+
+        for item in items[:8]:  # 每天最多显示8个
+            event = item['event']
+            region = item.get('region', '')
+            time_str = item.get('time', '')
+            expected = item.get('expected')
+            last = item.get('last')
+
+            # 提取时间部分
+            time_part = ''
+            if ' ' in time_str:
+                time_part = time_str.split(' ')[1]
+
+            result += f"  • {region} {event}\n"
+            if time_part:
+                result += f"    ⏰ {time_part}"
+            if expected is not None:
+                result += f" | 预期: `{expected}`"
+            if last is not None:
+                result += f" | 前值: `{last}`"
+            result += "\n"
+
+        if len(items) > 8:
+            result += f"    _...还有 {len(items) - 8} 项事件_\n"
+        result += "\n"
+
+    result += f"_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
+    return result
+
+def format_splits_calendar(calendar_data: List[Dict]) -> str:
+    """格式化拆股日历"""
+    if not calendar_data:
+        return "❌ 暂无拆股日历数据"
+
+    result = f"🔀 *拆股日历 (未来30天)*\n\n"
+    result += f"共 `{len(calendar_data)}` 只股票即将拆股\n\n"
+
+    for i, item in enumerate(calendar_data[:20], 1):  # 最多显示20个
+        symbol = item['symbol']
+        company = item['company']
+        date = item.get('date', '')
+        ratio_text = item.get('ratio_text', '')
+        optionable = item.get('optionable', '')
+
+        result += f"`{i:2d}.` *{symbol}* - {company}\n"
+        if date:
+            result += f"     📆 拆股日期: `{date}`\n"
+        if ratio_text:
+            result += f"     🔀 拆股比例: `{ratio_text}`\n"
+        if optionable:
+            result += f"     📋 可期权: `{optionable}`\n"
+        result += "\n"
+
+    if len(calendar_data) > 20:
+        result += f"_...还有 {len(calendar_data) - 20} 只股票未显示_\n\n"
+
+    result += f"_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
+    return result
+
 def format_ranking_list(stocks: List[Dict], title: str) -> str:
     """格式化排行榜"""
     if not stocks:
@@ -922,7 +1329,7 @@ async def finance_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     """金融数据主命令 /finance"""
     if not update.message:
         return
-        
+
     # 如果有参数，直接搜索股票
     if context.args:
         query = " ".join(context.args)
@@ -930,7 +1337,7 @@ async def finance_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         # 删除用户命令
         await delete_user_command(context, update.message.chat_id, update.message.message_id)
         return
-    
+
     # 没有参数，显示主菜单
     keyboard = [
         [
@@ -942,25 +1349,29 @@ async def finance_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             InlineKeyboardButton("💰 基金排行榜", callback_data="finance_fund_rankings")
         ],
         [
+            InlineKeyboardButton("📆 金融日历", callback_data="finance_calendars_menu")
+        ],
+        [
             InlineKeyboardButton("❌ 关闭", callback_data="finance_close")
         ]
     ]
-    
+
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
+
     help_text = """📊 金融数据查询
 
 🔍 功能介绍:
 • **查询股票**: 输入股票代码查看详细信息
 • **搜索股票**: 按公司名称搜索
 • **各种排行榜**: 涨幅榜、活跃股等
+• **金融日历**: 财报、IPO、经济事件等
 
 💡 快速使用:
 `/finance AAPL` - 查询苹果股票
 `/finance Tesla` - 搜索特斯拉
 
 请选择功能:"""
-    
+
     await send_message_with_auto_delete(
         context=context,
         chat_id=update.message.chat_id,
@@ -968,7 +1379,7 @@ async def finance_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         parse_mode="MarkdownV2",
         reply_markup=reply_markup
     )
-    
+
     await delete_user_command(context, update.message.chat_id, update.message.message_id)
 
 async def _execute_stock_search(update: Update, context: ContextTypes.DEFAULT_TYPE, query: str, callback_query: CallbackQuery = None) -> None:
@@ -1283,7 +1694,7 @@ async def finance_main_menu_callback(update: Update, context: ContextTypes.DEFAU
     """返回主菜单"""
     query = update.callback_query
     await query.answer()
-    
+
     keyboard = [
         [
             InlineKeyboardButton("📊 查询股票", callback_data="finance_search"),
@@ -1294,25 +1705,29 @@ async def finance_main_menu_callback(update: Update, context: ContextTypes.DEFAU
             InlineKeyboardButton("💰 基金排行榜", callback_data="finance_fund_rankings")
         ],
         [
+            InlineKeyboardButton("📆 金融日历", callback_data="finance_calendars_menu")
+        ],
+        [
             InlineKeyboardButton("❌ 关闭", callback_data="finance_close")
         ]
     ]
-    
+
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
+
     help_text = """📊 金融数据查询
 
 🔍 功能介绍:
 • **查询股票**: 输入股票代码查看详细信息
 • **搜索股票**: 按公司名称搜索
 • **各种排行榜**: 涨幅榜、活跃股等
+• **金融日历**: 财报、IPO、经济事件等
 
 💡 快速使用:
 `/finance AAPL` - 查询苹果股票
 `/finance Tesla` - 搜索特斯拉
 
 请选择功能:"""
-    
+
     await query.edit_message_text(
         text=foldable_text_with_markdown_v2(help_text),
         parse_mode="MarkdownV2",
@@ -1870,14 +2285,250 @@ async def finance_dividends_callback(update: Update, context: ContextTypes.DEFAU
         except:
             pass
 
+async def finance_calendars_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """显示日历菜单"""
+    query = update.callback_query
+    await query.answer()
+
+    keyboard = [
+        [
+            InlineKeyboardButton("📅 财报日历", callback_data="finance_calendar_earnings"),
+            InlineKeyboardButton("🚀 IPO日历", callback_data="finance_calendar_ipo")
+        ],
+        [
+            InlineKeyboardButton("🌍 经济事件", callback_data="finance_calendar_economic"),
+            InlineKeyboardButton("🔀 拆股日历", callback_data="finance_calendar_splits")
+        ],
+        [
+            InlineKeyboardButton("🔙 返回主菜单", callback_data="finance_main_menu")
+        ]
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    help_text = """📆 *金融日历*
+
+选择你要查看的日历类型:
+
+📅 *财报日历* - 未来7天公司财报发布
+🚀 *IPO日历* - 未来30天新股上市
+🌍 *经济事件* - 未来7天宏观经济数据
+🔀 *拆股日历* - 未来30天股票拆股事件"""
+
+    await query.edit_message_text(
+        text=foldable_text_with_markdown_v2(help_text),
+        parse_mode="MarkdownV2",
+        reply_markup=reply_markup
+    )
+
+async def finance_calendar_earnings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """显示财报日历"""
+    query = update.callback_query
+    await query.answer("正在获取财报日历...")
+
+    loading_message = "📅 正在获取财报日历... ⏳"
+    await query.edit_message_text(
+        text=foldable_text_v2(loading_message),
+        parse_mode="MarkdownV2"
+    )
+
+    try:
+        calendar_data = await finance_service.get_earnings_calendar(days=7, limit=50)
+
+        if calendar_data:
+            result_text = format_earnings_calendar(calendar_data)
+
+            keyboard = [
+                [
+                    InlineKeyboardButton("🔄 刷新", callback_data="finance_calendar_earnings"),
+                    InlineKeyboardButton("🔙 返回日历", callback_data="finance_calendars_menu")
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await query.edit_message_text(
+                text=foldable_text_with_markdown_v2(result_text),
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup
+            )
+        else:
+            error_text = "❌ 暂无财报日历数据"
+            keyboard = [[InlineKeyboardButton("🔙 返回日历", callback_data="finance_calendars_menu")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await query.edit_message_text(
+                text=foldable_text_v2(error_text),
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup
+            )
+
+    except Exception as e:
+        logger.error(f"获取财报日历时发生错误: {e}", exc_info=True)
+        error_text = f"❌ 获取财报日历失败: {str(e)}"
+
+        await query.edit_message_text(
+            text=foldable_text_v2(error_text),
+            parse_mode="MarkdownV2"
+        )
+
+async def finance_calendar_ipo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """显示IPO日历"""
+    query = update.callback_query
+    await query.answer("正在获取IPO日历...")
+
+    loading_message = "🚀 正在获取IPO日历... ⏳"
+    await query.edit_message_text(
+        text=foldable_text_v2(loading_message),
+        parse_mode="MarkdownV2"
+    )
+
+    try:
+        calendar_data = await finance_service.get_ipo_calendar(days=30, limit=50)
+
+        if calendar_data:
+            result_text = format_ipo_calendar(calendar_data)
+
+            keyboard = [
+                [
+                    InlineKeyboardButton("🔄 刷新", callback_data="finance_calendar_ipo"),
+                    InlineKeyboardButton("🔙 返回日历", callback_data="finance_calendars_menu")
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await query.edit_message_text(
+                text=foldable_text_with_markdown_v2(result_text),
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup
+            )
+        else:
+            error_text = "❌ 暂无IPO日历数据"
+            keyboard = [[InlineKeyboardButton("🔙 返回日历", callback_data="finance_calendars_menu")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await query.edit_message_text(
+                text=foldable_text_v2(error_text),
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup
+            )
+
+    except Exception as e:
+        logger.error(f"获取IPO日历时发生错误: {e}", exc_info=True)
+        error_text = f"❌ 获取IPO日历失败: {str(e)}"
+
+        await query.edit_message_text(
+            text=foldable_text_v2(error_text),
+            parse_mode="MarkdownV2"
+        )
+
+async def finance_calendar_economic_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """显示经济事件日历"""
+    query = update.callback_query
+    await query.answer("正在获取经济事件日历...")
+
+    loading_message = "🌍 正在获取经济事件日历... ⏳"
+    await query.edit_message_text(
+        text=foldable_text_v2(loading_message),
+        parse_mode="MarkdownV2"
+    )
+
+    try:
+        calendar_data = await finance_service.get_economic_events_calendar(days=7, limit=50)
+
+        if calendar_data:
+            result_text = format_economic_events_calendar(calendar_data)
+
+            keyboard = [
+                [
+                    InlineKeyboardButton("🔄 刷新", callback_data="finance_calendar_economic"),
+                    InlineKeyboardButton("🔙 返回日历", callback_data="finance_calendars_menu")
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await query.edit_message_text(
+                text=foldable_text_with_markdown_v2(result_text),
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup
+            )
+        else:
+            error_text = "❌ 暂无经济事件日历数据"
+            keyboard = [[InlineKeyboardButton("🔙 返回日历", callback_data="finance_calendars_menu")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await query.edit_message_text(
+                text=foldable_text_v2(error_text),
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup
+            )
+
+    except Exception as e:
+        logger.error(f"获取经济事件日历时发生错误: {e}", exc_info=True)
+        error_text = f"❌ 获取经济事件日历失败: {str(e)}"
+
+        await query.edit_message_text(
+            text=foldable_text_v2(error_text),
+            parse_mode="MarkdownV2"
+        )
+
+async def finance_calendar_splits_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """显示拆股日历"""
+    query = update.callback_query
+    await query.answer("正在获取拆股日历...")
+
+    loading_message = "🔀 正在获取拆股日历... ⏳"
+    await query.edit_message_text(
+        text=foldable_text_v2(loading_message),
+        parse_mode="MarkdownV2"
+    )
+
+    try:
+        calendar_data = await finance_service.get_splits_calendar(days=30, limit=50)
+
+        if calendar_data:
+            result_text = format_splits_calendar(calendar_data)
+
+            keyboard = [
+                [
+                    InlineKeyboardButton("🔄 刷新", callback_data="finance_calendar_splits"),
+                    InlineKeyboardButton("🔙 返回日历", callback_data="finance_calendars_menu")
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await query.edit_message_text(
+                text=foldable_text_with_markdown_v2(result_text),
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup
+            )
+        else:
+            error_text = "❌ 暂无拆股日历数据"
+            keyboard = [[InlineKeyboardButton("🔙 返回日历", callback_data="finance_calendars_menu")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await query.edit_message_text(
+                text=foldable_text_v2(error_text),
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup
+            )
+
+    except Exception as e:
+        logger.error(f"获取拆股日历时发生错误: {e}", exc_info=True)
+        error_text = f"❌ 获取拆股日历失败: {str(e)}"
+
+        await query.edit_message_text(
+            text=foldable_text_v2(error_text),
+            parse_mode="MarkdownV2"
+        )
+
 async def finance_close_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理关闭按钮点击"""
     query = update.callback_query
     await query.answer("消息已关闭")
-    
+
     if not query:
         return
-        
+
     try:
         await query.delete_message()
     except Exception as e:
@@ -1966,6 +2617,13 @@ command_factory.register_callback(r"^finance_cashflow:", finance_financial_callb
 # 新增功能
 command_factory.register_callback(r"^finance_earnings:", finance_earnings_callback, permission=Permission.NONE, description="财报日期")
 command_factory.register_callback(r"^finance_dividends:", finance_dividends_callback, permission=Permission.NONE, description="分红拆股")
+
+# 日历功能
+command_factory.register_callback(r"^finance_calendars_menu$", finance_calendars_menu_callback, permission=Permission.NONE, description="金融日历菜单")
+command_factory.register_callback(r"^finance_calendar_earnings$", finance_calendar_earnings_callback, permission=Permission.NONE, description="财报日历")
+command_factory.register_callback(r"^finance_calendar_ipo$", finance_calendar_ipo_callback, permission=Permission.NONE, description="IPO日历")
+command_factory.register_callback(r"^finance_calendar_economic$", finance_calendar_economic_callback, permission=Permission.NONE, description="经济事件日历")
+command_factory.register_callback(r"^finance_calendar_splits$", finance_calendar_splits_callback, permission=Permission.NONE, description="拆股日历")
 
 command_factory.register_callback(r"^finance_close$", finance_close_callback, permission=Permission.NONE, description="关闭金融消息")
 
