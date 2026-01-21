@@ -5,6 +5,7 @@
 
 import hashlib
 import logging
+import os
 import time
 from pathlib import Path
 from telegram import Update
@@ -730,6 +731,17 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
         # Convert to WebP if needed to avoid Telegram image_process_failed error
         converted_path = _convert_image_to_webp(Path(media_list[0].path))
         image_path = str(converted_path)
+
+        # 检查文件大小，如果超过9MB则压缩
+        file_size = os.path.getsize(image_path)
+        max_size = 9 * 1024 * 1024  # 9MB（留1MB余量）
+
+        if file_size > max_size:
+            logger.warning(f"⚠️ 图片大小 {file_size / 1024 / 1024:.2f}MB 超过限制，压缩中...")
+            compressed_path = _generate_thumbnail(Path(image_path), max_width=1920, quality=60)
+            image_path = str(compressed_path)
+            logger.info(f"✅ 压缩后大小: {os.path.getsize(image_path) / 1024 / 1024:.2f}MB")
+
         with open(image_path, 'rb') as photo_file:
             msg = await context.bot.send_photo(
                 chat_id=chat_id,
@@ -756,6 +768,17 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                 if not imghdr.what(image_path):
                     logger.warning(f"⚠️ Skipping invalid image file: {image_path}")
                     continue
+
+                # 检查文件大小，如果超过9MB则压缩
+                file_size = os.path.getsize(image_path)
+                max_size = 9 * 1024 * 1024  # 9MB（留1MB余量）
+
+                if file_size > max_size:
+                    logger.warning(f"⚠️ 图片大小 {file_size / 1024 / 1024:.2f}MB 超过限制，压缩中...")
+                    # 使用缩略图功能压缩（质量60%，最大宽度1920）
+                    compressed_path = _generate_thumbnail(Path(image_path), max_width=1920, quality=60)
+                    image_path = str(compressed_path)
+                    logger.info(f"✅ 压缩后大小: {os.path.getsize(image_path) / 1024 / 1024:.2f}MB")
 
                 with open(image_path, 'rb') as photo_file:
                     media_group.append(InputMediaPhoto(media=photo_file.read()))
