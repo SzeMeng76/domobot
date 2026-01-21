@@ -119,6 +119,66 @@ def _convert_image_to_webp(image_path: Path) -> Path:
         return image_path
 
 
+def _generate_thumbnail(image_path: Path, max_width: int = 800, quality: int = 70) -> Path:
+    """
+    生成图片缩略图，用于优化Telegraph link preview加载速度
+
+    为什么需要缩略图：
+    - Telegraph页面有大量高清图片时，Telegram生成link preview需要加载所有图片
+    - 用户在preview还没渲染完时点击，会导致页面闪烁
+    - 使用缩略图可以让link preview快速渲染完成，避免闪烁
+
+    Args:
+        image_path: 原始图片路径
+        max_width: 缩略图最大宽度（默认800px，足够preview显示）
+        quality: JPEG质量（默认70，平衡大小和质量）
+
+    Returns:
+        缩略图路径
+    """
+    try:
+        img = PILImage.open(image_path)
+
+        # 如果图片宽度已经小于max_width，直接返回原图
+        if img.width <= max_width:
+            logger.debug(f"图片宽度({img.width}px)已小于{max_width}px，跳过缩略图生成")
+            return image_path
+
+        # 计算缩放比例
+        ratio = max_width / img.width
+        new_height = int(img.height * ratio)
+
+        # 缩放图片
+        img_resized = img.resize((max_width, new_height), PILImage.Resampling.LANCZOS)
+
+        # 生成缩略图文件名
+        thumb_path = image_path.parent / f"{image_path.stem}_thumb.jpg"
+
+        # 保存为JPEG（压缩效果更好）
+        if img_resized.mode in ('RGBA', 'LA', 'P'):
+            # 如果有透明通道，转换为RGB并使用白色背景
+            background = PILImage.new('RGB', img_resized.size, (255, 255, 255))
+            if img_resized.mode == 'P':
+                img_resized = img_resized.convert('RGBA')
+            background.paste(img_resized, mask=img_resized.split()[-1] if img_resized.mode == 'RGBA' else None)
+            img_resized = background
+
+        img_resized.save(thumb_path, 'JPEG', quality=quality, optimize=True)
+
+        # 计算压缩比例
+        original_size = image_path.stat().st_size / 1024
+        thumb_size = thumb_path.stat().st_size / 1024
+        compression_ratio = (1 - thumb_size / original_size) * 100
+
+        logger.info(f"✅ 生成缩略图: {image_path.name} ({original_size:.1f}KB) -> {thumb_path.name} ({thumb_size:.1f}KB), 压缩{compression_ratio:.1f}%")
+
+        return thumb_path
+
+    except Exception as e:
+        logger.warning(f"⚠️ 生成缩略图失败: {e}，使用原图")
+        return image_path
+
+
 def get_url_hash(url: str) -> str:
     """生成URL的MD5哈希值（用于callback_data）"""
     md5 = hashlib.md5()
@@ -730,12 +790,23 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
         # 超过10张图片，自动尝试图床+Telegraph（参考parse_hub_bot逻辑）
         logger.info(f"检测到 {len(media_list)} 张图片（>10张），尝试图床+Telegraph")
         try:
-            # 上传图片到图床
+            # 生成缩略图并上传到图床（优化link preview渲染速度）
             uploaded_urls = []
             for img in media_list:
-                img_url = await _adapter.upload_to_image_host(img.path)
+                # 生成缩略图（800px宽，质量70%）
+                thumb_path = _generate_thumbnail(Path(img.path), max_width=800, quality=70)
+
+                # 上传缩略图到图床
+                img_url = await _adapter.upload_to_image_host(thumb_path)
                 if img_url:
                     uploaded_urls.append(img_url)
+
+                # 清理缩略图文件（如果是生成的缩略图）
+                if thumb_path != Path(img.path):
+                    try:
+                        thumb_path.unlink()
+                    except Exception as e:
+                        logger.debug(f"清理缩略图失败: {e}")
 
             if uploaded_urls:
                 # 创建HTML内容（使用原生lazy loading优化移动端加载）
@@ -747,7 +818,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                     html_content += f"<p>{desc}</p>"
 
                 # 使用HTML5原生懒加载：前3张立即加载，后续图片lazy load
-                # 这样可以避免Telegram移动端一次性加载所有图片导致闪烁
+                # 配合缩略图，可以让Telegram link preview快速渲染完成
                 for idx, url in enumerate(uploaded_urls):
                     if idx < 3:
                         # 前3张图片：立即加载（loading="eager"）
@@ -756,15 +827,15 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                         # 后续图片：懒加载（loading="lazy"，浏览器原生支持）
                         html_content += f'<figure><img src="{url}" loading="lazy"/></figure>'
 
-                # 添加底部提示
-                html_content += f'<p><i>共 {len(uploaded_urls)} 张图片 · 使用浏览器打开体验更佳</i></p>'
+                # 添加图片数量统计
+                html_content += f'<p><i>共 {len(uploaded_urls)} 张图片</i></p>'
 
                 # 发布到Telegraph
                 pr = download_result.pr if hasattr(download_result, 'pr') else None
                 telegraph_url = await _adapter.publish_to_telegraph(pr, html_content) if pr else None
 
                 if telegraph_url:
-                    # Telegraph成功，发送链接
+                    # Telegraph成功，发送链接（启用preview，缩略图让preview快速渲染完成）
                     msg = await context.bot.send_message(
                         chat_id=chat_id,
                         text=f"{caption}\n\n📷 共 {len(media_list)} 张图片\n🔗 [查看完整图集]({telegraph_url})",
