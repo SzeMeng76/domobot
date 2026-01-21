@@ -8242,8 +8242,13 @@ async def execute_tv_watch(query, context, tv_id: int):
         )
         message = query.message
     except telegram_error.BadRequest as e:
-        if "no text in the message" in str(e).lower():
-            # 如果原消息没有文本（纯按钮），则发送新消息
+        if "no text in the message" in str(e).lower() or "message to edit not found" in str(e).lower():
+            # 如果原消息是图片消息或没有文本，先删除原消息，然后发送新消息
+            try:
+                await query.message.delete()
+            except Exception:
+                pass  # 忽略删除失败
+
             message = await context.bot.send_message(
                 chat_id=query.message.chat_id,
                 text=f"🔍 正在获取观看平台信息 (ID: {tv_id})..."
