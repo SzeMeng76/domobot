@@ -4582,10 +4582,7 @@ async def tv_text_handler_core(update: Update, context: ContextTypes.DEFAULT_TYP
                 tv_session_manager.remove_session(user_id)
                 
             except ValueError:
-                await context.bot.send_message(
-                    chat_id=update.message.chat_id,
-                    text="❌ 请输入有效的数字ID"
-                )
+                await send_error(context, update.message.chat_id, "请输入有效的数字ID")
             
         elif action == "season" and waiting_for == "season_number":
             # 用户输入了季数
@@ -4603,20 +4600,14 @@ async def tv_text_handler_core(update: Update, context: ContextTypes.DEFAULT_TYP
                 tv_session_manager.remove_session(user_id)
                 
             except ValueError:
-                await context.bot.send_message(
-                    chat_id=update.message.chat_id,
-                    text="❌ 请输入有效的季数"
-                )
+                await send_error(context, update.message.chat_id, "请输入有效的季数")
             
         elif action == "episode" and waiting_for == "season_episode_numbers":
             # 用户输入了季数和集数
             try:
                 parts = text.split()
                 if len(parts) != 2:
-                    await context.bot.send_message(
-                        chat_id=update.message.chat_id,
-                        text="❌ 请输入季数和集数，用空格分隔（例如：1 5）"
-                    )
+                    await send_error(context, update.message.chat_id, "请输入季数和集数，用空格分隔（例如：1 5）")
                     return
                 
                 season_number = int(parts[0])
@@ -4633,21 +4624,15 @@ async def tv_text_handler_core(update: Update, context: ContextTypes.DEFAULT_TYP
                 tv_session_manager.remove_session(user_id)
                 
             except ValueError:
-                await context.bot.send_message(
-                    chat_id=update.message.chat_id,
-                    text="❌ 请输入有效的季数和集数"
-                )
+                await send_error(context, update.message.chat_id, "请输入有效的季数和集数")
             
         else:
             logger.warning(f"TVService: 未知的会话状态 - action: {action}, waiting_for: {waiting_for}")
             
     except Exception as e:
         logger.error(f"TV文本处理失败: {e}")
-        await context.bot.send_message(
-            chat_id=update.message.chat_id,
-            text=f"❌ 处理失败: {str(e)}"
-        )
-        
+        await send_error(context, update.message.chat_id, f"处理失败: {str(e)}")
+
         # 清理用户会话状态
         tv_session_manager.remove_session(user_id)
 
@@ -8364,7 +8349,7 @@ async def execute_tv_season(query, context, tv_id: int):
 async def _get_tv_season_details_with_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE, tv_id: int, season_number: int):
     """获取TV季详情的完整逻辑 - 100% movieold逻辑 + 返回按钮"""
     if not movie_service:
-        await context.bot.send_message(update.message.chat_id, "❌ TV查询服务未初始化")
+        await send_error(context, update.message.chat_id, "TV查询服务未初始化")
         return
     
     message = await context.bot.send_message(
@@ -8539,7 +8524,7 @@ async def execute_tv_episode(query, context, tv_id: int):
 async def _get_tv_episode_details_with_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE, tv_id: int, season_number: int, episode_number: int):
     """获取TV集详情的完整逻辑 - 100% movieold逻辑 + 返回按钮"""
     if not movie_service:
-        await context.bot.send_message(update.message.chat_id, "❌ TV查询服务未初始化")
+        await send_error(context, update.message.chat_id, "TV查询服务未初始化")
         return
     
     message = await context.bot.send_message(

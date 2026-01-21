@@ -130,9 +130,12 @@ def require_permission(permission: Permission):
                 return await func(update, context)
             except Exception as e:
                 logger.error(f"Error in {func.__name__}: {e}", exc_info=True)
-                await context.bot.send_message(
+                # 使用 send_error 确保错误消息会被自动删除
+                from utils.message_manager import send_error
+                await send_error(
+                    context=context,
                     chat_id=update.effective_chat.id,
-                    text="❌ 处理请求时发生错误，请稍后重试。\n如果问题持续存在，请联系管理员。",
+                    text="处理请求时发生错误，请稍后重试。\n如果问题持续存在，请联系管理员。",
                 )
 
         return wrapper
@@ -220,9 +223,12 @@ def permission_required(require_admin=False):
                 return await func(update, context)
             except Exception as e:
                 logger.error(f"Error in {func.__name__}: {e}", exc_info=True)
-                await context.bot.send_message(
+                # 使用 send_error 确保错误消息会被自动删除
+                from utils.message_manager import send_error
+                await send_error(
+                    context=context,
                     chat_id=update.effective_chat.id,
-                    text="❌ 处理请求时发生错误，请稍后重试。\n如果问题持续存在，请联系管理员。",
+                    text="处理请求时发生错误，请稍后重试。\n如果问题持续存在，请联系管理员。",
                 )
 
         return wrapper
