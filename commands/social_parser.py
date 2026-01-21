@@ -758,57 +758,71 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
         import imghdr
 
         media_group = []
-        for img in media_list[:10]:
-            try:
-                # Convert to WebP if needed to avoid Telegram image_process_failed error
-                converted_path = _convert_image_to_webp(Path(img.path))
-                image_path = str(converted_path)
+        file_handles = []  # 保持文件对象打开直到发送完成
 
-                # Verify file is actually an image
-                if not imghdr.what(image_path):
-                    logger.warning(f"⚠️ Skipping invalid image file: {image_path}")
+        try:
+            for img in media_list[:10]:
+                try:
+                    # Convert to WebP if needed to avoid Telegram image_process_failed error
+                    converted_path = _convert_image_to_webp(Path(img.path))
+                    image_path = str(converted_path)
+
+                    # Verify file is actually an image
+                    if not imghdr.what(image_path):
+                        logger.warning(f"⚠️ Skipping invalid image file: {image_path}")
+                        continue
+
+                    # 检查文件大小，如果超过9MB则压缩
+                    file_size = os.path.getsize(image_path)
+                    max_size = 9 * 1024 * 1024  # 9MB（留1MB余量）
+
+                    if file_size > max_size:
+                        logger.warning(f"⚠️ 图片大小 {file_size / 1024 / 1024:.2f}MB 超过限制，压缩中...")
+                        # 使用缩略图功能压缩（质量60%，最大宽度1920）
+                        compressed_path = _generate_thumbnail(Path(image_path), max_width=1920, quality=60)
+                        image_path = str(compressed_path)
+                        logger.info(f"✅ 压缩后大小: {os.path.getsize(image_path) / 1024 / 1024:.2f}MB")
+
+                    # 最佳实践：传递文件对象而不是字节，减少内存占用
+                    # 参考：https://docs.python-telegram-bot.org/en/stable/telegram.inputmediaphoto.html
+                    photo_file = open(image_path, 'rb')
+                    file_handles.append(photo_file)
+                    media_group.append(InputMediaPhoto(media=photo_file))
+
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to process image {img.path}: {e}, skipping")
                     continue
 
-                # 检查文件大小，如果超过9MB则压缩
-                file_size = os.path.getsize(image_path)
-                max_size = 9 * 1024 * 1024  # 9MB（留1MB余量）
+            # Check if we have any valid images
+            if not media_group:
+                logger.error("❌ No valid images to send")
+                raise ValueError("All images failed validation")
 
-                if file_size > max_size:
-                    logger.warning(f"⚠️ 图片大小 {file_size / 1024 / 1024:.2f}MB 超过限制，压缩中...")
-                    # 使用缩略图功能压缩（质量60%，最大宽度1920）
-                    compressed_path = _generate_thumbnail(Path(image_path), max_width=1920, quality=60)
-                    image_path = str(compressed_path)
-                    logger.info(f"✅ 压缩后大小: {os.path.getsize(image_path) / 1024 / 1024:.2f}MB")
+            # 发送媒体组（不带caption）
+            messages = await context.bot.send_media_group(
+                chat_id=chat_id,
+                media=media_group,
+                reply_to_message_id=reply_to_message_id
+            )
 
-                with open(image_path, 'rb') as photo_file:
-                    media_group.append(InputMediaPhoto(media=photo_file.read()))
+            # 单独发送文本消息带caption和按钮
+            text_msg = await context.bot.send_message(
+                chat_id=chat_id,
+                text=caption,
+                parse_mode="MarkdownV2",
+                reply_to_message_id=messages[0].message_id,  # 回复到第一张图片
+                disable_web_page_preview=True,
+                reply_markup=reply_markup
+            )
+            return list(messages) + [text_msg]
 
-            except Exception as e:
-                logger.warning(f"⚠️ Failed to process image {img.path}: {e}, skipping")
-                continue
-
-        # Check if we have any valid images
-        if not media_group:
-            logger.error("❌ No valid images to send")
-            raise ValueError("All images failed validation")
-
-        # 发送媒体组（不带caption）
-        messages = await context.bot.send_media_group(
-            chat_id=chat_id,
-            media=media_group,
-            reply_to_message_id=reply_to_message_id
-        )
-
-        # 单独发送文本消息带caption和按钮
-        text_msg = await context.bot.send_message(
-            chat_id=chat_id,
-            text=caption,
-            parse_mode="MarkdownV2",
-            reply_to_message_id=messages[0].message_id,  # 回复到第一张图片
-            disable_web_page_preview=True,
-            reply_markup=reply_markup
-        )
-        return list(messages) + [text_msg]
+        finally:
+            # 关闭所有文件句柄
+            for file_handle in file_handles:
+                try:
+                    file_handle.close()
+                except Exception as e:
+                    logger.warning(f"Failed to close file handle: {e}")
     else:
         # 超过10张图片，自动尝试图床+Telegraph（参考parse_hub_bot逻辑）
         logger.info(f"检测到 {len(media_list)} 张图片（>10张），尝试图床+Telegraph")
