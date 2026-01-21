@@ -8,6 +8,7 @@ import httpx
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
+from telegram import error as telegram_error
 from telegram.helpers import escape_markdown
 
 from utils.error_handling import with_error_handling
@@ -8233,8 +8234,22 @@ async def execute_tv_watch(query, context, tv_id: int):
         return
     
     # 先编辑为"正在获取..."消息
-    await query.edit_message_text(f"🔍 正在获取观看平台信息 \(ID: {tv_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
-    message = query.message  # 用于后续统一处理
+    try:
+        # 尝试编辑原消息（如果有文本）
+        await query.edit_message_text(
+            f"🔍 正在获取观看平台信息 (ID: {tv_id})...",
+            parse_mode=None  # 不使用 Markdown，避免转义问题
+        )
+        message = query.message
+    except telegram_error.BadRequest as e:
+        if "no text in the message" in str(e).lower():
+            # 如果原消息没有文本（纯按钮），则发送新消息
+            message = await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=f"🔍 正在获取观看平台信息 (ID: {tv_id})..."
+            )
+        else:
+            raise
     
     try:
         # 先获取电视剧基本信息以便获取标题
