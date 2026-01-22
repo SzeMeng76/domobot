@@ -735,6 +735,7 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         is_scam = None
         is_fake = None
         is_frozen = None
+        is_deleted = None
         bio = None
         user_status = None
         pyrogram_helper = context.bot_data.get("pyrogram_helper")
@@ -749,6 +750,7 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     is_scam = user_info.get('is_scam', False)
                     is_fake = user_info.get('is_fake', False)
                     is_frozen = user_info.get('is_frozen', False)
+                    is_deleted = user_info.get('is_deleted', False)
                     bio = user_info.get('bio')
                     user_status = user_info.get('status')
 
@@ -843,7 +845,9 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 result_text += f"✅ *认证状态*：{verified_text}\n"
 
             # 添加账号安全状态（如果可用）
-            if is_scam or is_fake or is_frozen:
+            if is_deleted:
+                result_text += f"🚨 *账号状态*：🗑️ 账号已删除 (Deleted Account)\n"
+            elif is_scam or is_fake or is_frozen:
                 if is_frozen:
                     result_text += f"🚨 *账号状态*：❄️ 账号已冻结\n"
                 elif is_scam:

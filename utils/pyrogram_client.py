@@ -160,6 +160,7 @@ class PyrogramHelper:
                 "is_scam": getattr(user, "is_scam", False),
                 "is_fake": getattr(user, "is_fake", False),
                 "is_frozen": getattr(user, "is_frozen", False),
+                "is_deleted": getattr(user, "deleted", False),
                 "bio": bio,
                 "status": getattr(user, "status", None),
             }
@@ -227,6 +228,7 @@ class PyrogramHelper:
                 "is_scam": getattr(user, "is_scam", False),
                 "is_fake": getattr(user, "is_fake", False),
                 "is_frozen": getattr(user, "is_frozen", False),
+                "is_deleted": getattr(user, "deleted", False),
                 "bio": bio,
                 "status": getattr(user, "status", None),
             }
