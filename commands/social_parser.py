@@ -137,35 +137,34 @@ def _generate_thumbnail(image_path: Path, max_width: int = 800, quality: int = 7
         缩略图路径
     """
     try:
-        img = PILImage.open(image_path)
+        with PILImage.open(image_path) as img:
+            # 如果图片宽度已经小于max_width，直接返回原图
+            if img.width <= max_width:
+                logger.debug(f"图片宽度({img.width}px)已小于{max_width}px，跳过缩略图生成")
+                return image_path
 
-        # 如果图片宽度已经小于max_width，直接返回原图
-        if img.width <= max_width:
-            logger.debug(f"图片宽度({img.width}px)已小于{max_width}px，跳过缩略图生成")
-            return image_path
+            # 计算缩放比例
+            ratio = max_width / img.width
+            new_height = int(img.height * ratio)
 
-        # 计算缩放比例
-        ratio = max_width / img.width
-        new_height = int(img.height * ratio)
+            # 缩放图片
+            img_resized = img.resize((max_width, new_height), PILImage.Resampling.LANCZOS)
 
-        # 缩放图片
-        img_resized = img.resize((max_width, new_height), PILImage.Resampling.LANCZOS)
+            # 生成缩略图文件名
+            thumb_path = image_path.parent / f"{image_path.stem}_thumb.jpg"
 
-        # 生成缩略图文件名
-        thumb_path = image_path.parent / f"{image_path.stem}_thumb.jpg"
+            # 保存为JPEG（压缩效果更好）
+            if img_resized.mode in ('RGBA', 'LA', 'P'):
+                # 如果有透明通道，转换为RGB并使用白色背景
+                background = PILImage.new('RGB', img_resized.size, (255, 255, 255))
+                if img_resized.mode == 'P':
+                    img_resized = img_resized.convert('RGBA')
+                background.paste(img_resized, mask=img_resized.split()[-1] if img_resized.mode == 'RGBA' else None)
+                img_resized = background
 
-        # 保存为JPEG（压缩效果更好）
-        if img_resized.mode in ('RGBA', 'LA', 'P'):
-            # 如果有透明通道，转换为RGB并使用白色背景
-            background = PILImage.new('RGB', img_resized.size, (255, 255, 255))
-            if img_resized.mode == 'P':
-                img_resized = img_resized.convert('RGBA')
-            background.paste(img_resized, mask=img_resized.split()[-1] if img_resized.mode == 'RGBA' else None)
-            img_resized = background
+            img_resized.save(thumb_path, 'JPEG', quality=quality, optimize=True)
 
-        img_resized.save(thumb_path, 'JPEG', quality=quality, optimize=True)
-
-        # 计算压缩比例
+        # 计算压缩比例（在with块外面，确保文件已保存）
         original_size = image_path.stat().st_size / 1024
         thumb_size = thumb_path.stat().st_size / 1024
         compression_ratio = (1 - thumb_size / original_size) * 100
