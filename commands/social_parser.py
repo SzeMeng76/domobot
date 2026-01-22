@@ -780,10 +780,8 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                     image_path = str(compressed_path)
                     logger.info(f"✅ 压缩后大小: {os.path.getsize(image_path) / 1024 / 1024:.2f}MB")
 
-                # 直接传递文件路径字符串，让python-telegram-bot库自动管理文件
-                # 优势：避免文件句柄泄漏，内存占用最小，避免Request Entity Too Large错误
-                # 参考：https://docs.python-telegram-bot.org/en/stable/telegram.inputmediaphoto.html
-                media_group.append(InputMediaPhoto(media=image_path))
+                with open(image_path, 'rb') as photo_file:
+                    media_group.append(InputMediaPhoto(media=photo_file.read()))
 
             except Exception as e:
                 logger.warning(f"⚠️ Failed to process image {img.path}: {e}, skipping")
@@ -818,11 +816,8 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
             # 生成缩略图并上传到图床（优化link preview渲染速度）
             uploaded_urls = []
             for img in media_list:
-                # 先转换HEIC/HEIF格式到WebP（如果需要）
-                converted_path = _convert_image_to_webp(Path(img.path))
-
                 # 生成缩略图（800px宽，质量70%）
-                thumb_path = _generate_thumbnail(converted_path, max_width=800, quality=70)
+                thumb_path = _generate_thumbnail(Path(img.path), max_width=800, quality=70)
 
                 # 上传缩略图到图床
                 img_url = await _adapter.upload_to_image_host(thumb_path)
@@ -830,7 +825,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                     uploaded_urls.append(img_url)
 
                 # 清理缩略图文件（如果是生成的缩略图）
-                if thumb_path != converted_path:
+                if thumb_path != Path(img.path):
                     try:
                         thumb_path.unlink()
                     except Exception as e:
