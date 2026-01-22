@@ -7979,8 +7979,21 @@ async def execute_tv_videos(query, context, tv_id: int):
         return
         
     message = query.message
-    await message.edit_text(f"🔍 正在获取电视剧视频 \\(ID: {tv_id}\\)\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
-    
+
+    # 辅助函数：安全地编辑消息
+    async def safe_edit_message(msg, text, parse_mode=None, reply_markup=None):
+        """安全地编辑消息，自动处理文本/caption/纯媒体消息"""
+        if msg.text:
+            await msg.edit_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
+        elif msg.caption:
+            await msg.edit_caption(caption=text, parse_mode=parse_mode, reply_markup=reply_markup)
+        else:
+            # 既没有文本也没有caption，只能编辑reply_markup
+            if reply_markup:
+                await msg.edit_reply_markup(reply_markup=reply_markup)
+
+    await safe_edit_message(message, f"🔍 正在获取电视剧视频 \\(ID: {tv_id}\\)\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
+
     try:
         # 直接获取视频数据
         videos_data = await movie_service._get_videos_data("tv", tv_id)
@@ -7989,7 +8002,8 @@ async def execute_tv_videos(query, context, tv_id: int):
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
             ])
-            await message.edit_text(
+            await safe_edit_message(
+                message,
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2,
                 reply_markup=return_keyboard
@@ -7998,13 +8012,13 @@ async def execute_tv_videos(query, context, tv_id: int):
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
             ])
-            await message.edit_text(f"❌ 未找到ID为 {tv_id} 的电视剧或无视频内容", reply_markup=return_keyboard)
+            await safe_edit_message(message, f"❌ 未找到ID为 {tv_id} 的电视剧或无视频内容", reply_markup=return_keyboard)
     except Exception as e:
         logger.error(f"获取电视剧视频失败: {e}")
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
         ])
-        await message.edit_text("❌ 获取电视剧视频时发生错误", reply_markup=return_keyboard)
+        await safe_edit_message(message, "❌ 获取电视剧视频时发生错误", reply_markup=return_keyboard)
     
     # 调度删除机器人回复消息（对应movieold的tv_videos逻辑）
     from utils.message_manager import _schedule_deletion
@@ -8217,30 +8231,23 @@ async def execute_tv_watch(query, context, tv_id: int):
     if not movie_service:
         await query.edit_message_text("❌ TV查询服务未初始化")
         return
-    
-    # 先编辑为"正在获取..."消息
-    try:
-        # 尝试编辑原消息（如果有文本）
-        await query.edit_message_text(
-            f"🔍 正在获取观看平台信息 (ID: {tv_id})...",
-            parse_mode=None  # 不使用 Markdown，避免转义问题
-        )
-        message = query.message
-    except telegram_error.BadRequest as e:
-        if "no text in the message" in str(e).lower() or "message to edit not found" in str(e).lower():
-            # 如果原消息是图片消息或没有文本，先删除原消息，然后发送新消息
-            try:
-                await query.message.delete()
-            except Exception:
-                pass  # 忽略删除失败
 
-            message = await context.bot.send_message(
-                chat_id=query.message.chat_id,
-                text=f"🔍 正在获取观看平台信息 (ID: {tv_id})..."
-            )
+    message = query.message
+
+    # 辅助函数：安全地编辑消息
+    async def safe_edit_message(msg, text, parse_mode=None, reply_markup=None):
+        """安全地编辑消息，自动处理文本/caption/纯媒体消息"""
+        if msg.text:
+            await msg.edit_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
+        elif msg.caption:
+            await msg.edit_caption(caption=text, parse_mode=parse_mode, reply_markup=reply_markup)
         else:
-            raise
-    
+            # 既没有文本也没有caption，只能编辑reply_markup
+            if reply_markup:
+                await msg.edit_reply_markup(reply_markup=reply_markup)
+
+    await safe_edit_message(message, f"🔍 正在获取观看平台信息 (ID: {tv_id})...")
+
     try:
         # 先获取电视剧基本信息以便获取标题
         tv_info = await movie_service.get_tv_details(tv_id)
@@ -8248,28 +8255,29 @@ async def execute_tv_watch(query, context, tv_id: int):
         if tv_info:
             tv_title = tv_info.get("original_name") or tv_info.get("name", "")
             logger.info(f"TV title for JustWatch search: {tv_title}")
-        
+
         # 使用增强的观影平台功能
         enhanced_providers = await movie_service.get_enhanced_watch_providers(
             tv_id, "tv", tv_title
         )
-        
+
         # 优先使用合并后的数据，如果没有则回退到 TMDB 数据
         providers_data = enhanced_providers.get("combined") or enhanced_providers.get("tmdb")
-        
+
         if providers_data:
             result_text = movie_service.format_watch_providers(providers_data, "tv")
-            
+
             # 如果有 JustWatch 数据，添加数据源说明
             if enhanced_providers.get("justwatch"):
                 result_text += "\n\n💡 数据来源: TMDB + JustWatch"
             else:
                 result_text += "\n\n💡 数据来源: TMDB"
-            
+
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
             ])
-            await message.edit_text(
+            await safe_edit_message(
+                message,
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2,
                 reply_markup=return_keyboard
@@ -8278,13 +8286,14 @@ async def execute_tv_watch(query, context, tv_id: int):
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
             ])
-            await message.edit_text(
+            await safe_edit_message(
+                message,
                 f"❌ 未找到ID为 {tv_id} 的电视剧观看平台信息",
                 reply_markup=return_keyboard
             )
     except Exception as e:
         logger.error(f"获取TV观看平台失败: {e}")
-        await message.edit_text("❌ 获取观看平台时发生错误")
+        await safe_edit_message(message, "❌ 获取观看平台时发生错误")
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
