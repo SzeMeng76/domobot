@@ -780,8 +780,10 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                     image_path = str(compressed_path)
                     logger.info(f"✅ 压缩后大小: {os.path.getsize(image_path) / 1024 / 1024:.2f}MB")
 
-                with open(image_path, 'rb') as photo_file:
-                    media_group.append(InputMediaPhoto(media=photo_file.read()))
+                # 直接传递文件路径字符串，让python-telegram-bot库自动管理文件
+                # 优势：避免文件句柄泄漏，内存占用最小，避免Request Entity Too Large错误
+                # 参考：https://docs.python-telegram-bot.org/en/stable/telegram.inputmediaphoto.html
+                media_group.append(InputMediaPhoto(media=image_path))
 
             except Exception as e:
                 logger.warning(f"⚠️ Failed to process image {img.path}: {e}, skipping")
