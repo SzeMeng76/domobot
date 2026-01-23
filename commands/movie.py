@@ -44,6 +44,17 @@ httpx_client = None
 # 创建person会话管理器 - 与flight/hotel相同的配置
 person_session_manager = SessionManager("PersonService", max_age=1800, max_sessions=200)  # 30分钟会话
 
+async def safe_edit_message(msg, text, parse_mode=None, reply_markup=None):
+    """安全地编辑消息，自动处理文本/caption/纯媒体消息"""
+    if msg.text:
+        await msg.edit_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
+    elif msg.caption:
+        await msg.edit_caption(caption=text, parse_mode=parse_mode, reply_markup=reply_markup)
+    else:
+        # 既没有文本也没有caption，只能编辑reply_markup
+        if reply_markup:
+            await msg.edit_reply_markup(reply_markup=reply_markup)
+
 async def _schedule_auto_delete(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, delay: int):
     """调度自动删除消息 - 与flight/hotel完全一致"""
     try:
@@ -93,17 +104,17 @@ async def _execute_person_search(update: Update, context: ContextTypes.DEFAULT_T
             keyboard = create_person_search_keyboard(search_data)
             
             # 更新消息内容，保持自动删除机制
-            await message.edit_text(
+            await safe_edit_message(message,
                 text=foldable_text_v2(result_text),
                 parse_mode="MarkdownV2",
                 reply_markup=keyboard
             )
         else:
-            await message.edit_text(f"❌ 未找到人物: {query}")
+            await safe_edit_message(message,f"❌ 未找到人物: {query}")
             
     except Exception as e:
         logger.error(f"人物搜索失败: {e}")
-        await message.edit_text(f"❌ 搜索失败: {str(e)}")
+        await safe_edit_message(message,f"❌ 搜索失败: {str(e)}")
 
 async def person_text_handler_core(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """人物功能文本处理的核心逻辑 - 与flight/hotel相同的模式"""
@@ -187,22 +198,22 @@ async def _execute_person_details(update: Update, context: ContextTypes.DEFAULT_
                 except Exception as photo_error:
                     logger.warning(f"发送头像失败: {photo_error}，改用文本消息")
                     # 图片发送失败，更新为文本消息
-                    await message.edit_text(
+                    await safe_edit_message(message,
                         text=foldable_text_with_markdown_v2(result_text),
                         parse_mode="MarkdownV2"
                     )
             else:
                 # 没有头像，更新为文本消息
-                await message.edit_text(
+                await safe_edit_message(message,
                     text=foldable_text_with_markdown_v2(result_text),
                     parse_mode="MarkdownV2"
                 )
         else:
-            await message.edit_text(f"❌ 未找到ID为 {person_id} 的人物")
+            await safe_edit_message(message,f"❌ 未找到ID为 {person_id} 的人物")
             
     except Exception as e:
         logger.error(f"获取人物详情失败: {e}")
-        await message.edit_text(f"❌ 获取详情失败: {str(e)}")
+        await safe_edit_message(message,f"❌ 获取详情失败: {str(e)}")
     
     # 调度删除机器人回复消息 - 统一处理图片和文本消息的自动删除
     config = get_config()
@@ -267,18 +278,18 @@ async def _handle_legacy_person_search_callback(query, context, callback_data):
                         except Exception as photo_error:
                             logger.warning(f"发送头像失败: {photo_error}，改用文本消息")
                             # 如果图片发送失败，改用文本消息
-                            await message.edit_text(
+                            await safe_edit_message(message,
                                 foldable_text_with_markdown_v2(result_text),
                                 parse_mode=ParseMode.MARKDOWN_V2
                             )
                     else:
                         # 没有头像，直接编辑文本
-                        await message.edit_text(
+                        await safe_edit_message(message,
                             foldable_text_with_markdown_v2(result_text),
                             parse_mode=ParseMode.MARKDOWN_V2
                         )
                 else:
-                    await message.edit_text(f"❌ 未找到ID为 {person_id} 的人物")
+                    await safe_edit_message(message,f"❌ 未找到ID为 {person_id} 的人物")
                 
                 # 调度删除机器人回复消息（统一处理，和movieold完全一样）
                 from utils.message_manager import _schedule_deletion
@@ -4489,17 +4500,17 @@ async def _execute_movie_search_from_menu(update: Update, context: ContextTypes.
             result_text = format_movie_search_results_for_keyboard(search_data)
             keyboard = create_movie_search_keyboard(search_data)
             
-            await message.edit_text(
+            await safe_edit_message(message,
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2,
                 reply_markup=keyboard
             )
         else:
-            await message.edit_text(f"❌ 未找到电影: {query}")
+            await safe_edit_message(message,f"❌ 未找到电影: {query}")
             
     except Exception as e:
         logger.error(f"电影搜索失败: {e}")
-        await message.edit_text(f"❌ 搜索失败: {str(e)}")
+        await safe_edit_message(message,f"❌ 搜索失败: {str(e)}")
     
     from utils.message_manager import _schedule_deletion
     config = get_config()
@@ -4556,13 +4567,13 @@ async def tv_text_handler_core(update: Update, context: ContextTypes.DEFAULT_TYP
                 result_text = format_tv_search_results_for_keyboard(search_data)
                 keyboard = create_tv_search_keyboard(search_data)
                 
-                await message.edit_text(
+                await safe_edit_message(message,
                     foldable_text_with_markdown_v2(result_text),
                     parse_mode=ParseMode.MARKDOWN_V2,
                     reply_markup=keyboard
                 )
             else:
-                await message.edit_text(f"❌ 未找到电视剧: {query}")
+                await safe_edit_message(message,f"❌ 未找到电视剧: {query}")
             
             # 清理会话状态
             tv_session_manager.remove_session(user_id)
@@ -4665,23 +4676,23 @@ async def _execute_movie_details_from_menu(update: Update, context: ContextTypes
                     await message.delete()
                     message = detail_message
                 except:
-                    await message.edit_text(
+                    await safe_edit_message(message,
                         foldable_text_with_markdown_v2(result_text),
                         parse_mode=ParseMode.MARKDOWN_V2,
                         reply_markup=function_keyboard
                     )
             else:
-                await message.edit_text(
+                await safe_edit_message(message,
                     foldable_text_with_markdown_v2(result_text),
                     parse_mode=ParseMode.MARKDOWN_V2,
                     reply_markup=function_keyboard
                 )
         else:
-            await message.edit_text(f"❌ 未找到ID为 {movie_id} 的电影")
+            await safe_edit_message(message,f"❌ 未找到ID为 {movie_id} 的电影")
             
     except Exception as e:
         logger.error(f"获取电影详情失败: {e}")
-        await message.edit_text(f"❌ 获取详情失败: {str(e)}")
+        await safe_edit_message(message,f"❌ 获取详情失败: {str(e)}")
     
     from utils.message_manager import _schedule_deletion
     config = get_config()
@@ -4740,23 +4751,23 @@ async def _execute_tv_details_from_menu(update: Update, context: ContextTypes.DE
                 except Exception as photo_error:
                     logger.warning(f"发送海报失败: {photo_error}，改用文本消息")
                     # 如果图片发送失败，改用文本消息
-                    await message.edit_text(
+                    await safe_edit_message(message,
                         foldable_text_with_markdown_v2(result_text),
                         parse_mode=ParseMode.MARKDOWN_V2,
                         reply_markup=function_keyboard
                     )
             else:
                 # 没有海报，直接发送文本
-                await message.edit_text(
+                await safe_edit_message(message,
                     foldable_text_with_markdown_v2(result_text),
                     parse_mode=ParseMode.MARKDOWN_V2,
                     reply_markup=function_keyboard
                 )
         else:
-            await message.edit_text(f"❌ 未找到ID为 {tv_id} 的电视剧")
+            await safe_edit_message(message,f"❌ 未找到ID为 {tv_id} 的电视剧")
     except Exception as e:
         logger.error(f"获取TV详情失败: {e}")
-        await message.edit_text(f"❌ 获取详情失败: {str(e)}")
+        await safe_edit_message(message,f"❌ 获取详情失败: {str(e)}")
     
     from utils.message_manager import _schedule_deletion
     config = get_config()
@@ -5019,7 +5030,7 @@ async def movie_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     
     try:
         search_data = await movie_service.search_movies(query)
-        if search_data:
+        if search_data and search_data.get('results'):
             # 添加查询词到搜索数据中
             search_data["query"] = query
             
@@ -5069,10 +5080,10 @@ async def movie_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             # 删除用户命令消息
             await delete_user_command(context, update.effective_chat.id, update.message.message_id, session_id=session_id)
         else:
-            await message.edit_text("❌ 搜索电影失败，请稍后重试")
+            await safe_edit_message(message,"❌ 搜索电影失败，请稍后重试")
     except Exception as e:
         logger.error(f"电影搜索失败: {e}")
-        await message.edit_text("❌ 搜索电影时发生错误")
+        await safe_edit_message(message,"❌ 搜索电影时发生错误")
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
@@ -5155,7 +5166,7 @@ async def movie_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         if source == "justwatch":
             # 显示JustWatch数据 - 支持单国和多国模式
             if not JUSTWATCH_AVAILABLE:
-                await message.edit_text("❌ JustWatch API不可用，请使用TMDB数据源")
+                await safe_edit_message(message,"❌ JustWatch API不可用，请使用TMDB数据源")
                 return
             
             if use_multi_country:
@@ -5232,14 +5243,14 @@ async def movie_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             else:
                 result_text = "❌ 获取热门电影数据失败，请稍后重试"
         
-        await message.edit_text(
+        await safe_edit_message(message,
             foldable_text_with_markdown_v2(result_text),
             parse_mode=ParseMode.MARKDOWN_V2
         )
         
     except Exception as e:
         logger.error(f"获取热门电影失败: {e}")
-        await message.edit_text("❌ 获取热门电影时发生错误")
+        await safe_edit_message(message,"❌ 获取热门电影时发生错误")
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
@@ -5341,23 +5352,23 @@ async def movie_detail_command(update: Update, context: ContextTypes.DEFAULT_TYP
                 except Exception as photo_error:
                     logger.warning(f"发送海报失败: {photo_error}，改用文本消息")
                     # 如果图片发送失败，改用文本消息
-                    await message.edit_text(
+                    await safe_edit_message(message,
                         foldable_text_with_markdown_v2(result_text),
                         parse_mode=ParseMode.MARKDOWN_V2,
                         reply_markup=function_keyboard
                     )
             else:
                 # 没有海报，直接发送文本
-                await message.edit_text(
+                await safe_edit_message(message,
                     foldable_text_with_markdown_v2(result_text),
                     parse_mode=ParseMode.MARKDOWN_V2,
                     reply_markup=function_keyboard
                 )
         else:
-            await message.edit_text(f"❌ 未找到ID为 {movie_id} 的电影")
+            await safe_edit_message(message,f"❌ 未找到ID为 {movie_id} 的电影")
     except Exception as e:
         logger.error(f"获取电影详情失败: {e}")
-        await message.edit_text("❌ 获取电影详情时发生错误")
+        await safe_edit_message(message,"❌ 获取电影详情时发生错误")
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
@@ -5420,7 +5431,7 @@ async def tv_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     
     try:
         search_data = await movie_service.search_tv_shows(query)
-        if search_data:
+        if search_data and search_data.get('results'):
             # 添加查询词到搜索数据中
             search_data["query"] = query
             
@@ -5470,10 +5481,10 @@ async def tv_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             # 删除用户命令消息
             await delete_user_command(context, update.effective_chat.id, update.message.message_id, session_id=session_id)
         else:
-            await message.edit_text("❌ 搜索电视剧失败，请稍后重试")
+            await safe_edit_message(message,"❌ 搜索电视剧失败，请稍后重试")
     except Exception as e:
         logger.error(f"电视剧搜索失败: {e}")
-        await message.edit_text("❌ 搜索电视剧时发生错误")
+        await safe_edit_message(message,"❌ 搜索电视剧时发生错误")
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
@@ -5556,7 +5567,7 @@ async def tv_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if source == "justwatch":
             # 显示JustWatch数据 - 支持单国和多国模式
             if not JUSTWATCH_AVAILABLE:
-                await message.edit_text("❌ JustWatch API不可用，请使用TMDB数据源")
+                await safe_edit_message(message,"❌ JustWatch API不可用，请使用TMDB数据源")
                 return
             
             if use_multi_country:
@@ -5633,14 +5644,14 @@ async def tv_hot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             else:
                 result_text = "❌ 获取热门电视剧数据失败，请稍后重试"
         
-        await message.edit_text(
+        await safe_edit_message(message,
             foldable_text_with_markdown_v2(result_text),
             parse_mode=ParseMode.MARKDOWN_V2
         )
         
     except Exception as e:
         logger.error(f"获取热门电视剧失败: {e}")
-        await message.edit_text("❌ 获取热门电视剧时发生错误")
+        await safe_edit_message(message,"❌ 获取热门电视剧时发生错误")
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
@@ -5742,23 +5753,23 @@ async def tv_detail_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 except Exception as photo_error:
                     logger.warning(f"发送海报失败: {photo_error}，改用文本消息")
                     # 如果图片发送失败，改用文本消息
-                    await message.edit_text(
+                    await safe_edit_message(message,
                         foldable_text_with_markdown_v2(result_text),
                         parse_mode=ParseMode.MARKDOWN_V2,
                         reply_markup=function_keyboard
                     )
             else:
                 # 没有海报，直接发送文本
-                await message.edit_text(
+                await safe_edit_message(message,
                     foldable_text_with_markdown_v2(result_text),
                     parse_mode=ParseMode.MARKDOWN_V2,
                     reply_markup=function_keyboard
                 )
         else:
-            await message.edit_text(f"❌ 未找到ID为 {tv_id} 的电视剧")
+            await safe_edit_message(message,f"❌ 未找到ID为 {tv_id} 的电视剧")
     except Exception as e:
         logger.error(f"获取电视剧详情失败: {e}")
-        await message.edit_text("❌ 获取电视剧详情时发生错误")
+        await safe_edit_message(message,"❌ 获取电视剧详情时发生错误")
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
@@ -6433,7 +6444,7 @@ async def _execute_movie_hot_chart(query, context) -> None:
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
         message = query.message
-        await message.edit_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
+        await safe_edit_message(message,"❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第4467-4471行）
@@ -6468,7 +6479,7 @@ async def _execute_movie_hot_chart(query, context) -> None:
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
             ])
-            await message.edit_text(
+            await safe_edit_message(message,
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2,
                 reply_markup=return_keyboard
@@ -6477,14 +6488,14 @@ async def _execute_movie_hot_chart(query, context) -> None:
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
             ])
-            await message.edit_text("❌ 获取热门电影数据失败，请稍后重试", reply_markup=return_keyboard)
+            await safe_edit_message(message,"❌ 获取热门电影数据失败，请稍后重试", reply_markup=return_keyboard)
             
     except Exception as e:
         logger.error(f"获取综合热门电影失败: {e}")
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await message.edit_text("❌ 获取综合热门电影时发生错误", reply_markup=return_keyboard)
+        await safe_edit_message(message,"❌ 获取综合热门电影时发生错误", reply_markup=return_keyboard)
     
     # 调度删除机器人回复消息（对应movieold统一删除逻辑）
     from utils.message_manager import _schedule_deletion  
@@ -6557,7 +6568,7 @@ async def _execute_trending_chart(query, context) -> None:
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
         message = query.message
-        await message.edit_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
+        await safe_edit_message(message,"❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第6335-6339行）
@@ -6571,7 +6582,7 @@ async def _execute_trending_chart(query, context) -> None:
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
             ])
-            await message.edit_text(
+            await safe_edit_message(message,
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2,
                 reply_markup=return_keyboard
@@ -6580,13 +6591,13 @@ async def _execute_trending_chart(query, context) -> None:
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
             ])
-            await message.edit_text("❌ 获取热门内容失败，请稍后重试", reply_markup=return_keyboard)
+            await safe_edit_message(message,"❌ 获取热门内容失败，请稍后重试", reply_markup=return_keyboard)
     except Exception as e:
         logger.error(f"获取热门内容失败: {e}")
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await message.edit_text("❌ 获取热门内容时发生错误", reply_markup=return_keyboard)
+        await safe_edit_message(message,"❌ 获取热门内容时发生错误", reply_markup=return_keyboard)
     
     # 调度删除机器人回复消息（对应movieold第6355-6359行）
     from utils.message_manager import _schedule_deletion
@@ -6600,7 +6611,7 @@ async def _execute_trending_week_chart(query, context) -> None:
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
         message = query.message
-        await message.edit_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
+        await safe_edit_message(message,"❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第6374-6378行）
@@ -6614,7 +6625,7 @@ async def _execute_trending_week_chart(query, context) -> None:
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
             ])
-            await message.edit_text(
+            await safe_edit_message(message,
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2,
                 reply_markup=return_keyboard
@@ -6623,13 +6634,13 @@ async def _execute_trending_week_chart(query, context) -> None:
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
             ])
-            await message.edit_text("❌ 获取本周热门内容失败，请稍后重试", reply_markup=return_keyboard)
+            await safe_edit_message(message,"❌ 获取本周热门内容失败，请稍后重试", reply_markup=return_keyboard)
     except Exception as e:
         logger.error(f"获取本周热门内容失败: {e}")
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await message.edit_text("❌ 获取本周热门内容时发生错误", reply_markup=return_keyboard)
+        await safe_edit_message(message,"❌ 获取本周热门内容时发生错误", reply_markup=return_keyboard)
     
     # 调度删除机器人回复消息（对应movieold第6394-6398行）
     from utils.message_manager import _schedule_deletion
@@ -6644,7 +6655,7 @@ async def _execute_now_playing_chart(query, context) -> None:
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
         message = query.message
-        await message.edit_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
+        await safe_edit_message(message,"❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第6411-6415行）
@@ -6658,7 +6669,7 @@ async def _execute_now_playing_chart(query, context) -> None:
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
             ])
-            await message.edit_text(
+            await safe_edit_message(message,
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2,
                 reply_markup=return_keyboard
@@ -6667,13 +6678,13 @@ async def _execute_now_playing_chart(query, context) -> None:
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
             ])
-            await message.edit_text("❌ 获取正在上映电影失败，请稍后重试", reply_markup=return_keyboard)
+            await safe_edit_message(message,"❌ 获取正在上映电影失败，请稍后重试", reply_markup=return_keyboard)
     except Exception as e:
         logger.error(f"获取正在上映电影失败: {e}")
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await message.edit_text("❌ 获取正在上映电影时发生错误", reply_markup=return_keyboard)
+        await safe_edit_message(message,"❌ 获取正在上映电影时发生错误", reply_markup=return_keyboard)
     
     # 调度删除机器人回复消息（对应movieold第6432-6435行）
     from utils.message_manager import _schedule_deletion
@@ -6687,7 +6698,7 @@ async def _execute_upcoming_chart(query, context) -> None:
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
         message = query.message
-        await message.edit_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
+        await safe_edit_message(message,"❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第6449-6453行）
@@ -6701,7 +6712,7 @@ async def _execute_upcoming_chart(query, context) -> None:
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
             ])
-            await message.edit_text(
+            await safe_edit_message(message,
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2,
                 reply_markup=return_keyboard
@@ -6710,13 +6721,13 @@ async def _execute_upcoming_chart(query, context) -> None:
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
             ])
-            await message.edit_text("❌ 获取即将上映电影失败，请稍后重试", reply_markup=return_keyboard)
+            await safe_edit_message(message,"❌ 获取即将上映电影失败，请稍后重试", reply_markup=return_keyboard)
     except Exception as e:
         logger.error(f"获取即将上映电影失败: {e}")
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await message.edit_text("❌ 获取即将上映电影时发生错误", reply_markup=return_keyboard)
+        await safe_edit_message(message,"❌ 获取即将上映电影时发生错误", reply_markup=return_keyboard)
     
     # 调度删除机器人回复消息（对应movieold第6470-6473行）
     from utils.message_manager import _schedule_deletion
@@ -6743,7 +6754,7 @@ async def _execute_tv_airing_chart(query, context) -> None:
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
             ])
-            await message.edit_text(
+            await safe_edit_message(message,
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2,
                 reply_markup=return_keyboard
@@ -6752,13 +6763,13 @@ async def _execute_tv_airing_chart(query, context) -> None:
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
             ])
-            await message.edit_text("❌ 获取今日播出电视剧失败，请稍后重试", reply_markup=return_keyboard)
+            await safe_edit_message(message,"❌ 获取今日播出电视剧失败，请稍后重试", reply_markup=return_keyboard)
     except Exception as e:
         logger.error(f"获取今日播出电视剧失败: {e}")
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await message.edit_text("❌ 获取今日播出电视剧时发生错误", reply_markup=return_keyboard)
+        await safe_edit_message(message,"❌ 获取今日播出电视剧时发生错误", reply_markup=return_keyboard)
     
     # 调度删除机器人回复消息（对应movieold第6508-6511行）
     from utils.message_manager import _schedule_deletion
@@ -6785,7 +6796,7 @@ async def _execute_tv_on_air_chart(query, context) -> None:
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
             ])
-            await message.edit_text(
+            await safe_edit_message(message,
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2,
                 reply_markup=return_keyboard
@@ -6794,13 +6805,13 @@ async def _execute_tv_on_air_chart(query, context) -> None:
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
             ])
-            await message.edit_text("❌ 获取正在播出电视剧失败，请稍后重试", reply_markup=return_keyboard)
+            await safe_edit_message(message,"❌ 获取正在播出电视剧失败，请稍后重试", reply_markup=return_keyboard)
     except Exception as e:
         logger.error(f"获取正在播出电视剧失败: {e}")
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await message.edit_text("❌ 获取正在播出电视剧时发生错误", reply_markup=return_keyboard)
+        await safe_edit_message(message,"❌ 获取正在播出电视剧时发生错误", reply_markup=return_keyboard)
     
     # 调度删除机器人回复消息（对应movieold第6546-6549行）
     from utils.message_manager import _schedule_deletion
@@ -6814,7 +6825,7 @@ async def _execute_streaming_movie_chart(query, context) -> None:
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
         message = query.message
-        await message.edit_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
+        await safe_edit_message(message,"❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息
@@ -6834,7 +6845,7 @@ async def _execute_streaming_movie_chart(query, context) -> None:
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
             ])
-            await message.edit_text(
+            await safe_edit_message(message,
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2,
                 reply_markup=return_keyboard
@@ -6843,13 +6854,13 @@ async def _execute_streaming_movie_chart(query, context) -> None:
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
             ])
-            await message.edit_text("❌ 获取多国综合流媒体电影热度排行榜失败，请稍后重试", reply_markup=return_keyboard)
+            await safe_edit_message(message,"❌ 获取多国综合流媒体电影热度排行榜失败，请稍后重试", reply_markup=return_keyboard)
     except Exception as e:
         logger.error(f"获取流媒体电影热度失败: {e}")
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await message.edit_text("❌ 获取流媒体电影热度时发生错误", reply_markup=return_keyboard)
+        await safe_edit_message(message,"❌ 获取流媒体电影热度时发生错误", reply_markup=return_keyboard)
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
@@ -6882,7 +6893,7 @@ async def _execute_streaming_tv_chart(query, context) -> None:
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
             ])
-            await message.edit_text(
+            await safe_edit_message(message,
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2,
                 reply_markup=return_keyboard
@@ -6891,13 +6902,13 @@ async def _execute_streaming_tv_chart(query, context) -> None:
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
             ])
-            await message.edit_text("❌ 获取多国综合流媒体剧集热度排行榜失败，请稍后重试", reply_markup=return_keyboard)
+            await safe_edit_message(message,"❌ 获取多国综合流媒体剧集热度排行榜失败，请稍后重试", reply_markup=return_keyboard)
     except Exception as e:
         logger.error(f"获取流媒体剧集热度失败: {e}")
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await message.edit_text("❌ 获取流媒体剧集热度时发生错误", reply_markup=return_keyboard)
+        await safe_edit_message(message,"❌ 获取流媒体剧集热度时发生错误", reply_markup=return_keyboard)
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
@@ -6911,7 +6922,7 @@ async def _execute_movie_trending_chart(query, context) -> None:
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
         message = query.message
-        await message.edit_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
+        await safe_edit_message(message,"❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息
@@ -6925,7 +6936,7 @@ async def _execute_movie_trending_chart(query, context) -> None:
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
             ])
-            await message.edit_text(
+            await safe_edit_message(message,
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2,
                 reply_markup=return_keyboard
@@ -6934,13 +6945,13 @@ async def _execute_movie_trending_chart(query, context) -> None:
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
             ])
-            await message.edit_text("❌ 获取Trakt热门电影失败，请稍后重试", reply_markup=return_keyboard)
+            await safe_edit_message(message,"❌ 获取Trakt热门电影失败，请稍后重试", reply_markup=return_keyboard)
     except Exception as e:
         logger.error(f"获取Trakt热门电影失败: {e}")
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await message.edit_text("❌ 获取Trakt热门电影时发生错误", reply_markup=return_keyboard)
+        await safe_edit_message(message,"❌ 获取Trakt热门电影时发生错误", reply_markup=return_keyboard)
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
@@ -6967,7 +6978,7 @@ async def _execute_tv_trending_chart(query, context) -> None:
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
             ])
-            await message.edit_text(
+            await safe_edit_message(message,
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2,
                 reply_markup=return_keyboard
@@ -6976,13 +6987,13 @@ async def _execute_tv_trending_chart(query, context) -> None:
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
             ])
-            await message.edit_text("❌ 获取Trakt热门剧集失败，请稍后重试", reply_markup=return_keyboard)
+            await safe_edit_message(message,"❌ 获取Trakt热门剧集失败，请稍后重试", reply_markup=return_keyboard)
     except Exception as e:
         logger.error(f"获取Trakt热门剧集失败: {e}")
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await message.edit_text("❌ 获取Trakt热门剧集时发生错误", reply_markup=return_keyboard)
+        await safe_edit_message(message,"❌ 获取Trakt热门剧集时发生错误", reply_markup=return_keyboard)
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
@@ -7444,7 +7455,7 @@ async def handle_movie_function_callback(query, context, callback_data):
         await execute_movie_watch(query, context, movie_id)
     else:
         message = query.message
-        await message.edit_text(f"❌ 未实现的功能: {function_name}")
+        await safe_edit_message(message,f"❌ 未实现的功能: {function_name}")
 
 async def execute_movie_recommendations(query, context, movie_id: int):
     """执行电影推荐 - 完全按照movieold的movie_rec_command逻辑"""
@@ -7453,12 +7464,12 @@ async def execute_movie_recommendations(query, context, movie_id: int):
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
         message = query.message
-        await message.edit_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
+        await safe_edit_message(message,"❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第5053-5057行）
     message = query.message
-    await message.edit_text(f"🔍 正在获取电影推荐 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await safe_edit_message(message,f"🔍 正在获取电影推荐 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
     
     try:
         recommendations = await movie_service.get_movie_recommendations(movie_id)
@@ -7467,7 +7478,7 @@ async def execute_movie_recommendations(query, context, movie_id: int):
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
             ])
-            await message.edit_text(
+            await safe_edit_message(message,
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2,
                 reply_markup=return_keyboard
@@ -7476,7 +7487,7 @@ async def execute_movie_recommendations(query, context, movie_id: int):
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
             ])
-            await message.edit_text(
+            await safe_edit_message(message,
                 "❌ 获取电影推荐失败，请稍后重试",
                 reply_markup=return_keyboard
             )
@@ -7485,7 +7496,7 @@ async def execute_movie_recommendations(query, context, movie_id: int):
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
         ])
-        await message.edit_text("❌ 获取电影推荐时发生错误", reply_markup=return_keyboard)
+        await safe_edit_message(message,"❌ 获取电影推荐时发生错误", reply_markup=return_keyboard)
     
     # 调度删除机器人回复消息（对应movieold第5073-5077行）
     from utils.message_manager import _schedule_deletion
@@ -7499,12 +7510,12 @@ async def execute_movie_videos(query, context, movie_id: int):
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
         message = query.message
-        await message.edit_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
+        await safe_edit_message(message,"❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第5820-5824行）
     message = query.message
-    await message.edit_text(f"🔍 正在获取电影视频 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await safe_edit_message(message,f"🔍 正在获取电影视频 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
     
     try:
         videos_data = await movie_service._get_videos_data("movie", movie_id)
@@ -7513,7 +7524,7 @@ async def execute_movie_videos(query, context, movie_id: int):
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
             ])
-            await message.edit_text(
+            await safe_edit_message(message,
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2,
                 reply_markup=return_keyboard
@@ -7522,13 +7533,13 @@ async def execute_movie_videos(query, context, movie_id: int):
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
             ])
-            await message.edit_text(
+            await safe_edit_message(message,
                 "❌ 该电影暂无可用的预告片或视频",
                 reply_markup=return_keyboard
             )
     except Exception as e:
         logger.error(f"获取电影视频失败: {e}")
-        await message.edit_text("❌ 获取电影视频时发生错误")
+        await safe_edit_message(message,"❌ 获取电影视频时发生错误")
     
     # 调度删除机器人回复消息（对应movieold第5840-5844行）
     from utils.message_manager import _schedule_deletion
@@ -7542,18 +7553,18 @@ async def execute_movie_reviews(query, context, movie_id: int):
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
         message = query.message
-        await message.edit_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
+        await safe_edit_message(message,"❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第6277-6281行）
     message = query.message
-    await message.edit_text(f"🔍 正在获取电影评价 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await safe_edit_message(message,f"🔍 正在获取电影评价 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
     
     try:
         # 获取电影基本信息
         detail_data = await movie_service.get_movie_details(movie_id)
         if not detail_data:
-            await message.edit_text(f"❌ 未找到ID为 {movie_id} 的电影")
+            await safe_edit_message(message,f"❌ 未找到ID为 {movie_id} 的电影")
             return
         
         movie_title = detail_data.get("title", "未知电影")
@@ -7561,7 +7572,7 @@ async def execute_movie_reviews(query, context, movie_id: int):
         # 获取评价数据
         reviews_data = await movie_service._get_reviews_data("movie", movie_id)
         if not reviews_data:
-            await message.edit_text(f"❌ 未找到电影《{movie_title}》的评价信息")
+            await safe_edit_message(message,f"❌ 未找到电影《{movie_title}》的评价信息")
             return
         
         # 格式化评价列表
@@ -7637,7 +7648,7 @@ async def execute_movie_reviews(query, context, movie_id: int):
                 ])
                 
                 summary_text = "\n".join(preview_lines)
-                await message.edit_text(
+                await safe_edit_message(message,
                     foldable_text_with_markdown_v2(summary_text),
                     parse_mode=ParseMode.MARKDOWN_V2,
                     reply_markup=return_keyboard
@@ -7648,7 +7659,7 @@ async def execute_movie_reviews(query, context, movie_id: int):
                 return_keyboard = InlineKeyboardMarkup([
                     [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
                 ])
-                await message.edit_text(
+                await safe_edit_message(message,
                     foldable_text_with_markdown_v2(truncated_text),
                     parse_mode=ParseMode.MARKDOWN_V2,
                     reply_markup=return_keyboard
@@ -7658,14 +7669,14 @@ async def execute_movie_reviews(query, context, movie_id: int):
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
             ])
-            await message.edit_text(
+            await safe_edit_message(message,
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2,
                 reply_markup=return_keyboard
             )
     except Exception as e:
         logger.error(f"获取电影评价失败: {e}")
-        await message.edit_text("❌ 获取电影评价时发生错误")
+        await safe_edit_message(message,"❌ 获取电影评价时发生错误")
     
     # 调度删除机器人回复消息（对应movieold第6297-6301行）
     from utils.message_manager import _schedule_deletion
@@ -7679,12 +7690,12 @@ async def execute_movie_related(query, context, movie_id: int):
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
         message = query.message
-        await message.edit_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
+        await safe_edit_message(message,"❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第6133-6137行）
     message = query.message
-    await message.edit_text(f"🔍 正在获取相关电影推荐 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await safe_edit_message(message,f"🔍 正在获取相关电影推荐 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
     
     try:
         # 先获取电影基本信息用于显示标题
@@ -7700,7 +7711,7 @@ async def execute_movie_related(query, context, movie_id: int):
                 return_keyboard = InlineKeyboardMarkup([
                     [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
                 ])
-                await message.edit_text(
+                await safe_edit_message(message,
                     foldable_text_with_markdown_v2(result_text),
                     parse_mode=ParseMode.MARKDOWN_V2,
                     reply_markup=return_keyboard
@@ -7709,7 +7720,7 @@ async def execute_movie_related(query, context, movie_id: int):
                 return_keyboard = InlineKeyboardMarkup([
                     [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
                 ])
-                await message.edit_text(
+                await safe_edit_message(message,
                     f"❌ 未找到电影《{movie_title}》的相关推荐",
                     reply_markup=return_keyboard
                 )
@@ -7717,13 +7728,13 @@ async def execute_movie_related(query, context, movie_id: int):
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
             ])
-            await message.edit_text(
+            await safe_edit_message(message,
                 f"❌ 在Trakt上未找到电影《{movie_title}》",
                 reply_markup=return_keyboard
             )
     except Exception as e:
         logger.error(f"获取相关电影推荐失败: {e}")
-        await message.edit_text("❌ 获取相关电影推荐时发生错误")
+        await safe_edit_message(message,"❌ 获取相关电影推荐时发生错误")
     
     # 调度删除机器人回复消息（对应movieold第6153-6157行）
     from utils.message_manager import _schedule_deletion
@@ -7737,12 +7748,12 @@ async def execute_movie_watch(query, context, movie_id: int):
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
         message = query.message
-        await message.edit_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
+        await safe_edit_message(message,"❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第7018-7022行）
     message = query.message
-    await message.edit_text(f"🔍 正在获取观看平台信息 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await safe_edit_message(message,f"🔍 正在获取观看平台信息 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
     
     try:
         # 先获取电影基本信息以便获取标题
@@ -7773,7 +7784,7 @@ async def execute_movie_watch(query, context, movie_id: int):
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
             ])
-            await message.edit_text(
+            await safe_edit_message(message,
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2,
                 reply_markup=return_keyboard
@@ -7782,7 +7793,7 @@ async def execute_movie_watch(query, context, movie_id: int):
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
             ])
-            await message.edit_text(
+            await safe_edit_message(message,
                 f"❌ 未找到ID为 {movie_id} 的电影观看平台信息",
                 reply_markup=return_keyboard
             )
@@ -7791,7 +7802,7 @@ async def execute_movie_watch(query, context, movie_id: int):
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回电影功能", callback_data=f"movie_detail_{movie_id}")]
         ])
-        await message.edit_text("❌ 获取观看平台信息时发生错误", reply_markup=return_keyboard)
+        await safe_edit_message(message,"❌ 获取观看平台信息时发生错误", reply_markup=return_keyboard)
     
     # 调度删除机器人回复消息（对应movieold第7058-7062行）
     from utils.message_manager import _schedule_deletion
@@ -7805,7 +7816,7 @@ async def show_movie_details_with_functions(query, context, movie_id: int):
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
         message = query.message
-        await message.edit_text("❌ 电影查询服务未初始化", reply_markup=return_keyboard)
+        await safe_edit_message(message,"❌ 电影查询服务未初始化", reply_markup=return_keyboard)
         return
     
     user_id = query.from_user.id
@@ -7836,7 +7847,7 @@ async def show_movie_details_with_functions(query, context, movie_id: int):
     # 如果没有缓存数据，重新获取
     if not detail_data:
         message = query.message
-        await message.edit_text(f"🔍 正在获取电影详情 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+        await safe_edit_message(message,f"🔍 正在获取电影详情 \(ID: {movie_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
         detail_data = await movie_service.get_movie_details(movie_id)
     
     try:
@@ -7893,11 +7904,11 @@ async def show_movie_details_with_functions(query, context, movie_id: int):
                 )
         else:
             message = query.message
-            await message.edit_text(f"❌ 未找到ID为 {movie_id} 的电影")
+            await safe_edit_message(message,f"❌ 未找到ID为 {movie_id} 的电影")
     except Exception as e:
         logger.error(f"显示电影详情失败: {e}")
         message = query.message
-        await message.edit_text("❌ 获取电影详情时发生错误")
+        await safe_edit_message(message,"❌ 获取电影详情时发生错误")
     
     # 调度删除机器人回复消息（和movieold的详情显示一样）
     from utils.message_manager import _schedule_deletion
@@ -7926,7 +7937,7 @@ async def handle_tv_function_callback(query, context, callback_data):
         await execute_tv_episode(query, context, tv_id)
     else:
         message = query.message
-        await message.edit_text(f"❌ 未实现的功能: {function_name}")
+        await safe_edit_message(message,f"❌ 未实现的功能: {function_name}")
 
 async def execute_tv_recommendations(query, context, tv_id: int):
     """执行TV推荐 - 完全按照movieold的tv_rec_command逻辑"""
@@ -7938,7 +7949,7 @@ async def execute_tv_recommendations(query, context, tv_id: int):
         return
         
     message = query.message
-    await message.edit_text(f"🔍 正在获取电视剧推荐 \\(基于ID: {tv_id}\\)\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await safe_edit_message(message,f"🔍 正在获取电视剧推荐 \\(基于ID: {tv_id}\\)\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
     
     try:
         rec_data = await movie_service.get_tv_recommendations(tv_id)
@@ -7947,7 +7958,7 @@ async def execute_tv_recommendations(query, context, tv_id: int):
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
             ])
-            await message.edit_text(
+            await safe_edit_message(message,
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2,
                 reply_markup=return_keyboard
@@ -7956,13 +7967,13 @@ async def execute_tv_recommendations(query, context, tv_id: int):
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
             ])
-            await message.edit_text(f"❌ 未找到基于ID {tv_id} 的推荐", reply_markup=return_keyboard)
+            await safe_edit_message(message,f"❌ 未找到基于ID {tv_id} 的推荐", reply_markup=return_keyboard)
     except Exception as e:
         logger.error(f"获取电视剧推荐失败: {e}")
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
         ])
-        await message.edit_text("❌ 获取电视剧推荐时发生错误", reply_markup=return_keyboard)
+        await safe_edit_message(message,"❌ 获取电视剧推荐时发生错误", reply_markup=return_keyboard)
     
     # 调度删除机器人回复消息（对应movieold的tv_rec逻辑）
     from utils.message_manager import _schedule_deletion
@@ -7984,7 +7995,7 @@ async def execute_tv_videos(query, context, tv_id: int):
     async def safe_edit_message(msg, text, parse_mode=None, reply_markup=None):
         """安全地编辑消息，自动处理文本/caption/纯媒体消息"""
         if msg.text:
-            await msg.edit_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
+            await safe_edit_message(msg,text, parse_mode=parse_mode, reply_markup=reply_markup)
         elif msg.caption:
             await msg.edit_caption(caption=text, parse_mode=parse_mode, reply_markup=reply_markup)
         else:
@@ -8032,7 +8043,7 @@ async def execute_tv_reviews(query, context, tv_id: int):
         return
         
     message = query.message
-    await message.edit_text(f"🔍 正在获取电视剧评价 \(ID: {tv_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await safe_edit_message(message,f"🔍 正在获取电视剧评价 \(ID: {tv_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
     
     try:
         # 获取电视剧基本信息
@@ -8041,7 +8052,7 @@ async def execute_tv_reviews(query, context, tv_id: int):
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
             ])
-            await message.edit_text(f"❌ 未找到ID为 {tv_id} 的电视剧", reply_markup=return_keyboard)
+            await safe_edit_message(message,f"❌ 未找到ID为 {tv_id} 的电视剧", reply_markup=return_keyboard)
             # 调度删除机器人回复消息
             from utils.message_manager import _schedule_deletion
             from utils.config_manager import get_config
@@ -8135,7 +8146,7 @@ async def execute_tv_reviews(query, context, tv_id: int):
                 return_keyboard = InlineKeyboardMarkup([
                     [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
                 ])
-                await message.edit_text(
+                await safe_edit_message(message,
                     foldable_text_with_markdown_v2(summary_text),
                     parse_mode=ParseMode.MARKDOWN_V2,
                     reply_markup=return_keyboard
@@ -8146,7 +8157,7 @@ async def execute_tv_reviews(query, context, tv_id: int):
                 return_keyboard = InlineKeyboardMarkup([
                     [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
                 ])
-                await message.edit_text(
+                await safe_edit_message(message,
                     foldable_text_with_markdown_v2(truncated_text),
                     parse_mode=ParseMode.MARKDOWN_V2,
                     reply_markup=return_keyboard
@@ -8156,7 +8167,7 @@ async def execute_tv_reviews(query, context, tv_id: int):
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
             ])
-            await message.edit_text(
+            await safe_edit_message(message,
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2,
                 reply_markup=return_keyboard
@@ -8164,7 +8175,7 @@ async def execute_tv_reviews(query, context, tv_id: int):
         
     except Exception as e:
         logger.error(f"获取电视剧评价失败: {e}")
-        await message.edit_text("❌ 获取电视剧评价时发生错误")
+        await safe_edit_message(message,"❌ 获取电视剧评价时发生错误")
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
@@ -8196,7 +8207,7 @@ async def execute_tv_related(query, context, tv_id: int):
                 return_keyboard = InlineKeyboardMarkup([
                     [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
                 ])
-                await message.edit_text(
+                await safe_edit_message(message,
                     foldable_text_with_markdown_v2(result_text),
                     parse_mode=ParseMode.MARKDOWN_V2,
                     reply_markup=return_keyboard
@@ -8205,7 +8216,7 @@ async def execute_tv_related(query, context, tv_id: int):
                 return_keyboard = InlineKeyboardMarkup([
                     [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
                 ])
-                await message.edit_text(
+                await safe_edit_message(message,
                     f"❌ 未找到电视剧《{tv_title}》的相关推荐",
                     reply_markup=return_keyboard
                 )
@@ -8213,13 +8224,13 @@ async def execute_tv_related(query, context, tv_id: int):
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
             ])
-            await message.edit_text(
+            await safe_edit_message(message,
                 f"❌ 在Trakt上未找到电视剧《{tv_title}》",
                 reply_markup=return_keyboard
             )
     except Exception as e:
         logger.error(f"获取相关TV推荐失败: {e}")
-        await message.edit_text("❌ 获取相关推荐时发生错误")
+        await safe_edit_message(message,"❌ 获取相关推荐时发生错误")
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
@@ -8238,7 +8249,7 @@ async def execute_tv_watch(query, context, tv_id: int):
     async def safe_edit_message(msg, text, parse_mode=None, reply_markup=None):
         """安全地编辑消息，自动处理文本/caption/纯媒体消息"""
         if msg.text:
-            await msg.edit_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
+            await safe_edit_message(msg,text, parse_mode=parse_mode, reply_markup=reply_markup)
         elif msg.caption:
             await msg.edit_caption(caption=text, parse_mode=parse_mode, reply_markup=reply_markup)
         else:
@@ -8373,7 +8384,7 @@ async def _get_tv_season_details_with_buttons(update: Update, context: ContextTy
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
             ])
-            await message.edit_text(f"❌ 未找到电视剧ID {tv_id} 的第{season_number}季", reply_markup=return_keyboard)
+            await safe_edit_message(message,f"❌ 未找到电视剧ID {tv_id} 的第{season_number}季", reply_markup=return_keyboard)
             return
         
         # 获取电视剧基本信息用于Telegraph标题
@@ -8454,7 +8465,7 @@ async def _get_tv_season_details_with_buttons(update: Update, context: ContextTy
                 return_keyboard = InlineKeyboardMarkup([
                     [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
                 ])
-                await message.edit_text(
+                await safe_edit_message(message,
                     foldable_text_with_markdown_v2(summary_text),
                     parse_mode=ParseMode.MARKDOWN_V2,
                     reply_markup=return_keyboard
@@ -8465,7 +8476,7 @@ async def _get_tv_season_details_with_buttons(update: Update, context: ContextTy
                 return_keyboard = InlineKeyboardMarkup([
                     [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
                 ])
-                await message.edit_text(
+                await safe_edit_message(message,
                     foldable_text_with_markdown_v2(truncated_text),
                     parse_mode=ParseMode.MARKDOWN_V2,
                     reply_markup=return_keyboard
@@ -8475,7 +8486,7 @@ async def _get_tv_season_details_with_buttons(update: Update, context: ContextTy
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
             ])
-            await message.edit_text(
+            await safe_edit_message(message,
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2,
                 reply_markup=return_keyboard
@@ -8483,7 +8494,7 @@ async def _get_tv_season_details_with_buttons(update: Update, context: ContextTy
         
     except Exception as e:
         logger.error(f"获取TV季详情失败: {e}")
-        await message.edit_text("❌ 获取TV季详情时发生错误")
+        await safe_edit_message(message,"❌ 获取TV季详情时发生错误")
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
@@ -8549,7 +8560,7 @@ async def _get_tv_episode_details_with_buttons(update: Update, context: ContextT
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
             ])
-            await message.edit_text(
+            await safe_edit_message(message,
                 foldable_text_with_markdown_v2(result_text),
                 parse_mode=ParseMode.MARKDOWN_V2,
                 reply_markup=return_keyboard
@@ -8558,10 +8569,10 @@ async def _get_tv_episode_details_with_buttons(update: Update, context: ContextT
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
             ])
-            await message.edit_text(f"❌ 未找到电视剧ID {tv_id} 第{season_number}季第{episode_number}集", reply_markup=return_keyboard)
+            await safe_edit_message(message,f"❌ 未找到电视剧ID {tv_id} 第{season_number}季第{episode_number}集", reply_markup=return_keyboard)
     except Exception as e:
         logger.error(f"获取TV集详情失败: {e}")
-        await message.edit_text("❌ 获取TV集详情时发生错误")
+        await safe_edit_message(message,"❌ 获取TV集详情时发生错误")
     
     # 调度删除机器人回复消息
     from utils.message_manager import _schedule_deletion
@@ -8575,7 +8586,7 @@ async def show_tv_details_with_functions(query, context, tv_id: int):
     """显示TV详情和功能按钮 - 用于返回按钮，优先使用缓存数据"""
     if not movie_service:
         message = query.message
-        await message.edit_text("❌ TV查询服务未初始化")
+        await safe_edit_message(message,"❌ TV查询服务未初始化")
         return
     
     user_id = query.from_user.id
@@ -8597,7 +8608,7 @@ async def show_tv_details_with_functions(query, context, tv_id: int):
     # 如果没有缓存数据，重新获取
     if not detail_data:
         message = query.message
-        await message.edit_text(f"🔍 正在获取TV详情 \(ID: {tv_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+        await safe_edit_message(message,f"🔍 正在获取TV详情 \(ID: {tv_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
         detail_data = await movie_service.get_tv_details(tv_id)
     
     try:
