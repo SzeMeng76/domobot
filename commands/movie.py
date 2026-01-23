@@ -5080,7 +5080,7 @@ async def movie_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             # 删除用户命令消息
             await delete_user_command(context, update.effective_chat.id, update.message.message_id, session_id=session_id)
         else:
-            await safe_edit_message(message,"❌ 搜索电影失败，请稍后重试")
+            await safe_edit_message(message,f"❌ 未找到电影: {query}")
     except Exception as e:
         logger.error(f"电影搜索失败: {e}")
         await safe_edit_message(message,"❌ 搜索电影时发生错误")
@@ -5481,7 +5481,7 @@ async def tv_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             # 删除用户命令消息
             await delete_user_command(context, update.effective_chat.id, update.message.message_id, session_id=session_id)
         else:
-            await safe_edit_message(message,"❌ 搜索电视剧失败，请稍后重试")
+            await safe_edit_message(message,f"❌ 未找到电视剧: {query}")
     except Exception as e:
         logger.error(f"电视剧搜索失败: {e}")
         await safe_edit_message(message,"❌ 搜索电视剧时发生错误")
