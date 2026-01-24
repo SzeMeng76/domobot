@@ -129,7 +129,7 @@ class PyrogramHelper:
             - is_verified: 是否为认证账号（蓝V）
             - is_scam: 是否被标记为诈骗账号
             - is_fake: 是否被标记为虚假账号
-            - is_frozen: 是否被冻结
+            - is_restricted: 是否被限制/冻结
             - bio: 个人简介 (可能为 None)
             - status: 在线状态 (可能为 None)
         """
@@ -155,26 +155,34 @@ class PyrogramHelper:
             username = user.username
             user_status = getattr(user, "status", None)
 
+            # 检测已删除账号的多个条件
             # 条件1: is_deleted 属性为 True
-            is_deleted_attr = getattr(user, "is_deleted", False)
+            is_deleted_attr = getattr(user, "is_deleted", None)
 
-            # 条件2: first_name 为 "Deleted Account"
+            # 条件2-5: 综合特征判断
+            # - first_name 为 "Deleted Account"
+            # - last_name 为空
+            # - 没有 username
+            # - status 为 LONG_AGO 或不可用
             is_name_deleted = (first_name == "Deleted Account")
+            is_lastname_empty = not last_name
+            has_no_username = not username
 
-            # 条件3: last_name 为空
-            is_lastname_empty = (last_name == "" or last_name is None)
+            # 判断 status（需要导入 UserStatus）
+            try:
+                from pyrogram.enums import UserStatus
+                is_status_suspicious = (user_status is None or user_status == UserStatus.LONG_AGO)
+            except:
+                is_status_suspicious = (user_status is None)
 
-            # 条件4: 没有 username
-            has_no_username = (username is None or username == "")
-
-            # 条件5: status 为 LONG_AGO 或不可用
-            from pyrogram.enums import UserStatus
-            is_status_long_ago = (user_status == UserStatus.LONG_AGO or user_status is None)
-
-            # 综合判断：满足多个条件则认为账号已删除
-            # 优先使用 is_deleted 属性，如果为 True 则直接判定
-            # 否则，如果同时满足：名字是"Deleted Account" + 没有姓氏 + 没有用户名 + status异常，则判定为已删除
-            is_deleted = is_deleted_attr or (is_name_deleted and is_lastname_empty and has_no_username and is_status_long_ago)
+            # 最终判断：
+            # 1. is_deleted 明确为 True，或
+            # 2. 同时满足：status 异常(LONG_AGO/None) + 名字是 "Deleted Account" + (没有姓氏 或 没有用户名)
+            is_deleted = (is_deleted_attr is True) or (
+                is_status_suspicious and
+                is_name_deleted and
+                (is_lastname_empty or has_no_username)
+            )
 
             user_info = {
                 "user_id": user.id,
@@ -186,7 +194,7 @@ class PyrogramHelper:
                 "is_verified": getattr(user, "is_verified", False),
                 "is_scam": getattr(user, "is_scam", False),
                 "is_fake": getattr(user, "is_fake", False),
-                "is_frozen": getattr(user, "is_frozen", False),
+                "is_restricted": getattr(user, "is_restricted", False),
                 "is_deleted": is_deleted,
                 "bio": bio,
                 "status": getattr(user, "status", None),
@@ -216,7 +224,7 @@ class PyrogramHelper:
             - is_verified: 是否为认证账号（蓝V）
             - is_scam: 是否被标记为诈骗账号
             - is_fake: 是否被标记为虚假账号
-            - is_frozen: 是否被冻结
+            - is_restricted: 是否被限制/冻结
             - bio: 个人简介 (可能为 None)
             - status: 在线状态 (可能为 None)
 
@@ -250,20 +258,30 @@ class PyrogramHelper:
             username_val = user.username
             user_status = getattr(user, "status", None)
 
+            # 检测已删除账号的多个条件
             # 条件1: is_deleted 属性为 True
-            is_deleted_attr = getattr(user, "is_deleted", False)
+            is_deleted_attr = getattr(user, "is_deleted", None)
 
-            # 条件2: first_name 为 "Deleted Account"
+            # 条件2-5: 综合特征判断
             is_name_deleted = (first_name == "Deleted Account")
+            is_lastname_empty = not last_name
+            has_no_username = not username_val
 
-            # 条件3: last_name 为空
-            is_lastname_empty = (last_name == "" or last_name is None)
-
-            # 条件4: 没有 username
-            has_no_username = (username_val is None or username_val == "")
+            # 判断 status
+            try:
+                from pyrogram.enums import UserStatus
+                is_status_suspicious = (user_status is None or user_status == UserStatus.LONG_AGO)
+            except:
+                is_status_suspicious = (user_status is None)
 
             # 综合判断：满足多个条件则认为账号已删除
-            is_deleted = is_deleted_attr or (is_name_deleted and is_lastname_empty and has_no_username)
+            # 1. is_deleted 明确为 True，或
+            # 2. 同时满足：status 异常(LONG_AGO/None) + 名字是 "Deleted Account" + (没有姓氏 或 没有用户名)
+            is_deleted = (is_deleted_attr is True) or (
+                is_status_suspicious and
+                is_name_deleted and
+                (is_lastname_empty or has_no_username)
+            )
 
             user_info = {
                 "user_id": user.id,
@@ -275,7 +293,7 @@ class PyrogramHelper:
                 "is_verified": getattr(user, "is_verified", False),
                 "is_scam": getattr(user, "is_scam", False),
                 "is_fake": getattr(user, "is_fake", False),
-                "is_frozen": getattr(user, "is_frozen", False),
+                "is_restricted": getattr(user, "is_restricted", False),
                 "is_deleted": is_deleted,
                 "bio": bio,
                 "status": getattr(user, "status", None),
@@ -307,8 +325,7 @@ class PyrogramHelper:
             - is_verified: 是否为认证群组
             - is_scam: 是否被标记为诈骗
             - is_fake: 是否被标记为虚假
-            - is_restricted: 是否受限
-            - is_frozen: 是否被冻结
+            - is_restricted: 是否受限/冻结
             - join_link: 加入链接
         """
         if not self.is_started or not self.client:
@@ -354,7 +371,6 @@ class PyrogramHelper:
                 "is_scam": getattr(chat, 'is_scam', False),
                 "is_fake": getattr(chat, 'is_fake', False),
                 "is_restricted": getattr(chat, 'is_restricted', False),
-                "is_frozen": getattr(chat, 'is_frozen', False),
                 "join_link": join_link,
             }
 

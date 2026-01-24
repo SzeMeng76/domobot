@@ -239,8 +239,8 @@ async def get_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_text += f"✅ *认证状态*: 已认证 ✓\n"
 
             # 显示安全状态
-            if chat_info.get('is_frozen'):
-                reply_text += f"🚨 *群组状态*: ❄️ 已冻结\n"
+            if chat_info.get('is_restricted'):
+                reply_text += f"🚨 *群组状态*: ❄️ 已限制/冻结\n"
             elif chat_info.get('is_scam'):
                 reply_text += f"🚨 *群组状态*: ⚠️ 诈骗群组 \\(Telegram已标记\\)\n"
             elif chat_info.get('is_fake'):
@@ -734,7 +734,7 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         is_verified = None
         is_scam = None
         is_fake = None
-        is_frozen = None
+        is_restricted = None
         is_deleted = None
         bio = None
         user_status = None
@@ -749,7 +749,7 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     is_verified = user_info.get('is_verified', False)
                     is_scam = user_info.get('is_scam', False)
                     is_fake = user_info.get('is_fake', False)
-                    is_frozen = user_info.get('is_frozen', False)
+                    is_restricted = user_info.get('is_restricted', False)
                     is_deleted = user_info.get('is_deleted', False)
                     bio = user_info.get('bio')
                     user_status = user_info.get('status')
@@ -847,9 +847,9 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # 添加账号安全状态（如果可用）
             if is_deleted:
                 result_text += f"🚨 *账号状态*：🗑️ 账号已删除 (Deleted Account)\n"
-            elif is_scam or is_fake or is_frozen:
-                if is_frozen:
-                    result_text += f"🚨 *账号状态*：❄️ 账号已冻结\n"
+            elif is_scam or is_fake or is_restricted:
+                if is_restricted:
+                    result_text += f"🚨 *账号状态*：❄️ 账号已限制/冻结\n"
                 elif is_scam:
                     result_text += f"🚨 *账号状态*：⚠️ 诈骗账号 (Telegram已标记)\n"
                 elif is_fake:
@@ -902,9 +902,9 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 result_text += f"✅ *认证状态*：{verified_text}\n"
 
             # 添加账号安全状态（如果可用）
-            if is_scam or is_fake or is_frozen:
-                if is_frozen:
-                    result_text += f"🚨 *账号状态*：❄️ 账号已冻结\n"
+            if is_scam or is_fake or is_restricted:
+                if is_restricted:
+                    result_text += f"🚨 *账号状态*：❄️ 账号已限制/冻结\n"
                 elif is_scam:
                     result_text += f"🚨 *账号状态*：⚠️ 诈骗账号 (Telegram已标记)\n"
                 elif is_fake:
