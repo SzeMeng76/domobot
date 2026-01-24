@@ -177,7 +177,7 @@ class PyrogramHelper:
             # - status 为 LONG_AGO 或不可用
             is_name_deleted = (first_name == "Deleted Account")
             is_lastname_empty = not last_name
-            has_no_username = not username
+            has_no_username = (not username or username == 'None')
 
             # 判断 status（需要导入 UserStatus）
             try:
@@ -194,6 +194,8 @@ class PyrogramHelper:
                 is_name_deleted and
                 (is_lastname_empty or has_no_username)
             )
+
+            logger.debug(f"  - FINAL is_deleted = {is_deleted}")
 
             user_info = {
                 "user_id": user.id,
