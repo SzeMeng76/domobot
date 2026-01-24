@@ -160,6 +160,16 @@ class PyrogramHelper:
             # 同时检查两种属性名以确保兼容性
             is_deleted_attr = getattr(user, "is_deleted", None) or getattr(user, "deleted", None)
 
+            # 调试日志：输出原始属性值
+            logger.debug(f"[DELETED CHECK] user_id={user.id}")
+            logger.debug(f"  - user.is_deleted = {getattr(user, 'is_deleted', 'NOT_FOUND')}")
+            logger.debug(f"  - user.deleted = {getattr(user, 'deleted', 'NOT_FOUND')}")
+            logger.debug(f"  - is_deleted_attr = {is_deleted_attr}")
+            logger.debug(f"  - first_name = '{first_name}'")
+            logger.debug(f"  - last_name = '{last_name}'")
+            logger.debug(f"  - username = '{username}'")
+            logger.debug(f"  - status = {user_status}")
+
             # 条件2-5: 综合特征判断
             # - first_name 为 "Deleted Account"
             # - last_name 为空
@@ -263,6 +273,16 @@ class PyrogramHelper:
             # 注意：Pyrogram 原始数据使用 "deleted"，但 Python 对象可能使用 "is_deleted"
             # 同时检查两种属性名以确保兼容性
             is_deleted_attr = getattr(user, "is_deleted", None) or getattr(user, "deleted", None)
+
+            # 调试日志：输出原始属性值
+            logger.debug(f"[DELETED CHECK] user_id={user.id}")
+            logger.debug(f"  - user.is_deleted = {getattr(user, 'is_deleted', 'NOT_FOUND')}")
+            logger.debug(f"  - user.deleted = {getattr(user, 'deleted', 'NOT_FOUND')}")
+            logger.debug(f"  - is_deleted_attr = {is_deleted_attr}")
+            logger.debug(f"  - first_name = '{first_name}'")
+            logger.debug(f"  - last_name = '{last_name}'")
+            logger.debug(f"  - username = '{username}'")
+            logger.debug(f"  - status = {user_status}")
 
             # 条件2-5: 综合特征判断
             is_name_deleted = (first_name == "Deleted Account")
