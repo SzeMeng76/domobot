@@ -149,18 +149,45 @@ class PyrogramHelper:
             except Exception as e:
                 logger.debug(f"Failed to get full user info (bio): {e}")
 
+            # 综合判断账号是否已删除（使用多个条件）
+            first_name = user.first_name or ""
+            last_name = user.last_name or ""
+            username = user.username
+            user_status = getattr(user, "status", None)
+
+            # 条件1: is_deleted 属性为 True
+            is_deleted_attr = getattr(user, "is_deleted", False)
+
+            # 条件2: first_name 为 "Deleted Account"
+            is_name_deleted = (first_name == "Deleted Account")
+
+            # 条件3: last_name 为空
+            is_lastname_empty = (last_name == "" or last_name is None)
+
+            # 条件4: 没有 username
+            has_no_username = (username is None or username == "")
+
+            # 条件5: status 为 LONG_AGO 或不可用
+            from pyrogram.enums import UserStatus
+            is_status_long_ago = (user_status == UserStatus.LONG_AGO or user_status is None)
+
+            # 综合判断：满足多个条件则认为账号已删除
+            # 优先使用 is_deleted 属性，如果为 True 则直接判定
+            # 否则，如果同时满足：名字是"Deleted Account" + 没有姓氏 + 没有用户名 + status异常，则判定为已删除
+            is_deleted = is_deleted_attr or (is_name_deleted and is_lastname_empty and has_no_username and is_status_long_ago)
+
             user_info = {
                 "user_id": user.id,
                 "dc_id": getattr(user, "dc_id", None),
-                "username": user.username,
-                "first_name": user.first_name or "",
-                "last_name": user.last_name or "",
+                "username": username,
+                "first_name": first_name,
+                "last_name": last_name,
                 "is_premium": getattr(user, "is_premium", False),
                 "is_verified": getattr(user, "is_verified", False),
                 "is_scam": getattr(user, "is_scam", False),
                 "is_fake": getattr(user, "is_fake", False),
                 "is_frozen": getattr(user, "is_frozen", False),
-                "is_deleted": getattr(user, "is_deleted", False),
+                "is_deleted": is_deleted,
                 "bio": bio,
                 "status": getattr(user, "status", None),
             }
@@ -217,18 +244,39 @@ class PyrogramHelper:
             except Exception as e:
                 logger.debug(f"Failed to get full user info (bio) for @{clean_username}: {e}")
 
+            # 综合判断账号是否已删除（使用多个条件）
+            first_name = user.first_name or ""
+            last_name = user.last_name or ""
+            username_val = user.username
+            user_status = getattr(user, "status", None)
+
+            # 条件1: is_deleted 属性为 True
+            is_deleted_attr = getattr(user, "is_deleted", False)
+
+            # 条件2: first_name 为 "Deleted Account"
+            is_name_deleted = (first_name == "Deleted Account")
+
+            # 条件3: last_name 为空
+            is_lastname_empty = (last_name == "" or last_name is None)
+
+            # 条件4: 没有 username
+            has_no_username = (username_val is None or username_val == "")
+
+            # 综合判断：满足多个条件则认为账号已删除
+            is_deleted = is_deleted_attr or (is_name_deleted and is_lastname_empty and has_no_username)
+
             user_info = {
                 "user_id": user.id,
                 "dc_id": getattr(user, "dc_id", None),
-                "username": user.username,
-                "first_name": user.first_name or "",
-                "last_name": user.last_name or "",
+                "username": username_val,
+                "first_name": first_name,
+                "last_name": last_name,
                 "is_premium": getattr(user, "is_premium", False),
                 "is_verified": getattr(user, "is_verified", False),
                 "is_scam": getattr(user, "is_scam", False),
                 "is_fake": getattr(user, "is_fake", False),
                 "is_frozen": getattr(user, "is_frozen", False),
-                "is_deleted": getattr(user, "is_deleted", False),
+                "is_deleted": is_deleted,
                 "bio": bio,
                 "status": getattr(user, "status", None),
             }
