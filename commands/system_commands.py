@@ -902,7 +902,9 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 result_text += f"✅ *认证状态*：{verified_text}\n"
 
             # 添加账号安全状态（如果可用）
-            if is_scam or is_fake or is_restricted:
+            if is_deleted:
+                result_text += f"🚨 *账号状态*：🗑️ 账号已删除 (Deleted Account)\n"
+            elif is_scam or is_fake or is_restricted:
                 if is_restricted:
                     result_text += f"🚨 *账号状态*：❄️ 账号已限制/冻结\n"
                 elif is_scam:
