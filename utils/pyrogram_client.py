@@ -156,8 +156,9 @@ class PyrogramHelper:
             user_status = getattr(user, "status", None)
 
             # 检测已删除账号的多个条件
-            # 条件1: is_deleted 属性为 True
-            is_deleted_attr = getattr(user, "is_deleted", None)
+            # 注意：Pyrogram 原始数据使用 "deleted"，但 Python 对象可能使用 "is_deleted"
+            # 同时检查两种属性名以确保兼容性
+            is_deleted_attr = getattr(user, "is_deleted", None) or getattr(user, "deleted", None)
 
             # 条件2-5: 综合特征判断
             # - first_name 为 "Deleted Account"
@@ -190,11 +191,11 @@ class PyrogramHelper:
                 "username": username,
                 "first_name": first_name,
                 "last_name": last_name,
-                "is_premium": getattr(user, "is_premium", False),
-                "is_verified": getattr(user, "is_verified", False),
-                "is_scam": getattr(user, "is_scam", False),
-                "is_fake": getattr(user, "is_fake", False),
-                "is_restricted": getattr(user, "is_restricted", False),
+                "is_premium": getattr(user, "is_premium", None) or getattr(user, "premium", False),
+                "is_verified": getattr(user, "is_verified", None) or getattr(user, "verified", False),
+                "is_scam": getattr(user, "is_scam", None) or getattr(user, "scam", False),
+                "is_fake": getattr(user, "is_fake", None) or getattr(user, "fake", False),
+                "is_restricted": getattr(user, "is_restricted", None) or getattr(user, "restricted", False),
                 "is_deleted": is_deleted,
                 "bio": bio,
                 "status": getattr(user, "status", None),
@@ -259,8 +260,9 @@ class PyrogramHelper:
             user_status = getattr(user, "status", None)
 
             # 检测已删除账号的多个条件
-            # 条件1: is_deleted 属性为 True
-            is_deleted_attr = getattr(user, "is_deleted", None)
+            # 注意：Pyrogram 原始数据使用 "deleted"，但 Python 对象可能使用 "is_deleted"
+            # 同时检查两种属性名以确保兼容性
+            is_deleted_attr = getattr(user, "is_deleted", None) or getattr(user, "deleted", None)
 
             # 条件2-5: 综合特征判断
             is_name_deleted = (first_name == "Deleted Account")
@@ -367,10 +369,10 @@ class PyrogramHelper:
                 "description": getattr(chat, 'description', None),
                 "dc_id": getattr(chat, 'dc_id', None),
                 "members_count": getattr(chat, 'members_count', None),
-                "is_verified": getattr(chat, 'is_verified', False),
-                "is_scam": getattr(chat, 'is_scam', False),
-                "is_fake": getattr(chat, 'is_fake', False),
-                "is_restricted": getattr(chat, 'is_restricted', False),
+                "is_verified": getattr(chat, 'is_verified', None) or getattr(chat, 'verified', False),
+                "is_scam": getattr(chat, 'is_scam', None) or getattr(chat, 'scam', False),
+                "is_fake": getattr(chat, 'is_fake', None) or getattr(chat, 'fake', False),
+                "is_restricted": getattr(chat, 'is_restricted', None) or getattr(chat, 'restricted', False),
                 "join_link": join_link,
             }
 
