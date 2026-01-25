@@ -141,66 +141,91 @@ def parse_countries_from_args(args: list[str]) -> list[str]:
 
 
 def get_icloud_prices_from_html(content: str) -> dict:
-    """Extracts iCloud prices from Apple Support HTML content."""
+    """Extracts iCloud prices from Apple Support HTML content.
+
+    New HTML structure (as of 2025):
+    <h4 class="gb-header">Nigeria<sup>3</sup> (NGN)</h4>
+    <ul class="list gb-list">
+      <li class="gb-list_item">
+        <p class="gb-paragraph"><b>50 GB</b>: ₦900</p>
+      </li>
+    </ul>
+    """
     soup = BeautifulSoup(content, "html.parser")
     prices = {}
 
-    paragraphs = soup.find_all("p", class_="gb-paragraph")
-    current_country = None
-    size_price_dict = {}
-    currency = ""
+    # Find all country headers (h4 with class gb-header)
+    country_headers = soup.find_all("h4", class_="gb-header")
 
-    for p in paragraphs:
-        text = p.get_text(strip=True)
+    for header in country_headers:
+        header_text = header.get_text(strip=True)
 
-        # Check if it's a country line - handle both Chinese format and potential HTML tags like <sup>
-        # Pattern: "国家名<sup>footnote</sup>（货币名称）" or "国家名（货币名称）"
-        if "（" in text and "）" in text and not p.find("b"):  # Country line should not have <b> tags
-            if current_country and size_price_dict:
-                prices[current_country] = {"currency": currency, "prices": size_price_dict}
+        # Extract country name and currency code from format like "Nigeria<sup>3</sup> (NGN)"
+        # Remove superscript footnotes
+        clean_text = re.sub(r'<sup>.*?</sup>', '', str(header))
+        clean_text = BeautifulSoup(clean_text, "html.parser").get_text(strip=True)
 
-            # Remove HTML tags like <sup> from country name  
-            clean_text = re.sub(r'<[^>]+>', '', text)
-            
-            # Extract country and currency from format like "俄罗斯（俄罗斯卢布）"
-            country_match = re.match(r"^(.*?)（(.*?)）", clean_text)
-            if country_match:
-                current_country = country_match.group(1).strip()
-                currency = country_match.group(2).strip()
-                size_price_dict = {}
-                logger.info(f"Found country: {current_country}, currency: {currency}")
+        # Match pattern: "Country Name (CURRENCY)"
+        country_match = re.match(r"^(.*?)\s*\(([A-Z]{3})\)$", clean_text)
+        if not country_match:
+            continue
 
-        # Check if it's a price line - must have <b> tag for storage size and be under a country
-        elif current_country:
+        country_name = country_match.group(1).strip()
+        currency_code = country_match.group(2).strip()
+
+        # Find the next <ul> sibling that contains the prices
+        price_list = header.find_next_sibling("ul", class_="gb-list")
+        if not price_list:
+            # Try finding within next few siblings
+            next_elem = header.find_next_sibling()
+            while next_elem and next_elem.name != "h4":
+                if next_elem.name == "ul" and "gb-list" in next_elem.get("class", []):
+                    price_list = next_elem
+                    break
+                next_elem = next_elem.find_next_sibling()
+
+        if not price_list:
+            logger.warning(f"No price list found for country: {country_name}")
+            continue
+
+        # Extract prices from list items
+        size_price_dict = {}
+        list_items = price_list.find_all("li", class_="gb-list_item")
+
+        for item in list_items:
+            p = item.find("p", class_="gb-paragraph")
+            if not p:
+                continue
+
+            text = p.get_text(strip=True)
             size_elem = p.find("b")
+
             if size_elem:
                 # Get storage size
                 size_text = size_elem.get_text(strip=True)
-                
-                # Extract price after the Chinese colon "："
-                if "：" in text:
-                    price = text.split("：", 1)[1].strip()
-                elif ":" in text:
+
+                # Extract price after colon
+                if ":" in text:
                     price = text.split(":", 1)[1].strip()
+                elif "：" in text:
+                    price = text.split("：", 1)[1].strip()
                 else:
-                    # Fallback: try to extract everything after the bold part
+                    # Fallback: extract everything after bold part
                     full_text = p.get_text(strip=True)
                     bold_text = size_elem.get_text(strip=True)
                     if bold_text in full_text:
                         price = full_text.replace(bold_text, "").strip()
-                        # Remove leading colon if present
                         price = re.sub(r"^[：:]\s*", "", price).strip()
                     else:
                         continue
-                
+
                 if price and size_text:
                     size_price_dict[size_text] = price
-                    logger.debug(f"Added price for {current_country}: {size_text} = {price}")
+                    logger.debug(f"Added price for {country_name}: {size_text} = {price}")
 
-    # Save data for the last country
-    if current_country and size_price_dict:
-        prices[current_country] = {"currency": currency, "prices": size_price_dict}
-        logger.info(f"Completed parsing for {current_country} with {len(size_price_dict)} storage tiers")
+        if size_price_dict:
+            prices[country_name] = {"currency": currency_code, "prices": size_price_dict}
+            logger.info(f"Parsed {country_name} ({currency_code}) with {len(size_price_dict)} storage tiers")
 
     logger.info(f"Total countries parsed from Apple Support HTML: {len(prices)}")
     return prices
