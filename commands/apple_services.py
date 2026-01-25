@@ -160,18 +160,28 @@ def get_icloud_prices_from_html(content: str) -> dict:
     for header in country_headers:
         header_text = header.get_text(strip=True)
 
-        # Extract country name and currency code from format like "Nigeria<sup>3</sup> (NGN)"
+        # Extract country name and currency from format like:
+        # English: "Nigeria<sup>3</sup> (NGN)"
+        # Chinese: "尼日利亚<sup>3</sup>（尼日利亚奈拉）"
         # Remove superscript footnotes
         clean_text = re.sub(r'<sup>.*?</sup>', '', str(header))
         clean_text = BeautifulSoup(clean_text, "html.parser").get_text(strip=True)
 
-        # Match pattern: "Country Name (CURRENCY)"
+        # Try English format first: "Country Name (CURRENCY_CODE)"
         country_match = re.match(r"^(.*?)\s*\(([A-Z]{3})\)$", clean_text)
-        if not country_match:
-            continue
-
-        country_name = country_match.group(1).strip()
-        currency_code = country_match.group(2).strip()
+        if country_match:
+            country_name = country_match.group(1).strip()
+            currency_code = country_match.group(2).strip()
+        else:
+            # Try Chinese format: "国家名（货币名称）"
+            country_match = re.match(r"^(.*?)（(.+?)）$", clean_text)
+            if not country_match:
+                logger.debug(f"Skipping header with unrecognized format: {clean_text}")
+                continue
+            country_name = country_match.group(1).strip()
+            currency_name = country_match.group(2).strip()
+            # For Chinese format, use currency name as code (will be displayed as-is)
+            currency_code = currency_name
 
         # Find the next <ul> sibling that contains the prices
         price_list = header.find_next_sibling("ul", class_="gb-list")
