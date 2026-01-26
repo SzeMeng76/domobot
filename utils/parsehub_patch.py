@@ -481,10 +481,13 @@ def patch_parsehub_yt_dlp():
 
                 photos = []
                 for i in download_list:
-                    # Remove ?imageView2/format/png params - causes CDN 500 error
-                    # Use base URL without params
-                    img_url = i.split('?')[0] if '?' in i else i
-                    ext = (await self.get_ext_by_url(img_url)) or "png"
+                    # 保留 URL 但强制转换为 JPEG 格式（兼容 AI 总结）
+                    # 小红书 CDN 支持 imageView2 参数进行格式转换
+                    # 移除原有参数，添加格式转换参数确保返回 JPEG
+                    base_url = i.split('?')[0] if '?' in i else i
+                    # 添加格式转换参数：转为 JPEG，质量 85，宽度限制 1080
+                    img_url = f"{base_url}?imageView2/2/w/1080/format/jpg"
+                    ext = "jpg"
                     photos.append(Image(img_url, ext))
                 return ImageParseResult(photo=photos, **k)
 
