@@ -115,7 +115,25 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                 logger.info(f"📍 generate_ai_summary 调用完成")
 
                 if not ai_summary:
-                    await query.answer("❌ AI总结生成失败", show_alert=True)
+                    # 恢复原始内容
+                    try:
+                        if query.message.caption:
+                            await query.edit_message_caption(
+                                caption=current_caption,
+                                parse_mode="Markdown",
+                                reply_markup=query.message.reply_markup
+                            )
+                        else:
+                            await query.edit_message_text(
+                                text=current_caption,
+                                parse_mode="Markdown",
+                                reply_markup=query.message.reply_markup,
+                                link_preview_options=LinkPreviewOptions(is_disabled=True)
+                            )
+                    except Exception as restore_error:
+                        logger.warning(f"恢复原始内容失败: {restore_error}")
+
+                    await query.answer("❌ AI总结生成失败，请稍后重试", show_alert=True)
                     return
 
                 # 缓存AI总结（24小时）

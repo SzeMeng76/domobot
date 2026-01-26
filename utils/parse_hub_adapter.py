@@ -737,7 +737,31 @@ class ParseHubAdapter:
             return summary_result.content
 
         except Exception as e:
-            logger.error(f"AI总结生成失败: {e}", exc_info=True)
+            # 详细的错误分类和日志记录
+            error_msg = str(e)
+
+            # 图片格式错误
+            if "invalid_image_format" in error_msg or "unsupported image" in error_msg.lower():
+                logger.error(f"❌ AI总结失败: 图片格式不支持 - {error_msg}")
+                logger.info("💡 提示: API 仅支持 png, jpeg, gif, webp 格式的图片")
+            # API 错误
+            elif "Error code: 400" in error_msg:
+                logger.error(f"❌ AI总结失败: API 请求错误 (400) - {error_msg}")
+            elif "Error code: 401" in error_msg:
+                logger.error(f"❌ AI总结失败: API 认证失败 (401) - 请检查 API Key")
+            elif "Error code: 429" in error_msg:
+                logger.error(f"❌ AI总结失败: API 请求频率限制 (429) - 请稍后重试")
+            elif "Error code: 500" in error_msg or "Error code: 503" in error_msg:
+                logger.error(f"❌ AI总结失败: API 服务器错误 - {error_msg}")
+            # 网络错误
+            elif "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
+                logger.error(f"❌ AI总结失败: 请求超时 - {error_msg}")
+            elif "connection" in error_msg.lower():
+                logger.error(f"❌ AI总结失败: 网络连接错误 - {error_msg}")
+            # 其他错误
+            else:
+                logger.error(f"❌ AI总结失败: {error_msg}", exc_info=True)
+
             return None
 
     async def publish_to_telegraph(self, result: ParseResult, content_html: str) -> Optional[str]:
