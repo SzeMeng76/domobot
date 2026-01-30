@@ -66,9 +66,9 @@ pillow_heif.register_heif_opener()
 def _convert_image_to_webp(image_path: Path) -> Path:
     """
     Convert image to WebP format for better Telegram compatibility.
-    Handles heif, heic, and other formats that may cause Telegram image_process_failed error.
+    Handles heif, heic, avif and other formats that may cause Telegram image_process_failed error.
 
-    Reference: parse_hub_bot only converts HEIF/HEIC to WebP, other formats are sent directly.
+    Reference: parse_hub_bot only converts HEIF/HEIC/AVIF to WebP, other formats are sent directly.
     WebP is preferred over JPEG because it has smaller file size with better quality.
 
     Args:
@@ -85,8 +85,8 @@ def _convert_image_to_webp(image_path: Path) -> Path:
         if suffix in ['.jpg', '.jpeg', '.png', '.webp']:
             return image_path
 
-        # HEIF/HEIC need conversion (Telegram doesn't support them)
-        if suffix not in ['.heif', '.heic']:
+        # HEIF/HEIC/AVIF need conversion (Telegram doesn't support them)
+        if suffix not in ['.heif', '.heic', '.avif']:
             # Other formats: try to send directly first
             return image_path
 
