@@ -678,8 +678,15 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
     if not isinstance(media_list, list):
         media_list = [media_list]
 
+    # 调试日志：检查下载结果
+    logger.info(f"[DEBUG _send_images] 原始media_list长度: {len(media_list) if media_list else 0}")
+    if media_list and len(media_list) > 0:
+        logger.info(f"[DEBUG _send_images] 第一个media对象: type={type(media_list[0])}, has_path={hasattr(media_list[0], 'path')}, path={getattr(media_list[0], 'path', 'N/A')[:100] if hasattr(media_list[0], 'path') else 'N/A'}")
+
     # 过滤掉None的媒体对象（下载失败的）
     media_list = [m for m in media_list if m is not None and hasattr(m, 'path') and m.path]
+
+    logger.info(f"[DEBUG _send_images] 过滤后media_list长度: {len(media_list)}")
 
     # 如果没有媒体文件，检查是否是长文本（超过1000字自动Telegraph）
     if len(media_list) == 0:

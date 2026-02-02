@@ -201,6 +201,11 @@ class ParseHubAdapter:
                     'Origin': 'https://www.xiaohongshu.com',
                 })
                 logger.info(f"✅ 配置小红书 headers: Referer + Origin")
+            elif platform_id == 'weibo':
+                download_headers.update({
+                    'Referer': 'https://weibo.com/',
+                })
+                logger.info(f"✅ 配置微博 headers: Referer")
 
             # 创建配置（重要：每次都创建新的ParseHub实例，传入配置）
             parse_config = ParseConfig(proxy=parser_proxy, cookie=platform_cookie)
