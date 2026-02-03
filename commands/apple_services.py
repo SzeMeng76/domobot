@@ -211,8 +211,8 @@ def get_icloud_prices_from_html(content: str) -> dict:
             size_elem = p.find("b")
 
             if size_elem:
-                # Get storage size
-                size_text = size_elem.get_text(strip=True)
+                # Get storage size and normalize by removing spaces (e.g., "50 GB" -> "50GB")
+                size_text = size_elem.get_text(strip=True).replace(" ", "")
 
                 # Extract price after colon
                 if ":" in text:
