@@ -311,6 +311,7 @@ async def handle_inline_callback(update: Update, context: ContextTypes.DEFAULT_T
 async def setup_inline_query_handler(application) -> None:
     """设置 inline query 处理器"""
     from telegram.ext import InlineQueryHandler as TelegramInlineQueryHandler
+    from telegram.ext import CallbackQueryHandler
 
     handler = InlineQueryHandler()
 
@@ -320,11 +321,9 @@ async def setup_inline_query_handler(application) -> None:
     )
 
     # 注册 inline callback 处理器（处理用户点击"执行"按钮）
-    from utils.command_factory import command_factory
-    command_factory.register_callback(
-        pattern="^inline:",
-        handler=handle_inline_callback,
-        description="Inline Query 回调处理"
+    # 直接添加到 application，而不是通过 command_factory
+    application.add_handler(
+        CallbackQueryHandler(handle_inline_callback, pattern="^inline:")
     )
 
     logger.info("✅ Inline Query 处理器已注册")
