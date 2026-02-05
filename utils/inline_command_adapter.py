@@ -80,7 +80,7 @@ class InlineCommandAdapter:
     async def _handle_rate(self, args: str) -> Tuple[str, ParseMode, None]:
         """处理汇率转换命令"""
         from commands.rate_command import convert_currency_with_fallback, get_currency_symbol
-        from utils.formatter import escape_markdown_v2
+        from utils.formatter import escape_v2
 
         # 解析参数: "100 usd to cny" 或 "usd cny 100"
         parts = args.split()
@@ -137,11 +137,11 @@ class InlineCommandAdapter:
             text = (
                 f"💱 *汇率转换*\n"
                 f"━━━━━━━━━━━━━━━━\n\n"
-                f"{from_symbol} `{escape_markdown_v2(formatted_amount)}` *{escape_markdown_v2(from_currency)}*\n"
+                f"{from_symbol} `{escape_v2(formatted_amount)}` *{escape_v2(from_currency)}*\n"
                 f"    ↓\n"
-                f"{to_symbol} `{escape_markdown_v2(formatted_result)}` *{escape_markdown_v2(to_currency)}*\n\n"
+                f"{to_symbol} `{escape_v2(formatted_result)}` *{escape_v2(to_currency)}*\n\n"
                 f"━━━━━━━━━━━━━━━━\n"
-                f"📊 汇率: 1 {escape_markdown_v2(from_currency)} ≈ {escape_markdown_v2(f'{result/amount:.4f}')} {escape_markdown_v2(to_currency)}\n"
+                f"📊 汇率: 1 {escape_v2(from_currency)} ≈ {escape_v2(f'{result/amount:.4f}')} {escape_v2(to_currency)}\n"
                 f"🕐 数据来源: OpenExchange"
             )
 
@@ -179,13 +179,13 @@ class InlineCommandAdapter:
 
         # 简化版：返回提示信息
         # 完整实现需要调用天气API
-        from utils.formatter import escape_markdown_v2
+        from utils.formatter import escape_v2
 
         return (
             f"🌤️ *天气查询*\n\n"
-            f"查询城市: {escape_markdown_v2(args)}\n\n"
+            f"查询城市: {escape_v2(args)}\n\n"
             f"💡 天气查询功能需要完整API支持\n"
-            f"请在私聊中使用 `/weather {escape_markdown_v2(args)}` 获取详细天气信息",
+            f"请在私聊中使用 `/weather {escape_v2(args)}` 获取详细天气信息",
             ParseMode.MARKDOWN_V2,
             None
         )
@@ -207,13 +207,13 @@ class InlineCommandAdapter:
                 None
             )
 
-        from utils.formatter import escape_markdown_v2
+        from utils.formatter import escape_v2
 
         return (
             f"🎮 *Steam 游戏价格*\n\n"
-            f"搜索: {escape_markdown_v2(args)}\n\n"
+            f"搜索: {escape_v2(args)}\n\n"
             f"💡 游戏价格查询需要完整数据库支持\n"
-            f"请在私聊中使用 `/steam {escape_markdown_v2(args)}` 获取详细价格对比",
+            f"请在私聊中使用 `/steam {escape_v2(args)}` 获取详细价格对比",
             ParseMode.MARKDOWN_V2,
             None
         )
@@ -273,12 +273,12 @@ class InlineCommandAdapter:
         if not args:
             args = "btc"  # 默认查询比特币
 
-        from utils.formatter import escape_markdown_v2
+        from utils.formatter import escape_v2
 
         return (
             f"₿ *加密货币价格*\n\n"
-            f"查询: {escape_markdown_v2(args.upper())}\n\n"
-            f"💡 请在私聊中使用 `/crypto {escape_markdown_v2(args)}` 获取实时价格",
+            f"查询: {escape_v2(args.upper())}\n\n"
+            f"💡 请在私聊中使用 `/crypto {escape_v2(args)}` 获取实时价格",
             ParseMode.MARKDOWN_V2,
             None
         )
@@ -301,12 +301,12 @@ class InlineCommandAdapter:
                 None
             )
 
-        from utils.formatter import escape_markdown_v2
+        from utils.formatter import escape_v2
 
         return (
             f"🕐 *时区查询*\n\n"
-            f"查询城市: {escape_markdown_v2(args)}\n\n"
-            f"💡 请在私聊中使用 `/time {escape_markdown_v2(args)}` 获取详细时间信息",
+            f"查询城市: {escape_v2(args)}\n\n"
+            f"💡 请在私聊中使用 `/time {escape_v2(args)}` 获取详细时间信息",
             ParseMode.MARKDOWN_V2,
             None
         )
@@ -317,14 +317,14 @@ class InlineCommandAdapter:
 
     async def _handle_news(self, args: str) -> Tuple[str, ParseMode, None]:
         """处理新闻查询"""
-        from utils.formatter import escape_markdown_v2
+        from utils.formatter import escape_v2
 
         keyword = args if args else "科技"
 
         return (
             f"📰 *新闻查询*\n\n"
-            f"关键词: {escape_markdown_v2(keyword)}\n\n"
-            f"💡 请在私聊中使用 `/news {escape_markdown_v2(keyword)}` 获取最新新闻",
+            f"关键词: {escape_v2(keyword)}\n\n"
+            f"💡 请在私聊中使用 `/news {escape_v2(keyword)}` 获取最新新闻",
             ParseMode.MARKDOWN_V2,
             None
         )
@@ -346,12 +346,12 @@ class InlineCommandAdapter:
                 None
             )
 
-        from utils.formatter import escape_markdown_v2
+        from utils.formatter import escape_v2
 
         return (
             f"🎬 *影视信息*\n\n"
-            f"搜索: {escape_markdown_v2(args)}\n\n"
-            f"💡 请在私聊中使用 `/movie {escape_markdown_v2(args)}` 获取详细信息",
+            f"搜索: {escape_v2(args)}\n\n"
+            f"💡 请在私聊中使用 `/movie {escape_v2(args)}` 获取详细信息",
             ParseMode.MARKDOWN_V2,
             None
         )
@@ -372,12 +372,12 @@ class InlineCommandAdapter:
                 None
             )
 
-        from utils.formatter import escape_markdown_v2
+        from utils.formatter import escape_v2
 
         return (
             f"📱 *App Store 价格*\n\n"
-            f"搜索: {escape_markdown_v2(args)}\n\n"
-            f"💡 请在私聊中使用 `/appstore {escape_markdown_v2(args)}` 获取价格对比",
+            f"搜索: {escape_v2(args)}\n\n"
+            f"💡 请在私聊中使用 `/appstore {escape_v2(args)}` 获取价格对比",
             ParseMode.MARKDOWN_V2,
             None
         )
@@ -394,12 +394,12 @@ class InlineCommandAdapter:
                 None
             )
 
-        from utils.formatter import escape_markdown_v2
+        from utils.formatter import escape_v2
 
         return (
             f"🤖 *Google Play 价格*\n\n"
-            f"搜索: {escape_markdown_v2(args)}\n\n"
-            f"💡 请在私聊中使用 `/googleplay {escape_markdown_v2(args)}` 获取价格对比",
+            f"搜索: {escape_v2(args)}\n\n"
+            f"💡 请在私聊中使用 `/googleplay {escape_v2(args)}` 获取价格对比",
             ParseMode.MARKDOWN_V2,
             None
         )
@@ -430,12 +430,12 @@ class InlineCommandAdapter:
                 None
             )
 
-        from utils.formatter import escape_markdown_v2
+        from utils.formatter import escape_v2
 
         return (
             f"👨‍🍳 *菜谱查询*\n\n"
-            f"搜索: {escape_markdown_v2(args)}\n\n"
-            f"💡 请在私聊中使用 `/cooking {escape_markdown_v2(args)}` 获取详细菜谱",
+            f"搜索: {escape_v2(args)}\n\n"
+            f"💡 请在私聊中使用 `/cooking {escape_v2(args)}` 获取详细菜谱",
             ParseMode.MARKDOWN_V2,
             None
         )
@@ -452,12 +452,12 @@ class InlineCommandAdapter:
                 None
             )
 
-        from utils.formatter import escape_markdown_v2
+        from utils.formatter import escape_v2
 
         return (
             f"💳 *BIN 查询*\n\n"
-            f"卡号: {escape_markdown_v2(args)}\n\n"
-            f"💡 请在私聊中使用 `/bin {escape_markdown_v2(args)}` 获取详细信息",
+            f"卡号: {escape_v2(args)}\n\n"
+            f"💡 请在私聊中使用 `/bin {escape_v2(args)}` 获取详细信息",
             ParseMode.MARKDOWN_V2,
             None
         )
@@ -474,12 +474,12 @@ class InlineCommandAdapter:
                 None
             )
 
-        from utils.formatter import escape_markdown_v2
+        from utils.formatter import escape_v2
 
         return (
             f"🌐 *域名查询*\n\n"
-            f"域名: {escape_markdown_v2(args)}\n\n"
-            f"💡 请在私聊中使用 `/whois {escape_markdown_v2(args)}` 获取详细信息",
+            f"域名: {escape_v2(args)}\n\n"
+            f"💡 请在私聊中使用 `/whois {escape_v2(args)}` 获取详细信息",
             ParseMode.MARKDOWN_V2,
             None
         )
@@ -496,12 +496,12 @@ class InlineCommandAdapter:
                 None
             )
 
-        from utils.formatter import escape_markdown_v2
+        from utils.formatter import escape_v2
 
         return (
             f"🗺️ *地图查询*\n\n"
-            f"地点: {escape_markdown_v2(args)}\n\n"
-            f"💡 请在私聊中使用 `/map {escape_markdown_v2(args)}` 获取地图信息",
+            f"地点: {escape_v2(args)}\n\n"
+            f"💡 请在私聊中使用 `/map {escape_v2(args)}` 获取地图信息",
             ParseMode.MARKDOWN_V2,
             None
         )
@@ -518,12 +518,12 @@ class InlineCommandAdapter:
                 None
             )
 
-        from utils.formatter import escape_markdown_v2
+        from utils.formatter import escape_v2
 
         return (
             f"✈️ *航班查询*\n\n"
-            f"航班号: {escape_markdown_v2(args)}\n\n"
-            f"💡 请在私聊中使用 `/flight {escape_markdown_v2(args)}` 获取详细信息",
+            f"航班号: {escape_v2(args)}\n\n"
+            f"💡 请在私聊中使用 `/flight {escape_v2(args)}` 获取详细信息",
             ParseMode.MARKDOWN_V2,
             None
         )
@@ -540,12 +540,12 @@ class InlineCommandAdapter:
                 None
             )
 
-        from utils.formatter import escape_markdown_v2
+        from utils.formatter import escape_v2
 
         return (
             f"🏨 *酒店查询*\n\n"
-            f"搜索: {escape_markdown_v2(args)}\n\n"
-            f"💡 请在私聊中使用 `/hotel {escape_markdown_v2(args)}` 获取详细信息",
+            f"搜索: {escape_v2(args)}\n\n"
+            f"💡 请在私聊中使用 `/hotel {escape_v2(args)}` 获取详细信息",
             ParseMode.MARKDOWN_V2,
             None
         )
@@ -556,12 +556,12 @@ class InlineCommandAdapter:
 
     def _default_handler(self, command: str, args: str) -> Tuple[str, ParseMode, None]:
         """默认处理器 - 命令未实现"""
-        from utils.formatter import escape_markdown_v2
+        from utils.formatter import escape_v2
 
         return (
-            f"🔍 *{escape_markdown_v2(command.upper())}*\n\n"
+            f"🔍 *{escape_v2(command.upper())}*\n\n"
             f"该命令的 inline mode 支持正在开发中\n\n"
-            f"💡 请在私聊中使用 `/{escape_markdown_v2(command)} {escape_markdown_v2(args)}` 获取完整功能",
+            f"💡 请在私聊中使用 `/{escape_v2(command)} {escape_v2(args)}` 获取完整功能",
             ParseMode.MARKDOWN_V2,
             None
         )
