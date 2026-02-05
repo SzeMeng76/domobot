@@ -213,11 +213,6 @@ def setup_handlers(application: Application):
     # 使用命令工厂设置处理器（包括 UnifiedTextHandler）
     command_factory.setup_handlers(application)
 
-    # 注册 Inline Query 处理器（允许在任何对话中使用 @botname）
-    from handlers.inline_query_handler import setup_inline_query_handler
-    await setup_inline_query_handler(application)
-    logger.info("✅ Inline Query 处理器已注册")
-
     # 错误处理器
     application.add_error_handler(error_handler)
 
@@ -583,6 +578,14 @@ async def setup_application(application: Application, config) -> None:
     logger.info("🔧 设置用户缓存处理器...")
     setup_user_cache_handler(application)
     logger.info("✅ 用户缓存处理器设置完成")
+
+    # ========================================
+    # 第五步又半：设置 Inline Query 处理器
+    # ========================================
+    logger.info("🔧 设置 Inline Query 处理器...")
+    from handlers.inline_query_handler import setup_inline_query_handler
+    await setup_inline_query_handler(application)
+    logger.info("✅ Inline Query 处理器设置完成")
 
     # ========================================
     # 第六步：设置机器人命令菜单（分权限显示）
