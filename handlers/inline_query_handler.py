@@ -45,7 +45,7 @@ class InlineQueryHandler:
         user_manager = context.bot_data.get("user_cache_manager")
         if user_manager:
             try:
-                is_whitelisted = await user_manager.is_user_whitelisted(user_id)
+                is_whitelisted = await user_manager.is_whitelisted(user_id)
                 is_admin = await user_manager.is_admin(user_id)
 
                 from utils.config_manager import get_config
