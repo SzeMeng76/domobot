@@ -196,11 +196,21 @@ class ParseHubAdapter:
                 })
                 logger.info(f"✅ 配置TikTok headers: Referer + Origin")
             elif platform_id == 'xiaohongshu':
+                # 小红书CDN需要完整的浏览器headers才能绕过反爬虫
                 download_headers.update({
                     'Referer': 'https://www.xiaohongshu.com/',
                     'Origin': 'https://www.xiaohongshu.com',
+                    'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'Sec-Fetch-Dest': 'image',
+                    'Sec-Fetch-Mode': 'no-cors',
+                    'Sec-Fetch-Site': 'same-site',
+                    'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                    'sec-ch-ua-mobile': '?0',
+                    'sec-ch-ua-platform': '"Windows"',
                 })
-                logger.info(f"✅ 配置小红书 headers: Referer + Origin")
+                logger.info(f"✅ 配置小红书 headers: 完整浏览器特征（绕过CDN反爬虫）")
             elif platform_id == 'weibo':
                 download_headers.update({
                     'Referer': 'https://weibo.com/',
