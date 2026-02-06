@@ -1125,7 +1125,13 @@ async def _get_service_info_inline(url: str, country_code: str, service: str) ->
             if not plans:
                 result_lines.append(f"{service_display_name} 服务在该国家/地区不可用。")
             else:
+                is_first_plan = True
                 for plan in plans:
+                    if not is_first_plan:
+                        result_lines.append("")
+                    else:
+                        is_first_plan = False
+
                     name = plan.find("h3", class_="typography-plan-headline")
                     price_element = plan.find("p", class_="typography-plan-subhead")
 
@@ -1138,6 +1144,29 @@ async def _get_service_info_inline(url: str, country_code: str, service: str) ->
                             cny_price_str = await _convert_price_to_cny_inline(price, country_code)
                             line += cny_price_str
                         result_lines.append(line)
+
+                        # 子服务列表
+                        services = plan.find_all("li", class_="service-item")
+                        for service_item in services:
+                            service_name = service_item.find("span", class_="visuallyhidden")
+                            service_price = service_item.find("span", class_="cost")
+
+                            if service_name and service_price:
+                                service_name_text = service_name.get_text(strip=True)
+                                service_price_text = service_price.get_text(strip=True)
+                                service_price_text = (
+                                    service_price_text.replace("per month", "")
+                                    .replace("/month", "")
+                                    .replace("/mo.", "")
+                                    .strip()
+                                )
+                                service_line = f"  - {service_name_text}: {service_price_text}"
+                                if country_code != "CN":
+                                    cny_price_str = await _convert_price_to_cny_inline(
+                                        service_price_text, country_code
+                                    )
+                                    service_line += cny_price_str
+                                result_lines.append(service_line)
 
         elif service == "applemusic":
             soup = BeautifulSoup(content, "html.parser")
