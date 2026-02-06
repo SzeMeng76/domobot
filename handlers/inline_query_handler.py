@@ -75,9 +75,12 @@ class InlineQueryHandler:
         # 处理查询
         # ========================================
 
+        # 获取 bot username
+        bot_username = context.bot.username or "bot"
+
         # 如果查询为空，显示帮助信息
         if not query:
-            results = self._get_help_results()
+            results = self._get_help_results(bot_username)
             await update.inline_query.answer(results, cache_time=300)
             return
 
@@ -97,34 +100,38 @@ class InlineQueryHandler:
         # 返回结果
         await update.inline_query.answer(results, cache_time=10)
 
-    def _get_help_results(self) -> list:
+    def _get_help_results(self, bot_username: str) -> list:
         """返回帮助信息"""
-        help_text = """
+        help_text = f"""
 🤖 **Inline Mode 使用说明**
 
 在任何对话中输入:
-`@你的botname 命令 参数$`
+`@{bot_username} 命令 参数$`
 
-**常用命令示例:**
-• `rate 100 usd to cny$` - 汇率转换
-• `weather beijing$` - 天气查询
-• `steam elden ring$` - Steam游戏价格
-• `netflix$` - Netflix订阅价格
+**💰 金融查询:**
+• `rate usd 100$` - 汇率转换
 • `crypto btc$` - 加密货币价格
-• `time tokyo$` - 时区查询
-• `news tech$` - 新闻查询
-• `movie avengers$` - 影视信息
-• `cooking 宫保鸡丁$` - 菜谱查询
-• `bin 123456$` - BIN查询
-• `whois google.com$` - 域名查询
+• `finance AAPL$` - 股票查询
+• `bin 123456$` - BIN卡头查询
 
-**支持全部命令:**
-weather, steam, netflix, disney, spotify, max, appstore, googleplay, appleservices, crypto, time, news, movie, cooking, bin, whois, map, flight, hotel
+**🎬 流媒体价格:**
+• `netflix$` - Netflix全球价格排名
+• `spotify$` - Spotify全球价格排名
+• `disney$` - Disney+全球价格排名
+• `max$` - HBO Max全球价格排名
+• `appleservices icloud$` - Apple服务价格
+• `appstore id363590051$` - App Store多国价格
+
+**🌐 实用工具:**
+• `weather 北京$` - 天气查询(含AI日报)
+• `time tokyo$` - 时区查询
+• `news$` - 热门新闻汇总
+• `whois google.com$` - WHOIS/DNS查询
+• `cooking$` - 随机菜谱推荐
 
 **注意:**
 • 命令末尾必须加 `$` 符号才会执行
 • 点击结果后会发送到当前对话
-• 点击"执行"按钮获取实时数据
         """.strip()
 
         return [

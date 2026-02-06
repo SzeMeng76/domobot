@@ -2117,3 +2117,128 @@ command_factory.register_callback(r"^meal_plan_select:", meal_plan_select_callba
 command_factory.register_callback(r"^meal_plan_again:", meal_plan_again_callback, permission=Permission.NONE, description="重新智能推荐")
 command_factory.register_callback(r"^cooking_close$", cooking_close_callback, permission=Permission.NONE, description="关闭烹饪消息")
 command_factory.register_callback(r"^recipe_category_back$", recipe_category_back_callback, permission=Permission.NONE, description="返回菜谱分类选择")
+
+
+# =============================================================================
+# Inline 执行入口
+# =============================================================================
+
+# 全局 CookingService 实例（用于 inline 查询）
+_cooking_service = CookingService()
+
+async def cooking_inline_execute(args: str) -> dict:
+    """
+    Inline Query 执行入口 - 随机推荐一个完整菜谱
+
+    Args:
+        args: 忽略参数，始终返回随机菜谱
+
+    Returns:
+        dict: {
+            "success": bool,
+            "title": str,
+            "message": str,
+            "description": str,
+            "error": str | None
+        }
+    """
+    try:
+        # 加载菜谱数据
+        await _cooking_service.load_recipes_data()
+
+        if not _cooking_service.recipes_data:
+            return {
+                "success": False,
+                "title": "❌ 菜谱数据加载失败",
+                "message": "无法加载菜谱数据，请稍后重试",
+                "description": "数据加载失败",
+                "error": "菜谱数据为空"
+            }
+
+        # 随机获取 1 个菜谱
+        recipes = _cooking_service.get_random_recipes(1)
+
+        if not recipes:
+            return {
+                "success": False,
+                "title": "❌ 暂无菜谱",
+                "message": "暂无可推荐的菜谱",
+                "description": "暂无菜谱",
+                "error": "菜谱为空"
+            }
+
+        recipe = recipes[0]
+        name = recipe.get("name", "未知菜谱")
+        category = recipe.get("category", "其他")
+        difficulty = recipe.get("difficulty", "")
+        time_needed = recipe.get("time", "")
+
+        # 格式化完整菜谱
+        lines = [f"🍳 **{name}**", ""]
+
+        # 基本信息
+        info_parts = []
+        if category:
+            info_parts.append(f"📁 {category}")
+        if difficulty:
+            info_parts.append(f"⚡ {difficulty}")
+        if time_needed:
+            info_parts.append(f"⏱️ {time_needed}")
+        if info_parts:
+            lines.append(" | ".join(info_parts))
+            lines.append("")
+
+        # 食材列表
+        ingredients = recipe.get("ingredients", [])
+        if ingredients:
+            lines.append("**🥬 食材:**")
+            for ing in ingredients:
+                ing_name = ing.get("name", "")
+                ing_amount = ing.get("amount", "")
+                if ing_name:
+                    if ing_amount:
+                        lines.append(f"• {ing_name} {ing_amount}")
+                    else:
+                        lines.append(f"• {ing_name}")
+            lines.append("")
+
+        # 烹饪步骤
+        steps = recipe.get("steps", [])
+        if steps:
+            lines.append("**📝 步骤:**")
+            for i, step in enumerate(steps, 1):
+                step_text = step if isinstance(step, str) else step.get("content", "")
+                if step_text:
+                    # 限制每步长度
+                    if len(step_text) > 100:
+                        step_text = step_text[:97] + "..."
+                    lines.append(f"{i}. {step_text}")
+            lines.append("")
+
+        # 小贴士
+        tips = recipe.get("tips", [])
+        if tips:
+            lines.append("**💡 小贴士:**")
+            for tip in tips[:3]:  # 最多3条
+                tip_text = tip if isinstance(tip, str) else str(tip)
+                if len(tip_text) > 80:
+                    tip_text = tip_text[:77] + "..."
+                lines.append(f"• {tip_text}")
+
+        return {
+            "success": True,
+            "title": f"🍳 {name}",
+            "message": foldable_text_with_markdown_v2("\n".join(lines)),
+            "description": f"{category} | {difficulty}" if difficulty else category,
+            "error": None
+        }
+
+    except Exception as e:
+        logger.error(f"Inline cooking query failed: {e}")
+        return {
+            "success": False,
+            "title": "❌ 查询失败",
+            "message": f"获取菜谱失败: {str(e)}",
+            "description": "查询失败",
+            "error": str(e)
+        }

@@ -943,3 +943,239 @@ command_factory.register_command(
 # command_factory.register_command(
 #     "aps_cleancache", apple_services_clean_cache_command, permission=Permission.ADMIN, description="清理Apple服务缓存"
 # )
+
+
+# =============================================================================
+# Inline 执行入口
+# =============================================================================
+
+async def _get_service_info_inline(url: str, country_code: str, service: str) -> str:
+    """
+    Inline 专用的服务信息获取函数（不依赖 context，不使用缓存）
+    支持 iCloud fallback 到 Apple Support 页面
+    """
+    country_info = SUPPORTED_COUNTRIES.get(country_code)
+    if not country_info:
+        return "不支持的国家/地区"
+
+    flag_emoji = get_country_flag(country_code)
+    service_display_name = {"icloud": "iCloud", "appleone": "Apple One", "applemusic": "Apple Music"}.get(
+        service, service
+    )
+
+    try:
+        from utils.http_client import get_http_client
+
+        client = get_http_client()
+        response = await client.get(url, timeout=15)
+        content = None
+
+        if response.status_code == 404:
+            # For iCloud, try fallback to Apple Support page
+            if service == "icloud":
+                logger.info(f"[Inline] Attempting iCloud fallback to Apple Support page for {country_code}")
+                support_url = "https://support.apple.com/zh-cn/108047"
+                try:
+                    fallback_response = await client.get(support_url, timeout=15)
+                    if fallback_response.status_code == 200:
+                        content = fallback_response.text
+                        url = support_url
+                        logger.info(f"[Inline] Successfully fetched fallback URL: {support_url}")
+                    else:
+                        return f"📍 国家/地区: {flag_emoji} {country_info['name']}\n{service_display_name} 服务在该国家/地区不可用。"
+                except Exception as fallback_error:
+                    logger.error(f"[Inline] Fallback request failed: {fallback_error}")
+                    return f"📍 国家/地区: {flag_emoji} {country_info['name']}\n{service_display_name} 服务在该国家/地区不可用。"
+            else:
+                return f"📍 国家/地区: {flag_emoji} {country_info['name']}\n{service_display_name} 服务在该国家/地区不可用。"
+        else:
+            response.raise_for_status()
+            content = response.text
+
+        if content is None:
+            return f"📍 国家/地区: {flag_emoji} {country_info['name']}\n{service_display_name} 服务在该国家/地区不可用。"
+
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404 and service == "icloud":
+            # Try fallback
+            try:
+                from utils.http_client import get_http_client
+                client = get_http_client()
+                support_url = "https://support.apple.com/zh-cn/108047"
+                fallback_response = await client.get(support_url, timeout=15)
+                if fallback_response.status_code == 200:
+                    content = fallback_response.text
+                    url = support_url
+                else:
+                    return f"📍 国家/地区: {flag_emoji} {country_info['name']}\n{service_display_name} 服务在该国家/地区不可用。"
+            except:
+                return f"📍 国家/地区: {flag_emoji} {country_info['name']}\n{service_display_name} 服务在该国家/地区不可用。"
+        else:
+            return f"📍 国家/地区: {flag_emoji} {country_info['name']}\n获取价格信息失败: 网络错误 (HTTP {e.response.status_code})。"
+    except Exception as e:
+        logger.error(f"[Inline] Error for {country_code}, service {service}: {e}")
+        return f"📍 国家/地区: {flag_emoji} {country_info['name']}\n获取价格信息失败: {e!s}."
+
+    # 解析价格信息
+    try:
+        result_lines = [f"📍 国家/地区: {flag_emoji} {country_info['name']}"]
+
+        if service == "icloud":
+            prices = get_icloud_prices_from_apple_website(content, country_code)
+            if not prices:
+                prices = get_icloud_prices_from_html(content)
+
+            # Fallback to Apple Support if no prices found
+            if not prices and "support.apple.com" not in url:
+                try:
+                    from utils.http_client import get_http_client
+                    client = get_http_client()
+                    support_url = "https://support.apple.com/zh-cn/108047"
+                    support_response = await client.get(support_url, timeout=15)
+                    if support_response.status_code == 200:
+                        support_content = support_response.text
+                        prices = get_icloud_prices_from_html(support_content)
+                except:
+                    pass
+
+            if prices:
+                # 国家特定的价格
+                country_prices = prices.get(country_code)
+                if country_prices:
+                    result_lines.append(f"💰 {service_display_name} 存储方案:")
+                    for plan_name, price in country_prices.items():
+                        cny_price = await format_price_with_cny(price, country_info)
+                        result_lines.append(f"  • {plan_name}: {cny_price}")
+                # Fallback to CN prices
+                elif "CN" in prices:
+                    result_lines.append(f"💰 {service_display_name} 存储方案 (中国区):")
+                    for plan_name, price in prices["CN"].items():
+                        cny_price = await format_price_with_cny(price, SUPPORTED_COUNTRIES.get("CN", country_info))
+                        result_lines.append(f"  • {plan_name}: {cny_price}")
+                else:
+                    result_lines.append(f"未找到 {service_display_name} 价格信息。")
+            else:
+                result_lines.append(f"未找到 {service_display_name} 价格信息。")
+        else:
+            # Apple One / Apple Music
+            prices = get_apple_service_prices_from_html(content, service)
+            if prices:
+                result_lines.append(f"💰 {service_display_name} 订阅方案:")
+                for plan_name, price in prices.items():
+                    cny_price = await format_price_with_cny(price, country_info)
+                    result_lines.append(f"  • {plan_name}: {cny_price}")
+            else:
+                result_lines.append(f"未找到 {service_display_name} 价格信息。")
+
+        return "\n".join(result_lines)
+
+    except Exception as e:
+        logger.error(f"[Inline] Error parsing prices for {country_code}: {e}")
+        return f"📍 国家/地区: {flag_emoji} {country_info['name']}\n解析价格信息失败: {e!s}."
+
+
+async def appleservices_inline_execute(args: str) -> dict:
+    """
+    Inline Query 执行入口 - 提供完整的 Apple 服务价格查询功能
+
+    Args:
+        args: 用户输入的参数字符串，如 "icloud" 或 "appleone US"
+
+    Returns:
+        dict: {
+            "success": bool,
+            "title": str,
+            "message": str,
+            "description": str,
+            "error": str | None
+        }
+    """
+    import asyncio
+
+    if not args or not args.strip():
+        # 无参数：显示帮助信息
+        return {
+            "success": False,
+            "title": "❌ 请指定服务类型",
+            "message": "请提供服务类型\\n\\n*可用服务:*\\n• `appleservices icloud` \\\\- iCloud 价格\\n• `appleservices appleone` \\\\- Apple One 套餐\\n• `appleservices applemusic` \\\\- Apple Music 价格\\n\\n*可选国家:*\\n添加国家代码查询特定地区，如: `appleservices icloud US CN JP`",
+            "description": "请指定服务类型: icloud, appleone, applemusic",
+            "error": "未提供服务类型"
+        }
+
+    try:
+        parts = args.strip().split()
+        service = parts[0].lower()
+
+        if service not in ["icloud", "appleone", "applemusic"]:
+            return {
+                "success": False,
+                "title": "❌ 无效的服务类型",
+                "message": f"无效的服务类型: `{service}`\\n\\n*可用服务:*\\n• `icloud` \\\\- iCloud 存储\\n• `appleone` \\\\- Apple One 套餐\\n• `applemusic` \\\\- Apple Music",
+                "description": "无效的服务类型",
+                "error": "无效的服务类型"
+            }
+
+        # 解析国家参数
+        countries = parse_countries_from_args(parts[1:]) if len(parts) > 1 else DEFAULT_COUNTRIES
+
+        display_name = {"icloud": "iCloud", "appleone": "Apple One", "applemusic": "Apple Music"}.get(service, service)
+
+        # 构建URL并获取数据（使用 inline 专用函数）
+        tasks = []
+        for country in countries:
+            url = ""
+            if service == "icloud":
+                if country == "US":
+                    url = "https://www.apple.com/icloud/"
+                elif country == "CN":
+                    url = "https://www.apple.com.cn/icloud/"
+                else:
+                    url = f"https://www.apple.com/{country.lower()}/icloud/"
+            elif country == "US":
+                url = f"https://www.apple.com/{service}/"
+            elif country == "CN" and service == "appleone":
+                url = "https://www.apple.com.cn/apple-one/"
+            elif country == "CN" and service == "applemusic":
+                url = "https://www.apple.com.cn/apple-music/"
+            else:
+                url = f"https://www.apple.com/{country.lower()}/{service}/"
+            tasks.append(_get_service_info_inline(url, country, service))
+
+        country_results = await asyncio.gather(*tasks)
+
+        # 组装消息
+        raw_message_parts = [f"*📱 {display_name} 价格信息*", ""]
+
+        valid_results = [result for result in country_results if result]
+        if valid_results:
+            for i, result in enumerate(valid_results):
+                raw_message_parts.append(result)
+                if i < len(valid_results) - 1:
+                    raw_message_parts.append("")
+        else:
+            raw_message_parts.append("所有查询地区均无此服务。")
+
+        raw_final_message = "\n".join(raw_message_parts).strip()
+
+        # 构建简短描述
+        country_str = ", ".join(countries[:3])
+        if len(countries) > 3:
+            country_str += f" 等{len(countries)}个地区"
+
+        return {
+            "success": True,
+            "title": f"📱 {display_name} 价格",
+            "message": foldable_text_with_markdown_v2(raw_final_message),
+            "description": f"{display_name} {country_str} 价格",
+            "error": None
+        }
+
+    except Exception as e:
+        logger.error(f"Inline Apple Services query failed: {e}")
+        return {
+            "success": False,
+            "title": "❌ 查询失败",
+            "message": f"查询 Apple 服务价格失败: {str(e)}",
+            "description": "查询失败",
+            "error": str(e)
+        }

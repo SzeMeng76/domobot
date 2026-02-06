@@ -54,6 +54,7 @@ class InlineCommandAdapter:
             "cooking": self._handle_cooking,
             "bin": self._handle_bin,
             "whois": self._handle_whois,
+            "finance": self._handle_finance,
             "map": self._handle_map,
             "flight": self._handle_flight,
             "hotel": self._handle_hotel,
@@ -190,13 +191,17 @@ class InlineCommandAdapter:
             return (foldable_text_with_markdown_v2(error_message), ParseMode.MARKDOWN_V2, None)
 
     async def _handle_max(self, args: str) -> Tuple[str, ParseMode, None]:
-        """处理 HBO Max 价格查询"""
-        return (
-            "📺 *HBO Max 订阅价格*\n\n"
-            "💡 请在私聊中使用 `/max` 获取详细价格信息",
-            ParseMode.MARKDOWN_V2,
-            None
-        )
+        """处理 HBO Max 价格查询 - 调用完整的 max 功能"""
+        from commands.max import max_inline_execute
+        from utils.formatter import foldable_text_with_markdown_v2
+
+        result = await max_inline_execute(args)
+
+        if result["success"]:
+            return (result["message"], ParseMode.MARKDOWN_V2, None)
+        else:
+            error_message = f"❌ *{result['title']}*\n\n{result['message']}"
+            return (foldable_text_with_markdown_v2(error_message), ParseMode.MARKDOWN_V2, None)
 
     # ============================================================================
     # ₿ 加密货币价格
@@ -283,26 +288,17 @@ class InlineCommandAdapter:
     # ============================================================================
 
     async def _handle_appstore(self, args: str) -> Tuple[str, ParseMode, None]:
-        """处理 App Store 价格查询"""
-        if not args:
-            return (
-                "❌ *App Store 价格查询*\n\n"
-                "请提供应用名称\n\n"
-                "*使用方法:*\n"
-                "`appstore minecraft`",
-                ParseMode.MARKDOWN_V2,
-                None
-            )
+        """处理 App Store 价格查询 - 通过 App ID 查询多国价格"""
+        from commands.app_store import appstore_inline_execute
+        from utils.formatter import foldable_text_with_markdown_v2
 
-        from utils.formatter import escape_v2
+        result = await appstore_inline_execute(args)
 
-        return (
-            f"📱 *App Store 价格*\n\n"
-            f"搜索: {escape_v2(args)}\n\n"
-            f"💡 请在私聊中使用 `/appstore {escape_v2(args)}` 获取价格对比",
-            ParseMode.MARKDOWN_V2,
-            None
-        )
+        if result["success"]:
+            return (result["message"], ParseMode.MARKDOWN_V2, None)
+        else:
+            error_message = f"❌ *{result['title']}*\n\n{result['message']}"
+            return (foldable_text_with_markdown_v2(error_message), ParseMode.MARKDOWN_V2, None)
 
     async def _handle_googleplay(self, args: str) -> Tuple[str, ParseMode, None]:
         """处理 Google Play 价格查询"""
@@ -327,40 +323,34 @@ class InlineCommandAdapter:
         )
 
     async def _handle_appleservices(self, args: str) -> Tuple[str, ParseMode, None]:
-        """处理 Apple 服务价格查询"""
-        return (
-            "🍎 *Apple 服务价格*\n\n"
-            "💡 请在私聊中使用 `/appleservices` 获取 iCloud、Apple Music 等服务价格",
-            ParseMode.MARKDOWN_V2,
-            None
-        )
+        """处理 Apple 服务价格查询 - 调用完整的 appleservices 功能"""
+        from commands.apple_services import appleservices_inline_execute
+        from utils.formatter import foldable_text_with_markdown_v2
+
+        result = await appleservices_inline_execute(args)
+
+        if result["success"]:
+            return (result["message"], ParseMode.MARKDOWN_V2, None)
+        else:
+            error_message = f"❌ *{result['title']}*\n\n{result['message']}"
+            return (foldable_text_with_markdown_v2(error_message), ParseMode.MARKDOWN_V2, None)
 
     # ============================================================================
     # 👨‍🍳 其他功能
     # ============================================================================
 
     async def _handle_cooking(self, args: str) -> Tuple[str, ParseMode, None]:
-        """处理菜谱查询"""
-        if not args:
-            return (
-                "❌ *菜谱查询*\n\n"
-                "请提供菜名\n\n"
-                "*使用方法:*\n"
-                "`cooking 宫保鸡丁`\n"
-                "`cooking 红烧肉`",
-                ParseMode.MARKDOWN_V2,
-                None
-            )
+        """处理菜谱查询 - 调用完整的 cooking 功能"""
+        from commands.cooking import cooking_inline_execute
+        from utils.formatter import foldable_text_with_markdown_v2
 
-        from utils.formatter import escape_v2
+        result = await cooking_inline_execute(args)
 
-        return (
-            f"👨‍🍳 *菜谱查询*\n\n"
-            f"搜索: {escape_v2(args)}\n\n"
-            f"💡 请在私聊中使用 `/cooking {escape_v2(args)}` 获取详细菜谱",
-            ParseMode.MARKDOWN_V2,
-            None
-        )
+        if result["success"]:
+            return (result["message"], ParseMode.MARKDOWN_V2, None)
+        else:
+            error_message = f"❌ *{result['title']}*\n\n{result['message']}"
+            return (foldable_text_with_markdown_v2(error_message), ParseMode.MARKDOWN_V2, None)
 
     async def _handle_bin(self, args: str) -> Tuple[str, ParseMode, None]:
         """处理 BIN 查询 - 调用完整的 bin 功能"""
@@ -376,26 +366,30 @@ class InlineCommandAdapter:
             return (foldable_text_with_markdown_v2(error_message), ParseMode.MARKDOWN_V2, None)
 
     async def _handle_whois(self, args: str) -> Tuple[str, ParseMode, None]:
-        """处理 WHOIS 查询"""
-        if not args:
-            return (
-                "❌ *域名查询*\n\n"
-                "请提供域名\n\n"
-                "*使用方法:*\n"
-                "`whois google.com`",
-                ParseMode.MARKDOWN_V2,
-                None
-            )
+        """处理 WHOIS 查询 - 调用完整的 whois 功能（域名、IP、ASN、TLD + DNS）"""
+        from commands.whois import whois_inline_execute
 
-        from utils.formatter import escape_v2
+        result = await whois_inline_execute(args)
 
-        return (
-            f"🌐 *域名查询*\n\n"
-            f"域名: {escape_v2(args)}\n\n"
-            f"💡 请在私聊中使用 `/whois {escape_v2(args)}` 获取详细信息",
-            ParseMode.MARKDOWN_V2,
-            None
-        )
+        if result["success"]:
+            # WHOIS 结果使用 MARKDOWN_V2
+            return (result["message"], ParseMode.MARKDOWN_V2, None)
+        else:
+            error_message = f"❌ *{result['title']}*\n\n{result['message']}"
+            return (error_message, ParseMode.MARKDOWN_V2, None)
+
+    async def _handle_finance(self, args: str) -> Tuple[str, ParseMode, None]:
+        """处理股票查询 - 调用完整的 finance 功能"""
+        from commands.finance import finance_inline_execute
+        from utils.formatter import foldable_text_with_markdown_v2
+
+        result = await finance_inline_execute(args)
+
+        if result["success"]:
+            return (result["message"], ParseMode.MARKDOWN_V2, None)
+        else:
+            error_message = f"❌ *{result['title']}*\n\n{result['message']}"
+            return (foldable_text_with_markdown_v2(error_message), ParseMode.MARKDOWN_V2, None)
 
     async def _handle_map(self, args: str) -> Tuple[str, ParseMode, None]:
         """处理地图查询"""

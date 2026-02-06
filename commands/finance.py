@@ -2629,3 +2629,80 @@ command_factory.register_callback(r"^finance_close$", finance_close_callback, pe
 
 # 已迁移到统一缓存管理命令 /cleancache
 # command_factory.register_command("finance_cleancache", finance_clean_cache_command, permission=Permission.ADMIN, description="清理金融模块缓存")
+
+
+# =============================================================================
+# Inline 执行入口
+# =============================================================================
+
+async def finance_inline_execute(args: str) -> dict:
+    """
+    Inline Query 执行入口 - 提供股票查询功能（仅支持精确股票代码）
+
+    Args:
+        args: 用户输入的股票代码，如 "AAPL" 或 "MSFT"
+
+    Returns:
+        dict: {
+            "success": bool,
+            "title": str,
+            "message": str,
+            "description": str,
+            "error": str | None
+        }
+    """
+    from utils.formatter import foldable_text_with_markdown_v2
+
+    if not args or not args.strip():
+        return {
+            "success": False,
+            "title": "❌ 请输入股票代码",
+            "message": "请提供股票代码\\n\\n*使用方法:*\\n• `finance AAPL` \\\\- 苹果\\n• `finance MSFT` \\\\- 微软\\n• `finance TSLA` \\\\- 特斯拉\\n• `finance 0700.HK` \\\\- 腾讯\\n• `finance 600519.SS` \\\\- 茅台",
+            "description": "请提供股票代码，如 AAPL, MSFT",
+            "error": "未提供股票代码"
+        }
+
+    symbol = args.strip().split()[0].upper()
+
+    try:
+        # 获取股票信息（仅精确匹配）
+        stock_data = await finance_service.get_stock_info(symbol)
+
+        if not stock_data or stock_data.get('error'):
+            error_msg = stock_data.get('message', '股票代码不存在') if stock_data else '股票代码不存在'
+            return {
+                "success": False,
+                "title": f"❌ 未找到 {symbol}",
+                "message": f"未找到股票代码 `{symbol}`\\n\\n💡 请使用精确的股票代码:\\n• 美股: AAPL, MSFT, GOOGL\\n• 港股: 0700\\.HK, 9988\\.HK\\n• A股: 600519\\.SS, 000001\\.SZ",
+                "description": f"未找到: {symbol}",
+                "error": error_msg
+            }
+
+        # 格式化结果
+        formatted_result = format_stock_info(stock_data)
+
+        name = stock_data.get('name', symbol)
+        price = stock_data.get('current_price', 0)
+        change_percent = stock_data.get('change_percent', 0)
+        currency = stock_data.get('currency', 'USD')
+
+        trend = "📈" if change_percent >= 0 else "📉"
+        short_desc = f"{name} | {price:.2f} {currency} {trend} {change_percent:+.2f}%"
+
+        return {
+            "success": True,
+            "title": f"📊 {symbol} - {name}",
+            "message": foldable_text_with_markdown_v2(formatted_result),
+            "description": short_desc,
+            "error": None
+        }
+
+    except Exception as e:
+        logger.error(f"Inline finance query failed: {e}")
+        return {
+            "success": False,
+            "title": "❌ 查询失败",
+            "message": f"查询股票失败: {str(e)}",
+            "description": "查询失败",
+            "error": str(e)
+        }

@@ -2254,3 +2254,118 @@ command_factory.register_command("whois_tld", whois_tld_command, permission=Perm
 command_factory.register_command("dns", dns_command, permission=Permission.NONE, description="DNS记录查询")
 # 已迁移到统一缓存管理命令 /cleancache
 # command_factory.register_command("whois_cleancache", whois_clean_cache_command, permission=Permission.ADMIN, description="清理WHOIS和DNS查询缓存")
+
+
+# =============================================================================
+# Inline 执行入口
+# =============================================================================
+
+async def whois_inline_execute(args: str) -> dict:
+    """
+    Inline Query 执行入口 - 提供完整的 WHOIS/DNS 查询功能
+
+    智能识别查询类型：
+    - 域名: google.com（包含 DNS 记录）
+    - IP: 8.8.8.8
+    - ASN: AS15169 或 15169
+    - TLD: .com 或 com
+
+    Args:
+        args: 用户输入的查询内容
+
+    Returns:
+        dict: {
+            "success": bool,
+            "title": str,
+            "message": str,
+            "description": str,
+            "error": str | None
+        }
+    """
+    if not args or not args.strip():
+        return {
+            "success": False,
+            "title": "❌ 请输入查询内容",
+            "message": "请提供查询内容\\n\\n*支持查询类型:*\\n• `whois google.com` \\\\- 域名 \\\\+ DNS\\n• `whois 8.8.8.8` \\\\- IP地址\\n• `whois AS15169` \\\\- ASN\\n• `whois .com` \\\\- TLD信息",
+            "description": "请提供域名、IP、ASN 或 TLD",
+            "error": "未提供查询内容"
+        }
+
+    query = args.strip().split()[0]  # 只取第一个参数
+
+    try:
+        # 检测查询类型
+        query_type = detect_query_type(query)
+
+        # 查询类型映射
+        type_names = {
+            'domain': '🌐 域名',
+            'ip': '🖥️ IP',
+            'asn': '🔢 ASN',
+            'tld': '🏷️ TLD'
+        }
+        type_name = type_names.get(query_type, '🔍 查询')
+
+        # 执行查询
+        service = WhoisService()
+
+        if query_type == 'domain':
+            result = await service.query_domain(query)
+        elif query_type == 'ip':
+            result = await service.query_ip(query)
+        elif query_type == 'asn':
+            result = await service.query_asn(query)
+        elif query_type == 'tld':
+            result = await service.query_tld(query)
+        else:
+            return {
+                "success": False,
+                "title": "❌ 未知查询类型",
+                "message": f"无法识别 `{query}` 的查询类型",
+                "description": "未知查询类型",
+                "error": "未知查询类型"
+            }
+
+        if not result['success']:
+            return {
+                "success": False,
+                "title": f"❌ {type_name}查询失败",
+                "message": result.get('error', '查询失败'),
+                "description": f"{query} 查询失败",
+                "error": result.get('error')
+            }
+
+        # 格式化结果
+        formatted_result = format_whois_result(result)
+
+        # 构建简短描述
+        data = result.get('data', {})
+        if query_type == 'domain':
+            registrar = data.get('注册商', '')[:30] if data.get('注册商') else ''
+            short_desc = f"{query} | {registrar}" if registrar else query
+        elif query_type == 'ip':
+            org = data.get('组织', '') or data.get('🏢 实际组织', '')
+            short_desc = f"{query} | {org[:30]}" if org else query
+        elif query_type == 'asn':
+            desc = data.get('ASN描述', '')[:30] if data.get('ASN描述') else ''
+            short_desc = f"{query} | {desc}" if desc else query
+        else:
+            short_desc = query
+
+        return {
+            "success": True,
+            "title": f"{type_name} {query}",
+            "message": formatted_result,
+            "description": short_desc,
+            "error": None
+        }
+
+    except Exception as e:
+        logger.error(f"Inline WHOIS query failed: {e}")
+        return {
+            "success": False,
+            "title": "❌ 查询失败",
+            "message": f"查询失败: {str(e)}",
+            "description": "查询失败",
+            "error": str(e)
+        }

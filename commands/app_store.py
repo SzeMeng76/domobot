@@ -1321,3 +1321,124 @@ command_factory.register_callback(
     permission=Permission.USER,
     description="App搜索回调处理",
 )
+
+
+# =============================================================================
+# Inline 执行入口
+# =============================================================================
+
+async def appstore_inline_execute(args: str) -> dict:
+    """
+    Inline Query 执行入口 - 通过 App ID 查询 App Store 价格
+
+    Args:
+        args: App ID + 可选国家代码，格式为 "id363590051 US CN JP" 或 "363590051"
+
+    Returns:
+        dict: {
+            "success": bool,
+            "title": str,
+            "message": str,
+            "description": str,
+            "error": str | None
+        }
+    """
+    if not args or not args.strip():
+        return {
+            "success": False,
+            "title": "❌ 请输入 App ID",
+            "message": "请提供 App ID\\n\\n*使用方法:*\\n• `appstore id363590051` \\\\- 默认地区\\n• `appstore id363590051 US CN JP` \\\\- 指定地区\\n• `appstore 363590051` \\\\- 也可省略 id 前缀\\n\\n💡 App ID 可在 App Store 链接中找到",
+            "description": "请提供 App ID，如 id363590051",
+            "error": "未提供 App ID"
+        }
+
+    # 解析参数
+    parts = args.strip().split()
+    app_id_param = parts[0]
+
+    # 支持 "id363590051" 或 "363590051" 格式
+    if app_id_param.lower().startswith("id"):
+        app_id = app_id_param[2:]
+    else:
+        app_id = app_id_param
+
+    if not app_id.isdigit():
+        return {
+            "success": False,
+            "title": "❌ 无效的 App ID",
+            "message": f"无效的 App ID: `{app_id_param}`\\n\\nApp ID 必须是数字，如 `id363590051`",
+            "description": "App ID 格式错误",
+            "error": "App ID 必须是数字"
+        }
+
+    try:
+        # 解析国家参数
+        if len(parts) > 1:
+            countries_parsed = parse_countries(parts[1:])
+            countries_to_check = countries_parsed if countries_parsed else DEFAULT_COUNTRIES
+        else:
+            countries_to_check = DEFAULT_COUNTRIES
+
+        platform = "ios"  # 默认 iOS 平台
+
+        # 获取多国价格信息
+        price_results_raw = await get_multi_country_prices(
+            app_name=f"App ID {app_id}",
+            app_id=int(app_id),
+            platform=platform,
+            countries=countries_to_check,
+        )
+
+        # 过滤成功结果
+        successful_results = [res for res in price_results_raw if res["status"] == "ok"]
+
+        if not successful_results:
+            return {
+                "success": False,
+                "title": f"❌ 未找到 App {app_id}",
+                "message": f"在默认区域中未找到 App ID `{app_id}`\\n\\n请检查 ID 是否正确",
+                "description": f"未找到 App ID {app_id}",
+                "error": "App 不存在"
+            }
+
+        # 获取真实应用名称
+        real_app_name = None
+        for res in successful_results:
+            if res.get("real_app_name"):
+                real_app_name = res["real_app_name"]
+                break
+
+        app_name = real_app_name or f"App ID {app_id}"
+
+        # 格式化结果
+        target_plan = find_common_plan(price_results_raw)
+        formatted_result = format_app_details(
+            app_name=app_name,
+            app_id=app_id,
+            platform=platform,
+            price_results=price_results_raw,
+            target_plan=target_plan,
+        )
+
+        # 构建简短描述
+        first_result = successful_results[0]
+        first_price = first_result.get("app_price_str", "免费")
+        short_desc = f"{app_name} | {first_price}"
+
+        return {
+            "success": True,
+            "title": f"📱 {app_name}",
+            "message": foldable_text_with_markdown_v2(formatted_result),
+            "description": short_desc,
+            "error": None
+        }
+
+    except Exception as e:
+        logger.error(f"Inline App Store query failed: {e}")
+        return {
+            "success": False,
+            "title": "❌ 查询失败",
+            "message": f"查询 App Store 失败: {str(e)}",
+            "description": "查询失败",
+            "error": str(e)
+        }
