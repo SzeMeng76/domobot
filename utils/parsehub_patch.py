@@ -432,14 +432,27 @@ def patch_parsehub_yt_dlp():
                     if result.type == PostType.VIDEO:
                         media = result.media[0] if result.media else None
                         if media and media.url:
-                            return VideoParseResult(
-                                video=Video(path=media.url, thumb_url=media.thumb_url,
-                                           duration=media.duration, height=media.height, width=media.width),
-                                **k,
-                            )
+                            # Validate video URL before returning (check if accessible)
+                            try:
+                                async with httpx.AsyncClient(timeout=10.0, proxy=self.cfg.proxy) as client:
+                                    head_response = await client.head(media.url, follow_redirects=True)
+                                    if head_response.status_code == 404:
+                                        logger.warning(f"🌐 [Patch] XHS video URL returns 404, trying TikHub...")
+                                        result = None  # Trigger TikHub fallback
+                                    else:
+                                        return VideoParseResult(
+                                            video=Video(path=media.url, thumb_url=media.thumb_url,
+                                                       duration=media.duration, height=media.height, width=media.width),
+                                            **k,
+                                        )
+                            except Exception as e:
+                                logger.warning(f"🌐 [Patch] XHS video URL validation failed: {e}, trying TikHub...")
+                                result = None  # Trigger TikHub fallback
                         # No video URL, will try TikHub below
                     elif result.type == PostType.IMAGE:
                         photos = []
+                        url_validation_failed = False
+
                         for i in result.media:
                             if i.type == MediaType.LIVE_PHOTO:
                                 photos.append(Video(i.url, thumb_url=i.thumb_url, width=i.width, height=i.height))
@@ -451,7 +464,23 @@ def patch_parsehub_yt_dlp():
                                 photos.append(Image(i.url, ext, thumb_url=i.thumb_url, width=i.width, height=i.height))
 
                         if photos:
-                            return MultimediaParseResult(media=photos, **k)
+                            # Validate first image URL before returning (sample check)
+                            try:
+                                first_url = photos[0].path if hasattr(photos[0], 'path') else (photos[0].url if hasattr(photos[0], 'url') else None)
+                                if first_url:
+                                    async with httpx.AsyncClient(timeout=10.0, proxy=self.cfg.proxy) as client:
+                                        head_response = await client.head(first_url, follow_redirects=True)
+                                        if head_response.status_code == 404:
+                                            logger.warning(f"🌐 [Patch] XHS image URL returns 404, trying TikHub...")
+                                            url_validation_failed = True
+                            except Exception as e:
+                                logger.warning(f"🌐 [Patch] XHS image URL validation failed: {e}, trying TikHub...")
+                                url_validation_failed = True
+
+                            if not url_validation_failed:
+                                return MultimediaParseResult(media=photos, **k)
+                            else:
+                                result = None  # Trigger TikHub fallback
                     else:
                         raise ParseError("不支持的类型")
             else:
@@ -523,19 +552,38 @@ def patch_parsehub_yt_dlp():
                     raise ParseError(f"TikHub API返回错误: {data.get('message', 'Unknown error')}")
 
                 inner_data = data.get("data", {}).get("data", {})
-                video_info = inner_data.get("videoInfo", {})
-                video_url = video_info.get("videoUrl")
 
                 # Extract title/desc from TikHub response
+                # Note: TikHub uses "content" not "desc", and "imagesList" not "imageList"
                 title = inner_data.get("title", "")
-                desc = inner_data.get("desc", "")
+                desc = inner_data.get("content", "")  # Changed from "desc" to "content"
                 k = {"title": title, "desc": desc, "raw_url": url}
 
-                if video_url:
-                    logger.info(f"✅ [TikHub] Got XHS video URL: {video_url[:80]}")
-                    return VideoParseResult(video=video_url, **k)
+                # Check for video
+                video_info = inner_data.get("videoInfo")
+                if video_info:
+                    video_url = video_info.get("videoUrl")
+                    if video_url:
+                        logger.info(f"✅ [TikHub] Got XHS video URL: {video_url[:80]}")
+                        return VideoParseResult(video=video_url, **k)
 
-                raise ParseError("TikHub返回数据中没有视频URL")
+                # Check for images
+                images_list = inner_data.get("imagesList", [])  # Changed from "imageList" to "imagesList"
+                if images_list:
+                    photos = []
+                    for img in images_list:
+                        # TikHub returns dict with "url", "original", "width", "height"
+                        img_url = img.get("url") or img.get("original")
+                        if img_url:
+                            width = img.get("width", 0)
+                            height = img.get("height", 0)
+                            photos.append(Image(img_url, "jpg", width=width, height=height))
+
+                    if photos:
+                        logger.info(f"✅ [TikHub] Got XHS {len(photos)} images")
+                        return MultimediaParseResult(media=photos, **k)
+
+                raise ParseError("TikHub返回数据中没有视频或图片URL")
 
             except ParseError:
                 raise
