@@ -344,3 +344,76 @@ command_factory.register_command("ds", disney_command, permission=Permission.NON
 # command_factory.register_command(
 #     "ds_cleancache", disney_plus_clean_cache_command, permission=Permission.ADMIN, description="清理Disney+缓存"
 # )
+
+
+# =============================================================================
+# Inline 执行入口
+# =============================================================================
+
+async def disney_inline_execute(args: str) -> dict:
+    """
+    Inline Query 执行入口 - 提供完整的 Disney+ 价格查询功能
+
+    Args:
+        args: 用户输入的参数字符串，如 "US" 或 "美国"，为空则返回 Top 10
+
+    Returns:
+        dict: {
+            "success": bool,
+            "title": str,
+            "message": str,
+            "description": str,
+            "error": str | None
+        }
+    """
+    if not disney_price_bot:
+        return {
+            "success": False,
+            "title": "❌ 服务未初始化",
+            "message": "Disney+ 查询服务未初始化，请联系管理员",
+            "description": "服务未初始化",
+            "error": "Disney+ 服务未初始化"
+        }
+
+    try:
+        # 加载数据
+        await disney_price_bot.load_or_fetch_data(None)
+
+        if not args or not args.strip():
+            # 无参数：返回 Top 10 最便宜的国家
+            result = await disney_price_bot.get_top_cheapest()
+            return {
+                "success": True,
+                "title": "🎪 Disney+ 全球最低价排名",
+                "message": result,
+                "description": "Disney+ Premium 套餐全球最低价 Top 10",
+                "error": None
+            }
+        else:
+            # 有参数：查询指定国家
+            query_list = args.strip().split()
+            result = await disney_price_bot.query_prices(query_list)
+
+            # 构建简短描述
+            if len(query_list) == 1:
+                short_desc = f"Disney+ {query_list[0]} 订阅价格"
+            else:
+                short_desc = f"Disney+ {', '.join(query_list[:3])} 等地区价格"
+
+            return {
+                "success": True,
+                "title": f"🎪 Disney+ 价格查询",
+                "message": result,
+                "description": short_desc,
+                "error": None
+            }
+
+    except Exception as e:
+        logger.error(f"Inline Disney+ query failed: {e}")
+        return {
+            "success": False,
+            "title": "❌ 查询失败",
+            "message": f"查询 Disney+ 价格失败: {str(e)}",
+            "description": "查询失败",
+            "error": str(e)
+        }

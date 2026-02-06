@@ -1476,8 +1476,142 @@ command_factory.register_callback(
 # )
 
 # command_factory.register_command(
-#     "tq_cleanrealtime", 
-#     tq_clean_realtime_cache_command, 
-#     permission=Permission.ADMIN, 
+#     "tq_cleanrealtime",
+#     tq_clean_realtime_cache_command,
+#     permission=Permission.ADMIN,
 #     description="清理实时天气缓存"
 # )
+
+
+# =============================================================================
+# Inline 执行入口
+# =============================================================================
+
+async def weather_inline_execute(args: str, use_ai_report: bool = True) -> dict:
+    """
+    Inline Query 执行入口 - 提供完整的天气查询功能（含 AI 日报）
+
+    Args:
+        args: 用户输入的参数字符串，如 "北京" 或 "上海"
+        use_ai_report: 是否生成 AI 日报（默认 True）
+
+    Returns:
+        dict: {
+            "success": bool,
+            "title": str,
+            "message": str,
+            "description": str,
+            "error": str | None
+        }
+    """
+    if not args or not args.strip():
+        return {
+            "success": False,
+            "title": "❌ 请输入城市名",
+            "message": "请提供城市名称\\n\\n*使用方法:*\\n• `weather 北京` \\\\- 查询北京天气\\n• `weather 上海` \\\\- 查询上海天气",
+            "description": "请提供城市名称",
+            "error": "未提供城市参数"
+        }
+
+    if not cache_manager or not httpx_client:
+        return {
+            "success": False,
+            "title": "❌ 服务未初始化",
+            "message": "天气查询服务未初始化，请联系管理员",
+            "description": "服务未初始化",
+            "error": "服务未初始化"
+        }
+
+    location = args.strip().split()[0]  # 只取第一个参数作为城市名
+
+    try:
+        # 获取位置信息
+        location_data = await get_location_id(location)
+        if not location_data:
+            return {
+                "success": False,
+                "title": f"❌ 找不到城市 {location}",
+                "message": f"找不到城市 *{location}*，请检查拼写",
+                "description": f"找不到城市: {location}",
+                "error": "城市不存在"
+            }
+
+        location_id = location_data['id']
+        location_name = f"{location_data['name']}, {location_data['adm1']}"
+
+        # 获取实时天气和空气质量
+        realtime_data = await _get_api_response("weather/now", {"location": location_id})
+        air_data = await _get_api_response("air/now", {"location": location_id})
+
+        if not realtime_data:
+            return {
+                "success": False,
+                "title": f"❌ 获取天气失败",
+                "message": f"无法获取 *{location_name}* 的天气数据",
+                "description": "获取天气数据失败",
+                "error": "API 请求失败"
+            }
+
+        # 尝试生成 AI 日报
+        ai_report = None
+        if use_ai_report and OPENAI_AVAILABLE and get_config().openai_api_key:
+            try:
+                # 获取更多数据用于 AI 日报
+                daily_data = await _get_api_response("weather/3d", {"location": location_id})
+                hourly_data = await _get_api_response("weather/24h", {"location": location_id})
+                indices_data = await _get_api_response("indices/1d", {"location": location_id, "type": "0"})
+
+                # 获取天气预警
+                lat = float(location_data['lat'])
+                lon = float(location_data['lon'])
+                alerts_data = await get_weather_alerts(lat, lon)
+
+                if realtime_data and daily_data and hourly_data and indices_data:
+                    ai_report = await generate_ai_weather_report(
+                        location_name,
+                        realtime_data,
+                        daily_data,
+                        hourly_data,
+                        indices_data,
+                        air_data,
+                        alerts_data
+                    )
+            except Exception as e:
+                logging.warning(f"AI 日报生成失败: {e}")
+
+        # 构建结果
+        if ai_report:
+            # 使用 AI 日报
+            result_text = ai_report
+            title = f"🤖 {location_name} AI天气日报"
+            description = f"敏敏为你播报 {location_name} 天气"
+        else:
+            # 使用传统格式
+            result_text = format_realtime_weather(realtime_data, location_name)
+            if air_data and air_data.get('now') and air_data.get('now').get('aqi'):
+                result_text += format_air_quality(air_data)
+            title = f"🌤️ {location_name} 实时天气"
+
+            # 提取简短描述
+            now = realtime_data.get("now", {})
+            temp = now.get('temp', 'N/A')
+            text = now.get('text', 'N/A')
+            description = f"{text} {temp}°C"
+
+        return {
+            "success": True,
+            "title": title,
+            "message": result_text,
+            "description": description,
+            "error": None
+        }
+
+    except Exception as e:
+        logging.error(f"Inline weather query failed: {e}")
+        return {
+            "success": False,
+            "title": "❌ 查询失败",
+            "message": f"查询天气失败: {str(e)}",
+            "description": "查询失败",
+            "error": str(e)
+        }

@@ -607,7 +607,7 @@ async def rate_inline_execute(args: str) -> dict:
                 "",
                 "━━━━━━━━━━━━━━━━",
                 "📣 主源每小时更新 | 平台对比每8小时更新",
-                "🌐 来源: OpenExchange \\+ 5个主流平台",
+                "🌐 来源: OpenExchange + 5个主流平台",
             ]
         )
 

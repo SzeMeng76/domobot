@@ -101,31 +101,22 @@ class InlineCommandAdapter:
     # ============================================================================
 
     async def _handle_weather(self, args: str) -> Tuple[str, ParseMode, None]:
-        """处理天气查询命令"""
-        if not args:
-            return (
-                "❌ *天气查询*\n\n"
-                "请提供城市名称\n\n"
-                "*使用方法:*\n"
-                "`weather beijing`\n"
-                "`weather tokyo`\n"
-                "`weather new york`",
-                ParseMode.MARKDOWN_V2,
-                None
-            )
+        """处理天气查询命令 - 调用完整的 weather 功能（含 AI 日报）"""
+        from commands.weather import weather_inline_execute
+        from utils.formatter import foldable_text_with_markdown_v2
 
-        # 简化版：返回提示信息
-        # 完整实现需要调用天气API
-        from utils.formatter import escape_v2
+        result = await weather_inline_execute(args)
 
-        return (
-            f"🌤️ *天气查询*\n\n"
-            f"查询城市: {escape_v2(args)}\n\n"
-            f"💡 天气查询功能需要完整API支持\n"
-            f"请在私聊中使用 `/weather {escape_v2(args)}` 获取详细天气信息",
-            ParseMode.MARKDOWN_V2,
-            None
-        )
+        if result["success"]:
+            # AI 日报是纯文本，不需要 MarkdownV2 转义
+            if "🤖" in result.get("title", "") or "敏敏" in result.get("message", ""):
+                # AI 日报使用普通 Markdown
+                return (result["message"], ParseMode.MARKDOWN, None)
+            else:
+                return (foldable_text_with_markdown_v2(result["message"]), ParseMode.MARKDOWN_V2, None)
+        else:
+            error_message = f"❌ *{result['title']}*\n\n{result['message']}"
+            return (foldable_text_with_markdown_v2(error_message), ParseMode.MARKDOWN_V2, None)
 
     # ============================================================================
     # 🎮 Steam 游戏价格
@@ -160,37 +151,43 @@ class InlineCommandAdapter:
     # ============================================================================
 
     async def _handle_netflix(self, args: str) -> Tuple[str, ParseMode, None]:
-        """处理 Netflix 价格查询"""
-        from commands.netflix import get_netflix_prices_text
+        """处理 Netflix 价格查询 - 调用完整的 netflix 功能"""
+        from commands.netflix import netflix_inline_execute
+        from utils.formatter import foldable_text_with_markdown_v2
 
-        try:
-            result = await get_netflix_prices_text(self.cache_manager, self.rate_converter)
-            return (result, ParseMode.MARKDOWN_V2, None)
-        except:
-            return (
-                "🎬 *Netflix 订阅价格*\n\n"
-                "💡 请在私聊中使用 `/netflix` 获取详细价格信息",
-                ParseMode.MARKDOWN_V2,
-                None
-            )
+        result = await netflix_inline_execute(args)
+
+        if result["success"]:
+            return (result["message"], ParseMode.MARKDOWN_V2, None)
+        else:
+            error_message = f"❌ *{result['title']}*\n\n{result['message']}"
+            return (foldable_text_with_markdown_v2(error_message), ParseMode.MARKDOWN_V2, None)
 
     async def _handle_disney(self, args: str) -> Tuple[str, ParseMode, None]:
-        """处理 Disney+ 价格查询"""
-        return (
-            "🎪 *Disney\\+ 订阅价格*\n\n"
-            "💡 请在私聊中使用 `/disney` 获取详细价格信息",
-            ParseMode.MARKDOWN_V2,
-            None
-        )
+        """处理 Disney+ 价格查询 - 调用完整的 disney 功能"""
+        from commands.disney_plus import disney_inline_execute
+        from utils.formatter import foldable_text_with_markdown_v2
+
+        result = await disney_inline_execute(args)
+
+        if result["success"]:
+            return (result["message"], ParseMode.MARKDOWN_V2, None)
+        else:
+            error_message = f"❌ *{result['title']}*\n\n{result['message']}"
+            return (foldable_text_with_markdown_v2(error_message), ParseMode.MARKDOWN_V2, None)
 
     async def _handle_spotify(self, args: str) -> Tuple[str, ParseMode, None]:
-        """处理 Spotify 价格查询"""
-        return (
-            "🎵 *Spotify 订阅价格*\n\n"
-            "💡 请在私聊中使用 `/spotify` 获取详细价格信息",
-            ParseMode.MARKDOWN_V2,
-            None
-        )
+        """处理 Spotify 价格查询 - 调用完整的 spotify 功能"""
+        from commands.spotify import spotify_inline_execute
+        from utils.formatter import foldable_text_with_markdown_v2
+
+        result = await spotify_inline_execute(args)
+
+        if result["success"]:
+            return (result["message"], ParseMode.MARKDOWN_V2, None)
+        else:
+            error_message = f"❌ *{result['title']}*\n\n{result['message']}"
+            return (foldable_text_with_markdown_v2(error_message), ParseMode.MARKDOWN_V2, None)
 
     async def _handle_max(self, args: str) -> Tuple[str, ParseMode, None]:
         """处理 HBO Max 价格查询"""
@@ -242,18 +239,17 @@ class InlineCommandAdapter:
     # ============================================================================
 
     async def _handle_news(self, args: str) -> Tuple[str, ParseMode, None]:
-        """处理新闻查询"""
-        from utils.formatter import escape_v2
+        """处理新闻查询 - 调用完整的 news 功能"""
+        from commands.news import news_inline_execute
 
-        keyword = args if args else "科技"
+        result = await news_inline_execute(args)
 
-        return (
-            f"📰 *新闻查询*\n\n"
-            f"关键词: {escape_v2(keyword)}\n\n"
-            f"💡 请在私聊中使用 `/news {escape_v2(keyword)}` 获取最新新闻",
-            ParseMode.MARKDOWN_V2,
-            None
-        )
+        if result["success"]:
+            # 新闻使用普通 Markdown（包含链接）
+            return (result["message"], ParseMode.MARKDOWN, None)
+        else:
+            error_message = f"❌ *{result['title']}*\n\n{result['message']}"
+            return (error_message, ParseMode.MARKDOWN, None)
 
     # ============================================================================
     # 🎬 影视信息

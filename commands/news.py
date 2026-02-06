@@ -1114,10 +1114,145 @@ async def news_clean_cache_command(update: Update, context: ContextTypes.DEFAULT
 # 已迁移到统一缓存管理命令 /cleancache
 # 注册缓存清理命令
 # command_factory.register_command(
-#     "news_cleancache", 
-#     news_clean_cache_command, 
-#     permission=Permission.ADMIN, 
+#     "news_cleancache",
+#     news_clean_cache_command,
+#     permission=Permission.ADMIN,
 #     description="清理新闻缓存"
 # )
+
+
+# =============================================================================
+# Inline 执行入口
+# =============================================================================
+
+async def news_inline_execute(args: str) -> dict:
+    """
+    Inline Query 执行入口 - 提供完整的新闻查询功能
+
+    Args:
+        args: 用户输入的参数字符串，如 "zhihu" 或 "github"，为空则返回热门新闻
+
+    Returns:
+        dict: {
+            "success": bool,
+            "title": str,
+            "message": str,
+            "description": str,
+            "error": str | None
+        }
+    """
+    try:
+        if not args or not args.strip():
+            # 无参数：返回热门新闻汇总
+            hot_sources = get_balanced_hot_sources()
+            results = []
+
+            # 并发获取多个源的新闻
+            import asyncio
+            tasks = [get_news(source, 3) for source in hot_sources]
+            news_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            successful_sources = 0
+            failed_sources = []
+
+            for source, news_items in zip(hot_sources, news_results):
+                if isinstance(news_items, Exception):
+                    failed_sources.append(source)
+                    continue
+
+                if news_items:
+                    successful_sources += 1
+                    source_name = NEWS_SOURCES.get(source, source)
+                    results.append(f"📰 **{source_name}** (前3条)")
+
+                    for j, item in enumerate(news_items[:3], 1):
+                        title = item.get('title', '无标题').strip()
+                        url = item.get('url', '')
+
+                        if url:
+                            results.append(f"{j}. [{title[:40]}...]({url})")
+                        else:
+                            results.append(f"{j}. {title[:40]}...")
+
+                    results.append("")  # 空行分隔
+                else:
+                    failed_sources.append(source)
+
+            if results:
+                message = f"🔥 **今日热门新闻** (成功获取 {successful_sources} 个源)\n\n" + "\n".join(results)
+                message += "\n💡 使用 `news 源名称` 获取更多新闻"
+                if failed_sources:
+                    message += f"\n\n⚠️ 部分源暂时不可用: {', '.join(failed_sources)}"
+
+                return {
+                    "success": True,
+                    "title": "🔥 今日热门新闻",
+                    "message": message,
+                    "description": f"来自 {successful_sources} 个平台的热门资讯",
+                    "error": None
+                }
+            else:
+                return {
+                    "success": False,
+                    "title": "❌ 获取新闻失败",
+                    "message": "暂时无法获取热门新闻，所有源都不可用",
+                    "description": "新闻源不可用",
+                    "error": "所有新闻源不可用"
+                }
+
+        else:
+            # 有参数：查询指定新闻源
+            source = args.strip().split()[0].lower()
+            count = 10  # 默认10条
+
+            # 尝试解析数量参数
+            parts = args.strip().split()
+            if len(parts) > 1 and parts[1].isdigit():
+                count = min(int(parts[1]), 20)  # 最多20条
+
+            if source not in NEWS_SOURCES:
+                # 提供可用源列表
+                available_sources = list(NEWS_SOURCES.keys())[:15]
+                return {
+                    "success": False,
+                    "title": f"❌ 不支持的新闻源: {source}",
+                    "message": f"不支持的新闻源: `{source}`\n\n**部分可用源:**\n" + ", ".join(available_sources),
+                    "description": f"不支持的新闻源: {source}",
+                    "error": "新闻源不存在"
+                }
+
+            # 获取新闻
+            news_items = await get_news(source, count)
+
+            if not news_items:
+                return {
+                    "success": False,
+                    "title": f"❌ 获取 {NEWS_SOURCES[source]} 失败",
+                    "message": f"未能获取 {NEWS_SOURCES[source]} 的新闻，请稍后重试",
+                    "description": "获取新闻失败",
+                    "error": "API 返回空数据"
+                }
+
+            # 格式化消息
+            message = format_news_message(source, news_items)
+
+            return {
+                "success": True,
+                "title": f"📰 {NEWS_SOURCES[source]}",
+                "message": message,
+                "description": f"{NEWS_SOURCES[source]} 最新 {len(news_items)} 条",
+                "error": None
+            }
+
+    except Exception as e:
+        logger.error(f"Inline news query failed: {e}")
+        return {
+            "success": False,
+            "title": "❌ 查询失败",
+            "message": f"查询新闻失败: {str(e)}",
+            "description": "查询失败",
+            "error": str(e)
+        }
+
 
 logger.info("新闻命令模块已加载")
