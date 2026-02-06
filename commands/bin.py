@@ -284,8 +284,132 @@ command_factory.register_command(
 
 # 已迁移到统一缓存管理命令 /cleancache
 # command_factory.register_command(
-#     "bin_cleancache", 
-#     bin_clean_cache_command, 
-#     permission=Permission.ADMIN, 
+#     "bin_cleancache",
+#     bin_clean_cache_command,
+#     permission=Permission.ADMIN,
 #     description="清理BIN查询缓存"
 # )
+
+
+# =============================================================================
+# Inline 执行入口
+# =============================================================================
+
+async def bin_inline_execute(args: str) -> dict:
+    """
+    Inline Query 执行入口 - 提供完整的BIN查询功能
+
+    Args:
+        args: 用户输入的参数字符串，如 "123456"
+
+    Returns:
+        dict: {
+            "success": bool,
+            "title": str,
+            "message": str,
+            "description": str,
+            "error": str | None
+        }
+    """
+    if not args or not args.strip():
+        return {
+            "success": False,
+            "title": "❌ 请输入BIN号码",
+            "message": "请提供BIN卡头号码\n\n*使用方法:*\n• `bin 123456` \\- 查询6位BIN\n• `bin 12345678` \\- 查询8位BIN\n\n*说明:*\nBIN号码是信用卡号的前6\\-8位数字",
+            "description": "请提供BIN卡头号码（6-8位数字）",
+            "error": "未提供BIN参数"
+        }
+
+    if not cache_manager or not httpx_client:
+        return {
+            "success": False,
+            "title": "❌ 服务未初始化",
+            "message": "BIN查询服务未初始化，请联系管理员",
+            "description": "服务未初始化",
+            "error": "服务未初始化"
+        }
+
+    bin_number = args.strip().split()[0]
+
+    # 验证BIN号码
+    if not bin_number.isdigit():
+        return {
+            "success": False,
+            "title": "❌ 格式错误",
+            "message": "BIN号码必须为纯数字",
+            "description": "BIN号码必须为纯数字",
+            "error": "BIN号码必须为数字"
+        }
+
+    if len(bin_number) < 6 or len(bin_number) > 8:
+        return {
+            "success": False,
+            "title": "❌ 长度错误",
+            "message": "BIN号码长度必须在6\\-8位之间",
+            "description": "BIN号码长度必须在6-8位之间",
+            "error": "BIN号码长度错误"
+        }
+
+    try:
+        # 获取BIN信息
+        bin_data = await get_bin_info(bin_number)
+        country_data = await get_country_data()
+        currency_data = await get_currency_data()
+
+        if not bin_data:
+            config = get_config()
+            if not config.bin_api_key:
+                return {
+                    "success": False,
+                    "title": "❌ API未配置",
+                    "message": "BIN API Key 未配置，请联系管理员",
+                    "description": "BIN API未配置",
+                    "error": "API Key 未配置"
+                }
+            return {
+                "success": False,
+                "title": f"❌ 未找到 {bin_number}",
+                "message": f"无法获取BIN *{escape_markdown(bin_number, version=2)}* 的信息\n\n请检查号码是否正确",
+                "description": f"未找到BIN {bin_number} 的信息",
+                "error": "API 返回空数据"
+            }
+
+        # 格式化结果
+        result_text = format_bin_data(bin_number, bin_data, country_data, currency_data)
+
+        # 提取简短描述
+        data = bin_data.get("data", {})
+        brand = data.get("card_brand", "")
+        if brand in BINMapping.brand:
+            brand = BINMapping.brand[brand]
+        card_type = data.get("card_type", "")
+        if card_type in BINMapping.card_type:
+            card_type = BINMapping.card_type[card_type]
+        issuer = data.get("issuer", "")
+
+        short_desc_parts = [bin_number]
+        if brand:
+            short_desc_parts.append(brand)
+        if card_type:
+            short_desc_parts.append(card_type)
+        if issuer:
+            short_desc_parts.append(issuer[:20])
+        short_desc = " | ".join(short_desc_parts)
+
+        return {
+            "success": True,
+            "title": f"💳 BIN {bin_number}",
+            "message": result_text,
+            "description": short_desc,
+            "error": None
+        }
+
+    except Exception as e:
+        logging.error(f"Inline BIN query failed: {e}")
+        return {
+            "success": False,
+            "title": "❌ 查询失败",
+            "message": f"查询BIN信息失败: {str(e)}",
+            "description": "查询失败",
+            "error": str(e)
+        }

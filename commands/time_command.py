@@ -450,7 +450,87 @@ async def timezone_list_command(update: Update, context: ContextTypes.DEFAULT_TY
             message_id=update.effective_message.message_id
         )
 
-# Register commands
+# 注册命令
 command_factory.register_command("time", time_command, permission=Permission.NONE, description="查询当前时间（可指定时区）")
 command_factory.register_command("convert_time", convert_time_command, permission=Permission.NONE, description="时区转换")
 command_factory.register_command("timezone", timezone_list_command, permission=Permission.NONE, description="查看支持的时区列表")
+
+
+# =============================================================================
+# Inline 执行入口
+# =============================================================================
+
+async def time_inline_execute(args: str) -> dict:
+    """
+    Inline Query 执行入口 - 提供完整的时间查询功能
+
+    Args:
+        args: 用户输入的参数字符串，如 "北京" 或 "Japan"
+
+    Returns:
+        dict: {
+            "success": bool,
+            "title": str,
+            "message": str,
+            "description": str,
+            "error": str | None
+        }
+    """
+    if not args or not args.strip():
+        return {
+            "success": False,
+            "title": "❌ 请输入时区",
+            "message": "请提供时区名称\n\n*使用方法:*\n• `time 北京` \\- 查询北京时间\n• `time Japan` \\- 查询日本时间\n• `time US` \\- 查询美国时间",
+            "description": "请提供时区名称，如：北京、Japan、US",
+            "error": "未提供时区参数"
+        }
+
+    try:
+        # 解析时区
+        timezone_input = args.strip()
+        timezone, country_info = resolve_timezone(timezone_input)
+
+        # 获取时间
+        time_service = TimeService()
+        result = await time_service.get_current_time(timezone)
+
+        # 格式化结果
+        response = format_time_result(result, country_info)
+
+        # 如果使用了国家/城市名映射，添加提示
+        if country_info and country_info.get("name"):
+            safe_country_name = escape_markdown(country_info['name'], version=2)
+            response += f"\n\n💡 已识别为 {safe_country_name}"
+
+        # 简短描述
+        formatted_time = result.get("formatted", "")
+        if country_info and country_info.get("name"):
+            short_desc = f"{country_info.get('flag', '🕐')} {country_info['name']}: {formatted_time}"
+        else:
+            short_desc = f"🕐 {timezone}: {formatted_time}"
+
+        return {
+            "success": True,
+            "title": f"🕐 {timezone_input} 时间",
+            "message": response,
+            "description": short_desc,
+            "error": None
+        }
+
+    except ValueError as e:
+        return {
+            "success": False,
+            "title": "❌ 时区解析失败",
+            "message": f"无法解析时区: {args}\n\n💡 请尝试使用:\n• 城市名: 北京、东京、纽约\n• 国家名: 中国、日本、美国\n• 国家代码: CN、JP、US",
+            "description": f"无法解析时区: {args}",
+            "error": str(e)
+        }
+    except Exception as e:
+        logger.error(f"Inline time query failed: {e}")
+        return {
+            "success": False,
+            "title": "❌ 查询失败",
+            "message": f"查询时间失败: {str(e)}",
+            "description": "查询时间失败",
+            "error": str(e)
+        }

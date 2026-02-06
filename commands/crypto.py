@@ -663,7 +663,7 @@ command_factory.register_command(
 
 # 注册回调处理器
 command_factory.register_callback(r"^crypto_main_menu$", crypto_main_menu_callback, permission=Permission.USER, description="加密货币主菜单")
-command_factory.register_callback(r"^crypto_price_help$", crypto_price_help_callback, permission=Permission.USER, description="币价查询帮助") 
+command_factory.register_callback(r"^crypto_price_help$", crypto_price_help_callback, permission=Permission.USER, description="币价查询帮助")
 command_factory.register_callback(r"^crypto_trending$", crypto_trending_callback, permission=Permission.USER, description="热门币种")
 command_factory.register_callback(r"^crypto_gainers$", crypto_gainers_callback, permission=Permission.USER, description="涨幅榜")
 command_factory.register_callback(r"^crypto_losers$", crypto_losers_callback, permission=Permission.USER, description="跌幅榜")
@@ -675,3 +675,108 @@ command_factory.register_callback(r"^crypto_close$", crypto_close_callback, perm
 # command_factory.register_command(
 #     "crypto_cleancache", crypto_clean_cache_command, permission=Permission.ADMIN, description="清理加密货币缓存"
 # )
+
+
+# =============================================================================
+# Inline 执行入口
+# =============================================================================
+
+async def crypto_inline_execute(args: str) -> dict:
+    """
+    Inline Query 执行入口 - 提供完整的加密货币查询功能
+
+    Args:
+        args: 用户输入的参数字符串，如 "btc" 或 "eth 2 usd"
+
+    Returns:
+        dict: {
+            "success": bool,
+            "title": str,
+            "message": str,
+            "description": str,
+            "error": str | None
+        }
+    """
+    if not args or not args.strip():
+        return {
+            "success": False,
+            "title": "❌ 请输入币种",
+            "message": "请提供加密货币代码\n\n*使用方法:*\n• `crypto btc` \\- 查询比特币价格\n• `crypto eth 2` \\- 查询2个ETH价格\n• `crypto btc usd` \\- 查询BTC对USD价格",
+            "description": "请提供币种代码，如：btc、eth",
+            "error": "未提供币种参数"
+        }
+
+    if not cache_manager or not httpx_client:
+        return {
+            "success": False,
+            "title": "❌ 服务未初始化",
+            "message": "加密货币服务未初始化，请联系管理员",
+            "description": "服务未初始化",
+            "error": "服务未初始化"
+        }
+
+    try:
+        # 解析参数
+        parts = args.strip().split()
+        symbol = parts[0].upper()
+        amount = 1.0
+        convert_currency = "CNY"
+
+        if len(parts) > 1:
+            try:
+                amount = float(parts[1])
+                if len(parts) > 2:
+                    convert_currency = parts[2].upper()
+            except ValueError:
+                convert_currency = parts[1].upper()
+
+        # 获取价格数据
+        data = await get_crypto_price(symbol, convert_currency)
+
+        if not data:
+            return {
+                "success": False,
+                "title": f"❌ 无法获取 {symbol} 价格",
+                "message": f"无法获取 *{escape_markdown(symbol, version=2)}* 的价格数据\n\n请检查币种代码是否正确",
+                "description": f"无法获取 {symbol} 价格数据",
+                "error": "API 返回空数据"
+            }
+
+        # 格式化结果
+        result_text = format_crypto_data(data, symbol, amount, convert_currency)
+
+        # 提取简短描述
+        data_map = data.get("data", {})
+        coin_data_obj = data_map.get(symbol) or (list(data_map.values())[0] if data_map else None)
+        if isinstance(coin_data_obj, list) and coin_data_obj:
+            coin_data = coin_data_obj[0]
+        else:
+            coin_data = coin_data_obj
+
+        short_desc = f"{symbol}: 价格查询"
+        if coin_data and isinstance(coin_data, dict):
+            quote = coin_data.get("quote", {}).get(convert_currency, {})
+            if quote and quote.get("price"):
+                price = quote["price"]
+                total = price * amount
+                change_24h = quote.get("percent_change_24h", 0)
+                emoji = "📈" if change_24h >= 0 else "📉"
+                short_desc = f"{emoji} {amount:g} {symbol} = {total:,.2f} {convert_currency} ({change_24h:+.2f}%)"
+
+        return {
+            "success": True,
+            "title": f"🪙 {symbol} 价格",
+            "message": result_text,
+            "description": short_desc,
+            "error": None
+        }
+
+    except Exception as e:
+        logging.error(f"Inline crypto query failed: {e}")
+        return {
+            "success": False,
+            "title": "❌ 查询失败",
+            "message": f"查询加密货币价格失败: {str(e)}",
+            "description": "查询失败",
+            "error": str(e)
+        }

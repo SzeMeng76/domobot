@@ -445,6 +445,196 @@ async def rate_clean_cache_command(update: Update, context: ContextTypes.DEFAULT
         await delete_user_command(context, update.message.chat_id, update.message.message_id)
 
 
+async def rate_inline_execute(args: str) -> dict:
+    """
+    Inline Query 执行入口 - 提供完整的汇率转换功能
+
+    Args:
+        args: 用户输入的参数字符串，如 "USD CNY 100" 或 "usd 50"
+
+    Returns:
+        dict: {
+            "success": bool,
+            "title": str,           # 简短标题
+            "message": str,         # 完整消息（MarkdownV2 格式）
+            "description": str,     # 简短描述（用于 inline 结果预览）
+            "error": str | None     # 错误信息
+        }
+    """
+    if not rate_converter:
+        return {
+            "success": False,
+            "title": "❌ 汇率转换失败",
+            "message": "汇率转换器未初始化。请联系机器人管理员。",
+            "description": "汇率转换器未初始化",
+            "error": "汇率转换器未初始化"
+        }
+
+    # 解析参数
+    parts = args.strip().split() if args else []
+    from_currency = "USD"
+    to_currency = "CNY"
+    amount = 100.0
+    expression = None
+
+    try:
+        if len(parts) == 0:
+            pass  # 使用默认值
+        elif len(parts) == 1:
+            from_currency = parts[0].upper()
+        elif len(parts) == 2:
+            from_currency = parts[0].upper()
+            # 检查第二个参数是货币还是金额
+            if len(parts[1]) == 3 and parts[1].isalpha():
+                to_currency = parts[1].upper()
+            else:
+                # 尝试解析为金额或表达式
+                try:
+                    amount = float(parts[1])
+                except ValueError:
+                    from utils.safe_math_evaluator import safe_eval_math
+                    amount = safe_eval_math(parts[1])
+                    expression = parts[1]
+        elif len(parts) >= 3:
+            from_currency = parts[0].upper()
+            to_currency = parts[1].upper()
+            amount_str = parts[2]
+            try:
+                amount = float(amount_str)
+            except ValueError:
+                from utils.safe_math_evaluator import safe_eval_math
+                amount = safe_eval_math(amount_str)
+                expression = amount_str
+    except ValueError as e:
+        return {
+            "success": False,
+            "title": "❌ 参数错误",
+            "message": f"无效的金额或表达式: {args}",
+            "description": f"无效的金额或表达式",
+            "error": str(e)
+        }
+
+    # 检查数据可用性
+    if not await rate_converter.is_data_available():
+        await rate_converter.get_rates()
+        if not rate_converter.rates:
+            return {
+                "success": False,
+                "title": "❌ 数据不可用",
+                "message": "汇率数据暂时不可用。请稍后重试。",
+                "description": "汇率数据暂时不可用",
+                "error": "汇率数据不可用"
+            }
+
+    # 执行转换
+    try:
+        converted_amount = await convert_currency_with_fallback(amount, from_currency, to_currency)
+        if converted_amount is None:
+            return {
+                "success": False,
+                "title": "❌ 不支持的货币",
+                "message": f"不支持的货币对: {from_currency}/{to_currency}\n\n💡 提示: 使用 /rate 查看支持的货币",
+                "description": f"不支持的货币对: {from_currency}/{to_currency}",
+                "error": f"不支持的货币对: {from_currency}/{to_currency}"
+            }
+
+        from_symbol = get_currency_symbol(from_currency)
+        to_symbol = get_currency_symbol(to_currency)
+
+        # 格式化数字
+        formatted_amount = f"{amount:.8f}".rstrip("0").rstrip(".")
+        formatted_converted = f"{converted_amount:.2f}".rstrip("0").rstrip(".")
+
+        # 构建完整结果（与 rate_command 相同的格式）
+        result_lines = ["💰 *汇率转换结果*"]
+        result_lines.append("━━━━━━━━━━━━━━━━")
+
+        if expression:
+            result_lines.extend(["", "🧮 *计算公式*", f"   `{expression}` = `{formatted_amount}`"])
+
+        result_lines.extend(
+            [
+                "",
+                "💱 *主要汇率*",
+                f"   {from_symbol} `{formatted_amount}` *{from_currency}* → {to_symbol} `{formatted_converted}` *{to_currency}*",
+            ]
+        )
+
+        # 获取多平台对比数据
+        try:
+            comparison = await rate_converter.get_platform_comparison(amount, from_currency, to_currency)
+            if comparison and comparison["platforms"]:
+                result_lines.extend(["", "📊 *多平台对比*"])
+
+                # 收集所有平台的结果
+                all_results = []
+                if comparison["primary"]:
+                    all_results.append(("OpenExchange", comparison["primary"]["converted"]))
+
+                for platform, data in comparison["platforms"].items():
+                    all_results.append((platform, data["converted"]))
+
+                # 找出最优汇率
+                if all_results:
+                    best_platform, best_value = max(all_results, key=lambda x: x[1])
+                    worst_platform, worst_value = min(all_results, key=lambda x: x[1])
+
+                    # 显示各平台汇率
+                    for platform, data in sorted(comparison["platforms"].items()):
+                        converted_val = data["converted"]
+                        formatted_val = f"{converted_val:.2f}".rstrip("0").rstrip(".")
+
+                        marker = ""
+                        if converted_val == best_value:
+                            marker = " 🏆"
+                        elif converted_val == worst_value and len(all_results) > 1:
+                            marker = " 📉"
+
+                        result_lines.append(f"   • {platform}: {to_symbol} `{formatted_val}`{marker}")
+
+                    # 显示差价
+                    if best_value != worst_value:
+                        diff = best_value - worst_value
+                        diff_percent = (diff / worst_value) * 100
+                        formatted_diff = f"{diff:.2f}".rstrip("0").rstrip(".")
+                        result_lines.append("")
+                        result_lines.append(f"💡 *最大差价*: {to_symbol} `{formatted_diff}` ({diff_percent:.2f}%)")
+        except Exception as e:
+            logger.warning(f"Failed to get platform comparison in inline: {e}")
+
+        result_lines.extend(
+            [
+                "",
+                "━━━━━━━━━━━━━━━━",
+                "📣 主源每小时更新 | 平台对比每8小时更新",
+                "🌐 来源: OpenExchange \\+ 5个主流平台",
+            ]
+        )
+
+        result_text = "\n".join(result_lines)
+
+        # 简短描述（用于 inline 预览）
+        short_description = f"{from_symbol}{formatted_amount} {from_currency} → {to_symbol}{formatted_converted} {to_currency}"
+
+        return {
+            "success": True,
+            "title": f"💱 {from_currency} → {to_currency}",
+            "message": result_text,
+            "description": short_description,
+            "error": None
+        }
+
+    except Exception as e:
+        logger.error(f"Error during inline rate conversion: {e}")
+        return {
+            "success": False,
+            "title": "❌ 转换失败",
+            "message": f"转换时发生错误: {e!s}",
+            "description": f"转换错误: {e!s}",
+            "error": str(e)
+        }
+
+
 # Register commands
 command_factory.register_command("rate", rate_command, permission=Permission.USER, description="汇率查询和转换")
 # 已迁移到统一缓存管理命令 /cleancache

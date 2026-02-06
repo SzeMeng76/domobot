@@ -78,86 +78,23 @@ class InlineCommandAdapter:
     # ============================================================================
 
     async def _handle_rate(self, args: str) -> Tuple[str, ParseMode, None]:
-        """处理汇率转换命令"""
-        from commands.rate_command import convert_currency_with_fallback, get_currency_symbol
-        from utils.formatter import escape_v2
+        """处理汇率转换命令 - 调用完整的 rate 功能"""
+        from commands.rate_command import rate_inline_execute
+        from utils.formatter import foldable_text_with_markdown_v2
 
-        # 解析参数: "100 usd to cny" 或 "usd cny 100"
-        parts = args.split()
+        # 调用完整的 rate 功能
+        result = await rate_inline_execute(args)
 
-        # 默认值
-        amount = 100.0
-        from_currency = "USD"
-        to_currency = "CNY"
-
-        try:
-            if len(parts) == 0:
-                # 默认: 100 USD to CNY
-                pass
-            elif len(parts) == 1:
-                # /rate USD -> 100 USD to CNY
-                from_currency = parts[0].upper()
-            elif len(parts) == 2:
-                # /rate USD JPY -> 100 USD to JPY
-                from_currency = parts[0].upper()
-                to_currency = parts[1].upper()
-            elif len(parts) >= 3:
-                # 检查是否包含 "to"
-                if "to" in parts:
-                    to_index = parts.index("to")
-                    amount = float(parts[0])
-                    from_currency = parts[1].upper()
-                    to_currency = parts[to_index + 1].upper()
-                else:
-                    # /rate USD CNY 50
-                    from_currency = parts[0].upper()
-                    to_currency = parts[1].upper()
-                    amount = float(parts[2])
-
-            # 执行转换
-            result = await convert_currency_with_fallback(amount, from_currency, to_currency)
-
-            if result is None:
-                return (
-                    f"❌ *汇率转换失败*\n\n"
-                    f"不支持的货币对: `{from_currency}/{to_currency}`\n\n"
-                    f"💡 提示: 使用 `/rate` 查看支持的货币",
-                    ParseMode.MARKDOWN_V2,
-                    None
-                )
-
-            # 获取货币符号
-            from_symbol = get_currency_symbol(from_currency)
-            to_symbol = get_currency_symbol(to_currency)
-
-            # 格式化结果
-            formatted_amount = f"{amount:.8f}".rstrip("0").rstrip(".")
-            formatted_result = f"{result:.2f}".rstrip("0").rstrip(".")
-
-            text = (
-                f"💱 *汇率转换*\n"
-                f"━━━━━━━━━━━━━━━━\n\n"
-                f"{from_symbol} `{escape_v2(formatted_amount)}` *{escape_v2(from_currency)}*\n"
-                f"    ↓\n"
-                f"{to_symbol} `{escape_v2(formatted_result)}` *{escape_v2(to_currency)}*\n\n"
-                f"━━━━━━━━━━━━━━━━\n"
-                f"📊 汇率: 1 {escape_v2(from_currency)} ≈ {escape_v2(f'{result/amount:.4f}')} {escape_v2(to_currency)}\n"
-                f"🕐 数据来源: OpenExchange"
+        if result["success"]:
+            # 使用 foldable_text_with_markdown_v2 处理格式
+            return (foldable_text_with_markdown_v2(result["message"]), ParseMode.MARKDOWN_V2, None)
+        else:
+            # 错误信息
+            error_message = (
+                f"❌ *{result['title']}*\n\n"
+                f"{result['message']}"
             )
-
-            return (text, ParseMode.MARKDOWN_V2, None)
-
-        except ValueError as e:
-            return (
-                f"❌ *参数错误*\n\n"
-                f"无法解析金额或货币代码\n\n"
-                f"*正确格式:*\n"
-                f"`rate 100 usd to cny`\n"
-                f"`rate usd jpy`\n"
-                f"`rate usd jpy 50`",
-                ParseMode.MARKDOWN_V2,
-                None
-            )
+            return (foldable_text_with_markdown_v2(error_message), ParseMode.MARKDOWN_V2, None)
 
     # ============================================================================
     # 🌤️ 天气查询
@@ -269,47 +206,36 @@ class InlineCommandAdapter:
     # ============================================================================
 
     async def _handle_crypto(self, args: str) -> Tuple[str, ParseMode, None]:
-        """处理加密货币价格查询"""
+        """处理加密货币价格查询 - 调用完整的 crypto 功能"""
+        from commands.crypto import crypto_inline_execute
+        from utils.formatter import foldable_text_with_markdown_v2
+
         if not args:
             args = "btc"  # 默认查询比特币
 
-        from utils.formatter import escape_v2
+        result = await crypto_inline_execute(args)
 
-        return (
-            f"₿ *加密货币价格*\n\n"
-            f"查询: {escape_v2(args.upper())}\n\n"
-            f"💡 请在私聊中使用 `/crypto {escape_v2(args)}` 获取实时价格",
-            ParseMode.MARKDOWN_V2,
-            None
-        )
+        if result["success"]:
+            return (foldable_text_with_markdown_v2(result["message"]), ParseMode.MARKDOWN_V2, None)
+        else:
+            error_message = f"❌ *{result['title']}*\n\n{result['message']}"
+            return (foldable_text_with_markdown_v2(error_message), ParseMode.MARKDOWN_V2, None)
 
     # ============================================================================
     # 🕐 时区查询
     # ============================================================================
 
     async def _handle_time(self, args: str) -> Tuple[str, ParseMode, None]:
-        """处理时区查询"""
-        if not args:
-            return (
-                "❌ *时区查询*\n\n"
-                "请提供城市名称\n\n"
-                "*使用方法:*\n"
-                "`time tokyo`\n"
-                "`time new york`\n"
-                "`time london`",
-                ParseMode.MARKDOWN_V2,
-                None
-            )
+        """处理时区查询 - 调用完整的 time 功能"""
+        from commands.time_command import time_inline_execute
 
-        from utils.formatter import escape_v2
+        result = await time_inline_execute(args)
 
-        return (
-            f"🕐 *时区查询*\n\n"
-            f"查询城市: {escape_v2(args)}\n\n"
-            f"💡 请在私聊中使用 `/time {escape_v2(args)}` 获取详细时间信息",
-            ParseMode.MARKDOWN_V2,
-            None
-        )
+        if result["success"]:
+            return (result["message"], ParseMode.MARKDOWN_V2, None)
+        else:
+            error_message = f"❌ *{result['title']}*\n\n{result['message']}"
+            return (error_message, ParseMode.MARKDOWN_V2, None)
 
     # ============================================================================
     # 📰 新闻查询
@@ -441,26 +367,17 @@ class InlineCommandAdapter:
         )
 
     async def _handle_bin(self, args: str) -> Tuple[str, ParseMode, None]:
-        """处理 BIN 查询"""
-        if not args:
-            return (
-                "❌ *BIN 查询*\n\n"
-                "请提供银行卡号前6位\n\n"
-                "*使用方法:*\n"
-                "`bin 123456`",
-                ParseMode.MARKDOWN_V2,
-                None
-            )
+        """处理 BIN 查询 - 调用完整的 bin 功能"""
+        from commands.bin import bin_inline_execute
+        from utils.formatter import foldable_text_with_markdown_v2
 
-        from utils.formatter import escape_v2
+        result = await bin_inline_execute(args)
 
-        return (
-            f"💳 *BIN 查询*\n\n"
-            f"卡号: {escape_v2(args)}\n\n"
-            f"💡 请在私聊中使用 `/bin {escape_v2(args)}` 获取详细信息",
-            ParseMode.MARKDOWN_V2,
-            None
-        )
+        if result["success"]:
+            return (foldable_text_with_markdown_v2(result["message"]), ParseMode.MARKDOWN_V2, None)
+        else:
+            error_message = f"❌ *{result['title']}*\n\n{result['message']}"
+            return (foldable_text_with_markdown_v2(error_message), ParseMode.MARKDOWN_V2, None)
 
     async def _handle_whois(self, args: str) -> Tuple[str, ParseMode, None]:
         """处理 WHOIS 查询"""
