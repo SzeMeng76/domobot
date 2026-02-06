@@ -2193,13 +2193,29 @@ async def cooking_inline_execute(args: str) -> dict:
         if ingredients:
             lines.append("**🥬 食材:**")
             for ing in ingredients:
-                ing_name = ing.get("name", "")
-                ing_amount = ing.get("amount", "")
-                if ing_name:
-                    if ing_amount:
-                        lines.append(f"• {ing_name} {ing_amount}")
+                if isinstance(ing, dict):
+                    ing_name = (ing.get("name") or "").strip()
+                    text_quantity = (ing.get("text_quantity") or "").strip()
+                    quantity = ing.get("quantity")
+                    unit = (ing.get("unit") or "").strip()
+
+                    if not ing_name or ing_name == "--":
+                        continue
+
+                    if text_quantity:
+                        # text_quantity 已经是格式化好的完整文本
+                        ingredient_text = text_quantity
+                        if ingredient_text.startswith("- "):
+                            ingredient_text = ingredient_text[2:]
+                        lines.append(f"• {ingredient_text}")
+                    elif quantity and unit:
+                        lines.append(f"• {ing_name} {quantity}{unit}")
+                    elif quantity:
+                        lines.append(f"• {ing_name} {quantity}")
                     else:
                         lines.append(f"• {ing_name}")
+                elif isinstance(ing, str) and ing.strip():
+                    lines.append(f"• {ing.strip()}")
             lines.append("")
 
         # 烹饪步骤
@@ -2207,11 +2223,13 @@ async def cooking_inline_execute(args: str) -> dict:
         if steps:
             lines.append("**📝 步骤:**")
             for i, step in enumerate(steps, 1):
-                step_text = step if isinstance(step, str) else step.get("content", "")
-                if step_text:
-                    # 限制每步长度
-                    if len(step_text) > 100:
-                        step_text = step_text[:97] + "..."
+                if isinstance(step, str):
+                    step_text = step
+                elif isinstance(step, dict):
+                    step_text = step.get("description", "") or step.get("content", "")
+                else:
+                    step_text = ""
+                if step_text and step_text.strip() and step_text.strip() != "--":
                     lines.append(f"{i}. {step_text}")
             lines.append("")
 

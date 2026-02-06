@@ -1019,59 +1019,216 @@ async def _get_service_info_inline(url: str, country_code: str, service: str) ->
     # 解析价格信息
     try:
         result_lines = [f"📍 国家/地区: {flag_emoji} {country_info['name']}"]
+        country_name = country_info["name"]
 
         if service == "icloud":
+            # Try to parse as Apple website first (for country-specific URLs)
             prices = get_icloud_prices_from_apple_website(content, country_code)
+
+            # Fallback to legacy Apple Support page format if no prices found
             if not prices:
                 prices = get_icloud_prices_from_html(content)
 
-            # Fallback to Apple Support if no prices found
+            # If still no prices and we're not already using Apple Support, try fallback
             if not prices and "support.apple.com" not in url:
+                logger.info(f"[Inline] No prices found, attempting Apple Support fallback for {country_code}")
                 try:
-                    from utils.http_client import get_http_client
-                    client = get_http_client()
                     support_url = "https://support.apple.com/zh-cn/108047"
                     support_response = await client.get(support_url, timeout=15)
                     if support_response.status_code == 200:
                         support_content = support_response.text
+                        logger.info(f"[Inline] Successfully fetched Apple Support fallback page")
                         prices = get_icloud_prices_from_html(support_content)
-                except:
-                    pass
+                        if prices:
+                            logger.info(f"[Inline] Successfully parsed {len(prices)} countries from Apple Support page")
+                except Exception as support_error:
+                    logger.error(f"[Inline] Apple Support fallback failed: {support_error}")
 
-            if prices:
-                # 国家特定的价格
-                country_prices = prices.get(country_code)
-                if country_prices:
-                    result_lines.append(f"💰 {service_display_name} 存储方案:")
-                    for plan_name, price in country_prices.items():
-                        cny_price = await format_price_with_cny(price, country_info)
-                        result_lines.append(f"  • {plan_name}: {cny_price}")
-                # Fallback to CN prices
-                elif "CN" in prices:
-                    result_lines.append(f"💰 {service_display_name} 存储方案 (中国区):")
-                    for plan_name, price in prices["CN"].items():
-                        cny_price = await format_price_with_cny(price, SUPPORTED_COUNTRIES.get("CN", country_info))
-                        result_lines.append(f"  • {plan_name}: {cny_price}")
-                else:
-                    result_lines.append(f"未找到 {service_display_name} 价格信息。")
+            # Find matching country data (key is country NAME, not code!)
+            matched_country = None
+            for name in prices.keys():
+                # Remove footnote numbers and superscript for better matching
+                clean_name = re.sub(r'[0-9,\s]+$', '', name).strip()
+                # Use exact matching first, then fallback to substring matching
+                if (country_name == clean_name or
+                    clean_name == country_name):
+                    matched_country = name
+                    logger.info(f"[Inline] Exact matched country: '{country_name}' -> '{name}'")
+                    break
+                elif (country_name in name and
+                      len(country_name) > 2 and  # Avoid short matches like "美" matching "美国"
+                      not any(other_clean for other_clean in [re.sub(r'[0-9,\s]+$', '', other_name).strip()
+                                                              for other_name in prices.keys()
+                                                              if other_name != name]
+                             if country_name in other_clean and other_clean != clean_name)):
+                    matched_country = name
+                    logger.info(f"[Inline] Substring matched country: '{country_name}' -> '{name}'")
+                    break
+
+            if not matched_country:
+                # Final fallback: try Apple Support page if we haven't already
+                if "support.apple.com" not in url:
+                    logger.info(f"[Inline] Final fallback attempt: fetching Apple Support page for {country_code}")
+                    try:
+                        support_url = "https://support.apple.com/zh-cn/108047"
+                        support_response = await client.get(support_url, timeout=15)
+                        if support_response.status_code == 200:
+                            support_content = support_response.text
+                            support_prices = get_icloud_prices_from_html(support_content)
+                            if support_prices:
+                                logger.info(f"[Inline] Successfully got fallback data from Apple Support page")
+                                prices = support_prices
+                                # Re-check for matching country
+                                for name in prices.keys():
+                                    clean_name = re.sub(r'[0-9,\s]+$', '', name).strip()
+                                    # Use exact matching first
+                                    if (country_name == clean_name or
+                                        clean_name == country_name):
+                                        matched_country = name
+                                        logger.info(f"[Inline] Fallback exact matched country: '{country_name}' -> '{name}'")
+                                        break
+                                    elif (country_name in name and
+                                          len(country_name) > 2 and
+                                          not any(other_clean for other_clean in [re.sub(r'[0-9,\s]+$', '', other_name).strip()
+                                                                                  for other_name in prices.keys()
+                                                                                  if other_name != name]
+                                                 if country_name in other_clean and other_clean != clean_name)):
+                                        matched_country = name
+                                        logger.info(f"[Inline] Fallback substring matched country: '{country_name}' -> '{name}'")
+                                        break
+                    except Exception as support_error:
+                        logger.error(f"[Inline] Final fallback failed: {support_error}")
+
+                if not matched_country:
+                    result_lines.append(f"{service_display_name} 服务在该国家/地区不可用。")
             else:
-                result_lines.append(f"未找到 {service_display_name} 价格信息。")
-        else:
-            # Apple One / Apple Music
-            prices = get_apple_service_prices_from_html(content, service)
-            if prices:
-                result_lines.append(f"💰 {service_display_name} 订阅方案:")
-                for plan_name, price in prices.items():
-                    cny_price = await format_price_with_cny(price, country_info)
-                    result_lines.append(f"  • {plan_name}: {cny_price}")
+                size_order = ["5GB", "50GB", "200GB", "2TB", "6TB", "12TB"]
+                country_prices = prices[matched_country]["prices"]
+                for size in size_order:
+                    if size in country_prices:
+                        price = country_prices[size]
+                        # Normalize pricing text to Chinese for consistent display
+                        normalized_price = normalize_pricing_text(price)
+                        line = f"{size}: {normalized_price}"
+
+                        # Convert to CNY (inline version without context)
+                        if country_code != "CN" and normalized_price != "免费":
+                            cny_price_str = await _convert_price_to_cny_inline(price, country_code)
+                            line += cny_price_str
+                        result_lines.append(line)
+
+        elif service == "appleone":
+            soup = BeautifulSoup(content, "html.parser")
+            plans = soup.find_all("div", class_="plan-tile")
+            logger.info(f"[Inline] Found {len(plans)} Apple One plans for {country_code}")
+
+            if not plans:
+                result_lines.append(f"{service_display_name} 服务在该国家/地区不可用。")
             else:
-                result_lines.append(f"未找到 {service_display_name} 价格信息。")
+                for plan in plans:
+                    name = plan.find("h3", class_="typography-plan-headline")
+                    price_element = plan.find("p", class_="typography-plan-subhead")
+
+                    if name and price_element:
+                        name_text = name.get_text(strip=True)
+                        price = price_element.get_text(strip=True)
+                        price = price.replace("per month", "").replace("/month", "").replace("/mo.", "").strip()
+                        line = f"• {name_text}: {price}"
+                        if country_code != "CN":
+                            cny_price_str = await _convert_price_to_cny_inline(price, country_code)
+                            line += cny_price_str
+                        result_lines.append(line)
+
+        elif service == "applemusic":
+            soup = BeautifulSoup(content, "html.parser")
+            plans_section = soup.find("section", class_="section-plans")
+
+            if not plans_section or not isinstance(plans_section, Tag):
+                result_lines.append(f"{service_display_name} 服务在该国家/地区不可用。")
+            else:
+                # Try new gallery-based structure first (2024+ layout)
+                gallery_items = plans_section.select("li.gallery-item")
+                parsed_any = False
+
+                if gallery_items:
+                    logger.info(f"[Inline] Found {len(gallery_items)} gallery items for {country_code}")
+                    plan_name_map = {"student": "学生", "individual": "个人", "voice": "Voice", "family": "家庭"}
+
+                    for item in gallery_items:
+                        plan_id = item.get("id", "")
+                        plan_name_elem = item.select_one("h3.tile-eyebrow")
+                        price_elem = item.select_one("p.tile-headline")
+
+                        if plan_name_elem and price_elem:
+                            plan_name = plan_name_map.get(plan_id, plan_name_elem.get_text(strip=True))
+                            price_text = price_elem.get_text(strip=True)
+
+                            price_match = re.search(r'([¥₹$€£₩₦]\s*[\d,]+(?:\.\d+)?(?:/month|/年|/月)?|月額\s*[\d,]+円|[\d,]+(?:\.\d+)?\s*(?:TL|RM|USD|EUR|GBP|JPY|INR|KRW|NGN|BRL|CAD|AUD|NZD|HKD|SGD|PHP|ILS|PKR|kr|RUB|PLN|CZK|HUF)(?:/month|/mo)?|RMB\s*\d+)', price_text)
+
+                            if price_match:
+                                price_str = price_match.group(1).strip()
+                                price_str = re.sub(r'/month|/mo\.?|。.*$', '', price_str, flags=re.IGNORECASE).strip()
+
+                                line = f"• {plan_name}计划: {price_str}"
+                                if country_code != "CN":
+                                    cny_price_str = await _convert_price_to_cny_inline(price_str, country_code)
+                                    line += cny_price_str
+                                result_lines.append(line)
+                                parsed_any = True
+
+                # Fallback to old plan-list-item structure
+                if not parsed_any:
+                    logger.info(f"[Inline] Falling back to old plan-list-item structure for {country_code}")
+                    plan_order = ["student", "individual", "family"]
+                    processed_plans = set()
+
+                    for plan_type in plan_order:
+                        item = plans_section.select_one(f"div.plan-list-item.{plan_type}")
+                        if item and isinstance(item, Tag) and plan_type not in processed_plans:
+                            price_tag = item.select_one("p.cost span, p.cost, .price, .plan-price")
+                            if price_tag:
+                                price_str = price_tag.get_text(strip=True)
+                                price_str = re.sub(r"\s*/\s*(月|month|mo\\.?).*", "", price_str, flags=re.IGNORECASE).strip()
+
+                                if plan_type == "student":
+                                    plan_name = "学生"
+                                elif plan_type == "individual":
+                                    plan_name = "个人"
+                                elif plan_type == "family":
+                                    plan_name = "家庭"
+                                else:
+                                    plan_name = plan_type.capitalize()
+
+                                line = f"• {plan_name}计划: {price_str}"
+                                if country_code != "CN":
+                                    cny_price_str = await _convert_price_to_cny_inline(price_str, country_code)
+                                    line += cny_price_str
+                                result_lines.append(line)
+                                processed_plans.add(plan_type)
 
         return "\n".join(result_lines)
 
     except Exception as e:
         logger.error(f"[Inline] Error parsing prices for {country_code}: {e}")
         return f"📍 国家/地区: {flag_emoji} {country_info['name']}\n解析价格信息失败: {e!s}."
+
+
+async def _convert_price_to_cny_inline(price: str, country_code: str) -> str:
+    """Inline 专用的价格转换函数（不依赖 context）"""
+    country_info = SUPPORTED_COUNTRIES.get(country_code)
+    if not country_info:
+        return ""
+
+    price_value = extract_price_value_from_country_info(price, country_info)
+    if price_value <= 0:
+        return ""
+
+    from commands.rate_command import convert_currency_with_fallback
+    cny_price = await convert_currency_with_fallback(price_value, country_info["currency"], "CNY")
+    if cny_price is not None:
+        return f" ≈ ¥{cny_price:.2f} CNY"
+    else:
+        return ""
 
 
 async def appleservices_inline_execute(args: str) -> dict:
