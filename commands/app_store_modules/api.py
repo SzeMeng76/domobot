@@ -138,12 +138,18 @@ class AppStoreWebAPI:
                         continue
                     seen_ids.add(app_id)
 
-                    # 提取应用名称（从 h3.svelte-pjlfuj 获取干净的名称）
-                    h3_tag = link.find("h3", class_="svelte-pjlfuj")
-                    if h3_tag:
-                        app_name = h3_tag.get_text(strip=True)
+                    # 提取应用名称
+                    # 优先从 aria-label 获取（格式: "View AppName"）
+                    aria_label = link.get("aria-label", "")
+                    if aria_label.startswith("View "):
+                        app_name = aria_label[5:]  # 去掉 "View " 前缀
                     else:
-                        app_name = f"App {app_id}"
+                        # 备用: 从 h3 标签获取（不依赖 Svelte 类名）
+                        h3_tag = link.find("h3")
+                        if h3_tag:
+                            app_name = h3_tag.get_text(strip=True)
+                        else:
+                            app_name = f"App {app_id}"
 
                     # 构建完整 URL
                     full_url = (
