@@ -7995,7 +7995,7 @@ async def execute_tv_videos(query, context, tv_id: int):
     async def safe_edit_message(msg, text, parse_mode=None, reply_markup=None):
         """安全地编辑消息，自动处理文本/caption/纯媒体消息"""
         if msg.text:
-            await safe_edit_message(msg,text, parse_mode=parse_mode, reply_markup=reply_markup)
+            await msg.edit_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
         elif msg.caption:
             await msg.edit_caption(caption=text, parse_mode=parse_mode, reply_markup=reply_markup)
         else:
@@ -8249,7 +8249,7 @@ async def execute_tv_watch(query, context, tv_id: int):
     async def safe_edit_message(msg, text, parse_mode=None, reply_markup=None):
         """安全地编辑消息，自动处理文本/caption/纯媒体消息"""
         if msg.text:
-            await safe_edit_message(msg,text, parse_mode=parse_mode, reply_markup=reply_markup)
+            await msg.edit_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
         elif msg.caption:
             await msg.edit_caption(caption=text, parse_mode=parse_mode, reply_markup=reply_markup)
         else:
