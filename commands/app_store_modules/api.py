@@ -34,10 +34,20 @@ class AppStoreWebAPI:
         url = f"https://apps.apple.com/{country_code.lower()}/app/id{app_id}"
 
         try:
-            async with httpx.AsyncClient(follow_redirects=True, verify=False) as client:
+            # 增加超时时间，优化重定向处理
+            async with httpx.AsyncClient(
+                follow_redirects=True,
+                verify=False,
+                timeout=httpx.Timeout(20.0, connect=10.0)
+            ) as client:
                 logger.info(f"获取应用页面: {url}")
-                response = await client.get(url, headers=MINIMAL_HEADERS, timeout=12)
+                response = await client.get(url, headers=MINIMAL_HEADERS)
                 response.raise_for_status()
+
+                # 记录重定向信息
+                if response.history:
+                    logger.info(f"经过 {len(response.history)} 次重定向，最终 URL: {response.url}")
+
                 return response.text
 
         except httpx.HTTPStatusError as e:
@@ -78,13 +88,18 @@ class AppStoreWebAPI:
         params = {"term": query}
 
         try:
-            async with httpx.AsyncClient(follow_redirects=True, verify=False) as client:
+            # 增加超时时间，优化重定向处理
+            async with httpx.AsyncClient(
+                follow_redirects=True,
+                verify=False,
+                timeout=httpx.Timeout(20.0, connect=10.0)
+            ) as client:
                 logger.info(
                     f"网页搜索: query='{query}', country={country}, platform={platform}"
                 )
 
                 response = await client.get(
-                    url, params=params, headers=MINIMAL_HEADERS, timeout=15
+                    url, params=params, headers=MINIMAL_HEADERS
                 )
                 response.raise_for_status()
 

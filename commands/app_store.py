@@ -521,10 +521,9 @@ async def get_app_prices(
         real_app_name = offers_data.get("app_name", "")
         currency = offers_data.get("currency", "USD")
         price = offers_data.get("price", 0)
-        category = offers_data.get("category", "free")
 
-        # 格式化应用价格
-        if category == "free" or price == 0:
+        # 格式化应用价格（只根据价格判断，不依赖 category 字段）
+        if price == 0:
             app_price_str = "免费"
             app_price_cny = 0.0
         else:
