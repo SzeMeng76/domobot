@@ -674,7 +674,9 @@ def format_app_details(
             price_details_lines.append(f"🌍 国家/地区: {country_name}")
             price_details_lines.append(f"💰 应用价格 : {app_price_str}")
 
-            if res["app_price_cny"] is not None and res["app_price_cny"] > 0:
+            # 只有非 CNY 货币才显示 CNY 换算
+            country_code = res.get("country_code", "").upper()
+            if country_code != "CN" and res["app_price_cny"] is not None and res["app_price_cny"] > 0:
                 price_details_lines[-1] += f" (约 ¥{res['app_price_cny']:.2f} CNY)"
 
             # 内购项目
@@ -683,9 +685,8 @@ def format_app_details(
                     iap_name = iap["name"]
                     iap_price = iap["price_str"]
                     iap_line = f"  •   {iap_name}: {iap_price}"
-                    if iap["cny_price"] is not None and iap["cny_price"] != float(
-                        "inf"
-                    ):
+                    # 只有非 CNY 货币才显示 CNY 换算
+                    if country_code != "CN" and iap["cny_price"] is not None and iap["cny_price"] != float("inf"):
                         iap_line += f" (约 ¥{iap['cny_price']:.2f} CNY)"
                     price_details_lines.append(iap_line)
 
