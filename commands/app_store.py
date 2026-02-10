@@ -290,7 +290,9 @@ def calculate_effective_price(
     if price_data.get("status") != "ok":
         return (float("inf"), float("inf"))
 
-    app_price = price_data.get("app_price_cny", float("inf"))
+    app_price = price_data.get("app_price_cny")
+    if app_price is None:
+        app_price = float("inf")
     target_plan_price = float("inf")
     min_in_app_price = float("inf")
 
@@ -536,7 +538,8 @@ async def get_app_prices(
                 )
                 app_price_cny = cny_price  # None if conversion failed
             else:
-                app_price_cny = None
+                # CN 区域直接使用价格
+                app_price_cny = float(price)
 
         # 解析内购项目
         in_app_purchases_raw = AppStoreParser.parse_in_app_purchases_html(html_content)
