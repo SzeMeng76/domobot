@@ -128,7 +128,11 @@ class ParseHubAdapter:
                 return None, None, 0, "不支持的平台"
 
             # 获取平台ID
-            platform_id = getattr(parser, '__platform_id__', '')
+            platform_obj = getattr(parser, '__platform__', None)
+            if platform_obj and hasattr(platform_obj, 'id'):
+                platform_id = platform_obj.id
+            else:
+                platform_id = getattr(parser, '__platform_id__', '')
             platform_name = platform_id or "unknown"
 
             # 配置代理（优先使用传入的proxy，否则使用配置中的proxy）
