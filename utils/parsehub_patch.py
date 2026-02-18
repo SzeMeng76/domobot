@@ -28,9 +28,12 @@ def patch_parsehub_yt_dlp():
         from parsehub.provider_api.bilibili import BiliAPI
         # ParseHub 1.5.11+ renamed xhs_.py to xhs.py
         try:
-            from parsehub.parsers.parser.xhs import XhsParser
+            from parsehub.parsers.parser.xhs import XHSParser as XhsParser
         except ImportError:
-            from parsehub.parsers.parser.xhs_ import XhsParser
+            try:
+                from parsehub.parsers.parser.xhs import XhsParser
+            except ImportError:
+                from parsehub.parsers.parser.xhs_ import XhsParser
 
         logger.info("🔧 Starting ParseHub patch...")
 
@@ -402,12 +405,17 @@ def patch_parsehub_yt_dlp():
 
         # Check if we're using the new API (1.5.11+)
         try:
-            from parsehub.provider_api.xhs import XHSAPI, MediaType, PostType
+            from parsehub.provider_api.xhs import XHSAPI, XHSMediaType as MediaType, XHSPostType as PostType
             USE_NEW_XHS_API = True
-            logger.info("🔍 [XHS] Detected ParseHub 1.5.11+ (new XHSAPI)")
+            logger.info("🔍 [XHS] Detected ParseHub 1.5.13+ (new XHSAPI)")
         except ImportError:
-            USE_NEW_XHS_API = False
-            logger.info("🔍 [XHS] Detected ParseHub <1.5.11 (old XHS class)")
+            try:
+                from parsehub.provider_api.xhs import XHSAPI, MediaType, PostType
+                USE_NEW_XHS_API = True
+                logger.info("🔍 [XHS] Detected ParseHub 1.5.11+ (new XHSAPI)")
+            except ImportError:
+                USE_NEW_XHS_API = False
+                logger.info("🔍 [XHS] Detected ParseHub <1.5.11 (old XHS class)")
 
         async def patched_xhs_parse(self, url: str):
             """Patched XhsParser.parse to handle empty download list and use TikHub as fallback"""
@@ -427,7 +435,7 @@ def patch_parsehub_yt_dlp():
 
                 if result:
                     desc = self.hashtag_handler(result.desc)
-                    k = {"title": result.title, "desc": desc, "raw_url": url}
+                    k = {"title": result.title, "content": desc, "raw_url": url}
 
                     if result.type == PostType.VIDEO:
                         media = result.media[0] if result.media else None
@@ -495,7 +503,7 @@ def patch_parsehub_yt_dlp():
 
                 if x_result and (old_result := x_result[0]):
                     desc = self.hashtag_handler(old_result["作品描述"])
-                    k = {"title": old_result["作品标题"], "desc": desc, "raw_url": url}
+                    k = {"title": old_result["作品标题"], "content": desc, "raw_url": url}
 
                     # Livephoto处理
                     if all(old_result["动图地址"]):
@@ -557,7 +565,7 @@ def patch_parsehub_yt_dlp():
                 # Note: TikHub uses "content" not "desc", and "imagesList" not "imageList"
                 title = inner_data.get("title", "")
                 desc = inner_data.get("content", "")  # Changed from "desc" to "content"
-                k = {"title": title, "desc": desc, "raw_url": url}
+                k = {"title": title, "content": desc, "raw_url": url}
 
                 # Check for video
                 video_info = inner_data.get("videoInfo")
@@ -674,7 +682,7 @@ def patch_parsehub_yt_dlp():
                 return VideoParseResult(
                     raw_url=url,
                     title=title,
-                    desc=title,
+                    content=title,
                     video=Video(
                         download_url,
                         width=width,
@@ -918,7 +926,7 @@ def patch_parsehub_yt_dlp():
                 dimensions = {}
             width, height = dimensions.get("width", 0) or 0, dimensions.get("height", 0) or 0
 
-            k = {"title": post.title, "desc": post.caption, "raw_url": url}
+            k = {"title": post.title, "content": post.caption, "raw_url": url}
             match post.typename:
                 case "GraphSidecar":
                     media = [
@@ -1023,7 +1031,7 @@ def patch_parsehub_yt_dlp():
                 return YtVideoParseResult(
                     video=video_info.url,
                     title=video_info.title,
-                    desc=video_info.description,
+                    content=video_info.description,
                     raw_url=url,
                     dl=video_info,
                 )

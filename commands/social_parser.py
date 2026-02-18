@@ -264,13 +264,13 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         # 格式化结果（result 现在是 DownloadResult）
         formatted = await _adapter.format_result(result, platform)
-        logger.info(f"🔍 formatted结果: title='{formatted.get('title')}', desc='{formatted.get('desc', '')[:100]}'")
+        logger.info(f"🔍 formatted结果: title='{formatted.get('title')}', content='{formatted.get('content', '')[:100]}'")
 
-        # 构建标题和描述（类似parse_hub_bot：有title或desc才显示，都没有才显示"无标题"）
-        if formatted['title'] or formatted['desc']:
+        # 构建标题和描述（类似parse_hub_bot：有title或content才显示，都没有才显示"无标题"）
+        if formatted['title'] or formatted['content']:
             caption_parts = []
             title = formatted['title']
-            desc = formatted['desc']
+            desc = formatted['content']
 
             # 去重：如果title包含desc或desc包含title，只显示一个
             if title and desc:
@@ -325,7 +325,7 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 'url': formatted['url'],
                 'caption': caption,
                 'title': formatted.get('title', ''),
-                'desc': formatted.get('desc', ''),
+                'content': formatted.get('content', ''),
                 'platform': platform
             }
             await _adapter.cache_manager.set(
@@ -405,8 +405,8 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
             pr = download_result.pr
             if hasattr(pr, 'title') and pr.title:
                 raw_text += pr.title + "\n\n"
-            if hasattr(pr, 'desc') and pr.desc:
-                raw_text += pr.desc
+            if hasattr(pr, 'content') and pr.content:
+                raw_text += pr.content
 
         # 超过1000字，自动发布到Telegraph
         if len(raw_text) > 500:
@@ -696,8 +696,8 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
             pr = download_result.pr
             if hasattr(pr, 'title') and pr.title:
                 raw_text += pr.title + "\n\n"
-            if hasattr(pr, 'desc') and pr.desc:
-                raw_text += pr.desc
+            if hasattr(pr, 'content') and pr.content:
+                raw_text += pr.content
 
         # 超过1000字，自动发布到Telegraph
         if len(raw_text) > 500:
@@ -832,7 +832,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
 
             if uploaded_urls:
                 # 创建HTML内容（使用原生lazy loading优化移动端加载）
-                desc = download_result.pr.desc if hasattr(download_result, 'pr') else ""
+                desc = download_result.pr.content if hasattr(download_result, 'pr') else ""
 
                 # 添加描述
                 html_content = ""
@@ -916,8 +916,8 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
             pr = download_result.pr
             if hasattr(pr, 'title') and pr.title:
                 raw_text += pr.title + "\n\n"
-            if hasattr(pr, 'desc') and pr.desc:
-                raw_text += pr.desc
+            if hasattr(pr, 'content') and pr.content:
+                raw_text += pr.content
 
         # 超过1000字，自动发布到Telegraph
         if len(raw_text) > 500:

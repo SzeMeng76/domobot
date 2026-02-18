@@ -339,7 +339,7 @@ class ParseHubAdapter:
             pr = download_result.pr
             formatted = {
                 "title": pr.title or "",  # 保持原始值，不要在这里添加"无标题"
-                "desc": pr.desc or "",
+                "content": pr.content or "",
                 "platform": platform,
                 "url": pr.raw_url,
                 "media_type": self._get_media_type(pr),
