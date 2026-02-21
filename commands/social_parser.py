@@ -13,7 +13,7 @@ from telegram.ext import ContextTypes
 from PIL import Image as PILImage
 import pillow_heif
 
-from parsehub.types import Video, Image, VideoParseResult, ImageParseResult, MultimediaParseResult
+from parsehub.types import VideoFile, ImageFile, VideoParseResult, ImageParseResult, MultimediaParseResult, RichTextParseResult
 from utils.command_factory import command_factory
 from utils.error_handling import with_error_handling
 
@@ -249,7 +249,7 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     try:
         # 解析URL
-        result, platform, parse_time, error_msg = await _adapter.parse_url(text, user_id, group_id)
+        result, parse_result, platform, parse_time, error_msg = await _adapter.parse_url(text, user_id, group_id)
 
         if not result:
             # 显示具体错误信息
@@ -263,7 +263,7 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await status_msg.edit_text("📥 下载中...")
 
         # 格式化结果（result 现在是 DownloadResult）
-        formatted = await _adapter.format_result(result, platform)
+        formatted = await _adapter.format_result(result, platform, parse_result=parse_result)
         logger.info(f"🔍 formatted结果: title='{formatted.get('title')}', content='{formatted.get('content', '')[:100]}'")
 
         # 构建标题和描述（类似parse_hub_bot：有title或content才显示，都没有才显示"无标题"）
@@ -337,7 +337,7 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             logger.info(f"✅ 已缓存解析数据: cache:social_parser:summary:{url_hash}")
 
         # 发送媒体（带按钮）
-        sent_messages = await _send_media(context, chat_id, result, caption, reply_to_message_id=update.message.message_id if update.message else None, reply_markup=reply_markup)
+        sent_messages = await _send_media(context, chat_id, result, caption, reply_to_message_id=update.message.message_id if update.message else None, reply_markup=reply_markup, parse_result=parse_result)
 
         # 删除状态消息
         await status_msg.delete()
@@ -361,19 +361,20 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             await delete_user_command(context, chat_id, update.message.message_id)
 
 
-async def _send_media(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None, reply_markup=None):
+async def _send_media(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None, reply_markup=None, parse_result=None):
     """发送媒体文件，返回发送的消息列表"""
     try:
-        # download_result.pr 是原始的 ParseResult
-        if isinstance(download_result.pr, VideoParseResult):
+        # 使用 parse_result（parsehub 2.0.0 不再存储在 download_result 中）
+        pr = parse_result
+        if isinstance(pr, VideoParseResult):
             # 发送视频
-            return await _send_video(context, chat_id, download_result, caption, reply_to_message_id, reply_markup)
-        elif isinstance(download_result.pr, ImageParseResult):
+            return await _send_video(context, chat_id, download_result, caption, reply_to_message_id, reply_markup, parse_result=pr)
+        elif isinstance(pr, ImageParseResult) or isinstance(pr, RichTextParseResult):
             # 发送图片
-            return await _send_images(context, chat_id, download_result, caption, reply_to_message_id, reply_markup)
-        elif isinstance(download_result.pr, MultimediaParseResult):
+            return await _send_images(context, chat_id, download_result, caption, reply_to_message_id, reply_markup, parse_result=pr)
+        elif isinstance(pr, MultimediaParseResult):
             # 发送混合媒体
-            return await _send_multimedia(context, chat_id, download_result, caption, reply_to_message_id, reply_markup)
+            return await _send_multimedia(context, chat_id, download_result, caption, reply_to_message_id, reply_markup, parse_result=pr)
         else:
             # 只发送文本
             msg = await context.bot.send_message(
@@ -390,7 +391,7 @@ async def _send_media(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
         raise
 
 
-async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None, reply_markup=None):
+async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None, reply_markup=None, parse_result=None):
     """发送视频（支持视频分割和图床上传），返回发送的消息列表"""
     media = download_result.media
 
@@ -401,8 +402,8 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
     if not media or not hasattr(media, 'path') or not media.path:
         # 获取原始文本内容（未转义的）
         raw_text = ""
-        if hasattr(download_result, 'pr'):
-            pr = download_result.pr
+        if parse_result:
+            pr = parse_result
             if hasattr(pr, 'title') and pr.title:
                 raw_text += pr.title + "\n\n"
             if hasattr(pr, 'content') and pr.content:
@@ -415,8 +416,7 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
                 from markdown import markdown
                 # 将文本转换为HTML
                 html_content = markdown(raw_text)
-                pr = download_result.pr if hasattr(download_result, 'pr') else None
-                telegraph_url = await _adapter.publish_to_telegraph(pr, html_content)
+                telegraph_url = await _adapter.publish_to_telegraph(parse_result, html_content)
 
                 if telegraph_url:
                     # Telegraph成功，发送摘要+链接
@@ -620,22 +620,19 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
     return [msg]
 
 
-async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None, reply_markup=None):
+async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None, reply_markup=None, parse_result=None):
     """发送图片，返回发送的消息列表"""
-    from parsehub.parsers.parser import WXImageParseResult, CoolapkImageParseResult
+    from parsehub.parsers.parser.coolapk import CoolapkImageParseResult
     from markdown import markdown
 
     # 检查是否是微信文章或酷安图文 - 自动使用 Telegraph
-    if hasattr(download_result, 'pr'):
-        parse_result = download_result.pr
-
-        # 微信公众号文章
-        if isinstance(parse_result, WXImageParseResult):
+    if parse_result:
+        # 微信公众号文章 (parsehub 2.0.0: WXParser returns RichTextParseResult)
+        if isinstance(parse_result, RichTextParseResult) and hasattr(parse_result, 'markdown_content'):
             try:
                 logger.info("检测到微信文章，自动发布到Telegraph")
-                # 将微信文章内容转换为HTML并发布到Telegraph
-                if hasattr(parse_result, 'wx') and hasattr(parse_result.wx, 'markdown_content'):
-                    html_content = markdown(parse_result.wx.markdown_content.replace("mmbiz.qpic.cn", "mmbiz.qpic.cn.in"))
+                if parse_result.markdown_content:
+                    html_content = markdown(parse_result.markdown_content.replace("mmbiz.qpic.cn", "mmbiz.qpic.cn.in"))
                     telegraph_url = await _adapter.publish_to_telegraph(parse_result, html_content)
 
                     if telegraph_url:
@@ -692,20 +689,18 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
     if len(media_list) == 0:
         # 获取原始文本内容（未转义的）
         raw_text = ""
-        if hasattr(download_result, 'pr'):
-            pr = download_result.pr
-            if hasattr(pr, 'title') and pr.title:
-                raw_text += pr.title + "\n\n"
-            if hasattr(pr, 'content') and pr.content:
-                raw_text += pr.content
+        if parse_result:
+            if hasattr(parse_result, 'title') and parse_result.title:
+                raw_text += parse_result.title + "\n\n"
+            if hasattr(parse_result, 'content') and parse_result.content:
+                raw_text += parse_result.content
 
         # 超过1000字，自动发布到Telegraph
         if len(raw_text) > 500:
             try:
                 logger.info(f"检测到长文本 ({len(raw_text)}字)，自动发布到Telegraph")
                 html_content = markdown(raw_text)
-                pr = download_result.pr if hasattr(download_result, 'pr') else None
-                telegraph_url = await _adapter.publish_to_telegraph(pr, html_content)
+                telegraph_url = await _adapter.publish_to_telegraph(parse_result, html_content)
 
                 if telegraph_url:
                     # Telegraph成功，发送摘要+链接
@@ -832,7 +827,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
 
             if uploaded_urls:
                 # 创建HTML内容（使用原生lazy loading优化移动端加载）
-                desc = download_result.pr.content if hasattr(download_result, 'pr') else ""
+                desc = parse_result.content if parse_result and hasattr(parse_result, 'content') else ""
 
                 # 添加描述
                 html_content = ""
@@ -853,8 +848,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                 html_content += f'<p><i>共 {len(uploaded_urls)} 张图片</i></p>'
 
                 # 发布到Telegraph
-                pr = download_result.pr if hasattr(download_result, 'pr') else None
-                telegraph_url = await _adapter.publish_to_telegraph(pr, html_content) if pr else None
+                telegraph_url = await _adapter.publish_to_telegraph(parse_result, html_content) if parse_result else None
 
                 if telegraph_url:
                     # Telegraph成功，发送链接（启用preview，缩略图让preview快速渲染完成）
@@ -895,7 +889,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
         return sent_messages
 
 
-async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None, reply_markup=None):
+async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None, reply_markup=None, parse_result=None):
     """发送混合媒体（参考parse_hub_bot的实现，使用media_group分批发送），返回发送的消息列表"""
     from telegram import InputMediaPhoto, InputMediaVideo
 
@@ -912,12 +906,11 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
     if count == 0:
         # 获取原始文本内容（未转义的）
         raw_text = ""
-        if hasattr(download_result, 'pr'):
-            pr = download_result.pr
-            if hasattr(pr, 'title') and pr.title:
-                raw_text += pr.title + "\n\n"
-            if hasattr(pr, 'content') and pr.content:
-                raw_text += pr.content
+        if parse_result:
+            if hasattr(parse_result, 'title') and parse_result.title:
+                raw_text += parse_result.title + "\n\n"
+            if hasattr(parse_result, 'content') and parse_result.content:
+                raw_text += parse_result.content
 
         # 超过1000字，自动发布到Telegraph
         if len(raw_text) > 500:
@@ -925,8 +918,7 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
                 logger.info(f"检测到长文本 ({len(raw_text)}字)，自动发布到Telegraph")
                 from markdown import markdown
                 html_content = markdown(raw_text)
-                pr = download_result.pr if hasattr(download_result, 'pr') else None
-                telegraph_url = await _adapter.publish_to_telegraph(pr, html_content)
+                telegraph_url = await _adapter.publish_to_telegraph(parse_result, html_content)
 
                 if telegraph_url:
                     # Telegraph成功，发送摘要+链接
@@ -956,7 +948,7 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
     elif count == 1:
         # 单个媒体文件，直接发送
         media = media_list[0]
-        if isinstance(media, Video):
+        if isinstance(media, VideoFile):
             # 检查视频文件大小（Telegram限制50MB）
             video_path = Path(media.path)
             video_size_mb = video_path.stat().st_size / (1024 * 1024)
@@ -984,7 +976,7 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
                     reply_markup=reply_markup
                 )
             return [msg]
-        elif isinstance(media, Image):
+        elif isinstance(media, ImageFile):
             with open(str(media.path), 'rb') as photo_file:
                 msg = await context.bot.send_photo(
                     chat_id=chat_id,
@@ -1004,7 +996,7 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
             media_group = []
             for media in batch:
                 try:
-                    if isinstance(media, Video):
+                    if isinstance(media, VideoFile):
                         media_group.append(InputMediaVideo(
                             media=open(str(media.path), 'rb'),
                             width=media.width or 0,
@@ -1012,7 +1004,7 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
                             duration=media.duration or 0,
                             supports_streaming=True
                         ))
-                    elif isinstance(media, Image):
+                    elif isinstance(media, ImageFile):
                         media_group.append(InputMediaPhoto(media=open(str(media.path), 'rb')))
                 except Exception as e:
                     logger.error(f"准备媒体失败: {e}")

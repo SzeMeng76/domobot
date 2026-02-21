@@ -58,7 +58,7 @@ async def auto_parse_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     try:
         # 解析URL
-        result, platform, parse_time, error_msg = await _adapter.parse_url(text, user_id, group_id)
+        result, parse_result, platform, parse_time, error_msg = await _adapter.parse_url(text, user_id, group_id)
 
         if not result:
             error_text = f"❌ 自动解析失败: {error_msg}" if error_msg else "❌ 自动解析失败"
@@ -77,7 +77,7 @@ async def auto_parse_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await status_msg.edit_text("📥 下载中...")
 
         # 格式化结果
-        formatted = await _adapter.format_result(result, platform)
+        formatted = await _adapter.format_result(result, platform, parse_result=parse_result)
 
         # 导入转义函数和格式化函数
         from commands.social_parser import _escape_markdown, _format_text
@@ -136,7 +136,7 @@ async def auto_parse_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
             reply_markup = InlineKeyboardMarkup(buttons)
 
         # 发送媒体（带按钮）
-        sent_messages = await _send_media(context, group_id, result, caption, message.message_id, reply_markup)
+        sent_messages = await _send_media(context, group_id, result, caption, message.message_id, reply_markup, parse_result=parse_result)
 
         # 删除状态消息
         await status_msg.delete()

@@ -24,7 +24,7 @@ def patch_parsehub_yt_dlp():
         import httpx
         logger = logging.getLogger(__name__)
 
-        from parsehub.parsers.base.yt_dlp_parser import YtParser
+        from parsehub.parsers.base.ytdlp import YtParser
         from parsehub.provider_api.bilibili import BiliAPI
         # ParseHub 1.5.11+ renamed xhs_.py to xhs.py
         try:
@@ -207,33 +207,28 @@ def patch_parsehub_yt_dlp():
         logger.info("ℹ️ YtParser._parse: using original implementation (YouTube download via pytubefix)")
 
         # Patch YtVideoParseResult.download to use pytubefix for YouTube
-        from parsehub.parsers.base.yt_dlp_parser import YtVideoParseResult
-        from parsehub.types import DownloadResult, Video
-        from parsehub.config import DownloadConfig
-        from parsehub.types.error import DownloadError
+        from parsehub.parsers.base.ytdlp import YtVideoParseResult
+        from parsehub.types import DownloadResult, VideoFile
+        from parsehub.errors import DownloadError
         from pathlib import Path
         import time
         import asyncio
 
-        original_yt_video_download = YtVideoParseResult.download
+        original_yt_video_download = YtVideoParseResult._do_download
 
-        async def patched_yt_video_download(self, path=None, callback=None, callback_args=(), config=DownloadConfig()):
-            """Patched download that uses pytubefix for YouTube"""
-            logger.info(f"🔍 [Patch] patched_yt_video_download called: is_url={self.media.is_url}, path={self.media.path[:100] if self.media.path else 'None'}")
-
-            if not self.media.is_url:
-                logger.info(f"⚠️ [Patch] media.is_url is False, returning media directly")
-                return self.media
+        async def patched_yt_video_download(self, *, output_dir, callback=None, callback_args=(), proxy=None, headers=None):
+            """Patched _do_download that uses pytubefix for YouTube"""
+            logger.info(f"🔍 [Patch] patched_yt_video_download called: url={self.media.url[:100] if self.media.url else 'None'}")
 
             # Check if this is a YouTube URL
-            url_lower = self.media.path.lower() if self.media.path else ""
+            url_lower = self.media.url.lower() if self.media.url else ""
             is_youtube = any(domain in url_lower for domain in ['youtube.com', 'youtu.be'])
 
             if is_youtube:
-                logger.info(f"📥 [Patch] Detected YouTube URL, using pytubefix: {self.media.path[:80]}...")
+                logger.info(f"📥 [Patch] Detected YouTube URL, using pytubefix: {self.media.url[:80]}...")
 
                 # Download directory
-                dir_ = (config.save_dir if path is None else Path(path)).joinpath(f"{time.time_ns()}")
+                dir_ = Path(output_dir)
                 dir_.mkdir(parents=True, exist_ok=True)
 
                 if callback:
@@ -272,7 +267,7 @@ def patch_parsehub_yt_dlp():
                         # nodejs dependency is automatically installed via nodejs-wheel-binaries
                         # OAuth can be used as alternative to proxy (but requires Google account)
                         yt = YouTube(
-                            self.media.path,
+                            self.media.url,
                             client='WEB',
                             proxies=proxies,
                             use_oauth=use_oauth,
@@ -302,10 +297,8 @@ def patch_parsehub_yt_dlp():
                     logger.info(f"✅ [Patch] pytubefix download completed: {output_path}")
 
                     return DownloadResult(
-                        self,
-                        Video(
+                        VideoFile(
                             path=str(output_path),
-                            thumb_url=yt.thumbnail_url if hasattr(yt, 'thumbnail_url') else None,
                             height=0,  # pytubefix doesn't provide these easily
                             width=0,
                             duration=yt.length if hasattr(yt, 'length') else 0,
@@ -315,13 +308,13 @@ def patch_parsehub_yt_dlp():
                 except Exception as e:
                     logger.error(f"❌ [Patch] pytubefix download failed: {e}, falling back to yt-dlp")
                     # Fallback to original yt-dlp download
-                    return await original_yt_video_download(self, path, callback, callback_args, config)
+                    return await original_yt_video_download(self, output_dir=output_dir, callback=callback, callback_args=callback_args, proxy=proxy, headers=headers)
             else:
                 # Not a YouTube URL, use original yt-dlp download
-                return await original_yt_video_download(self, path, callback, callback_args, config)
+                return await original_yt_video_download(self, output_dir=output_dir, callback=callback, callback_args=callback_args, proxy=proxy, headers=headers)
 
-        YtVideoParseResult.download = patched_yt_video_download
-        logger.info("✅ YtVideoParseResult.download patched: use pytubefix for YouTube")
+        YtVideoParseResult._do_download = patched_yt_video_download
+        logger.info("✅ YtVideoParseResult._do_download patched: use pytubefix for YouTube")
 
         # Patch BiliAPI to support cookies and add Referer headers
         # Problem: BiliAPI.__init__ doesn't accept cookie parameter
@@ -401,7 +394,7 @@ def patch_parsehub_yt_dlp():
 
         # Patch XhsParser to handle empty download list and TikHub fallback
         # ParseHub 1.5.11+ uses new XHSAPI class, older versions use XHS class
-        original_xhs_parse = XhsParser.parse
+        original_xhs_parse = XhsParser._do_parse
 
         # Check if we're using the new API (1.5.11+)
         try:
@@ -418,11 +411,9 @@ def patch_parsehub_yt_dlp():
                 logger.info("🔍 [XHS] Detected ParseHub <1.5.11 (old XHS class)")
 
         async def patched_xhs_parse(self, url: str):
-            """Patched XhsParser.parse to handle empty download list and use TikHub as fallback"""
-            from parsehub.types import VideoParseResult, ImageParseResult, MultimediaParseResult, Video, Image
-            from parsehub.types.error import ParseError
-
-            url = await self.get_raw_url(url)
+            """Patched XhsParser._do_parse to handle empty download list and use TikHub as fallback"""
+            from parsehub.types import VideoParseResult, ImageParseResult, MultimediaParseResult, VideoRef, ImageRef
+            from parsehub.errors import ParseError
 
             if USE_NEW_XHS_API:
                 # ParseHub 1.5.11+ uses new XHSAPI
@@ -449,7 +440,7 @@ def patch_parsehub_yt_dlp():
                                         result = None  # Trigger TikHub fallback
                                     else:
                                         return VideoParseResult(
-                                            video=Video(path=media.url, thumb_url=media.thumb_url,
+                                            video=VideoRef(url=media.url, thumb_url=media.thumb_url,
                                                        duration=media.duration, height=media.height, width=media.width),
                                             **k,
                                         )
@@ -463,18 +454,18 @@ def patch_parsehub_yt_dlp():
 
                         for i in result.media:
                             if i.type == MediaType.LIVE_PHOTO:
-                                photos.append(Video(i.url, thumb_url=i.thumb_url, width=i.width, height=i.height))
+                                photos.append(VideoRef(url=i.url, thumb_url=i.thumb_url, width=i.width, height=i.height))
                             else:
                                 # ParseHub 1.5.12+: validate image extension
                                 ext = await self.get_ext_by_url(i.url) if hasattr(self.get_ext_by_url, '__self__') else await XhsParser.get_ext_by_url(i.url)
                                 if ext not in ["png", "webp", "jpeg", "heic", "avif"]:
                                     ext = "jpeg"
-                                photos.append(Image(i.url, ext, thumb_url=i.thumb_url, width=i.width, height=i.height))
+                                photos.append(ImageRef(url=i.url, ext=ext, thumb_url=i.thumb_url, width=i.width, height=i.height))
 
                         if photos:
                             # Validate first image URL before returning (sample check)
                             try:
-                                first_url = photos[0].path if hasattr(photos[0], 'path') else (photos[0].url if hasattr(photos[0], 'url') else None)
+                                first_url = photos[0].url if hasattr(photos[0], 'url') else None
                                 if first_url:
                                     async with httpx.AsyncClient(timeout=10.0, proxy=self.cfg.proxy) as client:
                                         head_response = await client.head(first_url, follow_redirects=True)
@@ -507,7 +498,7 @@ def patch_parsehub_yt_dlp():
 
                     # Livephoto处理
                     if all(old_result["动图地址"]):
-                        return MultimediaParseResult(media=[Video(i) for i in old_result["动图地址"]], **k)
+                        return MultimediaParseResult(media=[VideoRef(url=i) for i in old_result["动图地址"]], **k)
 
                     # 视频类型
                     elif old_result["作品类型"] == "视频":
@@ -524,7 +515,7 @@ def patch_parsehub_yt_dlp():
                             for i in download_list:
                                 base_url = i.split('?')[0] if '?' in i else i
                                 img_url = f"{base_url}?imageView2/2/w/1080/format/jpg"
-                                photos.append(Image(img_url, "jpg"))
+                                photos.append(ImageRef(url=img_url, ext="jpg"))
                             return ImageParseResult(photo=photos, **k)
                         logger.warning(f"🌐 [Patch] XHS images have no download URLs, returning empty ImageParseResult")
                         return ImageParseResult(photo=[], **k)
@@ -585,7 +576,7 @@ def patch_parsehub_yt_dlp():
                         if img_url:
                             width = img.get("width", 0)
                             height = img.get("height", 0)
-                            photos.append(Image(img_url, "jpg", width=width, height=height))
+                            photos.append(ImageRef(url=img_url, ext="jpg", width=width, height=height))
 
                     if photos:
                         logger.info(f"✅ [TikHub] Got XHS {len(photos)} images")
@@ -599,18 +590,18 @@ def patch_parsehub_yt_dlp():
                 logger.error(f"❌ [TikHub] XHS解析失败: {e}")
                 raise ParseError(f"小红书解析失败：官方和TikHub都无法获取下载地址 (TikHub error: {e})")
 
-        XhsParser.parse = patched_xhs_parse
+        XhsParser._do_parse = patched_xhs_parse
         logger.info("✅ XhsParser patched: handle empty download list + TikHub fallback")
 
         # Patch DouyinParser to use TikHub API for direct download
         from parsehub.parsers.parser import DouyinParser
 
-        original_douyin_parse = DouyinParser.parse
+        original_douyin_parse = DouyinParser._do_parse
 
         async def patched_douyin_parse(self, url: str):
-            """Patched parse that uses TikHub as fallback when official API fails"""
+            """Patched _do_parse that uses TikHub as fallback when official API fails"""
             from parsehub.types import VideoParseResult
-            from parsehub.types.error import ParseError
+            from parsehub.errors import ParseError
 
             # Try official parser first
             try:
@@ -624,8 +615,6 @@ def patch_parsehub_yt_dlp():
                 raise ParseError("官方解析失败且未配置TikHub API")
 
             try:
-                url = await self.get_raw_url(url)
-
                 # Extract aweme_id from URL
                 aweme_id_match = re.search(r'modal_id=(\d+)', url)
                 if not aweme_id_match:
@@ -678,13 +667,13 @@ def patch_parsehub_yt_dlp():
                 file_size_mb = play_addr.get("data_size", 0) / 1024 / 1024
                 logger.info(f"✅ [TikHub] Got Douyin video ({best_video.get('gear_name', 'unknown')}, {width}x{height}, {duration}s, {file_size_mb:.2f}MB)")
 
-                from parsehub.types import Video
+                from parsehub.types import VideoRef
                 return VideoParseResult(
                     raw_url=url,
                     title=title,
                     content=title,
-                    video=Video(
-                        download_url,
+                    video=VideoRef(
+                        url=download_url,
                         width=width,
                         height=height,
                         duration=duration,
@@ -695,7 +684,7 @@ def patch_parsehub_yt_dlp():
                 logger.error(f"❌ [TikHub] Douyin解析失败: {e}")
                 raise ParseError(f"TikHub解析失败: {e}")
 
-        DouyinParser.parse = patched_douyin_parse
+        DouyinParser._do_parse = patched_douyin_parse
         logger.info("✅ DouyinParser patched: use TikHub as fallback when official parser fails")
 
         # Patch DouyinParser to handle TikTok with TikHub API
@@ -704,7 +693,7 @@ def patch_parsehub_yt_dlp():
         async def patched_douyin_parse_with_tiktok(self, url: str):
             """Enhanced parse that uses TikHub for TikTok videos"""
             from parsehub.types import VideoParseResult, ImageParseResult
-            from parsehub.types.error import ParseError
+            from parsehub.errors import ParseError
 
             # Check if it's a TikTok URL
             is_tiktok = "tiktok.com" in url.lower()
@@ -723,8 +712,6 @@ def patch_parsehub_yt_dlp():
                     raise ParseError(f"TikTok解析失败且未配置TikHub API: {e}")
 
             try:
-                # Get real URL (follows redirects for short URLs like vt.tiktok.com)
-                url = await self.get_raw_url(url)
                 logger.info(f"🎬 [TikHub] Parsing TikTok video: {url[:80]}...")
 
                 # Extract video ID from TikTok URL (after redirect)
@@ -764,14 +751,14 @@ def patch_parsehub_yt_dlp():
                 # Check if it's an image post (photo carousel)
                 image_post_info = aweme_detail.get("image_post_info")
                 if image_post_info:
-                    from parsehub.types import Image
+                    from parsehub.types import ImageRef
                     images = image_post_info.get("images", [])
                     if images:
                         image_list = []
                         for img in images:
                             image_url_list = img.get("display_image", {}).get("url_list", [])
                             if image_url_list:
-                                image_list.append(Image(image_url_list[0]))
+                                image_list.append(ImageRef(url=image_url_list[0]))
 
                         logger.info(f"✅ [TikHub] Got TikTok image post with {len(image_list)} images")
                         return ImageParseResult(
@@ -794,12 +781,12 @@ def patch_parsehub_yt_dlp():
 
                     logger.info(f"✅ [TikHub] Got TikTok video (H.264, {width}x{height}, {duration}s)")
 
-                    from parsehub.types import Video
+                    from parsehub.types import VideoRef
                     return VideoParseResult(
                         raw_url=url,
                         title=desc,
-                        video=Video(
-                            download_url,
+                        video=VideoRef(
+                            url=download_url,
                             width=width,
                             height=height,
                             duration=duration,
@@ -823,12 +810,12 @@ def patch_parsehub_yt_dlp():
 
                         logger.info(f"✅ [TikHub] Got TikTok video ({best_video.get('gear_name', 'unknown')}, {width}x{height}, {duration}s)")
 
-                        from parsehub.types import Video
+                        from parsehub.types import VideoRef
                         return VideoParseResult(
                             raw_url=url,
                             title=desc,
-                            video=Video(
-                                download_url,
+                            video=VideoRef(
+                                url=download_url,
                                 width=width,
                                 height=height,
                                 duration=duration,
@@ -844,11 +831,11 @@ def patch_parsehub_yt_dlp():
 
                     logger.info(f"✅ [TikHub] Got TikTok video (fallback URL)")
 
-                    from parsehub.types import Video
+                    from parsehub.types import VideoRef
                     return VideoParseResult(
                         raw_url=url,
                         title=desc,
-                        video=Video(download_url, duration=duration),
+                        video=VideoRef(url=download_url, duration=duration),
                     )
 
                 raise ParseError("TikHub返回数据中没有可用的视频或图片")
@@ -864,7 +851,7 @@ def patch_parsehub_yt_dlp():
                 except Exception as fallback_error:
                     raise ParseError(f"TikHub和官方解析器都失败: TikHub={e}, Official={fallback_error}")
 
-        DouyinParser.parse = patched_douyin_parse_with_tiktok
+        DouyinParser._do_parse = patched_douyin_parse_with_tiktok
         logger.info("✅ DouyinParser patched: TikHub support for TikTok videos and images")
 
         # Patch TieBa to support Cookie and better headers
@@ -902,15 +889,13 @@ def patch_parsehub_yt_dlp():
         logger.info("✅ InstagramParser patched: Support username/reel/ URL format")
 
         # Patch Instagram parse method to pass cookie to _parse
-        original_instagram_parse = InstagramParser.parse
+        original_instagram_parse = InstagramParser._do_parse
 
         async def patched_instagram_parse(self, url: str):
-            """Patched parse that passes cookie to _parse method"""
+            """Patched _do_parse that passes cookie to _parse method"""
             from parsehub.types import VideoParseResult, ImageParseResult, MultimediaParseResult
-            from parsehub.types import Video, Image
-            from parsehub.types.error import ParseError
-
-            url = await self.get_raw_url(url)
+            from parsehub.types import VideoRef, ImageRef
+            from parsehub.errors import ParseError
 
             shortcode = self.get_short_code(url)
             if not shortcode:
@@ -930,18 +915,18 @@ def patch_parsehub_yt_dlp():
             match post.typename:
                 case "GraphSidecar":
                     media = [
-                        Video(i.video_url, thumb_url=i.display_url, width=i.width, height=i.height)
+                        VideoRef(url=i.video_url, thumb_url=i.display_url, width=i.width, height=i.height)
                         if i.is_video
-                        else Image(i.display_url, width=i.width, height=i.height)
+                        else ImageRef(url=i.display_url, width=i.width, height=i.height)
                         for i in post.get_sidecar_nodes()
                     ]
                     return MultimediaParseResult(media=media, **k)
                 case "GraphImage":
-                    return ImageParseResult(photo=[Image(post.url, width=width, height=height)], **k)
+                    return ImageParseResult(photo=[ImageRef(url=post.url, width=width, height=height)], **k)
                 case "GraphVideo":
                     return VideoParseResult(
-                        video=Video(
-                            post.video_url,
+                        video=VideoRef(
+                            url=post.video_url,
                             thumb_url=post.url,
                             duration=int(post.video_duration),
                             width=width,
@@ -952,7 +937,7 @@ def patch_parsehub_yt_dlp():
                 case _:
                     raise ParseError("不支持的类型")
 
-        InstagramParser.parse = patched_instagram_parse
+        InstagramParser._do_parse = patched_instagram_parse
         logger.info("✅ InstagramParser patched: Fix cookie passing to _parse method")
 
         # Patch MyInstaloaderContext to add better headers
@@ -992,16 +977,16 @@ def patch_parsehub_yt_dlp():
         # Patch ParseHub.parse to skip get_raw_url for Facebook watch/?v= URLs
         # Root cause: ParseHub.parse() calls get_raw_url() BEFORE calling parser.parse()
         # This strips query parameters from Facebook URLs
-        from parsehub.main import ParseHub
+        from parsehub import ParseHub
         original_parsehub_parse = ParseHub.parse
 
         async def patched_parsehub_parse(self, url: str):
             """Patched ParseHub.parse that skips get_raw_url for Facebook watch/?v= URLs"""
-            parser = self.select_parser(url)
+            parser = self._select_parser(url)
             if not parser:
                 raise ValueError("不支持的平台")
 
-            p = parser(parse_config=self.config)
+            p = parser(config=self.config)
 
             # Check if this is a Facebook watch/?v= URL
             if isinstance(p, FacebookParse) and "?v=" in url:
@@ -1011,22 +996,21 @@ def patch_parsehub_yt_dlp():
                 return await p.parse(url)
             else:
                 # Use original implementation (calls get_raw_url first)
-                url = await p.get_raw_url(url)
                 return await p.parse(url)
 
         ParseHub.parse = patched_parsehub_parse
         logger.info("✅ ParseHub.parse patched: Skip get_raw_url for Facebook watch/?v= URLs")
 
         # Also patch FacebookParse.parse to skip its internal get_raw_url call
-        original_facebook_parse = FacebookParse.parse
+        original_facebook_parse = FacebookParse._do_parse
 
         async def patched_facebook_parse(self, url: str):
-            """Patched FacebookParse.parse that skips get_raw_url for watch/?v= URLs"""
+            """Patched FacebookParse._do_parse that skips get_raw_url for watch/?v= URLs"""
             if "?v=" in url:
                 logger.info(f"✅ [Facebook] Detected ?v= parameter, calling _parse directly (skip get_raw_url)")
                 # Skip all get_raw_url calls and call _parse directly
                 # YtParser.parse also calls get_raw_url, so we bypass it too
-                from parsehub.parsers.base.yt_dlp_parser import YtVideoParseResult
+                from parsehub.parsers.base.ytdlp import YtVideoParseResult
                 video_info = await self._parse(url)
                 return YtVideoParseResult(
                     video=video_info.url,
@@ -1039,8 +1023,8 @@ def patch_parsehub_yt_dlp():
                 # Use original implementation for other Facebook URLs
                 return await original_facebook_parse(self, url)
 
-        FacebookParse.parse = patched_facebook_parse
-        logger.info("✅ FacebookParse.parse patched: Skip internal get_raw_url for watch/?v= URLs")
+        FacebookParse._do_parse = patched_facebook_parse
+        logger.info("✅ FacebookParse._do_parse patched: Skip internal get_raw_url for watch/?v= URLs")
 
         return True
 

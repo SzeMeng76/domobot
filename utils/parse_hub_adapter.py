@@ -17,7 +17,7 @@ from utils.parsehub_patch import patch_parsehub_yt_dlp
 patch_parsehub_yt_dlp()
 
 from parsehub import ParseHub
-from parsehub.config import DownloadConfig, ParseConfig, GlobalConfig
+from parsehub.config import ParseConfig, GlobalConfig
 from parsehub.types import ParseResult, VideoParseResult, ImageParseResult, MultimediaParseResult
 
 logger = logging.getLogger(__name__)
@@ -61,8 +61,8 @@ class ParseHubAdapter:
     async def get_supported_platforms(self) -> List[str]:
         """获取支持的平台列表"""
         try:
-            platforms = self.parsehub.get_supported_platforms()
-            return platforms
+            platforms = self.parsehub.get_platforms()
+            return [f"{p['name']}: {'|'.join(p['supported_types'])}" for p in platforms]
         except Exception as e:
             logger.error(f"获取支持的平台列表失败: {e}")
             return []
@@ -84,7 +84,7 @@ class ParseHubAdapter:
                 return False
 
             # 检查是否支持
-            parser = self.parsehub.select_parser(url)
+            parser = self.parsehub._select_parser(url)
             return parser is not None
         except Exception as e:
             logger.error(f"检查URL支持失败: {e}")
@@ -96,7 +96,7 @@ class ParseHubAdapter:
         user_id: int,
         group_id: Optional[int] = None,
         proxy: Optional[str] = None
-    ) -> Tuple[Optional[Any], Optional[str], float, Optional[str]]:
+    ) -> Tuple[Optional[Any], Optional[Any], Optional[str], float, Optional[str]]:
         """
         解析URL并下载媒体
 
@@ -107,7 +107,7 @@ class ParseHubAdapter:
             proxy: 代理地址（可选，不传则使用配置中的代理）
 
         Returns:
-            (DownloadResult, platform_name, parse_time, error_msg): 下载结果、平台名称、解析耗时、错误信息
+            (DownloadResult, ParseResult, platform_name, parse_time, error_msg)
         """
         start_time = time.time()
 
@@ -115,17 +115,17 @@ class ParseHubAdapter:
             # 提取 URL
             url = await self._extract_url(text)
             if not url:
-                return None, None, 0, "未找到有效的URL"
+                return None, None, None, 0, "未找到有效的URL"
 
             # 注意：DownloadResult包含文件对象，不能序列化到Redis缓存
             # 每次都需要重新解析和下载
             # cache_key = self._get_cache_key(url)
 
             # 选择解析器
-            parser = self.parsehub.select_parser(url)
+            parser = self.parsehub._select_parser(url)
             if not parser:
                 logger.error(f"不支持的平台: {url}")
-                return None, None, 0, "不支持的平台"
+                return None, None, None, 0, "不支持的平台"
 
             # 获取平台ID
             platform_obj = getattr(parser, '__platform__', None)
@@ -228,29 +228,22 @@ class ParseHubAdapter:
                 logger.info(f"🍪 传递给ParseConfig的cookie - 类型: {type(platform_cookie)}, 预览: {cookie_preview}")
             else:
                 logger.info(f"⚠️ 未传递cookie给ParseConfig")
-            download_config = DownloadConfig(
-                proxy=downloader_proxy,
-                save_dir=self.temp_dir,
-                headers=download_headers  # 传入平台特定headers
-            )
 
             # 创建新的ParseHub实例并传入配置
             parsehub = ParseHub(config=parse_config)
             result = await parsehub.parse(url)
 
             if not result:
-                return None, None, 0, "解析失败，未返回结果"
+                return None, None, None, 0, "解析失败，未返回结果"
 
             # 下载媒体
             try:
-                download_result = await result.download(config=download_config)
+                download_result = await result.download(path=self.temp_dir, proxy=downloader_proxy)
             except Exception as download_error:
                 # 下载失败（例如小红书CDN 500错误），但解析成功
                 # 返回解析结果但没有下载的媒体文件
                 logger.warning(f"媒体下载失败但解析成功: {download_error}")
-                # 创建一个空的DownloadResult（只包含解析信息，没有实际文件）
-                from parsehub.types import DownloadResult
-                download_result = DownloadResult(parse_result=result, media=None)
+                download_result = None
 
             parse_time = time.time() - start_time
 
@@ -260,7 +253,7 @@ class ParseHubAdapter:
             # 记录统计
             await self._record_stats(user_id, group_id, platform_name, url, True, parse_time * 1000)
 
-            return download_result, platform_name, parse_time, None
+            return download_result, result, platform_name, parse_time, None
 
         except Exception as e:
             parse_time = time.time() - start_time
@@ -278,7 +271,7 @@ class ParseHubAdapter:
                 error_msg
             )
 
-            return None, None, parse_time, error_msg
+            return None, None, None, parse_time, error_msg
 
     def _format_error_message(self, error: Exception) -> str:
         """格式化错误信息，使其对用户更友好"""
@@ -327,20 +320,22 @@ class ParseHubAdapter:
             return error_str[:150] + "..."
         return error_str
 
-    async def format_result(self, download_result, platform: str) -> dict:
+    async def format_result(self, download_result, platform: str, parse_result=None) -> dict:
         """
         格式化下载结果
 
         Args:
             download_result: DownloadResult 下载结果
             platform: 平台名称
+            parse_result: ParseResult 解析结果（parsehub 2.0.0+ 不再存储在 DownloadResult 中）
 
         Returns:
             dict: 格式化后的结果
         """
         try:
-            # download_result.pr 是原始的 ParseResult
-            pr = download_result.pr
+            pr = parse_result
+            if not pr:
+                return {}
             formatted = {
                 "title": pr.title or "",  # 保持原始值，不要在这里添加"无标题"
                 "content": pr.content or "",
@@ -352,11 +347,11 @@ class ParseHubAdapter:
             }
 
             # 获取媒体路径
-            media = download_result.media
+            media = download_result.media if download_result else None
             if isinstance(media, list):
                 formatted["media_count"] = len(media)
-                formatted["media_paths"] = [str(m.path) for m in media if m.exists()]
-            elif media and media.exists():
+                formatted["media_paths"] = [str(m.path) for m in media if Path(m.path).exists()]
+            elif media and Path(media.path).exists():
                 formatted["media_count"] = 1
                 formatted["media_paths"] = [str(media.path)]
 
@@ -427,7 +422,7 @@ class ParseHubAdapter:
                     logger.warning(f"重定向失败，使用原URL: {e}")
 
             # 3. 验证URL是否被支持
-            parser = self.parsehub.select_parser(url)
+            parser = self.parsehub._select_parser(url)
             if not parser:
                 logger.error(f"不支持的平台: {url}")
                 return None
@@ -686,102 +681,16 @@ class ParseHubAdapter:
 
     async def generate_ai_summary(self, download_result) -> Optional[str]:
         """
-        使用ParseHub内置的AI总结功能生成内容总结
+        AI总结功能
 
-        Args:
-            download_result: DownloadResult 对象
-
-        Returns:
-            总结文本，失败返回None
+        注意：ParseHub 2.0.0 移除了内置的 summary() 方法。
+        此功能暂时禁用，需要自行实现 AI 总结逻辑。
         """
         if not self.config or not self.config.enable_ai_summary:
             return None
 
-        if not self.config.openai_api_key:
-            logger.warning("AI总结功能已启用但未配置 OPENAI_API_KEY")
-            return None
-
-        try:
-            # 自定义 AI 总结 prompt（生动有趣的风格，使用 HTML 格式）
-            custom_prompt = """你是一个活泼友好的社交媒体助手，帮助用户快速了解视频/文章内容。
-
-请用生动有趣的方式总结这个内容，要求：
-
-**格式要求：**
-- 使用 HTML 格式（<b>粗体</b>、<i>斜体</i>、<code>代码</code>、<blockquote>引用</blockquote>等）
-- 中英文之间需要空格
-- 技术关键词使用 <code>行内代码</code>
-- 重要引用使用 <blockquote>引用内容</blockquote>
-- 适当使用 emoji 让内容更友好（但不要过度）
-- **禁止使用 Markdown 格式**（不要用 **、``、>、# 等符号）
-
-**内容结构：**
-1. <b>核心内容</b> - 用 1-2 句话说明主题（用粗体）
-2. <b>关键要点</b> - 3-5 个要点，使用列表格式（每行用 - 开头）
-3. <b>亮点/看点</b> - 如果有趣的片段、金句、或值得关注的细节，用引用格式突出显示
-
-**语气风格：**
-- 保持轻松友好，像朋友聊天一样
-- 对有趣的内容可以加点俏皮评论
-- 重要信息要清晰准确，不夸大不遗漏
-- **必须使用中文回复**（如果内容是英文，请翻译成中文后再总结）
-
-**注意事项：**
-- 如果是视频，关注视觉内容和对话
-- 如果是文章，关注论点和论据
-- 如果是社交媒体帖子，关注情绪和互动
-- 总长度控制在 200-500 字左右
-
-现在请总结以下内容："""
-
-            # 使用 ParseHub 内置的 summary() 方法
-            # 注意：需要传递完整的配置参数
-            # 如果没有配置转录API，使用AI总结的API（Whisper和GPT可以用同一个API key）
-            transcription_api_key = self.config.transcription_api_key or self.config.openai_api_key
-            transcription_base_url = self.config.transcription_base_url or self.config.openai_base_url
-
-            summary_result = await download_result.summary(
-                api_key=self.config.openai_api_key,
-                base_url=self.config.openai_base_url,
-                model=self.config.ai_summary_model,
-                provider="openai",
-                prompt=custom_prompt,  # 添加自定义 prompt
-                transcriptions_provider=self.config.transcription_provider or "openai",
-                transcriptions_api_key=transcription_api_key,
-                transcriptions_base_url=transcription_base_url,
-            )
-
-            # summary_result.content 是总结文本
-            logger.info(f"✅ AI总结生成成功，长度: {len(summary_result.content)}")
-            return summary_result.content
-
-        except Exception as e:
-            # 详细的错误分类和日志记录
-            error_msg = str(e)
-
-            # 图片格式错误
-            if "invalid_image_format" in error_msg or "unsupported image" in error_msg.lower():
-                logger.error(f"❌ AI总结失败: 图片格式不支持 - {error_msg}")
-                logger.info("💡 提示: API 仅支持 png, jpeg, gif, webp 格式的图片")
-            # API 错误
-            elif "Error code: 400" in error_msg:
-                logger.error(f"❌ AI总结失败: API 请求错误 (400) - {error_msg}")
-            elif "Error code: 401" in error_msg:
-                logger.error(f"❌ AI总结失败: API 认证失败 (401) - 请检查 API Key")
-            elif "Error code: 429" in error_msg:
-                logger.error(f"❌ AI总结失败: API 请求频率限制 (429) - 请稍后重试")
-            elif "Error code: 500" in error_msg or "Error code: 503" in error_msg:
-                logger.error(f"❌ AI总结失败: API 服务器错误 - {error_msg}")
-            # 网络错误
-            elif "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
-                logger.error(f"❌ AI总结失败: 请求超时 - {error_msg}")
-            elif "connection" in error_msg.lower():
-                logger.error(f"❌ AI总结失败: 网络连接错误 - {error_msg}")
-            # 其他错误
-            else:
-                logger.error(f"❌ AI总结失败: {error_msg}", exc_info=True)
-
-            return None
+        logger.warning("AI总结功能暂不可用：ParseHub 2.0.0 移除了内置 summary() 方法")
+        return None
 
     async def publish_to_telegraph(self, result: ParseResult, content_html: str) -> Optional[str]:
         """
