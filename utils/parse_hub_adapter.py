@@ -395,31 +395,51 @@ class ParseHubAdapter:
 
             if is_short:
                 # 跟随重定向获取真实URL
-                try:
-                    # 添加 User-Agent 避免被 TikTok 重定向到 notfound 页面
-                    headers = {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
-                    }
-                    # 使用代理避免地区限制（仅用于TikTok短链接重定向）
-                    import os
-                    # 检查是否是TikTok短链接
-                    is_tiktok_short = any(domain in url for domain in ['vt.tiktok.com', 'vm.tiktok.com'])
-                    proxy = os.getenv('TIKTOK_REDIRECT_PROXY') if is_tiktok_short else None
-                    if proxy:
-                        logger.info(f"✅ [TikTok短链接] 使用代理重定向: {proxy[:30]}...")
-                    async with httpx.AsyncClient(follow_redirects=True, timeout=10, headers=headers, proxy=proxy) as client:
-                        response = await client.head(url)
-                        final_url = str(response.url)
-                        logger.info(f"短链接重定向: {url} -> {final_url}")
+                # 添加 User-Agent 避免被 TikTok 重定向到 notfound 页面
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+                }
+                # 使用代理避免地区限制（仅用于TikTok短链接重定向）
+                import os
+                # 检查是否是TikTok短链接
+                is_tiktok_short = any(domain in url for domain in ['vt.tiktok.com', 'vm.tiktok.com'])
+                proxy = os.getenv('TIKTOK_REDIRECT_PROXY') if is_tiktok_short else None
 
-                        # 检查是否重定向到 notfound 页面（地区限制）
-                        if '/notfound' in final_url.lower():
-                            logger.error(f"视频不可用（可能地区限制）: {final_url}")
+                # TikTok 住宅代理可能间歇性 502，重试最多3次
+                max_retries = 3 if (is_tiktok_short and proxy) else 1
+                redirect_success = False
+                for attempt in range(max_retries):
+                    try:
+                        if proxy:
+                            logger.info(f"✅ [TikTok短链接] 使用代理重定向 (尝试 {attempt+1}/{max_retries}): {proxy[:30]}...")
+                        async with httpx.AsyncClient(follow_redirects=True, timeout=10, headers=headers, proxy=proxy) as client:
+                            response = await client.head(url)
+                            final_url = str(response.url)
+                            logger.info(f"短链接重定向: {url} -> {final_url}")
+
+                            # 检查是否重定向到 notfound 页面（地区限制）
+                            if '/notfound' in final_url.lower():
+                                logger.warning(f"重定向到notfound (尝试 {attempt+1}/{max_retries}): {final_url}")
+                                if attempt < max_retries - 1:
+                                    import asyncio
+                                    await asyncio.sleep(1)
+                                    continue
+                                logger.error(f"视频不可用（可能地区限制）: {final_url}")
+                                return None
+
+                            url = final_url
+                            redirect_success = True
+                            break
+                    except Exception as e:
+                        logger.warning(f"重定向失败 (尝试 {attempt+1}/{max_retries}): {e}")
+                        if attempt < max_retries - 1:
+                            import asyncio
+                            await asyncio.sleep(1)
+                            continue
+                        if is_tiktok_short:
+                            logger.error(f"TikTok短链接重定向全部失败，无法解析")
                             return None
-
-                        url = final_url
-                except Exception as e:
-                    logger.warning(f"重定向失败，使用原URL: {e}")
+                        logger.warning(f"重定向失败，使用原URL")
 
             # 3. 验证URL是否被支持
             parser = self.parsehub._select_parser(url)
