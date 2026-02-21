@@ -218,14 +218,16 @@ def patch_parsehub_yt_dlp():
 
         async def patched_yt_video_download(self, *, output_dir, callback=None, callback_args=(), proxy=None, headers=None):
             """Patched _do_download that uses pytubefix for YouTube"""
-            logger.info(f"🔍 [Patch] patched_yt_video_download called: url={self.media.url[:100] if self.media.url else 'None'}")
+            # 2.0.0: self.media 可能是 None，YouTube URL 存在 self.dl.url 或 self.raw_url
+            video_url = (self.dl.url if self.dl else None) or (self.media.url if self.media else None) or self.raw_url or ""
+            logger.info(f"🔍 [Patch] patched_yt_video_download called: url={video_url[:100] if video_url else 'None'}")
 
             # Check if this is a YouTube URL
-            url_lower = self.media.url.lower() if self.media.url else ""
+            url_lower = video_url.lower()
             is_youtube = any(domain in url_lower for domain in ['youtube.com', 'youtu.be'])
 
             if is_youtube:
-                logger.info(f"📥 [Patch] Detected YouTube URL, using pytubefix: {self.media.url[:80]}...")
+                logger.info(f"📥 [Patch] Detected YouTube URL, using pytubefix: {video_url[:80]}...")
 
                 # Download directory
                 dir_ = Path(output_dir)
@@ -267,7 +269,7 @@ def patch_parsehub_yt_dlp():
                         # nodejs dependency is automatically installed via nodejs-wheel-binaries
                         # OAuth can be used as alternative to proxy (but requires Google account)
                         yt = YouTube(
-                            self.media.url,
+                            video_url,
                             client='WEB',
                             proxies=proxies,
                             use_oauth=use_oauth,
