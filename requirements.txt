@@ -75,3 +75,8 @@ markdown>=3.10.2  # Markdown 转换器
 pyyaml>=6.0.3  # YAML配置文件解析
 tenacity>=9.1.4  # 重试机制（用于图床上传）
 telegraph>=2.2.0  # Telegraph API 库（用于发布长文本）
+
+# AI Summary - Audio/Video Processing
+pydub>=0.25.1  # 音频切片（Whisper转录大文件）
+opencv-python-headless>=4.13.0  # 视频截图（转录失败时的fallback）
+aiofiles>=25.1.0  # 异步文件读取（图片base64转换）

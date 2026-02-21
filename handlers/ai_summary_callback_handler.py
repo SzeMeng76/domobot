@@ -105,13 +105,13 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                     group_id=None
                 )
 
-                if not download_result:
+                if not download_result and not parse_result:
                     await query.answer("❌ 重新解析失败，无法生成总结", show_alert=True)
                     return
 
-                # 生成AI总结（传递完整的DownloadResult）
+                # 生成AI总结（传递ParseResult和DownloadResult）
                 logger.info(f"📍 准备调用 generate_ai_summary")
-                ai_summary = await _adapter.generate_ai_summary(download_result)
+                ai_summary = await _adapter.generate_ai_summary(parse_result, download_result)
                 logger.info(f"📍 generate_ai_summary 调用完成")
 
                 if not ai_summary:

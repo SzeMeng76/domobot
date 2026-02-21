@@ -699,18 +699,40 @@ class ParseHubAdapter:
             logger.error(f"视频分割失败: {e}")
             return [video_path]
 
-    async def generate_ai_summary(self, download_result) -> Optional[str]:
+    async def generate_ai_summary(self, parse_result, download_result=None) -> Optional[str]:
         """
         AI总结功能
 
-        注意：ParseHub 2.0.0 移除了内置的 summary() 方法。
-        此功能暂时禁用，需要自行实现 AI 总结逻辑。
+        Args:
+            parse_result: ParseResult 解析结果
+            download_result: DownloadResult 下载结果（可选，用于视频转录和图片识别）
+
+        Returns:
+            AI总结文本，失败返回None
         """
         if not self.config or not self.config.enable_ai_summary:
             return None
 
-        logger.warning("AI总结功能暂不可用：ParseHub 2.0.0 移除了内置 summary() 方法")
-        return None
+        if not self.config.openai_api_key:
+            logger.warning("AI总结未配置：缺少 OPENAI_API_KEY")
+            return None
+
+        try:
+            from utils.ai_summary import AISummarizer
+
+            summarizer = AISummarizer(
+                api_key=self.config.openai_api_key,
+                base_url=self.config.openai_base_url or None,
+                model=self.config.ai_summary_model or "gpt-5-mini",
+                transcription_provider=self.config.transcription_provider or "openai",
+                transcription_api_key=self.config.transcription_api_key,
+                transcription_base_url=self.config.transcription_base_url,
+            )
+            return await summarizer.summarize(parse_result, download_result)
+
+        except Exception as e:
+            logger.error(f"AI总结生成失败: {e}", exc_info=True)
+            return None
 
     async def publish_to_telegraph(self, result: ParseResult, content_html: str) -> Optional[str]:
         """
