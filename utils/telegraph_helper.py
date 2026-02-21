@@ -3,11 +3,28 @@ Telegraph 发布辅助工具
 用于将长图文内容发布到 Telegraph
 """
 
+import re
 import logging
 from typing import Optional
 from telegraph.aio import Telegraph
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_html_for_telegraph(html: str) -> str:
+    """将 HTML 中 Telegraph 不支持的标签替换为允许的标签
+
+    Telegraph 允许: a, aside, b, blockquote, br, code, em, figcaption,
+    figure, h3, h4, hr, i, img, li, ol, p, pre, s, strong, u, ul
+    """
+    # h1/h2 → h3
+    html = re.sub(r'<(/?)h[12](\s|>)', r'<\1h3\2', html)
+    # h5/h6 → h4
+    html = re.sub(r'<(/?)h[56](\s|>)', r'<\1h4\2', html)
+    # div/section/article/span → p
+    html = re.sub(r'<(/?)(?:div|section|article)(\s|>)', r'<\1p\2', html)
+    html = re.sub(r'<(/?)span(\s|>)', r'<\1em\2', html)
+    return html
 
 
 class TelegraphPublisher:
@@ -76,6 +93,8 @@ class TelegraphPublisher:
             return None
 
         try:
+            # 清理不支持的 HTML 标签
+            content = _sanitize_html_for_telegraph(content)
             # 使用telegraph库的create_page，自动处理html_content转换
             response = await self.telegraph.create_page(
                 title=title,
