@@ -218,7 +218,8 @@ def patch_parsehub_yt_dlp():
 
         async def patched_yt_video_download(self, *, output_dir, callback=None, callback_args=(), proxy=None, headers=None):
             """Patched _do_download that uses pytubefix for YouTube"""
-            # 2.0.0: self.media 可能是 None，YouTube URL 存在 self.dl.url 或 self.raw_url
+            # 2.0.1: YtVideoParseResult.video (VideoRef) 存储在 self.media 中
+            # 优先使用 self.dl.url (原始YouTube URL)，fallback 到 self.media.url 或 self.raw_url
             video_url = (self.dl.url if self.dl else None) or (self.media.url if self.media else None) or self.raw_url or ""
             logger.info(f"🔍 [Patch] patched_yt_video_download called: url={video_url[:100] if video_url else 'None'}")
 
@@ -1013,9 +1014,16 @@ def patch_parsehub_yt_dlp():
                 # Skip all get_raw_url calls and call _parse directly
                 # YtParser.parse also calls get_raw_url, so we bypass it too
                 from parsehub.parsers.base.ytdlp import YtVideoParseResult
+                from parsehub.types import VideoRef
                 video_info = await self._parse(url)
                 return YtVideoParseResult(
-                    video=video_info.url,
+                    video=VideoRef(
+                        url=video_info.url,
+                        thumb_url=video_info.thumbnail,
+                        width=video_info.width,
+                        height=video_info.height,
+                        duration=video_info.duration,
+                    ),
                     title=video_info.title,
                     content=video_info.description,
                     raw_url=url,

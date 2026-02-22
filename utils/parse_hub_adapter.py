@@ -350,8 +350,9 @@ class ParseHubAdapter:
             media = download_result.media if download_result else None
             if isinstance(media, list):
                 formatted["media_count"] = len(media)
-                formatted["media_paths"] = [str(m.path) for m in media if Path(m.path).exists()]
-            elif media and Path(media.path).exists():
+                # ParseHub 2.0.1+: MediaFile.exists() 方法直接检查文件是否存在
+                formatted["media_paths"] = [str(m.path) for m in media if m.exists()]
+            elif media and media.exists():
                 formatted["media_count"] = 1
                 formatted["media_paths"] = [str(media.path)]
 
