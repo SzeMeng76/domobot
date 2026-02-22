@@ -982,6 +982,21 @@ def patch_parsehub_yt_dlp():
         FacebookParse.__match__ = r"^(http(s)?://)?.+facebook.com/(watch/?\?v|share/[v,r]|.+/videos/|reel/).*"
         logger.info("✅ FacebookParse patched: Support watch/?v= URL format (with optional slash)")
 
+        # Patch FacebookParse params property to use compatible format selector
+        # Note: params is a @property that returns a new dict each time
+        # We need to override the property itself, not modify the dict
+        original_facebook_params = FacebookParse.params.fget
+
+        def patched_facebook_params(self) -> dict:
+            """Patched params property with Facebook-compatible format selector"""
+            params = original_facebook_params(self)
+            # Override format selector for Facebook (progressive video streams)
+            params["format"] = "best[height<=1080]/best"
+            return params
+
+        FacebookParse.params = property(patched_facebook_params)
+        logger.info("✅ FacebookParse.params patched: Use compatible format selector (best[height<=1080]/best)")
+
         # Patch ParseHub.parse to skip get_raw_url for Facebook watch/?v= URLs
         # Root cause: ParseHub.parse() calls get_raw_url() BEFORE calling parser.parse()
         # This strips query parameters from Facebook URLs
