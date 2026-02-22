@@ -660,6 +660,8 @@ class ParseHubAdapter:
                 kwargs["catbox_userhash"] = self.config.catbox_userhash
             if self.config.zioooo_storage_id:
                 kwargs["zioooo_storage_id"] = self.config.zioooo_storage_id
+            if self.config.pixeldrain_api_key:
+                kwargs["pixeldrain_api_key"] = self.config.pixeldrain_api_key
 
             async with ImageHostUploader(
                 service=self.config.image_host_service,

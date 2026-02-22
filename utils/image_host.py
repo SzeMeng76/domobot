@@ -1,6 +1,6 @@
 """
 图床上传工具
-支持 Catbox、Litterbox、Zio.ooo 等图床
+支持 Catbox、Litterbox、Zio.ooo、PixelDrain、GoFile.io 等图床
 用于上传大文件，解决Telegram文件大小限制
 """
 
@@ -23,9 +23,9 @@ class ImageHostUploader:
         初始化上传器
 
         Args:
-            service: 图床服务名称 (catbox, litterbox, zioooo)
+            service: 图床服务名称 (catbox, litterbox, zioooo, pixeldrain, gofile)
             proxy: 代理地址
-            **kwargs: 额外配置 (如 catbox_userhash, zioooo_storage_id)
+            **kwargs: 额外配置 (如 catbox_userhash, zioooo_storage_id, pixeldrain_api_key)
         """
         self.service = service.lower()
         self.proxy = proxy
@@ -77,6 +77,10 @@ class ImageHostUploader:
                 return await self._upload_litterbox(file_path)
             elif self.service == "zioooo":
                 return await self._upload_zioooo(file_path)
+            elif self.service == "pixeldrain":
+                return await self._upload_pixeldrain(file_path)
+            elif self.service == "gofile":
+                return await self._upload_gofile(file_path)
             else:
                 logger.error(f"不支持的图床服务: {self.service}")
                 return None
@@ -154,6 +158,50 @@ class ImageHostUploader:
             logger.info(f"✅ Zio.ooo上传成功: {url}")
             return url
 
+    @retry(stop=stop_after_attempt(2), wait=wait_fixed(2))
+    async def _upload_pixeldrain(self, file_path: Path) -> Optional[str]:
+        """上传到 PixelDrain (60天无下载才删除, 最大20GB)"""
+        api_url = "https://pixeldrain.com/api/file"
+        api_key = self.config.get("pixeldrain_api_key", "")
+
+        with open(file_path, 'rb') as f:
+            files = {"file": (file_path.name, f)}
+            # API key is optional for anonymous upload
+            auth = ("", api_key) if api_key else None
+
+            response = await self.client.post(api_url, files=files, auth=auth)
+            response.raise_for_status()
+
+            result = response.json()
+            file_id = result["id"]
+            url = f"https://pixeldrain.com/u/{file_id}"
+            logger.info(f"✅ PixelDrain上传成功: {url}")
+            return url
+
+    @retry(stop=stop_after_attempt(2), wait=wait_fixed(2))
+    async def _upload_gofile(self, file_path: Path) -> Optional[str]:
+        """上传到 GoFile.io (10天无下载才删除, 无大小限制)"""
+        # Step 1: Get best available server
+        server_response = await self.client.get("https://api.gofile.io/servers")
+        server_response.raise_for_status()
+        server_data = server_response.json()
+        server = server_data["data"]["servers"][0]["name"]
+
+        # Step 2: Upload file to that server
+        upload_url = f"https://{server}.gofile.io/contents/uploadfile"
+        with open(file_path, 'rb') as f:
+            files = {"file": (file_path.name, f)}
+            response = await self.client.post(upload_url, files=files)
+            response.raise_for_status()
+
+            result = response.json()
+            if result.get("status") != "ok":
+                raise Exception(f"GoFile上传失败: {result.get('status', '未知错误')}")
+
+            download_page = result["data"]["downloadPage"]
+            logger.info(f"✅ GoFile上传成功: {download_page}")
+            return download_page
+
 
 async def upload_to_host(
     file_path: str | Path,
@@ -166,7 +214,7 @@ async def upload_to_host(
 
     Args:
         file_path: 文件路径
-        service: 图床服务 (catbox, litterbox, zioooo)
+        service: 图床服务 (catbox, litterbox, zioooo, pixeldrain, gofile)
         proxy: 代理地址
         **kwargs: 额外配置
 

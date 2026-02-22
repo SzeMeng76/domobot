@@ -208,6 +208,7 @@ class BotConfig:
         self.image_host_service = "catbox"
         self.catbox_userhash = None
         self.zioooo_storage_id = None
+        self.pixeldrain_api_key = None
 
         # Telegraph配置
         self.enable_telegraph = False
@@ -480,6 +481,7 @@ class ConfigManager:
         self.config.image_host_service = os.getenv("IMAGE_HOST_SERVICE", "catbox")
         self.config.catbox_userhash = os.getenv("CATBOX_USERHASH", None)
         self.config.zioooo_storage_id = os.getenv("ZIOOOO_STORAGE_ID", None)
+        self.config.pixeldrain_api_key = os.getenv("PIXELDRAIN_API_KEY", None)
 
         # Telegraph配置
         self.config.enable_telegraph = get_bool_env("ENABLE_TELEGRAPH", "False")
