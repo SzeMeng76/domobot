@@ -103,6 +103,11 @@ def patch_parsehub_yt_dlp():
                     "Referer": "https://www.facebook.com/",
                     "Origin": "https://www.facebook.com"
                 })
+                # Facebook format fix: use best available format (progressive or adaptive)
+                # Facebook videos are usually single-stream (progressive), not split audio/video
+                if "format" in params:
+                    params["format"] = "best[height<=1080]/best"
+                    logger.info(f"🌐 [Patch] Updated Facebook format selector to: {params['format']}")
                 logger.info(f"🌐 [Patch] Added Facebook headers (Referer/Origin)")
 
             # 更新params（而不是覆盖）
@@ -994,9 +999,12 @@ def patch_parsehub_yt_dlp():
             # Check if this is a Facebook watch/?v= URL
             if isinstance(p, FacebookParse) and "?v=" in url:
                 logger.info(f"✅ [ParseHub] Detected Facebook watch/?v= URL, skipping get_raw_url")
-                logger.info(f"✅ [ParseHub] Passing URL directly to parser: {url}")
-                # Skip get_raw_url to preserve query parameters
-                return await p.parse(url)
+                logger.info(f"✅ [ParseHub] Calling _do_parse directly to preserve query parameters: {url}")
+                # Skip parse() method entirely to preserve query parameters
+                # Call _do_parse directly and set platform manually
+                result = await p._do_parse(url)
+                result.platform = p.__platform__
+                return result
             else:
                 # Use original implementation (calls get_raw_url first)
                 return await p.parse(url)
