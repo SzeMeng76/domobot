@@ -460,12 +460,17 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
         preview_caption = f"{caption}\n\n📦 文件大小: {size_text}MB\n📤 大文件上传中，请稍候\\.\\.\\."
 
         preview_msg = None
-        if media.thumb_url:
+        # 从 parse_result 获取缩略图 URL（VideoFile 没有 thumb_url 属性）
+        thumb_url = None
+        if parse_result and hasattr(parse_result, 'media') and parse_result.media:
+            thumb_url = getattr(parse_result.media, 'thumb_url', None)
+
+        if thumb_url:
             # 有缩略图，先发送缩略图
             try:
                 preview_msg = await context.bot.send_photo(
                     chat_id=chat_id,
-                    photo=media.thumb_url,
+                    photo=thumb_url,
                     caption=preview_caption,
                     parse_mode="MarkdownV2",
                     reply_to_message_id=reply_to_message_id,
