@@ -509,7 +509,7 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
                         width=media.width or 0,
                         height=media.height or 0,
                         duration=media.duration or 0,
-                        thumb=media.thumb_url,
+                        thumb=thumb_url,  # Use thumb_url from parse_result, not media
                         reply_markup=reply_markup,
                         parse_mode="MarkdownV2"
                     )
@@ -534,7 +534,7 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
         if len(video_parts) > 1:
             # 分割成功，更新预览消息
             try:
-                if media.thumb_url:
+                if thumb_url:
                     await preview_msg.edit_caption(
                         caption=f"{caption}\n\n📁 视频已分割为 {len(video_parts)} 个片段",
                         parse_mode="MarkdownV2"
@@ -570,7 +570,7 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
             success_caption = f"{caption}\n\n⚠️ 视频文件过大 \\({size_text}MB\\)\n📤 已上传到图床\n🔗 [点击查看视频]({image_host_url})"
 
             try:
-                if media.thumb_url:
+                if thumb_url:
                     await preview_msg.edit_caption(
                         caption=success_caption,
                         parse_mode="MarkdownV2"
@@ -593,7 +593,7 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
         fail_caption = f"{caption}\n\n⚠️ 视频文件过大 \\({size_text}MB\\)，所有上传方案均失败"
 
         try:
-            if media.thumb_url:
+            if thumb_url:
                 await preview_msg.edit_caption(
                     caption=fail_caption,
                     parse_mode="MarkdownV2"
