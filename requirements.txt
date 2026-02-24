@@ -44,10 +44,10 @@ backports.zoneinfo==0.2.1; python_version<"3.9"
 
 # WHOIS Query Libraries
 ipwhois==1.3.0
-whois21==1.4.6
-python-whois==0.9.5
+whois21==1.4.7
+python-whois==0.9.6
 asyncwhois>=1.1.12
-whodap>=0.1.9  # RDAP support for asyncwhois
+whodap>=0.1.14  # RDAP support for asyncwhois
 
 # DNS Query Library
 dnspython==2.8.0
