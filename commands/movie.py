@@ -55,6 +55,17 @@ async def safe_edit_message(msg, text, parse_mode=None, reply_markup=None):
         if reply_markup:
             await msg.edit_reply_markup(reply_markup=reply_markup)
 
+async def safe_query_edit(query, text, parse_mode=None, reply_markup=None):
+    """安全地通过CallbackQuery编辑消息，自动处理文本/caption/纯媒体消息"""
+    msg = query.message
+    if msg.text:
+        await msg.edit_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
+    elif msg.caption:
+        await msg.edit_caption(caption=text, parse_mode=parse_mode, reply_markup=reply_markup)
+    else:
+        # 纯媒体消息无法编辑文字，改为回复
+        await msg.reply_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
+
 async def _schedule_auto_delete(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, delay: int):
     """调度自动删除消息 - 与flight/hotel完全一致"""
     try:
@@ -224,7 +235,7 @@ async def _handle_legacy_person_search_callback(query, context, callback_data):
     user_id = query.from_user.id
     
     if user_id not in person_search_sessions:
-        await query.edit_message_text("❌ 搜索会话已过期，请重新搜索")
+        await safe_query_edit(query, "❌ 搜索会话已过期，请重新搜索")
         return
     
     session = person_search_sessions[user_id]
@@ -253,7 +264,7 @@ async def _handle_legacy_person_search_callback(query, context, callback_data):
                 person_id = selected_person["id"]
                 
                 # 先编辑为"正在获取人物详情..."消息
-                await query.edit_message_text(f"🔍 正在获取人物详情 \\(ID: {person_id}\\)\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
+                await safe_query_edit(query, f"🔍 正在获取人物详情 \\(ID: {person_id}\\)\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
                 message = query.message  # 用于后续统一处理
                 
                 # 获取人物详情
@@ -299,7 +310,7 @@ async def _handle_legacy_person_search_callback(query, context, callback_data):
                 # 清除用户会话
                 del person_search_sessions[user_id]
             else:
-                await query.edit_message_text("❌ 选择的人物索引无效")
+                await safe_query_edit(query, "❌ 选择的人物索引无效")
                 
         elif callback_data.startswith("person_page_"):
             # 处理分页
@@ -318,18 +329,18 @@ async def _handle_legacy_person_search_callback(query, context, callback_data):
                 result_text = format_person_search_results_for_keyboard(new_search_data)
                 keyboard = create_person_search_keyboard(new_search_data)
                 
-                await query.edit_message_text(
+                await safe_query_edit(query, 
                     foldable_text_with_markdown_v2(result_text),
                     reply_markup=keyboard,
                     parse_mode=ParseMode.MARKDOWN_V2
                 )
             else:
-                await query.edit_message_text("❌ 获取页面数据失败")
+                await safe_query_edit(query, "❌ 获取页面数据失败")
                 
     except Exception as e:
         logger.error(f"处理旧人物搜索回调失败: {e}")
         try:
-            await query.edit_message_text("❌ 处理选择时发生错误")
+            await safe_query_edit(query, "❌ 处理选择时发生错误")
         except:
             pass
 
@@ -5914,7 +5925,7 @@ async def movie_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     
     # 检查用户是否有有效的搜索会话
     if user_id not in movie_search_sessions:
-        await query.edit_message_text("❌ 搜索会话已过期，请重新搜索")
+        await safe_query_edit(query, "❌ 搜索会话已过期，请重新搜索")
         return
     
     session = movie_search_sessions[user_id]
@@ -5989,7 +6000,7 @@ async def movie_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                             await _schedule_deletion(context, query.message.chat_id, detail_message.message_id, config.auto_delete_delay)
                         except Exception as photo_error:
                             logger.warning(f"发送海报失败: {photo_error}，改用文本消息")
-                            await query.edit_message_text(
+                            await safe_query_edit(query, 
                                 foldable_text_with_markdown_v2(result_text),
                                 parse_mode=ParseMode.MARKDOWN_V2,
                                 reply_markup=function_keyboard
@@ -6000,7 +6011,7 @@ async def movie_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                             config = get_config()
                             await _schedule_deletion(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
                     else:
-                        await query.edit_message_text(
+                        await safe_query_edit(query, 
                             foldable_text_with_markdown_v2(result_text),
                             parse_mode=ParseMode.MARKDOWN_V2,
                             reply_markup=function_keyboard
@@ -6015,9 +6026,9 @@ async def movie_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                     movie_search_sessions[user_id]["current_movie_id"] = movie_id
                     movie_search_sessions[user_id]["current_movie_data"] = detail_data
                 else:
-                    await query.edit_message_text("❌ 获取电影详情失败")
+                    await safe_query_edit(query, "❌ 获取电影详情失败")
             else:
-                await query.edit_message_text("❌ 选择的电影索引无效")
+                await safe_query_edit(query, "❌ 选择的电影索引无效")
                 
         elif callback_data.startswith("movie_page_"):
             # 处理分页
@@ -6036,13 +6047,13 @@ async def movie_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                 result_text = format_movie_search_results_for_keyboard(new_search_data)
                 keyboard = create_movie_search_keyboard(new_search_data)
                 
-                await query.edit_message_text(
+                await safe_query_edit(query, 
                     foldable_text_with_markdown_v2(result_text),
                     reply_markup=keyboard,
                     parse_mode=ParseMode.MARKDOWN_V2
                 )
             else:
-                await query.edit_message_text("❌ 获取页面数据失败")
+                await safe_query_edit(query, "❌ 获取页面数据失败")
                 
         elif callback_data == "movie_close":
             # 关闭搜索结果
@@ -6052,7 +6063,7 @@ async def movie_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                 
     except Exception as e:
         logger.error(f"处理电影搜索回调失败: {e}")
-        await query.edit_message_text("❌ 处理选择时发生错误")
+        await safe_query_edit(query, "❌ 处理选择时发生错误")
 
 @with_error_handling
 async def tv_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -6081,7 +6092,7 @@ async def tv_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     # 检查用户是否有有效的搜索会话
     if user_id not in tv_search_sessions:
-        await query.edit_message_text("❌ 搜索会话已过期，请重新搜索")
+        await safe_query_edit(query, "❌ 搜索会话已过期，请重新搜索")
         return
     
     session = tv_search_sessions[user_id]
@@ -6156,7 +6167,7 @@ async def tv_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                             await _schedule_deletion(context, query.message.chat_id, detail_message.message_id, config.auto_delete_delay)
                         except Exception as photo_error:
                             logger.warning(f"发送海报失败: {photo_error}，改用文本消息")
-                            await query.edit_message_text(
+                            await safe_query_edit(query, 
                                 foldable_text_with_markdown_v2(result_text),
                                 parse_mode=ParseMode.MARKDOWN_V2,
                                 reply_markup=function_keyboard
@@ -6167,7 +6178,7 @@ async def tv_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                             config = get_config()
                             await _schedule_deletion(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
                     else:
-                        await query.edit_message_text(
+                        await safe_query_edit(query, 
                             foldable_text_with_markdown_v2(result_text),
                             parse_mode=ParseMode.MARKDOWN_V2,
                             reply_markup=function_keyboard
@@ -6182,9 +6193,9 @@ async def tv_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                     tv_search_sessions[user_id]["current_tv_id"] = tv_id
                     tv_search_sessions[user_id]["current_tv_data"] = detail_data
                 else:
-                    await query.edit_message_text("❌ 获取电视剧详情失败")
+                    await safe_query_edit(query, "❌ 获取电视剧详情失败")
             else:
-                await query.edit_message_text("❌ 选择的电视剧索引无效")
+                await safe_query_edit(query, "❌ 选择的电视剧索引无效")
                 
         elif callback_data.startswith("tv_page_"):
             # 处理分页
@@ -6203,13 +6214,13 @@ async def tv_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                 result_text = format_tv_search_results_for_keyboard(new_search_data)
                 keyboard = create_tv_search_keyboard(new_search_data)
                 
-                await query.edit_message_text(
+                await safe_query_edit(query, 
                     foldable_text_with_markdown_v2(result_text),
                     reply_markup=keyboard,
                     parse_mode=ParseMode.MARKDOWN_V2
                 )
             else:
-                await query.edit_message_text("❌ 获取页面数据失败")
+                await safe_query_edit(query, "❌ 获取页面数据失败")
                 
         elif callback_data == "tv_close":
             # 关闭搜索结果
@@ -6219,7 +6230,7 @@ async def tv_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                 
     except Exception as e:
         logger.error(f"处理电视剧搜索回调失败: {e}")
-        await query.edit_message_text("❌ 处理选择时发生错误")
+        await safe_query_edit(query, "❌ 处理选择时发生错误")
 
 async def chart_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理chart排行榜回调"""
@@ -6248,7 +6259,7 @@ async def chart_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                 ]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text(
+            await safe_query_edit(query, 
                 text=foldable_text_v2("🔥 *综合热门榜 \\(多源\\)*\n\n整合 TMDB、JustWatch、Trakt 三个数据源的热门内容\n\n请选择类型:"),
                 parse_mode="MarkdownV2",
                 reply_markup=reply_markup
@@ -6275,7 +6286,7 @@ async def chart_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                 ]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text(
+            await safe_query_edit(query, 
                 text=foldable_text_v2("📊 *TMDB 官方榜*\n\n全球权威电影数据库官方排行榜\n\n请选择类型:"),
                 parse_mode="MarkdownV2",
                 reply_markup=reply_markup
@@ -6294,7 +6305,7 @@ async def chart_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                 ]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text(
+            await safe_query_edit(query, 
                 text=foldable_text_v2("🎬 *JustWatch 流媒体榜*\n\n全球流媒体平台实时热度数据\n\n请选择类型:"),
                 parse_mode="MarkdownV2",
                 reply_markup=reply_markup
@@ -6313,7 +6324,7 @@ async def chart_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                 ]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text(
+            await safe_query_edit(query, 
                 text=foldable_text_v2("👥 *Trakt 用户榜*\n\n基于真实用户观影数据的推荐排行\n\n请选择类型:"),
                 parse_mode="MarkdownV2",
                 reply_markup=reply_markup
@@ -6351,7 +6362,7 @@ async def chart_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 
 🔍 选择上方按钮开始浏览排行榜"""
 
-            await query.edit_message_text(
+            await safe_query_edit(query, 
                 text=foldable_text_v2(help_text),
                 parse_mode="MarkdownV2",
                 reply_markup=reply_markup
@@ -6364,7 +6375,7 @@ async def chart_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     except Exception as e:
         logger.error(f"处理chart回调失败: {e}")
         try:
-            await query.edit_message_text("❌ 处理请求失败，请重试")
+            await safe_query_edit(query, "❌ 处理请求失败，请重试")
         except:
             pass
 
@@ -6389,14 +6400,14 @@ async def _handle_chart_request(query, context, callback_data: str) -> None:
     }
     
     if callback_data not in chart_map:
-        await query.edit_message_text("❌ 未知的排行榜类型")
+        await safe_query_edit(query, "❌ 未知的排行榜类型")
         return
     
     command_name, display_name = chart_map[callback_data]
     
     # 显示加载消息
     loading_message = f"🔍 正在获取{display_name}... ⏳"
-    await query.edit_message_text(foldable_text_v2(loading_message), parse_mode="MarkdownV2")
+    await safe_query_edit(query, foldable_text_v2(loading_message), parse_mode="MarkdownV2")
     
     # 调用相应的命令函数 (需要创建一个统一的执行函数)
     await _execute_chart_command(query, context, command_name, display_name)
@@ -6430,11 +6441,11 @@ async def _execute_chart_command(query, context, command_name: str, display_name
         elif command_name == "tv_trending":
             await _execute_tv_trending_chart(query, context)
         else:
-            await query.edit_message_text(f"❌ 未实现的排行榜类型: {command_name}")
+            await safe_query_edit(query, f"❌ 未实现的排行榜类型: {command_name}")
         
     except Exception as e:
         logger.error(f"执行排行榜命令失败: {e}")
-        await query.edit_message_text(f"❌ 获取{display_name}失败: {str(e)}")
+        await safe_query_edit(query, f"❌ 获取{display_name}失败: {str(e)}")
 
 # 具体的排行榜执行函数
 async def _execute_movie_hot_chart(query, context) -> None:
@@ -6448,7 +6459,7 @@ async def _execute_movie_hot_chart(query, context) -> None:
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第4467-4471行）
-    await query.edit_message_text("🔍 正在获取热门电影\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await safe_query_edit(query, "🔍 正在获取热门电影\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
     message = query.message  # 用于后续统一处理
     
     try:
@@ -6508,7 +6519,7 @@ async def _execute_tv_hot_chart(query, context) -> None:
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await query.edit_message_text("❌ 电视剧查询服务未初始化", reply_markup=return_keyboard)
+        await safe_query_edit(query, "❌ 电视剧查询服务未初始化", reply_markup=return_keyboard)
         return
     
     try:
@@ -6539,7 +6550,7 @@ async def _execute_tv_hot_chart(query, context) -> None:
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
             ])
-            await query.edit_message_text(
+            await safe_query_edit(query, 
                 text=foldable_text_with_markdown_v2(result_text),
                 parse_mode="MarkdownV2",
                 reply_markup=return_keyboard
@@ -6552,14 +6563,14 @@ async def _execute_tv_hot_chart(query, context) -> None:
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
             ])
-            await query.edit_message_text("❌ 获取热门电视剧数据失败，请稍后重试", reply_markup=return_keyboard)
+            await safe_query_edit(query, "❌ 获取热门电视剧数据失败，请稍后重试", reply_markup=return_keyboard)
             
     except Exception as e:
         logger.error(f"获取综合热门剧集失败: {e}")
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await query.edit_message_text("❌ 获取综合热门剧集时发生错误", reply_markup=return_keyboard)
+        await safe_query_edit(query, "❌ 获取综合热门剧集时发生错误", reply_markup=return_keyboard)
 
 async def _execute_trending_chart(query, context) -> None:
     """执行今日热门 - 完全按照movieold的trending_command逻辑"""
@@ -6572,7 +6583,7 @@ async def _execute_trending_chart(query, context) -> None:
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第6335-6339行）
-    await query.edit_message_text("🔍 正在获取今日热门内容\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await safe_query_edit(query, "🔍 正在获取今日热门内容\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
     message = query.message  # 用于后续统一处理
     
     try:
@@ -6615,7 +6626,7 @@ async def _execute_trending_week_chart(query, context) -> None:
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第6374-6378行）
-    await query.edit_message_text("🔍 正在获取本周热门内容\.\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await safe_query_edit(query, "🔍 正在获取本周热门内容\.\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
     message = query.message  # 用于后续统一处理
     
     try:
@@ -6659,7 +6670,7 @@ async def _execute_now_playing_chart(query, context) -> None:
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第6411-6415行）
-    await query.edit_message_text("🔍 正在获取正在上映的电影\.\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await safe_query_edit(query, "🔍 正在获取正在上映的电影\.\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
     message = query.message  # 用于后续统一处理
     
     try:
@@ -6702,7 +6713,7 @@ async def _execute_upcoming_chart(query, context) -> None:
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第6449-6453行）
-    await query.edit_message_text("🔍 正在获取即将上映的电影\.\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await safe_query_edit(query, "🔍 正在获取即将上映的电影\.\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
     message = query.message  # 用于后续统一处理
     
     try:
@@ -6740,11 +6751,11 @@ async def _execute_tv_airing_chart(query, context) -> None:
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await query.edit_message_text("❌ 电视剧查询服务未初始化", reply_markup=return_keyboard)
+        await safe_query_edit(query, "❌ 电视剧查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第6487-6491行）
-    await query.edit_message_text("🔍 正在获取今日播出的电视剧\.\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await safe_query_edit(query, "🔍 正在获取今日播出的电视剧\.\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
     message = query.message  # 用于后续统一处理
     
     try:
@@ -6782,11 +6793,11 @@ async def _execute_tv_on_air_chart(query, context) -> None:
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await query.edit_message_text("❌ 电视剧查询服务未初始化", reply_markup=return_keyboard)
+        await safe_query_edit(query, "❌ 电视剧查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息（对应movieold第6525-6529行）
-    await query.edit_message_text("🔍 正在获取正在播出的电视剧\.\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await safe_query_edit(query, "🔍 正在获取正在播出的电视剧\.\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
     message = query.message  # 用于后续统一处理
     
     try:
@@ -6829,7 +6840,7 @@ async def _execute_streaming_movie_chart(query, context) -> None:
         return
     
     # 先编辑为"正在获取..."消息
-    await query.edit_message_text("🔍 正在获取流媒体电影热度排行榜\.\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await safe_query_edit(query, "🔍 正在获取流媒体电影热度排行榜\.\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
     message = query.message  # 用于后续统一处理
     
     try:
@@ -6873,11 +6884,11 @@ async def _execute_streaming_tv_chart(query, context) -> None:
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await query.edit_message_text("❌ 电视剧查询服务未初始化", reply_markup=return_keyboard)
+        await safe_query_edit(query, "❌ 电视剧查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息
-    await query.edit_message_text("🔍 正在获取流媒体剧集热度排行榜\.\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await safe_query_edit(query, "🔍 正在获取流媒体剧集热度排行榜\.\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
     message = query.message  # 用于后续统一处理
     
     try:
@@ -6926,7 +6937,7 @@ async def _execute_movie_trending_chart(query, context) -> None:
         return
     
     # 先编辑为"正在获取..."消息
-    await query.edit_message_text("🔥 正在获取Trakt热门电影\.\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await safe_query_edit(query, "🔥 正在获取Trakt热门电影\.\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
     message = query.message  # 用于后续统一处理
     
     try:
@@ -6964,11 +6975,11 @@ async def _execute_tv_trending_chart(query, context) -> None:
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await query.edit_message_text("❌ 电视剧查询服务未初始化", reply_markup=return_keyboard)
+        await safe_query_edit(query, "❌ 电视剧查询服务未初始化", reply_markup=return_keyboard)
         return
     
     # 先编辑为"正在获取..."消息
-    await query.edit_message_text("🔥 正在获取Trakt热门剧集\.\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await safe_query_edit(query, "🔥 正在获取Trakt热门剧集\.\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
     message = query.message  # 用于后续统一处理
     
     try:
@@ -7058,7 +7069,7 @@ async def person_callback_handler(update: Update, context: ContextTypes.DEFAULT_
 
 请选择功能:"""
         
-        await query.edit_message_text(
+        await safe_query_edit(query, 
             text=foldable_text_with_markdown_v2(help_text),
             parse_mode="MarkdownV2",
             reply_markup=reply_markup
@@ -7093,7 +7104,7 @@ async def person_callback_handler(update: Update, context: ContextTypes.DEFAULT_
 • **国际**: 各国知名导演演员
 • **经典**: 历史上的传奇人物"""
 
-        await query.edit_message_text(
+        await safe_query_edit(query, 
             text=foldable_text_with_markdown_v2(search_help_text),
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 返回主菜单", callback_data="person_main_menu")]
@@ -7128,7 +7139,7 @@ async def person_callback_handler(update: Update, context: ContextTypes.DEFAULT_
 如果搜索结果显示 "🆔 ID: `31`"
 则输入 `31` 即可查看该人物详情"""
 
-        await query.edit_message_text(
+        await safe_query_edit(query, 
             text=foldable_text_with_markdown_v2(details_help_text),
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 返回主菜单", callback_data="person_main_menu")]
@@ -7138,7 +7149,7 @@ async def person_callback_handler(update: Update, context: ContextTypes.DEFAULT_
     
     elif data == "person_trending":
         # 热门人物功能 - 使用TMDB API获取真实数据
-        loading_message = await query.edit_message_text(
+        await safe_query_edit(query, 
             text="🔍 正在获取热门人物数据... ⏳"
         )
         
@@ -7150,7 +7161,7 @@ async def person_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 # 格式化热门人物结果
                 result_text = movie_service.format_trending_persons(trending_data)
                 
-                await query.edit_message_text(
+                await safe_query_edit(query, 
                     text=foldable_text_with_markdown_v2(result_text),
                     parse_mode="MarkdownV2",
                     reply_markup=InlineKeyboardMarkup([
@@ -7162,7 +7173,7 @@ async def person_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                     ])
                 )
             else:
-                await query.edit_message_text(
+                await safe_query_edit(query, 
                     text="❌ 获取热门人物数据失败，请稍后重试",
                     reply_markup=InlineKeyboardMarkup([
                         [InlineKeyboardButton("🔙 返回主菜单", callback_data="person_main_menu")]
@@ -7170,7 +7181,7 @@ async def person_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 )
         except Exception as e:
             logger.error(f"获取热门人物失败: {e}")
-            await query.edit_message_text(
+            await safe_query_edit(query, 
                 text="❌ 获取热门人物时发生错误",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔙 返回主菜单", callback_data="person_main_menu")]
@@ -7236,7 +7247,7 @@ async def handle_movie_menu_callback(query, context, callback_data):
             "• **导演**: 吴宇森"
         )
         
-        await query.edit_message_text(
+        await safe_query_edit(query, 
             text=foldable_text_v2(search_help),
             parse_mode="MarkdownV2",
             reply_markup=InlineKeyboardMarkup([
@@ -7263,7 +7274,7 @@ async def handle_movie_menu_callback(query, context, callback_data):
             "• 使用 `/chart` 命令查看热门电影"
         )
         
-        await query.edit_message_text(
+        await safe_query_edit(query, 
             text=foldable_text_v2(details_help),
             parse_mode="MarkdownV2",
             reply_markup=InlineKeyboardMarkup([
@@ -7294,7 +7305,7 @@ async def handle_movie_menu_callback(query, context, callback_data):
             "`/movie_detail 299536`"
         )
         
-        await query.edit_message_text(
+        await safe_query_edit(query, 
             text=foldable_text_with_markdown_v2(help_text),
             parse_mode=ParseMode.MARKDOWN_V2,
             reply_markup=InlineKeyboardMarkup([
@@ -7320,7 +7331,7 @@ async def handle_movie_menu_callback(query, context, callback_data):
             "`/movie 电影名` - 直接搜索电影"
         )
         
-        await query.edit_message_text(
+        await safe_query_edit(query, 
             text=foldable_text_v2(help_text),
             parse_mode="MarkdownV2",
             reply_markup=InlineKeyboardMarkup(keyboard)
@@ -7345,7 +7356,7 @@ async def handle_tv_menu_callback(query, context, callback_data):
             "• **导演**: 大卫·贝尼奥夫"
         )
         
-        await query.edit_message_text(
+        await safe_query_edit(query, 
             text=foldable_text_v2(search_help),
             parse_mode="MarkdownV2",
             reply_markup=InlineKeyboardMarkup([
@@ -7372,7 +7383,7 @@ async def handle_tv_menu_callback(query, context, callback_data):
             "• 使用 `/chart` 命令查看热门电视剧"
         )
         
-        await query.edit_message_text(
+        await safe_query_edit(query, 
             text=foldable_text_v2(details_help),
             parse_mode="MarkdownV2",
             reply_markup=InlineKeyboardMarkup([
@@ -7402,7 +7413,7 @@ async def handle_tv_menu_callback(query, context, callback_data):
             "`/tv_detail 1399`"
         )
         
-        await query.edit_message_text(
+        await safe_query_edit(query, 
             text=foldable_text_with_markdown_v2(help_text),
             parse_mode=ParseMode.MARKDOWN_V2,
             reply_markup=InlineKeyboardMarkup([
@@ -7428,7 +7439,7 @@ async def handle_tv_menu_callback(query, context, callback_data):
             "`/tv 电视剧名` - 直接搜索电视剧"
         )
         
-        await query.edit_message_text(
+        await safe_query_edit(query, 
             text=foldable_text_v2(help_text),
             parse_mode="MarkdownV2",
             reply_markup=InlineKeyboardMarkup(keyboard)
@@ -7891,13 +7902,13 @@ async def show_movie_details_with_functions(query, context, movie_id: int):
                     )
                 except Exception as media_error:
                     logger.warning(f"无法编辑媒体消息，回退到文本: {media_error}")
-                    await query.edit_message_text(
+                    await safe_query_edit(query, 
                         text=foldable_text_with_markdown_v2(result_text),
                         parse_mode=ParseMode.MARKDOWN_V2,
                         reply_markup=function_keyboard
                     )
             else:
-                await query.edit_message_text(
+                await safe_query_edit(query, 
                     text=foldable_text_with_markdown_v2(result_text),
                     parse_mode=ParseMode.MARKDOWN_V2,
                     reply_markup=function_keyboard
@@ -7945,7 +7956,7 @@ async def execute_tv_recommendations(query, context, tv_id: int):
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await query.edit_message_text("❌ 电视剧查询服务未初始化", reply_markup=return_keyboard)
+        await safe_query_edit(query, "❌ 电视剧查询服务未初始化", reply_markup=return_keyboard)
         return
         
     message = query.message
@@ -7986,7 +7997,7 @@ async def execute_tv_videos(query, context, tv_id: int):
         return_keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ 返回排行榜中心", callback_data="chart_back_main")]
         ])
-        await query.edit_message_text("❌ 电视剧查询服务未初始化", reply_markup=return_keyboard)
+        await safe_query_edit(query, "❌ 电视剧查询服务未初始化", reply_markup=return_keyboard)
         return
         
     message = query.message
@@ -8039,7 +8050,7 @@ async def execute_tv_videos(query, context, tv_id: int):
 async def execute_tv_reviews(query, context, tv_id: int):
     """执行TV评价 - 完全按照movieold的tv_reviews_command逻辑"""
     if not movie_service:
-        await query.edit_message_text("❌ TV查询服务未初始化")
+        await safe_query_edit(query, "❌ TV查询服务未初始化")
         return
         
     message = query.message
@@ -8068,7 +8079,7 @@ async def execute_tv_reviews(query, context, tv_id: int):
             return_keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ 返回TV功能", callback_data=f"tv_detail_{tv_id}")]
             ])
-            await query.edit_message_text(f"❌ 未找到电视剧《{tv_title}》的评价信息", reply_markup=return_keyboard)
+            await safe_query_edit(query, f"❌ 未找到电视剧《{tv_title}》的评价信息", reply_markup=return_keyboard)
             # 调度删除机器人回复消息
             from utils.message_manager import _schedule_deletion
             config = get_config()
@@ -8186,11 +8197,11 @@ async def execute_tv_reviews(query, context, tv_id: int):
 async def execute_tv_related(query, context, tv_id: int):
     """执行相关TV推荐 - 完全按照movieold的tv_related_command逻辑"""
     if not movie_service:
-        await query.edit_message_text("❌ TV查询服务未初始化")
+        await safe_query_edit(query, "❌ TV查询服务未初始化")
         return
     
     # 先编辑为"正在获取..."消息
-    await query.edit_message_text(f"🔍 正在获取相关电视剧推荐 \(ID: {tv_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
+    await safe_query_edit(query, f"🔍 正在获取相关电视剧推荐 \(ID: {tv_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
     message = query.message  # 用于后续统一处理
     
     try:
@@ -8240,7 +8251,7 @@ async def execute_tv_related(query, context, tv_id: int):
 async def execute_tv_watch(query, context, tv_id: int):
     """执行TV观看平台 - 完全按照movieold的tv_watch_command逻辑"""
     if not movie_service:
-        await query.edit_message_text("❌ TV查询服务未初始化")
+        await safe_query_edit(query, "❌ TV查询服务未初始化")
         return
 
     message = query.message
@@ -8314,7 +8325,7 @@ async def execute_tv_watch(query, context, tv_id: int):
 async def execute_tv_season(query, context, tv_id: int):
     """执行TV季详情 - 设置session等待用户输入季数"""
     if not movie_service:
-        await query.edit_message_text("❌ TV查询服务未初始化")
+        await safe_query_edit(query, "❌ TV查询服务未初始化")
         return
     
     user_id = query.from_user.id
@@ -8343,7 +8354,7 @@ async def execute_tv_season(query, context, tv_id: int):
         
         # 安全地编辑消息
         try:
-            await query.edit_message_text(prompt_text, parse_mode=ParseMode.MARKDOWN_V2)
+            await safe_query_edit(query, prompt_text, parse_mode=ParseMode.MARKDOWN_V2)
         except Exception as edit_error:
             # 如果编辑失败，尝试发送新消息
             from utils.message_manager import send_message_with_auto_delete
@@ -8357,7 +8368,7 @@ async def execute_tv_season(query, context, tv_id: int):
     except Exception as e:
         logger.error(f"设置TV季详情session失败: {e}")
         try:
-            await query.edit_message_text("❌ 设置查询失败")
+            await safe_query_edit(query, "❌ 设置查询失败")
         except Exception:
             # 如果编辑失败，发送新消息
             from utils.message_manager import send_error
@@ -8504,18 +8515,18 @@ async def _get_tv_season_details_with_buttons(update: Update, context: ContextTy
 async def execute_tv_episode(query, context, tv_id: int):
     """执行TV集详情 - 设置session等待用户输入季数和集数"""
     if not movie_service:
-        await query.edit_message_text("❌ TV查询服务未初始化")
+        await safe_edit_message(query.message, "❌ TV查询服务未初始化")
         return
-    
+
     user_id = query.from_user.id
-    
+
     try:
         # 先获取TV详情，显示总季数参考
         tv_details = await movie_service.get_tv_details(tv_id)
         if tv_details:
             total_seasons = tv_details.get("number_of_seasons", 1)
             tv_name = tv_details.get("name", "未知电视剧")
-            
+
             prompt_text = (
                 f"📖 **{tv_name}** \\- 集详情查询\n\n"
                 f"📊 **总共 {total_seasons} 季**\n\n"
@@ -8527,19 +8538,19 @@ async def execute_tv_episode(query, context, tv_id: int):
                 f"📖 请输入季数和集数，用空格分隔：\n"
                 f"例如：`1 5` （第1季第5集）"
             )
-        
+
         # 设置session等待用户输入
         tv_session_manager.set_session(user_id, {
             "action": "episode",
-            "tv_id": tv_id, 
+            "tv_id": tv_id,
             "waiting_for": "season_episode_numbers"
         })
-        
-        await query.edit_message_text(prompt_text, parse_mode=ParseMode.MARKDOWN_V2)
-        
+
+        await safe_edit_message(query.message, prompt_text, parse_mode=ParseMode.MARKDOWN_V2)
+
     except Exception as e:
         logger.error(f"设置TV集详情session失败: {e}")
-        await query.edit_message_text("❌ 设置查询失败")
+        await safe_edit_message(query.message, "❌ 设置查询失败")
 
 async def _get_tv_episode_details_with_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE, tv_id: int, season_number: int, episode_number: int):
     """获取TV集详情的完整逻辑 - 100% movieold逻辑 + 返回按钮"""
@@ -8653,22 +8664,22 @@ async def show_tv_details_with_functions(query, context, tv_id: int):
                     )
                 except Exception as media_error:
                     logger.warning(f"无法编辑媒体消息，回退到文本: {media_error}")
-                    await query.edit_message_text(
+                    await safe_query_edit(query, 
                         foldable_text_with_markdown_v2(result_text),
                         parse_mode=ParseMode.MARKDOWN_V2,
                         reply_markup=function_keyboard
                     )
             else:
-                await query.edit_message_text(
+                await safe_query_edit(query, 
                     foldable_text_with_markdown_v2(result_text),
                     parse_mode=ParseMode.MARKDOWN_V2,
                     reply_markup=function_keyboard
                 )
         else:
-            await query.edit_message_text(f"❌ 未找到ID为 {tv_id} 的TV")
+            await safe_query_edit(query, f"❌ 未找到ID为 {tv_id} 的TV")
     except Exception as e:
         logger.error(f"显示TV详情失败: {e}")
-        await query.edit_message_text("❌ 获取TV详情时发生错误")
+        await safe_query_edit(query, "❌ 获取TV详情时发生错误")
     
     # 调度删除机器人回复消息（和movieold的详情显示一样）
     from utils.message_manager import _schedule_deletion
