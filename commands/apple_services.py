@@ -689,8 +689,8 @@ async def get_service_info(url: str, country_code: str, service: str, context: C
                             price_text = price_elem.get_text(strip=True)
 
                             # Extract the main price, handling various formats
-                            # Examples: "₹119/month", "月額1,080円。新規登録すると、最初の1か月間無料。"
-                            price_match = re.search(r'([¥₹$€£₩₦]\s*[\d,]+(?:\.\d+)?(?:/month|/年|/月)?|月額\s*[\d,]+円|[\d,]+(?:\.\d+)?\s*(?:TL|RM|USD|EUR|GBP|JPY|INR|KRW|NGN|BRL|CAD|AUD|NZD|HKD|SGD|PHP|ILS|PKR|kr|RUB|PLN|CZK|HUF)(?:/month|/mo)?)', price_text)
+                            # Examples: "₹119/month", "月額1,080円。新規登録すると、最初の1か月間無料。", "RM 16.90/month"
+                            price_match = re.search(r'(RM\s*[\d,]+(?:\.\d+)?(?:/month|/mo)?|[¥₹$€£₩₦]\s*[\d,]+(?:\.\d+)?(?:/month|/年|/月)?|月額\s*[\d,]+円|[\d,]+(?:\.\d+)?\s*(?:TL|USD|EUR|GBP|JPY|INR|KRW|NGN|BRL|CAD|AUD|NZD|HKD|SGD|PHP|ILS|PKR|kr|RUB|PLN|CZK|HUF)(?:/month|/mo)?)', price_text)
 
                             if price_match:
                                 price_str = price_match.group(1).strip()
