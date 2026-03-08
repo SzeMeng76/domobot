@@ -49,7 +49,10 @@ COPY --from=builder /app/wheels /app/wheels
 COPY requirements.txt .
 
 # 使用复制过来的 wheels 安装依赖，然后清理掉 wheel 文件
-RUN pip install --no-cache-dir --no-index --find-links=/app/wheels -r requirements.txt \
+# 注意：不使用 --no-index，因为 pytubefix 从 GitHub fork 安装需要网络访问
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+    && pip install --no-cache-dir --find-links=/app/wheels -r requirements.txt \
+    && apt-get purge -y git && apt-get autoremove -y && rm -rf /var/lib/apt/lists/* \
     && rm -rf /app/wheels
 
 # 复制应用代码
