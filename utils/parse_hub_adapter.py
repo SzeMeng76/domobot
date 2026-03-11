@@ -17,7 +17,7 @@ from utils.parsehub_patch import patch_parsehub_yt_dlp
 patch_parsehub_yt_dlp()
 
 from parsehub import ParseHub
-from parsehub.config import ParseConfig, GlobalConfig
+from parsehub.config import GlobalConfig
 from parsehub.types import ParseResult, VideoParseResult, ImageParseResult, MultimediaParseResult
 
 logger = logging.getLogger(__name__)
@@ -221,17 +221,15 @@ class ParseHubAdapter:
                 })
                 logger.info(f"✅ 配置微博 headers: Referer")
 
-            # 创建配置（重要：每次都创建新的ParseHub实例，传入配置）
-            parse_config = ParseConfig(proxy=parser_proxy, cookie=platform_cookie)
+            # 创建ParseHub实例并直接传入proxy和cookie
             if platform_cookie:
                 cookie_preview = str(platform_cookie)[:100] if not isinstance(platform_cookie, dict) else f"dict with {len(platform_cookie)} keys"
-                logger.info(f"🍪 传递给ParseConfig的cookie - 类型: {type(platform_cookie)}, 预览: {cookie_preview}")
+                logger.info(f"🍪 传递给ParseHub的cookie - 类型: {type(platform_cookie)}, 预览: {cookie_preview}")
             else:
-                logger.info(f"⚠️ 未传递cookie给ParseConfig")
+                logger.info(f"⚠️ 未传递cookie给ParseHub")
 
-            # 创建新的ParseHub实例并传入配置
-            parsehub = ParseHub(config=parse_config)
-            result = await parsehub.parse(url)
+            parsehub = ParseHub()
+            result = await parsehub.parse(url, proxy=parser_proxy, cookie=platform_cookie)
 
             if not result:
                 return None, None, None, 0, "解析失败，未返回结果"
