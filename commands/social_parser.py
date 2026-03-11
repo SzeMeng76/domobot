@@ -555,7 +555,10 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
                         chat_id=chat_id,
                         video=video_file,
                         caption=f"片段 {i}/{len(video_parts)}",
-                        supports_streaming=True
+                        supports_streaming=True,
+                        read_timeout=300,
+                        write_timeout=300,
+                        connect_timeout=30
                     )
                     sent_messages.append(msg)
 
@@ -621,7 +624,10 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
             duration=media.duration or 0,
             reply_to_message_id=reply_to_message_id,
             supports_streaming=True,
-            reply_markup=reply_markup
+            reply_markup=reply_markup,
+            read_timeout=300,
+            write_timeout=300,
+            connect_timeout=30
         )
     return [msg]
 
@@ -980,7 +986,10 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
                     parse_mode="MarkdownV2",
                     reply_to_message_id=reply_to_message_id,
                     supports_streaming=True,
-                    reply_markup=reply_markup
+                    reply_markup=reply_markup,
+                    read_timeout=300,
+                    write_timeout=300,
+                    connect_timeout=30
                 )
             return [msg]
         elif isinstance(media, ImageFile):
