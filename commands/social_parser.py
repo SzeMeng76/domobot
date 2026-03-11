@@ -444,7 +444,8 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
         )
         return [msg]
 
-    video_path = Path(media.path)
+    from utils.video_splitter import ensure_h264
+    video_path = Path(await ensure_h264(str(media.path)))
 
     # 检查文件大小（Telegram 限制 50MB）
     video_size_mb = video_path.stat().st_size / (1024 * 1024)
@@ -955,7 +956,8 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
         media = media_list[0]
         if isinstance(media, VideoFile):
             # 检查视频文件大小（Telegram限制50MB）
-            video_path = Path(media.path)
+            from utils.video_splitter import ensure_h264
+            video_path = Path(await ensure_h264(str(media.path)))
             video_size_mb = video_path.stat().st_size / (1024 * 1024)
 
             if video_size_mb > 50:
@@ -970,7 +972,7 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
                 )
                 return [msg]
 
-            with open(str(media.path), 'rb') as video_file:
+            with open(str(video_path), 'rb') as video_file:
                 msg = await context.bot.send_video(
                     chat_id=chat_id,
                     video=video_file,
@@ -1002,8 +1004,10 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
             for media in batch:
                 try:
                     if isinstance(media, VideoFile):
+                        from utils.video_splitter import ensure_h264
+                        v_path = await ensure_h264(str(media.path))
                         media_group.append(InputMediaVideo(
-                            media=open(str(media.path), 'rb'),
+                            media=open(v_path, 'rb'),
                             width=media.width or 0,
                             height=media.height or 0,
                             duration=media.duration or 0,

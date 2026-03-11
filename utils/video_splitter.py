@@ -147,6 +147,48 @@ class VideoSplitter:
             return []
 
 
+async def get_video_codec(file: str) -> str:
+    """获取视频编码格式"""
+    proc = await asyncio.create_subprocess_exec(
+        "ffprobe",
+        "-v", "error",
+        "-select_streams", "v:0",
+        "-show_entries", "stream=codec_name",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        file,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    stdout, _ = await proc.communicate()
+    out = stdout.decode().strip()
+    return out.lower() if out else ""
+
+
+async def ensure_h264(file: str) -> str:
+    """如果视频不是 H.264 编码，转码为 H.264。返回最终文件路径。"""
+    codec = await get_video_codec(file)
+    if codec == "h264":
+        return file
+
+    src = Path(file)
+    out = src.with_stem(src.stem + "_h264")
+    proc = await asyncio.create_subprocess_exec(
+        "ffmpeg",
+        "-i", str(file),
+        "-c:v", "libx264",
+        "-preset", "fast",
+        "-crf", "23",
+        "-c:a", "aac",
+        "-y", str(out),
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    await proc.wait()
+    if out.exists() and out.stat().st_size > 0:
+        return str(out)
+    return file
+
+
 async def split_video_if_needed(
     video_path: Path,
     max_size_mb: int = 45,
