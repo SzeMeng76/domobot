@@ -66,11 +66,11 @@ yfinance>=1.2.0  # Latest stable version as of Feb 2026
 pandas>=3.0.0  # Latest stable version as of Feb 2026
 
 # Social Media Parser (ParseHub) - 社交媒体解析功能
-parsehub>=2.0.1  # 社交媒体聚合解析器，支持20+平台 (2.0.1: VideoRef/ImageRef keyword-only args)
+parsehub~=2.0.2  # 社交媒体聚合解析器，支持20+平台 (2.0.2: removed ParseConfig, pass proxy/cookie directly)
 pytubefix @ git+https://github.com/SzeMeng76/pytubefix.git@main  # YouTube 下载库（fork修复cipher.py, ref: pytubefix#579）
 pillow>=12.1.1  # 图像处理库
-pillow-heif>=1.2.1  # HEIF/HEIC 图片格式支持
-lxml-html-clean>=0.4.3  # HTML 清理工具
+pillow-heif>=1.3.0  # HEIF/HEIC 图片格式支持
+lxml-html-clean>=0.4.4  # HTML 清理工具
 markdown>=3.10.2  # Markdown 转换器
 pyyaml>=6.0.3  # YAML配置文件解析
 tenacity>=9.1.4  # 重试机制（用于图床上传）
@@ -78,5 +78,5 @@ telegraph>=2.2.0  # Telegraph API 库（用于发布长文本）
 
 # AI Summary - Audio/Video Processing
 pydub>=0.25.1  # 音频切片（Whisper转录大文件）
-opencv-python-headless>=4.13.0  # 视频截图（转录失败时的fallback）
+opencv-python-headless>=4.13.0.92  # 视频截图（转录失败时的fallback）
 aiofiles>=25.1.0  # 异步文件读取（图片base64转换）

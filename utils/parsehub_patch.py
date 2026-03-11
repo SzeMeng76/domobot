@@ -46,8 +46,8 @@ def patch_parsehub_yt_dlp():
             params = self.params.copy()
 
             # Add proxy if configured
-            if self.cfg.proxy:
-                params["proxy"] = self.cfg.proxy
+            if self.proxy:
+                params["proxy"] = self.proxy
 
             # JavaScript runtime配置：
             # yt-dlp默认支持deno，会自动检测PATH中的deno
@@ -139,24 +139,24 @@ def patch_parsehub_yt_dlp():
 
             # 其他平台cookie处理（从ParseConfig传递）
             # 只有在cookiefile还没设置时才处理
-            if self.cfg.cookie and "cookiefile" not in params:
-                logger.info(f"🍪 [Patch] Received cookie type: {type(self.cfg.cookie)}, value preview: {str(self.cfg.cookie)[:100]}")
+            if self.cookie and "cookiefile" not in params:
+                logger.info(f"🍪 [Patch] Received cookie type: {type(self.cookie)}, value preview: {str(self.cookie)[:100]}")
                 # 检查cookie类型：文件路径或字符串
-                if isinstance(self.cfg.cookie, str):
-                    logger.info(f"🍪 [Patch] Cookie is string, checking if file exists: {self.cfg.cookie}")
+                if isinstance(self.cookie, str):
+                    logger.info(f"🍪 [Patch] Cookie is string, checking if file exists: {self.cookie}")
                     # 判断是文件路径还是cookie字符串
-                    if os.path.exists(self.cfg.cookie):
+                    if os.path.exists(self.cookie):
                         logger.info(f"🍪 [Patch] File exists! Setting cookiefile parameter")
                         # Netscape文件路径，直接使用
-                        params["cookiefile"] = self.cfg.cookie
-                        logger.info(f"🍪 [Patch] Using cookie file: {self.cfg.cookie}")
+                        params["cookiefile"] = self.cookie
+                        logger.info(f"🍪 [Patch] Using cookie file: {self.cookie}")
                     else:
                         # Bilibili/Twitter等cookie字符串，解析后写临时文件
-                        logger.info(f"🍪 [Patch] Parsing cookie string (len={len(self.cfg.cookie)})")
+                        logger.info(f"🍪 [Patch] Parsing cookie string (len={len(self.cookie)})")
 
                         # 解析cookie字符串为dict
                         cookie_dict = {}
-                        for item in self.cfg.cookie.split(';'):
+                        for item in self.cookie.split(';'):
                             item = item.strip()
                             if '=' in item:
                                 key, value = item.split('=', 1)
@@ -371,7 +371,7 @@ def patch_parsehub_yt_dlp():
         # the BiliAPI creation call in BiliParse, but that's complex.
         #
         # Instead, we rely on the fact that ParseConfig.cookie is accessible
-        # via self.cfg.cookie in BiliParse. We just need BiliParse to pass it.
+        # via self.cookie in BiliParse. We just need BiliParse to pass it.
         #
         # Since we can't easily modify the calling code, we make BiliAPI
         # read cookie from environment if not provided in __init__.
@@ -425,7 +425,7 @@ def patch_parsehub_yt_dlp():
 
             if USE_NEW_XHS_API:
                 # ParseHub 1.5.11+ uses new XHSAPI
-                xhs = XHSAPI(proxy=self.cfg.proxy)
+                xhs = XHSAPI(proxy=self.proxy)
                 try:
                     result = await xhs.extract(url)
                 except Exception as e:
@@ -441,7 +441,7 @@ def patch_parsehub_yt_dlp():
                         if media and media.url:
                             # Validate video URL before returning (check if accessible)
                             try:
-                                async with httpx.AsyncClient(timeout=10.0, proxy=self.cfg.proxy) as client:
+                                async with httpx.AsyncClient(timeout=10.0, proxy=self.proxy) as client:
                                     head_response = await client.head(media.url, follow_redirects=True)
                                     if head_response.status_code == 404:
                                         logger.warning(f"🌐 [Patch] XHS video URL returns 404, trying TikHub...")
@@ -475,7 +475,7 @@ def patch_parsehub_yt_dlp():
                             try:
                                 first_url = photos[0].url if hasattr(photos[0], 'url') else None
                                 if first_url:
-                                    async with httpx.AsyncClient(timeout=10.0, proxy=self.cfg.proxy) as client:
+                                    async with httpx.AsyncClient(timeout=10.0, proxy=self.proxy) as client:
                                         head_response = await client.head(first_url, follow_redirects=True)
                                         if head_response.status_code == 404:
                                             logger.warning(f"🌐 [Patch] XHS image URL returns 404, trying TikHub...")
@@ -548,7 +548,7 @@ def patch_parsehub_yt_dlp():
                 api_url = f"https://api.tikhub.io/api/v1/xiaohongshu/app/get_note_info_v2?note_id={note_id}"
                 headers = {"Authorization": f"Bearer {tikhub_api_key}"}
 
-                async with httpx.AsyncClient(timeout=30.0, proxy=self.cfg.proxy) as client:
+                async with httpx.AsyncClient(timeout=30.0, proxy=self.proxy) as client:
                     response = await client.get(api_url, headers=headers)
 
                 if response.status_code != 200:
@@ -910,8 +910,8 @@ def patch_parsehub_yt_dlp():
                 raise ValueError("Instagram帖子链接无效")
 
             # Pass cookie to _parse (FIX: original code doesn't pass cookie)
-            logger.info(f"✅ [Instagram] Passing cookie to _parse: {bool(self.cfg.cookie)}")
-            post = await self._parse(url, shortcode, self.cfg.cookie)
+            logger.info(f"✅ [Instagram] Passing cookie to _parse: {bool(self.cookie)}")
+            post = await self._parse(url, shortcode, self.cookie)
 
             try:
                 dimensions: dict = post._field("dimensions")
@@ -1003,13 +1003,13 @@ def patch_parsehub_yt_dlp():
         from parsehub import ParseHub
         original_parsehub_parse = ParseHub.parse
 
-        async def patched_parsehub_parse(self, url: str):
+        async def patched_parsehub_parse(self, url: str, *, proxy: str | None = None, cookie: str | dict | None = None):
             """Patched ParseHub.parse that skips get_raw_url for Facebook watch/?v= URLs"""
             parser = self._select_parser(url)
             if not parser:
                 raise ValueError("不支持的平台")
 
-            p = parser(config=self.config)
+            p = parser(proxy=proxy, cookie=cookie)
 
             # Check if this is a Facebook watch/?v= URL
             if isinstance(p, FacebookParse) and "?v=" in url:
