@@ -49,7 +49,6 @@ class ParseHubAdapter:
             if config.douyin_api:
                 GlobalConfig.douyin_api = config.douyin_api
                 logger.info(f"✅ 配置抖音API: {config.douyin_api}")
-            GlobalConfig.duration_limit = 0  # 不限制视频时长
 
             # 配置伪装User-Agent（绕过反爬虫）
             GlobalConfig.ua = (
