@@ -129,7 +129,10 @@ class AISummarizer:
             for img_b64 in image_results:
                 content.append({
                     "type": "image_url",
-                    "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"},
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{img_b64}",
+                        "detail": "low",
+                    },
                 })
 
             messages = [
@@ -261,25 +264,25 @@ def _video_to_screenshot(video_path: str) -> str:
     return output_path
 
 
-async def _image_to_base64(image_path: str) -> str:
-    """Convert image file to base64 string"""
+async def _image_to_base64(image_path: str, max_size: int = 512, quality: int = 70) -> str:
+    """Convert image file to compressed base64 string for AI consumption"""
     path = Path(image_path)
-    ext = path.suffix.lower()
 
-    if ext in (".png", ".jpeg", ".jpg", ".gif", ".webp"):
-        import aiofiles
-        async with aiofiles.open(str(path), "rb") as f:
-            content = await f.read()
-        return base64.b64encode(content).decode("utf-8")
-
-    # Convert unsupported formats (HEIC, etc.) to WEBP
-    def _convert():
+    def _compress():
         with Image.open(str(path)) as img:
-            if img.mode != "RGBA":
-                img = img.convert("RGBA")
+            # Strip EXIF metadata by converting mode
+            if img.mode in ("RGBA", "P", "LA"):
+                img = img.convert("RGB")
+            elif img.mode != "RGB":
+                img = img.convert("RGB")
+
+            # Resize if larger than max_size (512px matches OpenAI detail:low)
+            if img.width > max_size or img.height > max_size:
+                img.thumbnail((max_size, max_size), Image.LANCZOS)
+
             buf = io.BytesIO()
-            img.save(buf, format="WEBP")
+            img.save(buf, format="JPEG", quality=quality, optimize=True)
             return buf.getvalue()
 
-    data = await asyncio.to_thread(_convert)
+    data = await asyncio.to_thread(_compress)
     return base64.b64encode(data).decode("utf-8")
