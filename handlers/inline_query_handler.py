@@ -3,7 +3,7 @@
 Telegram Inline Query 处理器（完整版）
 
 允许用户在任何对话中通过 @botname 的方式调用机器人命令
-完整支持所有已注册命令，包括按钮交互
+完整支持所有已注册命令，直接返回结果（无需点击按钮）
 """
 
 import logging
@@ -11,8 +11,6 @@ from telegram import (
     Update,
     InlineQueryResultArticle,
     InputTextMessageContent,
-    InlineKeyboardMarkup,
-    InlineKeyboardButton
 )
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
@@ -37,6 +35,13 @@ class InlineQueryHandler:
         - @botname steam elden ring$     -> Steam 游戏价格查询
         """
         query = update.inline_query.query
+        # 清理查询字符串：去除不可见字符和标准化空格
+        query = query.strip()
+        # 移除零宽字符和其他不可见字符
+        query = ''.join(char for char in query if char.isprintable() or char.isspace())
+        # 标准化空格
+        query = ' '.join(query.split())
+
         user_id = update.inline_query.from_user.id
 
         # ========================================
@@ -94,8 +99,8 @@ class InlineQueryHandler:
         # 去掉触发后缀，准备执行命令
         command_text = query[:-len(self.trigger_suffix)].strip()
 
-        # 解析并创建结果
-        results = await self._create_command_results(command_text, user_id, context)
+        # 直接执行命令并返回结果
+        results = await self._execute_and_create_results(command_text, user_id, context)
 
         # 返回结果
         await update.inline_query.answer(results, cache_time=10)
@@ -131,7 +136,7 @@ class InlineQueryHandler:
 
 **注意:**
 • 命令末尾必须加 `$` 符号才会执行
-• 点击结果后会发送到当前对话
+• 点击结果后会直接显示查询结果
         """.strip()
 
         return [
@@ -156,13 +161,20 @@ class InlineQueryHandler:
         # 命令提示
         command_hints = {
             "rate": "💱 汇率转换 - 添加 $ 执行查询",
-            "weather": "🌤️ 天气查询 - 添加 $ 执行查询",
-            "steam": "🎮 Steam游戏 - 添加 $ 执行查询",
-            "netflix": "🎬 Netflix - 添加 $ 执行查询",
             "crypto": "₿ 加密货币 - 添加 $ 执行查询",
+            "finance": "📈 股票查询 - 添加 $ 执行查询",
+            "bin": "💳 BIN查询 - 添加 $ 执行查询",
+            "netflix": "🎬 Netflix - 添加 $ 执行查询",
+            "spotify": "🎵 Spotify - 添加 $ 执行查询",
+            "disney": "🎪 Disney+ - 添加 $ 执行查询",
+            "max": "📺 HBO Max - 添加 $ 执行查询",
+            "appleservices": "🍎 Apple服务 - 添加 $ 执行查询",
+            "appstore": "📱 App Store - 添加 $ 执行查询",
+            "weather": "🌤️ 天气查询 - 添加 $ 执行查询",
             "time": "🕐 时区查询 - 添加 $ 执行查询",
             "news": "📰 新闻 - 添加 $ 执行查询",
-            "movie": "🎬 影视 - 添加 $ 执行查询",
+            "whois": "🌐 域名查询 - 添加 $ 执行查询",
+            "cooking": "👨‍🍳 菜谱 - 添加 $ 执行查询",
         }
 
         hint = command_hints.get(command, f"💡 添加 '{self.trigger_suffix}' 执行命令")
@@ -179,14 +191,14 @@ class InlineQueryHandler:
             )
         ]
 
-    async def _create_command_results(self, command_text: str, user_id: int, context: ContextTypes.DEFAULT_TYPE) -> list:
+    async def _execute_and_create_results(self, command_text: str, user_id: int, context: ContextTypes.DEFAULT_TYPE) -> list:
         """
-        创建命令结果列表
+        直接执行命令并创建结果列表（不需要点击按钮）
         """
         # 分割命令和参数
         parts = command_text.split(None, 1)
         if not parts:
-            return self._get_help_results()
+            return self._get_help_results(context.bot.username or "bot")
 
         command = parts[0].lower()
         args = parts[1] if len(parts) > 1 else ""
@@ -194,143 +206,74 @@ class InlineQueryHandler:
         # 命令映射表（图标 + 标题 + 描述）
         command_info = {
             "rate": {"icon": "💱", "title": "汇率转换", "desc": "实时汇率查询"},
-            "weather": {"icon": "🌤️", "title": "天气查询", "desc": "天气预报和预警"},
-            "steam": {"icon": "🎮", "title": "Steam游戏", "desc": "游戏价格对比"},
-            "netflix": {"icon": "🎬", "title": "Netflix", "desc": "订阅价格"},
-            "disney": {"icon": "🎪", "title": "Disney+", "desc": "订阅价格"},
-            "spotify": {"icon": "🎵", "title": "Spotify", "desc": "订阅价格"},
-            "max": {"icon": "📺", "title": "HBO Max", "desc": "订阅价格"},
             "crypto": {"icon": "₿", "title": "加密货币", "desc": "实时币价"},
+            "finance": {"icon": "📈", "title": "股票查询", "desc": "股票信息"},
+            "bin": {"icon": "💳", "title": "BIN查询", "desc": "银行卡信息"},
+            "netflix": {"icon": "🎬", "title": "Netflix", "desc": "订阅价格"},
+            "spotify": {"icon": "🎵", "title": "Spotify", "desc": "订阅价格"},
+            "disney": {"icon": "🎪", "title": "Disney+", "desc": "订阅价格"},
+            "max": {"icon": "📺", "title": "HBO Max", "desc": "订阅价格"},
+            "appleservices": {"icon": "🍎", "title": "Apple服务", "desc": "订阅价格"},
+            "appstore": {"icon": "📱", "title": "App Store", "desc": "应用价格"},
+            "weather": {"icon": "🌤️", "title": "天气查询", "desc": "天气预报和预警"},
             "time": {"icon": "🕐", "title": "时区查询", "desc": "世界时间"},
             "news": {"icon": "📰", "title": "新闻", "desc": "最新资讯"},
-            "movie": {"icon": "🎬", "title": "影视", "desc": "电影电视剧"},
-            "appstore": {"icon": "📱", "title": "App Store", "desc": "应用价格"},
-            "googleplay": {"icon": "🤖", "title": "Google Play", "desc": "应用价格"},
-            "appleservices": {"icon": "🍎", "title": "Apple服务", "desc": "订阅价格"},
-            "cooking": {"icon": "👨‍🍳", "title": "菜谱", "desc": "烹饪指南"},
-            "bin": {"icon": "💳", "title": "BIN查询", "desc": "银行卡信息"},
             "whois": {"icon": "🌐", "title": "域名查询", "desc": "WHOIS信息"},
-            "map": {"icon": "🗺️", "title": "地图", "desc": "地理位置"},
-            "flight": {"icon": "✈️", "title": "航班", "desc": "航班信息"},
-            "hotel": {"icon": "🏨", "title": "酒店", "desc": "酒店查询"},
+            "cooking": {"icon": "👨‍🍳", "title": "菜谱", "desc": "烹饪指南"},
         }
 
         info = command_info.get(command, {"icon": "🔍", "title": command.upper(), "desc": "执行命令"})
 
-        # 构建 callback_data
-        # 格式: inline:command:args
-        callback_data = f"inline:{command}:{args}"
-
-        # 如果 callback_data 太长（超过64字节限制），使用短格式
-        if len(callback_data) > 64:
-            # 使用哈希或截断
-            import hashlib
-            args_hash = hashlib.md5(args.encode()).hexdigest()[:8]
-            callback_data = f"inline:{command}:{args_hash}"
-            # 将完整参数存储到 bot_data 中
-            context.bot_data[f"inline_args_{user_id}_{args_hash}"] = args
-
-        # 创建结果
-        results = [
-            InlineQueryResultArticle(
-                id=str(uuid4()),
-                title=f"{info['icon']} {info['title']}",
-                description=f"{info['desc']} - {args[:50]}..." if len(args) > 50 else (f"{info['desc']} - {args}" if args else info['desc']),
-                thumbnail_url=f"https://img.icons8.com/color/96/000000/search.png",
-                input_message_content=InputTextMessageContent(
-                    message_text=f"⏳ 正在查询 {info['icon']} {info['title']} {args}...\n\n请稍候...",
-                ),
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton(
-                        text=f"🔄 执行查询",
-                        callback_data=callback_data if len(callback_data) <= 64 else f"inline:{command}:_"
-                    )]
-                ])
-            )
-        ]
-
-        return results
-
-
-async def handle_inline_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    处理 inline query 回调按钮点击
-    当用户点击"执行查询"按钮时，真正执行命令
-    """
-    query = update.callback_query
-    await query.answer("正在处理...")
-
-    # 解析 callback_data
-    # 格式: inline:command:args
-    data = query.data
-    if not data.startswith("inline:"):
-        return
-
-    parts = data.split(":", 2)
-    if len(parts) < 2:
-        return
-
-    command = parts[1]
-    args = parts[2] if len(parts) >= 3 else ""
-
-    # 如果 args 是 hash，从 bot_data 中恢复
-    user_id = query.from_user.id
-    if args.startswith("_") or (len(args) == 8 and args != args.lower()):
-        stored_args = context.bot_data.get(f"inline_args_{user_id}_{args}")
-        if stored_args:
-            args = stored_args
-
-    try:
-        # 显示"正在处理"消息
-        await query.edit_message_text(
-            text=f"⏳ 正在执行命令: `/{command} {args}`\n\n请稍候...",
-            parse_mode=ParseMode.MARKDOWN
-        )
-
-        # 使用命令适配器执行命令
-        from utils.inline_command_adapter import InlineCommandAdapter
-
-        adapter = InlineCommandAdapter(context)
-        result_text, parse_mode, reply_markup = await adapter.execute_command(command, args)
-
-        # 更新消息显示结果
-        await query.edit_message_text(
-            text=result_text,
-            parse_mode=parse_mode,
-            reply_markup=reply_markup
-        )
-
-        # 清理临时数据
-        if args and len(args) == 8:
-            context.bot_data.pop(f"inline_args_{user_id}_{args}", None)
-
-    except Exception as e:
-        logger.error(f"执行 inline callback 失败: {e}", exc_info=True)
         try:
-            await query.edit_message_text(
-                text=f"❌ 执行命令时出错\n\n错误: {str(e)}\n\n💡 请在私聊中使用 `/{command} {args}` 重试",
-                parse_mode=ParseMode.MARKDOWN
-            )
-        except:
-            pass
+            # 使用命令适配器执行命令
+            from utils.inline_command_adapter import InlineCommandAdapter
+
+            adapter = InlineCommandAdapter(context)
+            result_text, parse_mode, reply_markup = await adapter.execute_command(command, args)
+
+            # 创建结果
+            results = [
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title=f"{info['icon']} {info['title']}",
+                    description=f"{info['desc']} - {args[:50]}..." if len(args) > 50 else (f"{info['desc']} - {args}" if args else info['desc']),
+                    thumbnail_url=f"https://img.icons8.com/color/96/000000/checkmark.png",
+                    input_message_content=InputTextMessageContent(
+                        message_text=result_text,
+                        parse_mode=parse_mode
+                    ),
+                    reply_markup=reply_markup
+                )
+            ]
+
+            return results
+
+        except Exception as e:
+            logger.error(f"执行 inline 命令 {command} 失败: {e}", exc_info=True)
+            # 返回错误结果
+            return [
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title=f"❌ 执行失败",
+                    description=f"命令: {command} {args}",
+                    thumbnail_url=f"https://img.icons8.com/color/96/000000/error.png",
+                    input_message_content=InputTextMessageContent(
+                        message_text=f"❌ 执行命令时出错\n\n错误: {str(e)}\n\n💡 请在私聊中使用 `/{command} {args}` 重试",
+                        parse_mode=ParseMode.MARKDOWN
+                    ),
+                )
+            ]
 
 
 async def setup_inline_query_handler(application) -> None:
     """设置 inline query 处理器"""
     from telegram.ext import InlineQueryHandler as TelegramInlineQueryHandler
-    from telegram.ext import CallbackQueryHandler
 
     handler = InlineQueryHandler()
 
     # 注册 inline query 处理器
     application.add_handler(
         TelegramInlineQueryHandler(handler.handle_inline_query)
-    )
-
-    # 注册 inline callback 处理器（处理用户点击"执行"按钮）
-    # 直接添加到 application，而不是通过 command_factory
-    application.add_handler(
-        CallbackQueryHandler(handle_inline_callback, pattern="^inline:")
     )
 
     logger.info("✅ Inline Query 处理器已注册")
