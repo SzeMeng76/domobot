@@ -235,14 +235,20 @@ async def handle_inline_parse_chosen(
             content = _format_text(parse_result.content)
             caption_parts.append(escape_html(content))
 
-        caption = "\n\n".join(caption_parts) if caption_parts else "无标题"
-        caption += f'\n\n<b>🔗 <a href="{url}">原链接</a></b>'
+        # 先构建内容部分（不含链接）
+        content_text = "\n\n".join(caption_parts) if caption_parts else "无标题"
 
-        # Telegram caption 限制 1024 字符，必须严格控制在1020以内
-        if len(caption) > 1020:
-            link_part = f'\n\n<b>🔗 <a href="{url}">原链接</a></b>'
-            max_content_len = 1000 - len(link_part)
-            caption = caption[:max_content_len] + "..." + link_part
+        # 链接部分
+        link_part = f'\n\n<b>🔗 <a href="{url}">原链接</a></b>'
+
+        # Telegram caption 限制 1024 字符，必须严格控制
+        max_total_len = 1020
+        max_content_len = max_total_len - len(link_part)
+
+        if len(content_text) > max_content_len:
+            content_text = content_text[:max_content_len - 3] + "..."
+
+        caption = content_text + link_part
 
 
         # 根据类型处理（只处理视频和混合媒体中的视频）
