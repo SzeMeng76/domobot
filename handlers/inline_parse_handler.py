@@ -581,11 +581,8 @@ async def _handle_video_inline(
 
             from telegram import InputMediaVideo
 
-            # 获取缩略图（如果有的话）
-            thumb_url = getattr(parse_result.media, 'thumb_url', None) if hasattr(parse_result, 'media') else None
-
             with open(video_path, 'rb') as video_file:
-                # 构建 InputMediaVideo 参数
+                # 构建 InputMediaVideo 参数（不传 thumbnail，让 Telegram 自动生成）
                 media_kwargs = {
                     "media": video_file,
                     "caption": caption,
@@ -595,9 +592,6 @@ async def _handle_video_inline(
                     "duration": media.duration or 0,
                     "supports_streaming": True,
                 }
-                # 只有当 thumb_url 存在且不为空时才添加
-                if thumb_url:
-                    media_kwargs["thumbnail"] = thumb_url
 
                 result = await context.bot.edit_message_media(
                     inline_message_id=inline_message_id,
