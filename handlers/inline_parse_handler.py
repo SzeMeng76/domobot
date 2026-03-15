@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 from uuid import uuid4
 
-from telegram import Update, InlineQueryResultArticle, InlineQueryResultPhoto, InputTextMessageContent, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, InlineQueryResultArticle, InlineQueryResultPhoto, InlineQueryResultCachedVideo, InlineQueryResultCachedPhoto, InputTextMessageContent, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
@@ -21,6 +21,40 @@ logger = logging.getLogger(__name__)
 _parse_cache: Dict[str, Dict[str, Any]] = {}
 _cache_timestamps: Dict[str, float] = {}
 CACHE_TTL = 300  # 5分钟
+
+
+def _build_cached_inline_results(cached_data: dict, url: str) -> list:
+    """使用file_id缓存构建inline结果（直接使用Telegram服务器上的文件）"""
+    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔗 原链接", url=url)]])
+
+    file_id = cached_data.get("file_id")
+    file_type = cached_data.get("file_type", "video")
+    title = cached_data.get("title", "无标题")[:60]
+    caption = cached_data.get("caption", "")
+
+    if file_type == "video":
+        return [
+            InlineQueryResultCachedVideo(
+                id=str(uuid4()),
+                video_file_id=file_id,
+                title=f"🎬 {title}",
+                caption=caption,
+                reply_markup=keyboard,
+            )
+        ]
+    elif file_type == "photo":
+        return [
+            InlineQueryResultCachedPhoto(
+                id=str(uuid4()),
+                photo_file_id=file_id,
+                title=f"🖼️ {title}",
+                caption=caption,
+                reply_markup=keyboard,
+            )
+        ]
+    else:
+        # 未知类型，返回普通结果
+        return []
 
 
 def _clean_expired_cache():
@@ -67,6 +101,31 @@ async def handle_inline_parse_query(
                 ),
             )
         ]
+
+    # 提取原始URL
+    url = await parse_adapter._extract_url(query)
+    if not url:
+        return [
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title="❌ 未找到有效URL",
+                description=query[:50],
+                input_message_content=InputTextMessageContent(
+                    message_text="❌ 未找到有效的URL"
+                ),
+            )
+        ]
+
+    # 检查file_id缓存
+    cache_manager = context.bot_data.get("cache_manager")
+    if cache_manager:
+        try:
+            cached_data = await cache_manager.get(url, subdirectory="inline_parse")
+            if cached_data:
+                logger.info(f"[Inline Parse] file_id缓存命中: {url[:50]}...")
+                return _build_cached_inline_results(cached_data, url)
+        except Exception as e:
+            logger.warning(f"[Inline Parse] 读取file_id缓存失败: {e}")
 
     # 检查是否支持该 URL
     is_supported = await parse_adapter.check_url_supported(query)
@@ -372,17 +431,17 @@ async def handle_inline_parse_chosen(
 
         caption_parts = []
         if parse_result.title:
-            caption_parts.append(escape_html(parse_result.title))
+            caption_parts.append(f"<b>{escape_html(parse_result.title)}</b>")
         if parse_result.content:
             content = _format_text(parse_result.content)
             caption_parts.append(escape_html(content))
 
         caption = "\n\n".join(caption_parts) if caption_parts else "无标题"
-        caption += f"\n\n🔗 原链接: {url}"
+        caption += f'\n\n<b>🔗 <a href="{url}">原链接</a></b>'
 
         # Telegram caption 限制 1024 字符，必须严格控制在1020以内
         if len(caption) > 1020:
-            link_part = f"\n\n🔗 原链接: {url}"
+            link_part = f'\n\n<b>🔗 <a href="{url}">原链接</a></b>'
             max_content_len = 1000 - len(link_part)
             caption = caption[:max_content_len] + "..." + link_part
 
@@ -513,11 +572,8 @@ async def _handle_video_inline(
 
             from telegram import InputMediaVideo
 
-            # 获取缩略图
-            thumb_url = getattr(parse_result.media, 'thumb_url', None)
-
             with open(video_path, 'rb') as video_file:
-                await context.bot.edit_message_media(
+                result = await context.bot.edit_message_media(
                     inline_message_id=inline_message_id,
                     media=InputMediaVideo(
                         media=video_file,
@@ -526,10 +582,28 @@ async def _handle_video_inline(
                         width=media.width or 0,
                         height=media.height or 0,
                         duration=media.duration or 0,
-                        thumbnail=thumb_url,
                         supports_streaming=True,
                     ),
                 )
+
+                # 保存file_id到缓存
+                if result and hasattr(result, 'video') and result.video:
+                    cache_manager = context.bot_data.get("cache_manager")
+                    if cache_manager:
+                        try:
+                            await cache_manager.set(
+                                url,
+                                {
+                                    "file_id": result.video.file_id,
+                                    "file_type": "video",
+                                    "title": parse_result.title or "无标题",
+                                    "caption": caption,
+                                },
+                                subdirectory="inline_parse"
+                            )
+                            logger.info(f"[Inline Parse] 已保存file_id到缓存: {url[:50]}...")
+                        except Exception as e:
+                            logger.warning(f"[Inline Parse] 保存file_id失败: {e}")
         else:
             # >50MB → 上传到图床
             await context.bot.edit_message_caption(

@@ -90,6 +90,7 @@ class RedisCacheManager:
             "map": self.config.map_cache_duration,  # 30分钟，地图服务缓存
             "flights": self.config.flight_cache_duration,  # 1小时，航班服务缓存
             "hotels": self.config.hotel_cache_duration,  # 1小时，酒店服务缓存
+            "inline_parse": 86400 * 7,  # 7天，inline parse file_id缓存
         }
 
         # 对于搜索结果特殊处理
