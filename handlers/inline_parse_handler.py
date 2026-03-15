@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 from uuid import uuid4
 
-from telegram import Update, InlineQueryResultArticle, InputTextMessageContent
+from telegram import Update, InlineQueryResultArticle, InputTextMessageContent, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
@@ -141,6 +141,9 @@ async def handle_inline_parse_query(
             }
             _cache_timestamps[result_id] = time.time()
 
+            # 添加一个占位 inline keyboard 以确保获得 inline_message_id
+            keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("⏳ 处理中...", callback_data="processing")]])
+
             return [
                 InlineQueryResultArticle(
                     id=result_id,
@@ -150,6 +153,7 @@ async def handle_inline_parse_query(
                     input_message_content=InputTextMessageContent(
                         message_text="⏳ 正在发布到 Telegraph..."
                     ),
+                    reply_markup=keyboard,
                 )
             ]
         elif isinstance(parse_result, (VideoParseResult, ImageParseResult, MultimediaParseResult)):
@@ -164,6 +168,9 @@ async def handle_inline_parse_query(
             }
             _cache_timestamps[result_id] = time.time()
 
+            # 添加一个占位 inline keyboard 以确保获得 inline_message_id
+            keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("⏳ 处理中...", callback_data="processing")]])
+
             return [
                 InlineQueryResultArticle(
                     id=result_id,
@@ -173,6 +180,7 @@ async def handle_inline_parse_query(
                     input_message_content=InputTextMessageContent(
                         message_text="⏳ 下载中..."
                     ),
+                    reply_markup=keyboard,
                 )
             ]
         else:
@@ -251,8 +259,6 @@ async def handle_inline_parse_chosen(
         from parsehub.types import VideoParseResult, ImageParseResult, RichTextParseResult, MultimediaParseResult
         from commands.social_parser import _escape_markdown, _format_text
 
-        logger.info(f"[Inline Parse] 开始处理: type={type(parse_result).__name__}, url={url}")
-
         # 构建 caption
         caption_parts = []
         if parse_result.title:
@@ -266,25 +272,21 @@ async def handle_inline_parse_chosen(
         # 根据类型处理
         if isinstance(parse_result, RichTextParseResult):
             # 富文本 → Telegraph
-            logger.info(f"[Inline Parse] 处理富文本")
             await _handle_richtext_inline(
                 context, inline_message_id, parse_result, parse_adapter, caption, url
             )
         elif isinstance(parse_result, VideoParseResult):
             # 视频
-            logger.info(f"[Inline Parse] 处理视频")
             await _handle_video_inline(
                 context, inline_message_id, parse_result, parse_adapter, caption, url
             )
         elif isinstance(parse_result, ImageParseResult):
             # 图片
-            logger.info(f"[Inline Parse] 处理图片")
             await _handle_image_inline(
                 context, inline_message_id, parse_result, parse_adapter, caption, url
             )
         elif isinstance(parse_result, MultimediaParseResult):
             # 混合媒体（暂不支持 inline，提示用户使用 /parse）
-            logger.info(f"[Inline Parse] 混合媒体，不支持 inline")
             await context.bot.edit_message_text(
                 inline_message_id=inline_message_id,
                 text=f"{caption}\n\n⚠️ 混合媒体暂不支持 inline 模式\n💡 请使用 `/parse {url}` 命令获取完整内容",
@@ -292,14 +294,11 @@ async def handle_inline_parse_chosen(
             )
         else:
             # 其他类型
-            logger.info(f"[Inline Parse] 其他类型: {type(parse_result).__name__}")
             await context.bot.edit_message_text(
                 inline_message_id=inline_message_id,
                 text=caption,
                 parse_mode=ParseMode.MARKDOWN_V2
             )
-
-        logger.info(f"[Inline Parse] 处理完成")
 
     except Exception as e:
         logger.error(f"[Inline Parse] 处理失败: {e}", exc_info=True)
@@ -374,15 +373,11 @@ async def _handle_video_inline(
 ) -> None:
     """处理视频 inline 结果"""
     try:
-        logger.info(f"[Video Inline] 开始处理视频")
-
         # 更新状态
         await context.bot.edit_message_text(
             inline_message_id=inline_message_id,
             text="📥 下载中..."
         )
-
-        logger.info(f"[Video Inline] 开始下载")
 
         # 下载视频
         download_result = await parse_result.download(
@@ -390,10 +385,7 @@ async def _handle_video_inline(
             proxy=parse_adapter.config.downloader_proxy if parse_adapter.config else None
         )
 
-        logger.info(f"[Video Inline] 下载完成: download_result={download_result}, has_media={download_result.media if download_result else None}")
-
         if not download_result or not download_result.media:
-            logger.warning(f"[Video Inline] 下载失败：没有媒体文件")
             await context.bot.edit_message_text(
                 inline_message_id=inline_message_id,
                 text=f"{caption}\n\n❌ 下载失败",
@@ -404,16 +396,11 @@ async def _handle_video_inline(
         media = download_result.media
         video_path = Path(media.path)
 
-        logger.info(f"[Video Inline] 视频路径: {video_path}, 存在: {video_path.exists()}")
-
         # 检查文件大小
         from utils.video_splitter import ensure_h264
 
-        logger.info(f"[Video Inline] 检查 H264 编码")
         video_path = Path(await ensure_h264(str(video_path)))
         video_size_mb = video_path.stat().st_size / (1024 * 1024)
-
-        logger.info(f"[Video Inline] 视频大小: {video_size_mb:.1f}MB")
 
         if video_size_mb <= 50:
             # ≤50MB → 直接上传
