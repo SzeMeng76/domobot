@@ -423,20 +423,23 @@ async def handle_inline_parse_chosen(
         from parsehub.types import VideoParseResult, ImageParseResult, RichTextParseResult, MultimediaParseResult
         from commands.social_parser import _escape_markdown, _format_text
 
-        # 构建 caption（不使用 HTML 格式，避免解析问题）
+        # 构建 caption（使用 HTML 格式）
+        from html import escape as html_escape
+
         caption_parts = []
         if parse_result.title:
-            caption_parts.append(parse_result.title)
+            caption_parts.append(f"<b>{html_escape(parse_result.title)}</b>")
 
         if parse_result.content:
             content = _format_text(parse_result.content)
-            caption_parts.append(content)
+            caption_parts.append(html_escape(content))
 
         # 先构建内容部分（不含链接）
         content_text = "\n\n".join(caption_parts) if caption_parts else "无标题"
 
-        # 链接部分（纯文本）
-        link_part = f'\n\n🔗 原链接: {url}'
+        # 链接部分（URL 也需要转义）
+        escaped_url = html_escape(url)
+        link_part = f'\n\n<b>🔗 <a href="{escaped_url}">原链接</a></b>'
 
         # Telegram caption 限制 1024 字节（不是字符！），必须严格控制
         max_total_bytes = 1020
@@ -571,7 +574,8 @@ async def _handle_video_inline(
         video_size_mb = video_path.stat().st_size / (1024 * 1024)
 
         if video_size_mb <= 50:
-            # ≤50MB → 直接上传（替换照片为视频）
+            # Inline message 不能直接上传新文件，需要先发送到临时位置获取 file_id
+            # 先发送视频到 bot 自己的聊天获取 file_id
             await context.bot.edit_message_caption(
                 inline_message_id=inline_message_id,
                 caption=f"📤 上传中... ({video_size_mb:.1f}MB)"
@@ -579,21 +583,37 @@ async def _handle_video_inline(
 
             from telegram import InputMediaVideo
 
+            # 发送到 bot 自己获取 file_id
+            bot_user = await context.bot.get_me()
             with open(video_path, 'rb') as video_file:
-                # 构建 InputMediaVideo 参数（不使用 parse_mode）
-                media_kwargs = {
-                    "media": video_file,
-                    "caption": caption,
-                    "width": media.width or 0,
-                    "height": media.height or 0,
-                    "duration": media.duration or 0,
-                    "supports_streaming": True,
-                }
-
-                result = await context.bot.edit_message_media(
-                    inline_message_id=inline_message_id,
-                    media=InputMediaVideo(**media_kwargs),
+                sent_message = await context.bot.send_video(
+                    chat_id=bot_user.id,
+                    video=video_file,
+                    width=media.width or 0,
+                    height=media.height or 0,
+                    duration=media.duration or 0,
+                    supports_streaming=True,
                 )
+
+            # 使用获取到的 file_id 来编辑 inline message
+            result = await context.bot.edit_message_media(
+                inline_message_id=inline_message_id,
+                media=InputMediaVideo(
+                    media=sent_message.video.file_id,
+                    caption=caption,
+                    parse_mode=ParseMode.HTML,
+                    width=media.width or 0,
+                    height=media.height or 0,
+                    duration=media.duration or 0,
+                    supports_streaming=True,
+                ),
+            )
+
+            # 删除临时消息
+            try:
+                await context.bot.delete_message(chat_id=bot_user.id, message_id=sent_message.message_id)
+            except Exception:
+                pass
 
                 # 保存file_id到缓存
                 if result and hasattr(result, 'video') and result.video:
