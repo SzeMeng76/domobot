@@ -355,15 +355,23 @@ async def handle_inline_parse_chosen(
         # 构建 caption
         caption_parts = []
         if parse_result.title:
-            caption_parts.append(f"**{_escape_markdown(parse_result.title)}**")
+            # 标题限制在100字符以内
+            title = parse_result.title[:100] if len(parse_result.title) > 100 else parse_result.title
+            caption_parts.append(f"**{_escape_markdown(title)}**")
         if parse_result.content:
-            caption_parts.append(_escape_markdown(_format_text(parse_result.content)))
+            # 内容限制在400字符以内（转义后约800字符）
+            content = _format_text(parse_result.content)
+            content = content[:400] if len(content) > 400 else content
+            caption_parts.append(_escape_markdown(content))
 
         caption = "\n\n".join(caption_parts) if caption_parts else "无标题"
         caption += f"\n\n🔗 [原链接]({url})"
 
         # Telegram caption 限制 1024 字符，需要截断
-        if len(caption) > 1000:
+        if len(caption) > 1020:
+            link_part = f"\n\n🔗 [原链接]({url})"
+            max_content_len = 1020 - len(link_part) - 10
+            caption = caption[:max_content_len] + "..." + link_part
             caption = caption[:950] + "\\.\\.\\.\n\n🔗 [原链接](" + url + ")"
 
         # 根据类型处理（只处理视频和混合媒体中的视频）
