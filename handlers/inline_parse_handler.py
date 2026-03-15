@@ -575,7 +575,7 @@ async def _handle_video_inline(
         video_path = Path(await ensure_h264(str(video_path)))
         video_size_mb = video_path.stat().st_size / (1024 * 1024)
 
-        if video_size_mb <= 2048:  # 2GB limit for Telegram Bot API
+        if video_size_mb <= 50:  # 50MB limit for Bot API via HTTPS (2GB requires local Bot API server)
             # Inline message 不能直接上传新文件，需要先发送到临时位置获取 file_id
             # 先发送视频到 bot 自己的聊天获取 file_id
             await context.bot.edit_message_caption(
@@ -605,6 +605,9 @@ async def _handle_video_inline(
                     height=media.height or 0,
                     duration=media.duration or 0,
                     supports_streaming=True,
+                    read_timeout=300,
+                    write_timeout=300,
+                    connect_timeout=30
                 )
 
             # 使用获取到的 file_id 来编辑 inline message
@@ -646,7 +649,7 @@ async def _handle_video_inline(
                         except Exception as e:
                             logger.warning(f"[Inline Parse] 保存file_id失败: {e}")
         else:
-            # >2GB → 上传到图床
+            # >50MB → 上传到图床
             await context.bot.edit_message_caption(
                 inline_message_id=inline_message_id,
                 caption=f"📤 视频过大 ({video_size_mb:.1f}MB)，上传到图床中..."
