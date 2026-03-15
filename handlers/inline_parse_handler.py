@@ -423,33 +423,16 @@ async def handle_inline_parse_chosen(
         from parsehub.types import VideoParseResult, ImageParseResult, RichTextParseResult, MultimediaParseResult
         from commands.social_parser import _escape_markdown, _format_text
 
-        # 构建 caption（简化处理：遇到需要转义的字符就截断）
-        def needs_escape(text):
-            """检查文本是否包含需要 HTML 转义的字符"""
-            if not text:
-                return False
-            return any(c in text for c in ['<', '>', '&'])
+        # 构建 caption（使用标准库的 html.escape）
+        from html import escape as html_escape
 
         caption_parts = []
         if parse_result.title:
-            title = parse_result.title
-            # 如果标题包含需要转义的字符，截断到该字符之前
-            if needs_escape(title):
-                for i, c in enumerate(title):
-                    if c in ['<', '>', '&']:
-                        title = title[:i]
-                        break
-            caption_parts.append(f"<b>{title}</b>")
+            caption_parts.append(f"<b>{html_escape(parse_result.title)}</b>")
 
         if parse_result.content:
             content = _format_text(parse_result.content)
-            # 如果内容包含需要转义的字符，截断到该字符之前
-            if needs_escape(content):
-                for i, c in enumerate(content):
-                    if c in ['<', '>', '&']:
-                        content = content[:i]
-                        break
-            caption_parts.append(content)
+            caption_parts.append(html_escape(content))
 
         # 先构建内容部分（不含链接）
         content_text = "\n\n".join(caption_parts) if caption_parts else "无标题"
