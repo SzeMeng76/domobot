@@ -423,23 +423,20 @@ async def handle_inline_parse_chosen(
         from parsehub.types import VideoParseResult, ImageParseResult, RichTextParseResult, MultimediaParseResult
         from commands.social_parser import _escape_markdown, _format_text
 
-        # 构建 caption（使用标准库的 html.escape）
-        from html import escape as html_escape
-
+        # 构建 caption（不使用 HTML 格式，避免解析问题）
         caption_parts = []
         if parse_result.title:
-            caption_parts.append(f"<b>{html_escape(parse_result.title)}</b>")
+            caption_parts.append(parse_result.title)
 
         if parse_result.content:
             content = _format_text(parse_result.content)
-            caption_parts.append(html_escape(content))
+            caption_parts.append(content)
 
         # 先构建内容部分（不含链接）
         content_text = "\n\n".join(caption_parts) if caption_parts else "无标题"
 
-        # 链接部分（URL 也需要转义）
-        escaped_url = html_escape(url)
-        link_part = f'\n\n<b>🔗 <a href="{escaped_url}">原链接</a></b>'
+        # 链接部分（纯文本）
+        link_part = f'\n\n🔗 原链接: {url}'
 
         # Telegram caption 限制 1024 字节（不是字符！），必须严格控制
         max_total_bytes = 1020
@@ -583,11 +580,10 @@ async def _handle_video_inline(
             from telegram import InputMediaVideo
 
             with open(video_path, 'rb') as video_file:
-                # 构建 InputMediaVideo 参数（不传 thumbnail，让 Telegram 自动生成）
+                # 构建 InputMediaVideo 参数（不使用 parse_mode）
                 media_kwargs = {
                     "media": video_file,
                     "caption": caption,
-                    "parse_mode": ParseMode.HTML,
                     "width": media.width or 0,
                     "height": media.height or 0,
                     "duration": media.duration or 0,
