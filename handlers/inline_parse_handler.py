@@ -157,8 +157,8 @@ async def handle_inline_parse_query(
                 )
             ]
         elif isinstance(parse_result, VideoParseResult):
-            # 视频 → 返回缩略图照片，点击后下载并替换成视频
-            result_id = f"parse_media_{uuid4()}"
+            # 视频 → 返回缩略图照片，用户选择后自动下载并替换成视频
+            result_id = f"parse_video_{uuid4()}"
             # 缓存解析结果（使用 result_id）
             _parse_cache[result_id] = {
                 "url": url,
@@ -233,7 +233,7 @@ async def handle_inline_parse_query(
                         )
                     )
                 elif isinstance(media_item, (VideoRef, AniRef)):
-                    # 视频/动画 → 返回照片（缩略图），点击后下载
+                    # 视频/动画 → 返回照片（缩略图），用户选择后自动下载
                     result_id = f"parse_video_{uuid4()}"
                     # 缓存解析结果（使用 result_id，包含 media_index）
                     _parse_cache[result_id] = {
