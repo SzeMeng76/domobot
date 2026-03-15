@@ -362,6 +362,10 @@ async def handle_inline_parse_chosen(
         caption = "\n\n".join(caption_parts) if caption_parts else "无标题"
         caption += f"\n\n🔗 [原链接]({url})"
 
+        # Telegram caption 限制 1024 字符，需要截断
+        if len(caption) > 1000:
+            caption = caption[:950] + "\\.\\.\\.\n\n🔗 [原链接](" + url + ")"
+
         # 根据类型处理（只处理视频和混合媒体中的视频）
         if isinstance(parse_result, (VideoParseResult, ImageParseResult, MultimediaParseResult)):
             # 视频/混合媒体中的视频
