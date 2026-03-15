@@ -658,20 +658,19 @@ async def _handle_video_inline(
             image_host_url = await parse_adapter.upload_to_image_host(video_path)
 
             if image_host_url:
-                # 图床成功
-                size_text = f"{video_size_mb:.1f}".replace(".", "\\.")
+                # 图床成功 - 使用纯文本格式避免转义问题
+                from html import escape as html_escape
+                plain_caption = f"{parse_result.title or '无标题'}\n\n⚠️ 视频文件过大 ({video_size_mb:.1f}MB)\n📤 已上传到图床\n🔗 点击查看视频: {image_host_url}\n\n原链接: {url}"
                 await context.bot.edit_message_caption(
                     inline_message_id=inline_message_id,
-                    caption=f"{caption}\n\n⚠️ 视频文件过大 \\({size_text}MB\\)\n📤 已上传到图床\n🔗 [点击查看视频]({image_host_url})",
-                    parse_mode=ParseMode.MARKDOWN_V2
+                    caption=plain_caption
                 )
             else:
-                # 图床失败
-                size_text = f"{video_size_mb:.1f}".replace(".", "\\.")
+                # 图床失败 - 使用纯文本格式
+                plain_caption = f"{parse_result.title or '无标题'}\n\n⚠️ 视频文件过大 ({video_size_mb:.1f}MB)，无法上传\n💡 请使用 /parse 命令获取完整视频\n\n原链接: {url}"
                 await context.bot.edit_message_caption(
                     inline_message_id=inline_message_id,
-                    caption=f"{caption}\n\n⚠️ 视频文件过大 \\({size_text}MB\\)，无法上传\n💡 请使用 `/parse {url}` 命令获取完整视频",
-                    parse_mode=ParseMode.MARKDOWN_V2
+                    caption=plain_caption
                 )
 
         # 清理临时文件
