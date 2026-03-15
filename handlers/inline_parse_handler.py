@@ -437,8 +437,9 @@ async def handle_inline_parse_chosen(
         # 先构建内容部分（不含链接）
         content_text = "\n\n".join(caption_parts) if caption_parts else "无标题"
 
-        # 链接部分
-        link_part = f'\n\n<b>🔗 <a href="{url}">原链接</a></b>'
+        # 链接部分（URL 也需要转义）
+        escaped_url = html_escape(url)
+        link_part = f'\n\n<b>🔗 <a href="{escaped_url}">原链接</a></b>'
 
         # Telegram caption 限制 1024 字节（不是字符！），必须严格控制
         max_total_bytes = 1020
