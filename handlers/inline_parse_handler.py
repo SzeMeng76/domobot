@@ -583,11 +583,11 @@ async def _handle_video_inline(
 
             from telegram import InputMediaVideo
 
-            # 发送到 bot 自己获取 file_id
-            bot_user = await context.bot.get_me()
+            # 发送到临时频道获取 file_id
+            TEMP_STORAGE_CHAT_ID = -1002483865800
             with open(video_path, 'rb') as video_file:
                 sent_message = await context.bot.send_video(
-                    chat_id=bot_user.id,
+                    chat_id=TEMP_STORAGE_CHAT_ID,
                     video=video_file,
                     width=media.width or 0,
                     height=media.height or 0,
@@ -611,7 +611,7 @@ async def _handle_video_inline(
 
             # 删除临时消息
             try:
-                await context.bot.delete_message(chat_id=bot_user.id, message_id=sent_message.message_id)
+                await context.bot.delete_message(chat_id=TEMP_STORAGE_CHAT_ID, message_id=sent_message.message_id)
             except Exception:
                 pass
 
