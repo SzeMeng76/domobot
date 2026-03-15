@@ -442,12 +442,17 @@ async def handle_inline_parse_chosen(
         # 链接部分
         link_part = f'\n\n<b>🔗 <a href="{url}">原链接</a></b>'
 
-        # Telegram caption 限制 1024 字符，必须严格控制
-        max_total_len = 1020
-        max_content_len = max_total_len - len(link_part)
+        # Telegram caption 限制 1024 字节（不是字符！），必须严格控制
+        max_total_bytes = 1020
+        link_bytes = len(link_part.encode('utf-8'))
+        max_content_bytes = max_total_bytes - link_bytes
 
-        if len(content_text) > max_content_len:
-            content_text = content_text[:max_content_len - 3] + "..."
+        # 按字节截断内容
+        content_bytes = content_text.encode('utf-8')
+        if len(content_bytes) > max_content_bytes:
+            # 截断到安全长度，避免截断到多字节字符中间
+            safe_bytes = max_content_bytes - 10  # 留出 "..." 和安全边界
+            content_text = content_bytes[:safe_bytes].decode('utf-8', errors='ignore') + "..."
 
         caption = content_text + link_part
 
