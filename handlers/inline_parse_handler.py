@@ -115,11 +115,14 @@ async def handle_inline_parse_query(
                 )
             ]
 
+        # 记录解析结果类型
+        logger.info(f"[Inline Parse] URL: {url[:50]}... | 类型: {type(parse_result).__name__} | 标题: {parse_result.title[:30] if parse_result.title else 'None'}")
+
         # 构建 inline 结果
         from parsehub.types import VideoParseResult, ImageParseResult, RichTextParseResult, MultimediaParseResult
 
-        title = parse_result.title or "无标题"
-        description = parse_result.content[:100] if parse_result.content else "点击下载"
+        title = (parse_result.title or "无标题")[:60]  # Telegram限制64字符
+        description = (parse_result.content or "点击下载")[:100]
 
         # 获取缩略图
         thumb_url = None
@@ -167,13 +170,13 @@ async def handle_inline_parse_query(
             }
             _cache_timestamps[result_id] = time.time()
 
-            # 构建 caption
+            # 构建 caption（用于inline结果预览）
             caption_parts = []
             if parse_result.title:
                 caption_parts.append(parse_result.title)
             if parse_result.content:
                 caption_parts.append(parse_result.content[:100])
-            caption_text = "\\n\\n".join(caption_parts) if caption_parts else "⏳ 下载中..."
+            caption_text = "\n\n".join(caption_parts) if caption_parts else "⏳ 下载中..."
 
             # 添加原链接按钮
             keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔗 原链接", url=url)]])
@@ -270,7 +273,16 @@ async def handle_inline_parse_query(
                         )
                     )
 
-            return results
+            return results if results else [
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title="❌ 无可用媒体",
+                    description="该内容没有可显示的图片或视频",
+                    input_message_content=InputTextMessageContent(
+                        message_text=f"❌ 无可用媒体\n\n{title}\n\n🔗 原链接: {url}"
+                    ),
+                )
+            ]
         else:
             return [
                 InlineQueryResultArticle(
@@ -352,20 +364,20 @@ async def handle_inline_parse_chosen(
         from parsehub.types import VideoParseResult, ImageParseResult, RichTextParseResult, MultimediaParseResult
         from commands.social_parser import _escape_markdown, _format_text
 
-        # 构建 caption（纯文本格式）
+        # 构建 caption（纯文本格式，不使用任何Markdown）
         caption_parts = []
         if parse_result.title:
-            caption_parts.append(f"**{parse_result.title}**")
+            caption_parts.append(parse_result.title)
         if parse_result.content:
             content = _format_text(parse_result.content)
             caption_parts.append(content)
 
         caption = "\n\n".join(caption_parts) if caption_parts else "无标题"
-        caption += f"\n\n🔗 [原链接]({url})"
+        caption += f"\n\n🔗 原链接: {url}"
 
         # Telegram caption 限制 1024 字符，截断到 900 字符
         if len(caption) > 1000:
-            link_part = f"\n\n🔗 [原链接]({url})"
+            link_part = f"\n\n🔗 原链接: {url}"
             max_content_len = 900 - len(link_part)
             caption = caption[:max_content_len] + "..." + link_part
 

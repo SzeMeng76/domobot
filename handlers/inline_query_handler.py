@@ -74,8 +74,17 @@ class InlineQueryHandler:
                         ])
                         return
                 except Exception as e:
-                    logger.error(f"权限检查失败: {e}")
-                    await update.inline_query.answer([])
+                    logger.error(f"权限检查失败: {e}", exc_info=True)
+                    await update.inline_query.answer([
+                        InlineQueryResultArticle(
+                            id=str(uuid4()),
+                            title="❌ 权限检查失败",
+                            description="请稍后重试或联系管理员",
+                            input_message_content=InputTextMessageContent(
+                                message_text=f"❌ 权限检查失败\n\n错误: {str(e)}"
+                            ),
+                        )
+                    ])
                     return
 
             # 调用 parse handler
