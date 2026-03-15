@@ -175,6 +175,9 @@ async def handle_inline_parse_query(
                 caption_parts.append(parse_result.content[:100])
             caption_text = "\\n\\n".join(caption_parts) if caption_parts else "⏳ 下载中..."
 
+            # 添加一个空按钮以获取 inline_message_id
+            keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("⏳ 加载中...", callback_data="loading")]])
+
             return [
                 InlineQueryResultPhoto(
                     id=result_id,
@@ -183,6 +186,7 @@ async def handle_inline_parse_query(
                     title=f"🎬 视频 {title}",
                     description=description,
                     caption=caption_text,
+                    reply_markup=keyboard,
                 )
             ]
         elif isinstance(parse_result, (ImageParseResult, MultimediaParseResult)):
@@ -236,6 +240,9 @@ async def handle_inline_parse_query(
                     }
                     _cache_timestamps[result_id] = time.time()
 
+                    # 添加一个空按钮以获取 inline_message_id
+                    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("⏳ 加载中...", callback_data="loading")]])
+
                     results.append(
                         InlineQueryResultPhoto(
                             id=result_id,
@@ -244,6 +251,7 @@ async def handle_inline_parse_query(
                             title=f"🎬 视频 {index + 1}/{len(media_list)} - {title}",
                             description=description,
                             caption=caption_text,
+                            reply_markup=keyboard,
                         )
                     )
                 else:
