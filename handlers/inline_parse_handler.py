@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 from uuid import uuid4
 
-from telegram import Update, InlineQueryResultArticle, InputTextMessageContent, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, InlineQueryResultArticle, InlineQueryResultPhoto, InputTextMessageContent, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
@@ -156,9 +156,8 @@ async def handle_inline_parse_query(
                     reply_markup=keyboard,
                 )
             ]
-        elif isinstance(parse_result, (VideoParseResult, ImageParseResult, MultimediaParseResult)):
-            # 视频/图片 → 提示将下载并发送
-            media_type = "🎬 视频" if isinstance(parse_result, VideoParseResult) else "🖼️ 图片"
+        elif isinstance(parse_result, VideoParseResult):
+            # 视频 → 返回缩略图照片，点击后下载并替换成视频
             result_id = f"parse_media_{uuid4()}"
             # 缓存解析结果（使用 result_id）
             _parse_cache[result_id] = {
@@ -168,21 +167,86 @@ async def handle_inline_parse_query(
             }
             _cache_timestamps[result_id] = time.time()
 
-            # 添加一个占位 inline keyboard 以确保获得 inline_message_id
-            keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("⏳ 处理中...", callback_data="processing")]])
+            # 构建 caption
+            caption_parts = []
+            if parse_result.title:
+                caption_parts.append(parse_result.title)
+            if parse_result.content:
+                caption_parts.append(parse_result.content[:100])
+            caption_text = "\\n\\n".join(caption_parts) if caption_parts else "⏳ 下载中..."
 
             return [
-                InlineQueryResultArticle(
+                InlineQueryResultPhoto(
                     id=result_id,
-                    title=f"{media_type} {title}",
-                    description=description,
+                    photo_url=thumb_url or "https://img.icons8.com/color/512/000000/video.png",
                     thumbnail_url=thumb_url or "https://img.icons8.com/color/96/000000/video.png",
-                    input_message_content=InputTextMessageContent(
-                        message_text="⏳ 下载中..."
-                    ),
-                    reply_markup=keyboard,
+                    title=f"🎬 视频 {title}",
+                    description=description,
+                    caption=caption_text,
                 )
             ]
+        elif isinstance(parse_result, (ImageParseResult, MultimediaParseResult)):
+            # 图片/混合媒体 → 返回多个结果（每个媒体一个）
+            results = []
+            media_list = parse_result.media if isinstance(parse_result.media, list) else [parse_result.media]
+
+            for index, media_item in enumerate(media_list):
+                result_id = f"parse_media_{uuid4()}"
+                # 缓存解析结果（使用 result_id，包含 media_index）
+                _parse_cache[result_id] = {
+                    "url": url,
+                    "parse_result": parse_result,
+                    "query": query,
+                    "media_index": index,
+                }
+                _cache_timestamps[result_id] = time.time()
+
+                # 构建 caption
+                caption_parts = []
+                if parse_result.title:
+                    caption_parts.append(parse_result.title)
+                if parse_result.content:
+                    caption_parts.append(parse_result.content[:100])
+                caption_text = "\\n\\n".join(caption_parts) if caption_parts else "⏳ 下载中..."
+
+                # 获取该媒体项的缩略图
+                item_thumb = None
+                if hasattr(media_item, 'thumb_url'):
+                    item_thumb = media_item.thumb_url
+                elif hasattr(media_item, 'url'):
+                    item_thumb = media_item.url
+
+                # 判断是视频还是图片
+                from parsehub.types import VideoRef, AniRef
+                if hasattr(media_item, '__class__') and media_item.__class__.__name__ in ['VideoRef', 'AniRef']:
+                    # 视频项 → 返回照片（缩略图）
+                    results.append(
+                        InlineQueryResultPhoto(
+                            id=result_id,
+                            photo_url=item_thumb or "https://img.icons8.com/color/512/000000/video.png",
+                            thumbnail_url=item_thumb or "https://img.icons8.com/color/96/000000/video.png",
+                            title=f"🎬 视频 {index + 1}/{len(media_list)} - {title}",
+                            description=description,
+                            caption=caption_text,
+                        )
+                    )
+                else:
+                    # 图片项 → 返回 Article
+                    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("⏳ 处理中...", callback_data="processing")]])
+                    results.append(
+                        InlineQueryResultArticle(
+                            id=result_id,
+                            title=f"🖼️ 图片 {index + 1}/{len(media_list)} - {title}",
+                            description=description,
+                            thumbnail_url=item_thumb or "https://img.icons8.com/color/96/000000/image.png",
+                            input_message_content=InputTextMessageContent(
+                                message_text="⏳ 下载中..."
+                            ),
+                            reply_markup=keyboard,
+                        )
+                    )
+
+            return results
         else:
             return [
                 InlineQueryResultArticle(
@@ -242,6 +306,7 @@ async def handle_inline_parse_chosen(
 
     parse_result = cached_data["parse_result"]
     url = cached_data["url"]
+    media_index = cached_data.get("media_index", 0)  # 获取媒体索引（混合媒体用）
 
     # 获取 parse_adapter
     parse_adapter = context.bot_data.get("parse_adapter")
@@ -278,19 +343,12 @@ async def handle_inline_parse_chosen(
         elif isinstance(parse_result, VideoParseResult):
             # 视频
             await _handle_video_inline(
-                context, inline_message_id, parse_result, parse_adapter, caption, url
+                context, inline_message_id, parse_result, parse_adapter, caption, url, media_index
             )
-        elif isinstance(parse_result, ImageParseResult):
-            # 图片
+        elif isinstance(parse_result, (ImageParseResult, MultimediaParseResult)):
+            # 图片/混合媒体
             await _handle_image_inline(
-                context, inline_message_id, parse_result, parse_adapter, caption, url
-            )
-        elif isinstance(parse_result, MultimediaParseResult):
-            # 混合媒体（暂不支持 inline，提示用户使用 /parse）
-            await context.bot.edit_message_text(
-                inline_message_id=inline_message_id,
-                text=f"{caption}\n\n⚠️ 混合媒体暂不支持 inline 模式\n💡 请使用 `/parse {url}` 命令获取完整内容",
-                parse_mode=ParseMode.MARKDOWN_V2
+                context, inline_message_id, parse_result, parse_adapter, caption, url, media_index
             )
         else:
             # 其他类型
@@ -369,14 +427,15 @@ async def _handle_video_inline(
     parse_result,
     parse_adapter,
     caption: str,
-    url: str
+    url: str,
+    media_index: int = 0
 ) -> None:
     """处理视频 inline 结果"""
     try:
-        # 更新状态
-        await context.bot.edit_message_text(
+        # 更新状态（现在是照片消息，用 edit_message_caption）
+        await context.bot.edit_message_caption(
             inline_message_id=inline_message_id,
-            text="📥 下载中..."
+            caption="📥 下载中..."
         )
 
         # 下载视频
@@ -386,9 +445,9 @@ async def _handle_video_inline(
         )
 
         if not download_result or not download_result.media:
-            await context.bot.edit_message_text(
+            await context.bot.edit_message_caption(
                 inline_message_id=inline_message_id,
-                text=f"{caption}\n\n❌ 下载失败",
+                caption=f"{caption}\n\n❌ 下载失败",
                 parse_mode=ParseMode.MARKDOWN_V2
             )
             return
@@ -403,10 +462,10 @@ async def _handle_video_inline(
         video_size_mb = video_path.stat().st_size / (1024 * 1024)
 
         if video_size_mb <= 50:
-            # ≤50MB → 直接上传
-            await context.bot.edit_message_text(
+            # ≤50MB → 直接上传（替换照片为视频）
+            await context.bot.edit_message_caption(
                 inline_message_id=inline_message_id,
-                text="📤 上传中..."
+                caption=f"📤 上传中... ({video_size_mb:.1f}MB)"
             )
 
             from telegram import InputMediaVideo
@@ -430,9 +489,9 @@ async def _handle_video_inline(
                 )
         else:
             # >50MB → 上传到图床
-            await context.bot.edit_message_text(
+            await context.bot.edit_message_caption(
                 inline_message_id=inline_message_id,
-                text=f"📤 视频过大 ({video_size_mb:.1f}MB)，上传到图床中..."
+                caption=f"📤 视频过大 ({video_size_mb:.1f}MB)，上传到图床中..."
             )
 
             image_host_url = await parse_adapter.upload_to_image_host(video_path)
@@ -440,17 +499,17 @@ async def _handle_video_inline(
             if image_host_url:
                 # 图床成功
                 size_text = f"{video_size_mb:.1f}".replace(".", "\\.")
-                await context.bot.edit_message_text(
+                await context.bot.edit_message_caption(
                     inline_message_id=inline_message_id,
-                    text=f"{caption}\n\n⚠️ 视频文件过大 \\({size_text}MB\\)\n📤 已上传到图床\n🔗 [点击查看视频]({image_host_url})",
+                    caption=f"{caption}\n\n⚠️ 视频文件过大 \\({size_text}MB\\)\n📤 已上传到图床\n🔗 [点击查看视频]({image_host_url})",
                     parse_mode=ParseMode.MARKDOWN_V2
                 )
             else:
                 # 图床失败
                 size_text = f"{video_size_mb:.1f}".replace(".", "\\.")
-                await context.bot.edit_message_text(
+                await context.bot.edit_message_caption(
                     inline_message_id=inline_message_id,
-                    text=f"{caption}\n\n⚠️ 视频文件过大 \\({size_text}MB\\)，无法上传\n💡 请使用 `/parse {url}` 命令获取完整视频",
+                    caption=f"{caption}\n\n⚠️ 视频文件过大 \\({size_text}MB\\)，无法上传\n💡 请使用 `/parse {url}` 命令获取完整视频",
                     parse_mode=ParseMode.MARKDOWN_V2
                 )
 
@@ -475,7 +534,8 @@ async def _handle_image_inline(
     parse_result,
     parse_adapter,
     caption: str,
-    url: str
+    url: str,
+    media_index: int = 0
 ) -> None:
     """处理图片 inline 结果"""
     try:
@@ -501,6 +561,10 @@ async def _handle_image_inline(
 
         media_list = download_result.media if isinstance(download_result.media, list) else [download_result.media]
         media_list = [m for m in media_list if m and hasattr(m, 'path') and m.path]
+
+        # 如果指定了 media_index，只处理该索引的媒体
+        if media_index > 0 and media_index < len(media_list):
+            media_list = [media_list[media_index]]
 
         if len(media_list) == 0:
             await context.bot.edit_message_text(
