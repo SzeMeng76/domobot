@@ -1,0 +1,587 @@
+#!/usr/bin/env python3
+"""
+Inline Parse 处理器
+支持在 inline mode 中解析社交媒体链接并发送视频/图片
+"""
+
+import asyncio
+import logging
+import time
+from pathlib import Path
+from typing import Optional, Dict, Any
+from uuid import uuid4
+
+from telegram import Update, InlineQueryResultArticle, InputTextMessageContent
+from telegram.ext import ContextTypes
+from telegram.constants import ParseMode
+
+logger = logging.getLogger(__name__)
+
+# 全局缓存：存储解析结果（5分钟TTL）
+_parse_cache: Dict[str, Dict[str, Any]] = {}
+_cache_timestamps: Dict[str, float] = {}
+CACHE_TTL = 300  # 5分钟
+
+
+def _clean_expired_cache():
+    """清理过期缓存"""
+    current_time = time.time()
+    expired_keys = [
+        key for key, timestamp in _cache_timestamps.items()
+        if current_time - timestamp > CACHE_TTL
+    ]
+    for key in expired_keys:
+        _parse_cache.pop(key, None)
+        _cache_timestamps.pop(key, None)
+
+
+async def handle_inline_parse_query(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    query: str
+) -> list:
+    """
+    处理 inline parse 查询
+
+    Args:
+        update: Telegram Update
+        context: Context
+        query: 查询字符串（URL）
+
+    Returns:
+        InlineQueryResult 列表
+    """
+    # 清理过期缓存
+    _clean_expired_cache()
+
+    # 获取 parse_adapter
+    parse_adapter = context.bot_data.get("parse_adapter")
+    if not parse_adapter:
+        return [
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title="❌ 解析功能未初始化",
+                description="Parse 功能未配置",
+                input_message_content=InputTextMessageContent(
+                    message_text="❌ 解析功能未初始化，请联系管理员"
+                ),
+            )
+        ]
+
+    # 检查是否支持该 URL
+    is_supported = await parse_adapter.check_url_supported(query)
+    if not is_supported:
+        return [
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title="❌ 不支持的平台",
+                description=f"URL: {query[:50]}...",
+                input_message_content=InputTextMessageContent(
+                    message_text=f"❌ 不支持的平台\n\n支持：抖音、B站、YouTube、TikTok、小红书、Twitter等20+平台"
+                ),
+            )
+        ]
+
+    # 快速解析（只解析，不下载）
+    try:
+        from parsehub import ParseHub
+        parsehub = ParseHub()
+
+        # 提取 URL
+        url = await parse_adapter._extract_url(query)
+        if not url:
+            return [
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title="❌ 未找到有效URL",
+                    description=query[:50],
+                    input_message_content=InputTextMessageContent(
+                        message_text="❌ 未找到有效的URL"
+                    ),
+                )
+            ]
+
+        # 解析（不下载）
+        parse_result = await parsehub.parse(url)
+        if not parse_result:
+            return [
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title="❌ 解析失败",
+                    description=url[:50],
+                    input_message_content=InputTextMessageContent(
+                        message_text="❌ 解析失败，请检查链接是否正确"
+                    ),
+                )
+            ]
+
+        # 缓存解析结果
+        cache_key = f"parse_{update.inline_query.id}"
+        _parse_cache[cache_key] = {
+            "url": url,
+            "parse_result": parse_result,
+            "query": query,
+        }
+        _cache_timestamps[cache_key] = time.time()
+
+        # 构建 inline 结果
+        from parsehub.types import VideoParseResult, ImageParseResult, RichTextParseResult, MultimediaParseResult
+
+        title = parse_result.title or "无标题"
+        description = parse_result.content[:100] if parse_result.content else "点击下载"
+
+        # 获取缩略图
+        thumb_url = None
+        if isinstance(parse_result, VideoParseResult) and parse_result.media:
+            thumb_url = getattr(parse_result.media, 'thumb_url', None)
+        elif isinstance(parse_result, ImageParseResult) and parse_result.media:
+            if isinstance(parse_result.media, list) and len(parse_result.media) > 0:
+                thumb_url = str(parse_result.media[0].path) if hasattr(parse_result.media[0], 'path') else None
+
+        # 根据类型返回不同的结果
+        if isinstance(parse_result, RichTextParseResult):
+            # 富文本 → 提示将发布到 Telegraph
+            return [
+                InlineQueryResultArticle(
+                    id=f"parse_richtext_{uuid4()}",
+                    title=f"📰 {title}",
+                    description="富文本内容 - 点击发布到 Telegraph",
+                    thumbnail_url=thumb_url or "https://img.icons8.com/color/96/000000/news.png",
+                    input_message_content=InputTextMessageContent(
+                        message_text="⏳ 正在发布到 Telegraph..."
+                    ),
+                )
+            ]
+        elif isinstance(parse_result, (VideoParseResult, ImageParseResult, MultimediaParseResult)):
+            # 视频/图片 → 提示将下载并发送
+            media_type = "🎬 视频" if isinstance(parse_result, VideoParseResult) else "🖼️ 图片"
+            return [
+                InlineQueryResultArticle(
+                    id=f"parse_media_{uuid4()}",
+                    title=f"{media_type} {title}",
+                    description=description,
+                    thumbnail_url=thumb_url or "https://img.icons8.com/color/96/000000/video.png",
+                    input_message_content=InputTextMessageContent(
+                        message_text="⏳ 下载中..."
+                    ),
+                )
+            ]
+        else:
+            return [
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title=f"📄 {title}",
+                    description=description,
+                    input_message_content=InputTextMessageContent(
+                        message_text=f"**{title}**\n\n{description}\n\n🔗 [原链接]({url})",
+                        parse_mode=ParseMode.MARKDOWN
+                    ),
+                )
+            ]
+
+    except Exception as e:
+        logger.error(f"Inline parse 查询失败: {e}", exc_info=True)
+        return [
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title="❌ 解析失败",
+                description=str(e)[:100],
+                input_message_content=InputTextMessageContent(
+                    message_text=f"❌ 解析失败\n\n错误: {str(e)}"
+                ),
+            )
+        ]
+
+
+async def handle_inline_parse_chosen(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """
+    处理用户选择 inline parse 结果后的下载和上传
+
+    Args:
+        update: Telegram Update
+        context: Context
+    """
+    chosen_result = update.chosen_inline_result
+    inline_message_id = chosen_result.inline_message_id
+
+    # 从缓存中获取解析结果
+    cache_key = f"parse_{chosen_result.inline_query_id}"
+    cached_data = _parse_cache.pop(cache_key, None)
+    _cache_timestamps.pop(cache_key, None)
+
+    if not cached_data:
+        # 缓存过期或不存在
+        try:
+            await context.bot.edit_message_text(
+                inline_message_id=inline_message_id,
+                text="❌ 解析结果已过期，请重新查询"
+            )
+        except Exception:
+            pass
+        return
+
+    parse_result = cached_data["parse_result"]
+    url = cached_data["url"]
+
+    # 获取 parse_adapter
+    parse_adapter = context.bot_data.get("parse_adapter")
+    if not parse_adapter:
+        try:
+            await context.bot.edit_message_text(
+                inline_message_id=inline_message_id,
+                text="❌ 解析功能未初始化"
+            )
+        except Exception:
+            pass
+        return
+
+    try:
+        from parsehub.types import VideoParseResult, ImageParseResult, RichTextParseResult, MultimediaParseResult
+        from commands.social_parser import _escape_markdown, _format_text
+
+        # 构建 caption
+        caption_parts = []
+        if parse_result.title:
+            caption_parts.append(f"**{_escape_markdown(parse_result.title)}**")
+        if parse_result.content:
+            caption_parts.append(_escape_markdown(_format_text(parse_result.content)))
+
+        caption = "\n\n".join(caption_parts) if caption_parts else "无标题"
+        caption += f"\n\n🔗 [原链接]({url})"
+
+        # 根据类型处理
+        if isinstance(parse_result, RichTextParseResult):
+            # 富文本 → Telegraph
+            await _handle_richtext_inline(
+                context, inline_message_id, parse_result, parse_adapter, caption, url
+            )
+        elif isinstance(parse_result, VideoParseResult):
+            # 视频
+            await _handle_video_inline(
+                context, inline_message_id, parse_result, parse_adapter, caption, url
+            )
+        elif isinstance(parse_result, ImageParseResult):
+            # 图片
+            await _handle_image_inline(
+                context, inline_message_id, parse_result, parse_adapter, caption, url
+            )
+        elif isinstance(parse_result, MultimediaParseResult):
+            # 混合媒体（暂不支持 inline，提示用户使用 /parse）
+            await context.bot.edit_message_text(
+                inline_message_id=inline_message_id,
+                text=f"{caption}\n\n⚠️ 混合媒体暂不支持 inline 模式\n💡 请使用 `/parse {url}` 命令获取完整内容",
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+        else:
+            # 其他类型
+            await context.bot.edit_message_text(
+                inline_message_id=inline_message_id,
+                text=caption,
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+
+    except Exception as e:
+        logger.error(f"Inline parse chosen 处理失败: {e}", exc_info=True)
+        try:
+            await context.bot.edit_message_text(
+                inline_message_id=inline_message_id,
+                text=f"❌ 处理失败\n\n错误: {str(e)}"
+            )
+        except Exception:
+            pass
+
+
+async def _handle_richtext_inline(
+    context: ContextTypes.DEFAULT_TYPE,
+    inline_message_id: str,
+    parse_result,
+    parse_adapter,
+    caption: str,
+    url: str
+) -> None:
+    """处理富文本 inline 结果（发布到 Telegraph）"""
+    try:
+        from markdown import markdown
+
+        # 更新状态
+        await context.bot.edit_message_text(
+            inline_message_id=inline_message_id,
+            text="📰 发布到 Telegraph 中..."
+        )
+
+        # 转换为 HTML
+        md_content = parse_result.markdown_content
+        if parse_result.platform.id == 'weixin':
+            md_content = md_content.replace("mmbiz.qpic.cn", "mmbiz.qpic.cn.in")
+        elif parse_result.platform.id == 'coolapk':
+            md_content = md_content.replace("image.coolapk.com", "qpic.cn.in/image.coolapk.com")
+
+        html_content = markdown(md_content)
+
+        # 发布到 Telegraph
+        telegraph_url = await parse_adapter.publish_to_telegraph(parse_result, html_content)
+
+        if telegraph_url:
+            # 成功
+            await context.bot.edit_message_text(
+                inline_message_id=inline_message_id,
+                text=f"{caption}\n\n📰 [查看完整文章]({telegraph_url})",
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+        else:
+            # 失败
+            await context.bot.edit_message_text(
+                inline_message_id=inline_message_id,
+                text=f"{caption}\n\n❌ Telegraph 发布失败",
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+    except Exception as e:
+        logger.error(f"富文本 inline 处理失败: {e}", exc_info=True)
+        await context.bot.edit_message_text(
+            inline_message_id=inline_message_id,
+            text=f"❌ Telegraph 发布失败\n\n错误: {str(e)}"
+        )
+
+
+async def _handle_video_inline(
+    context: ContextTypes.DEFAULT_TYPE,
+    inline_message_id: str,
+    parse_result,
+    parse_adapter,
+    caption: str,
+    url: str
+) -> None:
+    """处理视频 inline 结果"""
+    try:
+        # 更新状态
+        await context.bot.edit_message_text(
+            inline_message_id=inline_message_id,
+            text="📥 下载中..."
+        )
+
+        # 下载视频
+        download_result = await parse_result.download(
+            path=parse_adapter.temp_dir,
+            proxy=parse_adapter.config.downloader_proxy if parse_adapter.config else None
+        )
+
+        if not download_result or not download_result.media:
+            await context.bot.edit_message_text(
+                inline_message_id=inline_message_id,
+                text=f"{caption}\n\n❌ 下载失败",
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+            return
+
+        media = download_result.media
+        video_path = Path(media.path)
+
+        # 检查文件大小
+        from utils.video_splitter import ensure_h264
+        video_path = Path(await ensure_h264(str(video_path)))
+        video_size_mb = video_path.stat().st_size / (1024 * 1024)
+
+        if video_size_mb <= 50:
+            # ≤50MB → 直接上传
+            await context.bot.edit_message_text(
+                inline_message_id=inline_message_id,
+                text="📤 上传中..."
+            )
+
+            from telegram import InputMediaVideo
+
+            # 获取缩略图
+            thumb_url = getattr(parse_result.media, 'thumb_url', None)
+
+            with open(video_path, 'rb') as video_file:
+                await context.bot.edit_message_media(
+                    inline_message_id=inline_message_id,
+                    media=InputMediaVideo(
+                        media=video_file,
+                        caption=caption,
+                        parse_mode=ParseMode.MARKDOWN_V2,
+                        width=media.width or 0,
+                        height=media.height or 0,
+                        duration=media.duration or 0,
+                        thumbnail=thumb_url,
+                        supports_streaming=True,
+                    ),
+                )
+        else:
+            # >50MB → 上传到图床
+            await context.bot.edit_message_text(
+                inline_message_id=inline_message_id,
+                text=f"📤 视频过大 ({video_size_mb:.1f}MB)，上传到图床中..."
+            )
+
+            image_host_url = await parse_adapter.upload_to_image_host(video_path)
+
+            if image_host_url:
+                # 图床成功
+                size_text = f"{video_size_mb:.1f}".replace(".", "\\.")
+                await context.bot.edit_message_text(
+                    inline_message_id=inline_message_id,
+                    text=f"{caption}\n\n⚠️ 视频文件过大 \\({size_text}MB\\)\n📤 已上传到图床\n🔗 [点击查看视频]({image_host_url})",
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
+            else:
+                # 图床失败
+                size_text = f"{video_size_mb:.1f}".replace(".", "\\.")
+                await context.bot.edit_message_text(
+                    inline_message_id=inline_message_id,
+                    text=f"{caption}\n\n⚠️ 视频文件过大 \\({size_text}MB\\)，无法上传\n💡 请使用 `/parse {url}` 命令获取完整视频",
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
+
+        # 清理临时文件
+        try:
+            import shutil
+            shutil.rmtree(download_result.output_dir, ignore_errors=True)
+        except Exception:
+            pass
+
+    except Exception as e:
+        logger.error(f"视频 inline 处理失败: {e}", exc_info=True)
+        await context.bot.edit_message_text(
+            inline_message_id=inline_message_id,
+            text=f"❌ 视频处理失败\n\n错误: {str(e)}"
+        )
+
+
+async def _handle_image_inline(
+    context: ContextTypes.DEFAULT_TYPE,
+    inline_message_id: str,
+    parse_result,
+    parse_adapter,
+    caption: str,
+    url: str
+) -> None:
+    """处理图片 inline 结果"""
+    try:
+        # 更新状态
+        await context.bot.edit_message_text(
+            inline_message_id=inline_message_id,
+            text="📥 下载中..."
+        )
+
+        # 下载图片
+        download_result = await parse_result.download(
+            path=parse_adapter.temp_dir,
+            proxy=parse_adapter.config.downloader_proxy if parse_adapter.config else None
+        )
+
+        if not download_result or not download_result.media:
+            await context.bot.edit_message_text(
+                inline_message_id=inline_message_id,
+                text=f"{caption}\n\n❌ 下载失败",
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+            return
+
+        media_list = download_result.media if isinstance(download_result.media, list) else [download_result.media]
+        media_list = [m for m in media_list if m and hasattr(m, 'path') and m.path]
+
+        if len(media_list) == 0:
+            await context.bot.edit_message_text(
+                inline_message_id=inline_message_id,
+                text=f"{caption}\n\n❌ 没有可用的图片",
+                parse_mode=ParseMode.MARKDOWN_V2
+            )
+            return
+        elif len(media_list) == 1:
+            # 单张图片 → 直接发送
+            await context.bot.edit_message_text(
+                inline_message_id=inline_message_id,
+                text="📤 上传中..."
+            )
+
+            from telegram import InputMediaPhoto
+            from commands.social_parser import _convert_image_to_webp
+
+            # 转换格式
+            converted_path = _convert_image_to_webp(Path(media_list[0].path))
+
+            with open(converted_path, 'rb') as photo_file:
+                await context.bot.edit_message_media(
+                    inline_message_id=inline_message_id,
+                    media=InputMediaPhoto(
+                        media=photo_file,
+                        caption=caption,
+                        parse_mode=ParseMode.MARKDOWN_V2,
+                    ),
+                )
+        else:
+            # 多张图片 → Telegraph
+            await context.bot.edit_message_text(
+                inline_message_id=inline_message_id,
+                text=f"📤 {len(media_list)} 张图片，上传到图床中..."
+            )
+
+            from commands.social_parser import _generate_thumbnail
+            from markdown import markdown
+
+            # 上传到图床
+            uploaded_urls = []
+            for img in media_list:
+                thumb_path = _generate_thumbnail(Path(img.path), max_width=800, quality=70)
+                img_url = await parse_adapter.upload_to_image_host(thumb_path)
+                if img_url:
+                    uploaded_urls.append(img_url)
+
+                # 清理缩略图
+                if thumb_path != Path(img.path):
+                    try:
+                        thumb_path.unlink()
+                    except Exception:
+                        pass
+
+            if uploaded_urls:
+                # 创建 HTML
+                html_content = ""
+                if parse_result.content:
+                    html_content += f"<p>{parse_result.content}</p>"
+
+                for idx, img_url in enumerate(uploaded_urls):
+                    loading = "eager" if idx < 3 else "lazy"
+                    html_content += f'<figure><img src="{img_url}" loading="{loading}"/></figure>'
+
+                html_content += f'<p><i>共 {len(uploaded_urls)} 张图片</i></p>'
+
+                # 发布到 Telegraph
+                telegraph_url = await parse_adapter.publish_to_telegraph(parse_result, html_content)
+
+                if telegraph_url:
+                    await context.bot.edit_message_text(
+                        inline_message_id=inline_message_id,
+                        text=f"{caption}\n\n📷 共 {len(media_list)} 张图片\n🔗 [查看完整图集]({telegraph_url})",
+                        parse_mode=ParseMode.MARKDOWN_V2
+                    )
+                else:
+                    await context.bot.edit_message_text(
+                        inline_message_id=inline_message_id,
+                        text=f"{caption}\n\n📷 共 {len(media_list)} 张图片\n❌ Telegraph 发布失败",
+                        parse_mode=ParseMode.MARKDOWN_V2
+                    )
+            else:
+                await context.bot.edit_message_text(
+                    inline_message_id=inline_message_id,
+                    text=f"{caption}\n\n📷 共 {len(media_list)} 张图片\n❌ 图床上传失败",
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
+
+        # 清理临时文件
+        try:
+            import shutil
+            shutil.rmtree(download_result.output_dir, ignore_errors=True)
+        except Exception:
+            pass
+
+    except Exception as e:
+        logger.error(f"图片 inline 处理失败: {e}", exc_info=True)
+        await context.bot.edit_message_text(
+            inline_message_id=inline_message_id,
+            text=f"❌ 图片处理失败\n\n错误: {str(e)}"
+        )

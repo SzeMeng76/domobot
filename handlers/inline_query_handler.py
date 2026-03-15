@@ -33,6 +33,7 @@ class InlineQueryHandler:
         - @botname rate 100 usd to cny$  -> 汇率转换
         - @botname weather beijing$      -> 天气查询
         - @botname steam elden ring$     -> Steam 游戏价格查询
+        - @botname https://douyin.com/... -> 解析社交媒体链接
         """
         query = update.inline_query.query
         # 清理查询字符串：去除不可见字符和标准化空格
@@ -43,6 +44,45 @@ class InlineQueryHandler:
         query = ' '.join(query.split())
 
         user_id = update.inline_query.from_user.id
+
+        # ========================================
+        # 检查是否是 URL（社交媒体解析）
+        # ========================================
+        if query.startswith('http://') or query.startswith('https://'):
+            # 检查权限后，调用 parse handler
+            user_manager = context.bot_data.get("user_cache_manager")
+            if user_manager:
+                try:
+                    is_whitelisted = await user_manager.is_whitelisted(user_id)
+                    is_admin = await user_manager.is_admin(user_id)
+
+                    from utils.config_manager import get_config
+                    config = get_config()
+                    is_super_admin = user_id == config.super_admin_id
+
+                    if not (is_whitelisted or is_admin or is_super_admin):
+                        logger.warning(f"⚠️ Inline Parse 被拒绝：用户 {user_id} 不在白名单中")
+                        await update.inline_query.answer([
+                            InlineQueryResultArticle(
+                                id=str(uuid4()),
+                                title="❌ 权限不足",
+                                description="您不在白名单中，无法使用 Inline Parse",
+                                input_message_content=InputTextMessageContent(
+                                    message_text="❌ 您不在白名单中，无法使用此功能\n\n请联系管理员添加白名单"
+                                ),
+                            )
+                        ])
+                        return
+                except Exception as e:
+                    logger.error(f"权限检查失败: {e}")
+                    await update.inline_query.answer([])
+                    return
+
+            # 调用 parse handler
+            from handlers.inline_parse_handler import handle_inline_parse_query
+            results = await handle_inline_parse_query(update, context, query)
+            await update.inline_query.answer(results, cache_time=10)
+            return
 
         # ========================================
         # 权限检查
@@ -268,6 +308,7 @@ class InlineQueryHandler:
 async def setup_inline_query_handler(application) -> None:
     """设置 inline query 处理器"""
     from telegram.ext import InlineQueryHandler as TelegramInlineQueryHandler
+    from telegram.ext import ChosenInlineResultHandler
 
     handler = InlineQueryHandler()
 
@@ -276,4 +317,10 @@ async def setup_inline_query_handler(application) -> None:
         TelegramInlineQueryHandler(handler.handle_inline_query)
     )
 
-    logger.info("✅ Inline Query 处理器已注册")
+    # 注册 chosen inline result 处理器（用于 parse 功能）
+    from handlers.inline_parse_handler import handle_inline_parse_chosen
+    application.add_handler(
+        ChosenInlineResultHandler(handle_inline_parse_chosen)
+    )
+
+    logger.info("✅ Inline Query 处理器已注册（含 Parse 支持）")
