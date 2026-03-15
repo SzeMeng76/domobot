@@ -202,9 +202,8 @@ async def handle_inline_parse_chosen(
             pass
         return
 
-    parse_result = cached_data["parse_result"]
     url = cached_data["url"]
-    media_index = cached_data.get("media_index", 0)  # 获取媒体索引（混合媒体用）
+    query = cached_data["query"]
 
     # 获取 parse_adapter
     parse_adapter = context.bot_data.get("parse_adapter")
@@ -217,6 +216,37 @@ async def handle_inline_parse_chosen(
         except Exception:
             pass
         return
+
+    # 如果缓存中没有 parse_result，说明是延迟解析，现在开始解析
+    parse_result = cached_data.get("parse_result")
+    if not parse_result:
+        try:
+            # 更新状态
+            await context.bot.edit_message_caption(
+                inline_message_id=inline_message_id,
+                caption="⏳ 解析中..."
+            )
+
+            # 开始解析
+            from parsehub import ParseHub
+            parsehub = ParseHub()
+            parse_result = await parsehub.parse(url)
+
+            if not parse_result:
+                await context.bot.edit_message_caption(
+                    inline_message_id=inline_message_id,
+                    caption="❌ 解析失败，请检查链接是否正确"
+                )
+                return
+        except Exception as e:
+            logger.error(f"[Inline Parse] 解析失败: {e}", exc_info=True)
+            await context.bot.edit_message_caption(
+                inline_message_id=inline_message_id,
+                caption=f"❌ 解析失败\n\n错误: {str(e)}"
+            )
+            return
+
+    media_index = cached_data.get("media_index", 0)  # 获取媒体索引（混合媒体用）
 
     try:
         from parsehub.types import VideoParseResult, ImageParseResult, RichTextParseResult, MultimediaParseResult
