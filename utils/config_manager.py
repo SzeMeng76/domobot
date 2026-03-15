@@ -193,6 +193,7 @@ class BotConfig:
         self.db_max_connections = 20  # 最大连接数
 
         # 社交媒体解析配置 (ParseHub)
+        self.inline_parse_temp_channel = None  # Inline Parse 临时存储频道 ID
         self.parser_proxy = None  # 解析代理
         self.downloader_proxy = None  # 下载代理
         self.parser_cache_duration = 86400  # 解析缓存时间（默认24小时）
@@ -466,6 +467,7 @@ class ConfigManager:
         self.config.db_max_connections = get_int_env("DB_MAX_CONNECTIONS", "20")
 
         # 社交媒体解析配置 (ParseHub)
+        self.config.inline_parse_temp_channel = get_int_env("INLINE_PARSE_TEMP_CHANNEL", "0") or None
         self.config.parser_proxy = os.getenv("PARSER_PROXY", None)
         self.config.downloader_proxy = os.getenv("DOWNLOADER_PROXY", None)
         self.config.parser_cache_duration = get_int_env("PARSER_CACHE_DURATION", "86400")

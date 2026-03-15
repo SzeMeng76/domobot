@@ -15,6 +15,8 @@ from telegram import Update, InlineQueryResultArticle, InlineQueryResultPhoto, I
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
+from utils.config_manager import ConfigManager
+
 logger = logging.getLogger(__name__)
 
 # 全局缓存：存储解析结果（5分钟TTL）
@@ -573,7 +575,7 @@ async def _handle_video_inline(
         video_path = Path(await ensure_h264(str(video_path)))
         video_size_mb = video_path.stat().st_size / (1024 * 1024)
 
-        if video_size_mb <= 50:
+        if video_size_mb <= 2048:  # 2GB limit for Telegram Bot API
             # Inline message 不能直接上传新文件，需要先发送到临时位置获取 file_id
             # 先发送视频到 bot 自己的聊天获取 file_id
             await context.bot.edit_message_caption(
@@ -584,10 +586,20 @@ async def _handle_video_inline(
             from telegram import InputMediaVideo
 
             # 发送到临时频道获取 file_id
-            TEMP_STORAGE_CHAT_ID = -1002483865800
+            config_manager = ConfigManager()
+            temp_channel_id = config_manager.config.inline_parse_temp_channel
+
+            if not temp_channel_id:
+                logger.error("INLINE_PARSE_TEMP_CHANNEL not configured")
+                await context.bot.edit_message_caption(
+                    inline_message_id=inline_message_id,
+                    caption="❌ 配置错误：未设置临时存储频道"
+                )
+                return
+
             with open(video_path, 'rb') as video_file:
                 sent_message = await context.bot.send_video(
-                    chat_id=TEMP_STORAGE_CHAT_ID,
+                    chat_id=temp_channel_id,
                     video=video_file,
                     width=media.width or 0,
                     height=media.height or 0,
@@ -611,7 +623,7 @@ async def _handle_video_inline(
 
             # 删除临时消息
             try:
-                await context.bot.delete_message(chat_id=TEMP_STORAGE_CHAT_ID, message_id=sent_message.message_id)
+                await context.bot.delete_message(chat_id=temp_channel_id, message_id=sent_message.message_id)
             except Exception:
                 pass
 
@@ -634,7 +646,7 @@ async def _handle_video_inline(
                         except Exception as e:
                             logger.warning(f"[Inline Parse] 保存file_id失败: {e}")
         else:
-            # >50MB → 上传到图床
+            # >2GB → 上传到图床
             await context.bot.edit_message_caption(
                 inline_message_id=inline_message_id,
                 caption=f"📤 视频过大 ({video_size_mb:.1f}MB)，上传到图床中..."
