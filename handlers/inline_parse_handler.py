@@ -141,232 +141,31 @@ async def handle_inline_parse_query(
             )
         ]
 
-    # 快速解析（只解析，不下载）
-    try:
-        from parsehub import ParseHub
-        parsehub = ParseHub()
+    # 不做实际解析，直接返回占位结果，等用户选择后再解析
+    result_id = f"parse_video_{uuid4()}"
 
-        # 提取 URL
-        url = await parse_adapter._extract_url(query)
-        if not url:
-            return [
-                InlineQueryResultArticle(
-                    id=str(uuid4()),
-                    title="❌ 未找到有效URL",
-                    description=query[:50],
-                    input_message_content=InputTextMessageContent(
-                        message_text="❌ 未找到有效的URL"
-                    ),
-                )
-            ]
+    # 缓存 URL（使用 result_id）
+    _parse_cache[result_id] = {
+        "url": url,
+        "query": query,
+    }
+    _cache_timestamps[result_id] = time.time()
 
-        # 解析（不下载）
-        parse_result = await parsehub.parse(url)
-        if not parse_result:
-            return [
-                InlineQueryResultArticle(
-                    id=str(uuid4()),
-                    title="❌ 解析失败",
-                    description=url[:50],
-                    input_message_content=InputTextMessageContent(
-                        message_text="❌ 解析失败，请检查链接是否正确"
-                    ),
-                )
-            ]
+    # 添加原链接按钮
+    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔗 原链接", url=url)]])
 
-        # 记录解析结果类型
-        logger.info(f"[Inline Parse] URL: {url[:50]}... | 类型: {type(parse_result).__name__} | 标题: {parse_result.title[:30] if parse_result.title else 'None'}")
-
-        # 构建 inline 结果
-        from parsehub.types import VideoParseResult, ImageParseResult, RichTextParseResult, MultimediaParseResult
-
-        title = (parse_result.title or "无标题")[:60]  # Telegram限制64字符
-        description = (parse_result.content or "点击下载")[:100]
-
-        # 获取缩略图
-        thumb_url = None
-        if isinstance(parse_result, VideoParseResult) and parse_result.media:
-            thumb_url = getattr(parse_result.media, 'thumb_url', None)
-        elif isinstance(parse_result, ImageParseResult) and parse_result.media:
-            if isinstance(parse_result.media, list) and len(parse_result.media) > 0:
-                thumb_url = str(parse_result.media[0].path) if hasattr(parse_result.media[0], 'path') else None
-
-        # 根据类型返回不同的结果
-        if isinstance(parse_result, RichTextParseResult):
-            # 富文本 → 提示将发布到 Telegraph
-            result_id = f"parse_richtext_{uuid4()}"
-            # 缓存解析结果（使用 result_id）
-            _parse_cache[result_id] = {
-                "url": url,
-                "parse_result": parse_result,
-                "query": query,
-            }
-            _cache_timestamps[result_id] = time.time()
-
-            # 添加原链接按钮
-            keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔗 原链接", url=url)]])
-
-            return [
-                InlineQueryResultArticle(
-                    id=result_id,
-                    title=f"📰 {title}",
-                    description="富文本内容 - 点击发布到 Telegraph",
-                    thumbnail_url=thumb_url or "https://img.icons8.com/color/96/000000/news.png",
-                    input_message_content=InputTextMessageContent(
-                        message_text="⏳ 正在发布到 Telegraph..."
-                    ),
-                    reply_markup=keyboard,
-                )
-            ]
-        elif isinstance(parse_result, VideoParseResult):
-            # 视频 → 返回缩略图照片，用户选择后自动下载并替换成视频
-            result_id = f"parse_video_{uuid4()}"
-            # 缓存解析结果（使用 result_id）
-            _parse_cache[result_id] = {
-                "url": url,
-                "parse_result": parse_result,
-                "query": query,
-            }
-            _cache_timestamps[result_id] = time.time()
-
-            # 构建 caption（用于inline结果预览）
-            caption_parts = []
-            if parse_result.title:
-                caption_parts.append(parse_result.title)
-            if parse_result.content:
-                caption_parts.append(parse_result.content[:100])
-            caption_text = "\n\n".join(caption_parts) if caption_parts else "⏳ 下载中..."
-
-            # 添加原链接按钮
-            keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔗 原链接", url=url)]])
-
-            return [
-                InlineQueryResultPhoto(
-                    id=result_id,
-                    photo_url=thumb_url or "https://img.icons8.com/color/512/000000/video.png",
-                    thumbnail_url=thumb_url or "https://img.icons8.com/color/96/000000/video.png",
-                    title=f"🎬 视频 {title}",
-                    description=description,
-                    caption=caption_text,
-                    reply_markup=keyboard,
-                )
-            ]
-        elif isinstance(parse_result, (ImageParseResult, MultimediaParseResult)):
-            # 图片/混合媒体 → 返回多个结果（每个媒体一个）
-            results = []
-            media_list = parse_result.media if isinstance(parse_result.media, list) else [parse_result.media]
-
-            # 构建 caption
-            caption_parts = []
-            if parse_result.title:
-                caption_parts.append(parse_result.title)
-            if parse_result.content:
-                caption_parts.append(parse_result.content[:100])
-            caption_text = "\n\n".join(caption_parts) if caption_parts else ""
-
-            # 添加原链接按钮
-            keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔗 原链接", url=url)]])
-
-            for index, media_item in enumerate(media_list):
-                # 获取该媒体项的 URL 和缩略图
-                item_url = None
-                item_thumb = None
-                if hasattr(media_item, 'url'):
-                    item_url = media_item.url
-                if hasattr(media_item, 'thumb_url'):
-                    item_thumb = media_item.thumb_url
-
-                # 判断媒体类型
-                from parsehub.types import VideoRef, AniRef, ImageRef
-
-                if isinstance(media_item, ImageRef):
-                    # 图片 → 直接用 InlineQueryResultPhoto（不需要下载）
-                    results.append(
-                        InlineQueryResultPhoto(
-                            id=f"parse_image_{uuid4()}",
-                            photo_url=item_url or item_thumb or "https://img.icons8.com/color/512/000000/image.png",
-                            thumbnail_url=item_thumb or item_url or "https://img.icons8.com/color/96/000000/image.png",
-                            title=f"🖼️ 图片 {index + 1}/{len(media_list)} - {title}",
-                            description=description,
-                            caption=caption_text,
-                            photo_width=getattr(media_item, 'width', None) or 300,
-                            photo_height=getattr(media_item, 'height', None) or 300,
-                            reply_markup=keyboard,
-                        )
-                    )
-                elif isinstance(media_item, (VideoRef, AniRef)):
-                    # 视频/动画 → 返回照片（缩略图），用户选择后自动下载
-                    result_id = f"parse_video_{uuid4()}"
-                    # 缓存解析结果（使用 result_id，包含 media_index）
-                    _parse_cache[result_id] = {
-                        "url": url,
-                        "parse_result": parse_result,
-                        "query": query,
-                        "media_index": index,
-                    }
-                    _cache_timestamps[result_id] = time.time()
-
-                    results.append(
-                        InlineQueryResultPhoto(
-                            id=result_id,
-                            photo_url=item_thumb or "https://img.icons8.com/color/512/000000/video.png",
-                            thumbnail_url=item_thumb or "https://img.icons8.com/color/96/000000/video.png",
-                            title=f"🎬 视频 {index + 1}/{len(media_list)} - {title}",
-                            description=description,
-                            caption=caption_text,
-                            reply_markup=keyboard,
-                        )
-                    )
-                else:
-                    # 未知类型 → 返回 Article
-                    results.append(
-                        InlineQueryResultArticle(
-                            id=f"parse_unknown_{uuid4()}",
-                            title=f"📄 媒体 {index + 1}/{len(media_list)} - {title}",
-                            description=description,
-                            thumbnail_url=item_thumb or "https://img.icons8.com/color/96/000000/file.png",
-                            input_message_content=InputTextMessageContent(
-                                message_text=f"{caption_text}\n\n🔗 [原链接]({url})",
-                                parse_mode=ParseMode.MARKDOWN
-                            ),
-                        )
-                    )
-
-            return results if results else [
-                InlineQueryResultArticle(
-                    id=str(uuid4()),
-                    title="❌ 无可用媒体",
-                    description="该内容没有可显示的图片或视频",
-                    input_message_content=InputTextMessageContent(
-                        message_text=f"❌ 无可用媒体\n\n{title}\n\n🔗 原链接: {url}"
-                    ),
-                )
-            ]
-        else:
-            return [
-                InlineQueryResultArticle(
-                    id=str(uuid4()),
-                    title=f"📄 {title}",
-                    description=description,
-                    input_message_content=InputTextMessageContent(
-                        message_text=f"**{title}**\n\n{description}\n\n🔗 [原链接]({url})",
-                        parse_mode=ParseMode.MARKDOWN
-                    ),
-                )
-            ]
-
-    except Exception as e:
-        logger.error(f"Inline parse 查询失败: {e}", exc_info=True)
-        return [
-            InlineQueryResultArticle(
-                id=str(uuid4()),
-                title="❌ 解析失败",
-                description=str(e)[:100],
-                input_message_content=InputTextMessageContent(
-                    message_text=f"❌ 解析失败\n\n错误: {str(e)}"
-                ),
-            )
-        ]
+    # 返回占位结果（显示缩略图照片）
+    return [
+        InlineQueryResultPhoto(
+            id=result_id,
+            photo_url="https://img.icons8.com/color/512/000000/video.png",
+            thumbnail_url="https://img.icons8.com/color/96/000000/video.png",
+            title=f"🎬 解析视频",
+            description=f"点击下载: {url[:50]}...",
+            caption="⏳ 解析中...",
+            reply_markup=keyboard,
+        )
+    ]
 
 
 async def handle_inline_parse_chosen(
