@@ -190,36 +190,52 @@ async def handle_inline_parse_query(
             results = []
             media_list = parse_result.media if isinstance(parse_result.media, list) else [parse_result.media]
 
+            # 构建 caption
+            caption_parts = []
+            if parse_result.title:
+                caption_parts.append(parse_result.title)
+            if parse_result.content:
+                caption_parts.append(parse_result.content[:100])
+            caption_text = "\n\n".join(caption_parts) if caption_parts else ""
+
             for index, media_item in enumerate(media_list):
-                result_id = f"parse_media_{uuid4()}"
-                # 缓存解析结果（使用 result_id，包含 media_index）
-                _parse_cache[result_id] = {
-                    "url": url,
-                    "parse_result": parse_result,
-                    "query": query,
-                    "media_index": index,
-                }
-                _cache_timestamps[result_id] = time.time()
-
-                # 构建 caption
-                caption_parts = []
-                if parse_result.title:
-                    caption_parts.append(parse_result.title)
-                if parse_result.content:
-                    caption_parts.append(parse_result.content[:100])
-                caption_text = "\\n\\n".join(caption_parts) if caption_parts else "⏳ 下载中..."
-
-                # 获取该媒体项的缩略图
+                # 获取该媒体项的 URL 和缩略图
+                item_url = None
                 item_thumb = None
+                if hasattr(media_item, 'url'):
+                    item_url = media_item.url
                 if hasattr(media_item, 'thumb_url'):
                     item_thumb = media_item.thumb_url
-                elif hasattr(media_item, 'url'):
-                    item_thumb = media_item.url
 
-                # 判断是视频还是图片
-                from parsehub.types import VideoRef, AniRef
-                if hasattr(media_item, '__class__') and media_item.__class__.__name__ in ['VideoRef', 'AniRef']:
-                    # 视频项 → 返回照片（缩略图）
+                # 判断媒体类型
+                from parsehub.types import VideoRef, AniRef, ImageRef
+
+                if isinstance(media_item, ImageRef):
+                    # 图片 → 直接用 InlineQueryResultPhoto（不需要下载）
+                    results.append(
+                        InlineQueryResultPhoto(
+                            id=f"parse_image_{uuid4()}",
+                            photo_url=item_url or item_thumb or "https://img.icons8.com/color/512/000000/image.png",
+                            thumbnail_url=item_thumb or item_url or "https://img.icons8.com/color/96/000000/image.png",
+                            title=f"🖼️ 图片 {index + 1}/{len(media_list)} - {title}",
+                            description=description,
+                            caption=caption_text,
+                            photo_width=getattr(media_item, 'width', None) or 300,
+                            photo_height=getattr(media_item, 'height', None) or 300,
+                        )
+                    )
+                elif isinstance(media_item, (VideoRef, AniRef)):
+                    # 视频/动画 → 返回照片（缩略图），点击后下载
+                    result_id = f"parse_video_{uuid4()}"
+                    # 缓存解析结果（使用 result_id，包含 media_index）
+                    _parse_cache[result_id] = {
+                        "url": url,
+                        "parse_result": parse_result,
+                        "query": query,
+                        "media_index": index,
+                    }
+                    _cache_timestamps[result_id] = time.time()
+
                     results.append(
                         InlineQueryResultPhoto(
                             id=result_id,
@@ -231,18 +247,17 @@ async def handle_inline_parse_query(
                         )
                     )
                 else:
-                    # 图片项 → 返回 Article
-                    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("⏳ 处理中...", callback_data="processing")]])
+                    # 未知类型 → 返回 Article
                     results.append(
                         InlineQueryResultArticle(
-                            id=result_id,
-                            title=f"🖼️ 图片 {index + 1}/{len(media_list)} - {title}",
+                            id=f"parse_unknown_{uuid4()}",
+                            title=f"📄 媒体 {index + 1}/{len(media_list)} - {title}",
                             description=description,
-                            thumbnail_url=item_thumb or "https://img.icons8.com/color/96/000000/image.png",
+                            thumbnail_url=item_thumb or "https://img.icons8.com/color/96/000000/file.png",
                             input_message_content=InputTextMessageContent(
-                                message_text="⏳ 下载中..."
+                                message_text=f"{caption_text}\n\n🔗 [原链接]({url})",
+                                parse_mode=ParseMode.MARKDOWN
                             ),
-                            reply_markup=keyboard,
                         )
                     )
 
@@ -279,7 +294,7 @@ async def handle_inline_parse_chosen(
     context: ContextTypes.DEFAULT_TYPE
 ) -> None:
     """
-    处理用户选择 inline parse 结果后的下载和上传
+    处理用户选择 inline parse 结果后的下载和上传（仅处理视频）
 
     Args:
         update: Telegram Update
@@ -287,18 +302,22 @@ async def handle_inline_parse_chosen(
     """
     chosen_result = update.chosen_inline_result
     inline_message_id = chosen_result.inline_message_id
+    result_id = chosen_result.result_id
+
+    # 只处理视频（ID 以 parse_video_ 开头），图片直接用 URL 不需要下载
+    if not result_id.startswith("parse_video_"):
+        return
 
     # 从缓存中获取解析结果（使用 result_id）
-    result_id = chosen_result.result_id
     cached_data = _parse_cache.pop(result_id, None)
     _cache_timestamps.pop(result_id, None)
 
     if not cached_data:
         # 缓存过期或不存在
         try:
-            await context.bot.edit_message_text(
+            await context.bot.edit_message_caption(
                 inline_message_id=inline_message_id,
-                text="❌ 解析结果已过期，请重新查询"
+                caption="❌ 解析结果已过期，请重新查询"
             )
         except Exception:
             pass
@@ -312,9 +331,9 @@ async def handle_inline_parse_chosen(
     parse_adapter = context.bot_data.get("parse_adapter")
     if not parse_adapter:
         try:
-            await context.bot.edit_message_text(
+            await context.bot.edit_message_caption(
                 inline_message_id=inline_message_id,
-                text="❌ 解析功能未初始化"
+                caption="❌ 解析功能未初始化"
             )
         except Exception:
             pass
@@ -334,36 +353,26 @@ async def handle_inline_parse_chosen(
         caption = "\n\n".join(caption_parts) if caption_parts else "无标题"
         caption += f"\n\n🔗 [原链接]({url})"
 
-        # 根据类型处理
-        if isinstance(parse_result, RichTextParseResult):
-            # 富文本 → Telegraph
-            await _handle_richtext_inline(
-                context, inline_message_id, parse_result, parse_adapter, caption, url
-            )
-        elif isinstance(parse_result, VideoParseResult):
-            # 视频
+        # 根据类型处理（只处理视频和混合媒体中的视频）
+        if isinstance(parse_result, (VideoParseResult, ImageParseResult, MultimediaParseResult)):
+            # 视频/混合媒体中的视频
             await _handle_video_inline(
                 context, inline_message_id, parse_result, parse_adapter, caption, url, media_index
             )
-        elif isinstance(parse_result, (ImageParseResult, MultimediaParseResult)):
-            # 图片/混合媒体
-            await _handle_image_inline(
-                context, inline_message_id, parse_result, parse_adapter, caption, url, media_index
-            )
         else:
-            # 其他类型
-            await context.bot.edit_message_text(
+            # 其他类型（不应该到这里，因为前面已经过滤了）
+            await context.bot.edit_message_caption(
                 inline_message_id=inline_message_id,
-                text=caption,
+                caption=caption,
                 parse_mode=ParseMode.MARKDOWN_V2
             )
 
     except Exception as e:
         logger.error(f"[Inline Parse] 处理失败: {e}", exc_info=True)
         try:
-            await context.bot.edit_message_text(
+            await context.bot.edit_message_caption(
                 inline_message_id=inline_message_id,
-                text=f"❌ 处理失败\n\n错误: {str(e)}"
+                caption=f"❌ 处理失败\n\n错误: {str(e)}"
             )
         except Exception as ex:
             logger.error(f"[Inline Parse] 更新错误消息失败: {ex}")
@@ -522,9 +531,9 @@ async def _handle_video_inline(
 
     except Exception as e:
         logger.error(f"视频 inline 处理失败: {e}", exc_info=True)
-        await context.bot.edit_message_text(
+        await context.bot.edit_message_caption(
             inline_message_id=inline_message_id,
-            text=f"❌ 视频处理失败\n\n错误: {str(e)}"
+            caption=f"❌ 视频处理失败\n\n错误: {str(e)}"
         )
 
 
