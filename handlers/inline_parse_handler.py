@@ -141,8 +141,8 @@ async def handle_inline_parse_query(
             }
             _cache_timestamps[result_id] = time.time()
 
-            # 添加一个占位 inline keyboard 以确保获得 inline_message_id
-            keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("⏳ 处理中...", callback_data="processing")]])
+            # 添加原链接按钮
+            keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔗 原链接", url=url)]])
 
             return [
                 InlineQueryResultArticle(
@@ -175,8 +175,8 @@ async def handle_inline_parse_query(
                 caption_parts.append(parse_result.content[:100])
             caption_text = "\\n\\n".join(caption_parts) if caption_parts else "⏳ 下载中..."
 
-            # 添加一个空按钮以获取 inline_message_id
-            keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("⏳ 加载中...", callback_data="loading")]])
+            # 添加原链接按钮
+            keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔗 原链接", url=url)]])
 
             return [
                 InlineQueryResultPhoto(
@@ -202,6 +202,9 @@ async def handle_inline_parse_query(
                 caption_parts.append(parse_result.content[:100])
             caption_text = "\n\n".join(caption_parts) if caption_parts else ""
 
+            # 添加原链接按钮
+            keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔗 原链接", url=url)]])
+
             for index, media_item in enumerate(media_list):
                 # 获取该媒体项的 URL 和缩略图
                 item_url = None
@@ -226,6 +229,7 @@ async def handle_inline_parse_query(
                             caption=caption_text,
                             photo_width=getattr(media_item, 'width', None) or 300,
                             photo_height=getattr(media_item, 'height', None) or 300,
+                            reply_markup=keyboard,
                         )
                     )
                 elif isinstance(media_item, (VideoRef, AniRef)):
@@ -239,9 +243,6 @@ async def handle_inline_parse_query(
                         "media_index": index,
                     }
                     _cache_timestamps[result_id] = time.time()
-
-                    # 添加一个空按钮以获取 inline_message_id
-                    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("⏳ 加载中...", callback_data="loading")]])
 
                     results.append(
                         InlineQueryResultPhoto(
