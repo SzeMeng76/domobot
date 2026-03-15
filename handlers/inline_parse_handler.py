@@ -352,27 +352,24 @@ async def handle_inline_parse_chosen(
         from parsehub.types import VideoParseResult, ImageParseResult, RichTextParseResult, MultimediaParseResult
         from commands.social_parser import _escape_markdown, _format_text
 
-        # 构建 caption
+        # 构建 caption（纯文本格式）
         caption_parts = []
         if parse_result.title:
-            # 标题限制在100字符以内
-            title = parse_result.title[:100] if len(parse_result.title) > 100 else parse_result.title
-            caption_parts.append(f"**{_escape_markdown(title)}**")
+            caption_parts.append(f"**{parse_result.title}**")
         if parse_result.content:
-            # 内容限制在400字符以内（转义后约800字符）
             content = _format_text(parse_result.content)
-            content = content[:400] if len(content) > 400 else content
-            caption_parts.append(_escape_markdown(content))
+            caption_parts.append(content)
 
         caption = "\n\n".join(caption_parts) if caption_parts else "无标题"
         caption += f"\n\n🔗 [原链接]({url})"
 
-        # Telegram caption 限制 1024 字符，需要截断
-        if len(caption) > 1020:
+        # Telegram caption 限制 1024 字符，截断到 900 字符
+        if len(caption) > 1000:
             link_part = f"\n\n🔗 [原链接]({url})"
-            max_content_len = 1020 - len(link_part) - 10
+            max_content_len = 900 - len(link_part)
             caption = caption[:max_content_len] + "..." + link_part
-            caption = caption[:950] + "\\.\\.\\.\n\n🔗 [原链接](" + url + ")"
+
+        # 根据类型处理 + "\\.\\.\\.\n\n🔗 [原链接](" + url + ")"
 
         # 根据类型处理（只处理视频和混合媒体中的视频）
         if isinstance(parse_result, (VideoParseResult, ImageParseResult, MultimediaParseResult)):
@@ -509,7 +506,6 @@ async def _handle_video_inline(
                     media=InputMediaVideo(
                         media=video_file,
                         caption=caption,
-                        parse_mode=ParseMode.MARKDOWN_V2,
                         width=media.width or 0,
                         height=media.height or 0,
                         duration=media.duration or 0,
