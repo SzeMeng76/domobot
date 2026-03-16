@@ -319,6 +319,25 @@ class InlineQueryHandler:
 
         except Exception as e:
             logger.error(f"执行 inline 命令 {command} 失败: {e}", exc_info=True)
+
+            # 如果是 parse entities 错误，尝试不带格式重新返回
+            if "parse" in str(e).lower() and "entit" in str(e).lower():
+                try:
+                    return [
+                        InlineQueryResultArticle(
+                            id=str(uuid4()),
+                            title=f"{info['icon']} {info['title']}",
+                            description=f"{info['desc']} - {args[:50]}..." if len(args) > 50 else (f"{info['desc']} - {args}" if args else info['desc']),
+                            thumbnail_url=f"https://img.icons8.com/color/96/000000/checkmark.png",
+                            input_message_content=InputTextMessageContent(
+                                message_text=result_text,
+                            ),
+                            reply_markup=reply_markup
+                        )
+                    ]
+                except Exception:
+                    pass
+
             # 返回错误结果
             return [
                 InlineQueryResultArticle(
@@ -327,8 +346,7 @@ class InlineQueryHandler:
                     description=f"命令: {command} {args}",
                     thumbnail_url=f"https://img.icons8.com/color/96/000000/error.png",
                     input_message_content=InputTextMessageContent(
-                        message_text=f"❌ 执行命令时出错\n\n错误: {str(e)}\n\n💡 请在私聊中使用 `/{command} {args}` 重试",
-                        parse_mode=ParseMode.MARKDOWN
+                        message_text=f"❌ 执行命令时出错\n\n错误: {str(e)}\n\n💡 请在私聊中使用 /{command} {args} 重试",
                     ),
                 )
             ]

@@ -193,6 +193,10 @@ async def handle_inline_parse_query(
             if isinstance(parse_result.media, list) and len(parse_result.media) > 0:
                 thumb_url = str(parse_result.media[0].path) if hasattr(parse_result.media[0], 'path') else None
 
+        # InlineQueryResultPhoto 的 photo_url 不支持 WebP，跳过使用默认图片
+        if thumb_url and thumb_url.endswith('.webp'):
+            thumb_url = None
+
         # 根据类型返回不同的结果
         if isinstance(parse_result, RichTextParseResult):
             # 富文本 → 提示将发布到 Telegraph
