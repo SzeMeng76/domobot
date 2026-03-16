@@ -575,103 +575,109 @@ async def _handle_video_inline(
         video_path = Path(await ensure_h264(str(video_path)))
         video_size_mb = video_path.stat().st_size / (1024 * 1024)
 
-        if video_size_mb <= 50:  # 50MB limit for Bot API via HTTPS (2GB requires local Bot API server)
-            # Inline message 不能直接上传新文件，需要先发送到临时位置获取 file_id
-            # 先发送视频到 bot 自己的聊天获取 file_id
+        if video_size_mb <= 2048:  # 2GB limit via Pyrogram MTProto
             await context.bot.edit_message_caption(
                 inline_message_id=inline_message_id,
                 caption=f"📤 上传中... ({video_size_mb:.1f}MB)"
             )
 
-            from telegram import InputMediaVideo
+            # 使用 Pyrogram 的 edit_inline_media 直接上传文件到 inline message
+            # Pyrogram 通过 MTProto 协议，支持上传新文件到 inline message，无需临时频道
+            from commands.social_parser import _adapter as parse_adapter_instance
+            pyrogram_helper = getattr(parse_adapter_instance, 'pyrogram_helper', None)
 
-            # 发送到临时频道获取 file_id
-            config_manager = ConfigManager()
-            temp_channel_id = config_manager.config.inline_parse_temp_channel
+            if pyrogram_helper and pyrogram_helper.is_started and pyrogram_helper.client:
+                from pyrogram.types import InputMediaVideo as PyrogramInputMediaVideo
 
-            if not temp_channel_id:
-                logger.error("INLINE_PARSE_TEMP_CHANNEL not configured")
-                await context.bot.edit_message_caption(
+                await pyrogram_helper.client.edit_inline_media(
                     inline_message_id=inline_message_id,
-                    caption="❌ 配置错误：未设置临时存储频道"
+                    media=PyrogramInputMediaVideo(
+                        media=str(video_path),
+                        caption=caption,
+                        parse_mode="html",
+                        width=media.width or 0,
+                        height=media.height or 0,
+                        duration=media.duration or 0,
+                        supports_streaming=True,
+                    )
                 )
-                return
+                logger.info(f"[Inline Parse] Pyrogram edit_inline_media 成功: {url[:50]}...")
+            else:
+                # Pyrogram 不可用，fallback 到临时频道方案 (50MB 限制)
+                if video_size_mb > 50:
+                    # 超过 50MB 且无 Pyrogram，上传到图床
+                    await context.bot.edit_message_caption(
+                        inline_message_id=inline_message_id,
+                        caption=f"📤 视频过大 ({video_size_mb:.1f}MB)，上传到图床中..."
+                    )
+                    image_host_url = await parse_adapter.upload_to_image_host(video_path)
+                    if image_host_url:
+                        plain_caption = f"{parse_result.title or '无标题'}\n\n⚠️ 视频文件过大 ({video_size_mb:.1f}MB)\n📤 已上传到图床\n🔗 点击查看视频: {image_host_url}\n\n原链接: {url}"
+                    else:
+                        plain_caption = f"{parse_result.title or '无标题'}\n\n⚠️ 视频文件过大 ({video_size_mb:.1f}MB)，无法上传\n💡 请使用 /parse 命令获取完整视频\n\n原链接: {url}"
+                    await context.bot.edit_message_caption(
+                        inline_message_id=inline_message_id,
+                        caption=plain_caption
+                    )
+                else:
+                    # ≤50MB，用临时频道方案
+                    from telegram import InputMediaVideo
+                    config_manager = ConfigManager()
+                    temp_channel_id = config_manager.config.inline_parse_temp_channel
 
-            with open(video_path, 'rb') as video_file:
-                sent_message = await context.bot.send_video(
-                    chat_id=temp_channel_id,
-                    video=video_file,
-                    width=media.width or 0,
-                    height=media.height or 0,
-                    duration=media.duration or 0,
-                    supports_streaming=True,
-                    read_timeout=300,
-                    write_timeout=300,
-                    connect_timeout=30
-                )
+                    if not temp_channel_id:
+                        logger.error("INLINE_PARSE_TEMP_CHANNEL not configured and Pyrogram not available")
+                        await context.bot.edit_message_caption(
+                            inline_message_id=inline_message_id,
+                            caption="❌ 配置错误：未设置临时存储频道且 Pyrogram 不可用"
+                        )
+                        return
 
-            # 使用获取到的 file_id 来编辑 inline message
-            result = await context.bot.edit_message_media(
-                inline_message_id=inline_message_id,
-                media=InputMediaVideo(
-                    media=sent_message.video.file_id,
-                    caption=caption,
-                    parse_mode=ParseMode.HTML,
-                    width=media.width or 0,
-                    height=media.height or 0,
-                    duration=media.duration or 0,
-                    supports_streaming=True,
-                ),
-            )
+                    with open(video_path, 'rb') as video_file:
+                        sent_message = await context.bot.send_video(
+                            chat_id=temp_channel_id,
+                            video=video_file,
+                            width=media.width or 0,
+                            height=media.height or 0,
+                            duration=media.duration or 0,
+                            supports_streaming=True,
+                            read_timeout=300,
+                            write_timeout=300,
+                            connect_timeout=30
+                        )
 
-            # 删除临时消息
-            try:
-                await context.bot.delete_message(chat_id=temp_channel_id, message_id=sent_message.message_id)
-            except Exception:
-                pass
+                    result = await context.bot.edit_message_media(
+                        inline_message_id=inline_message_id,
+                        media=InputMediaVideo(
+                            media=sent_message.video.file_id,
+                            caption=caption,
+                            parse_mode=ParseMode.HTML,
+                            width=media.width or 0,
+                            height=media.height or 0,
+                            duration=media.duration or 0,
+                            supports_streaming=True,
+                        ),
+                    )
 
-                # 保存file_id到缓存
-                if result and hasattr(result, 'video') and result.video:
-                    cache_manager = context.bot_data.get("cache_manager")
-                    if cache_manager:
-                        try:
-                            await cache_manager.set(
-                                url,
-                                {
-                                    "file_id": result.video.file_id,
-                                    "file_type": "video",
-                                    "title": parse_result.title or "无标题",
-                                    "caption": caption,
-                                },
-                                subdirectory="inline_parse"
-                            )
-                            logger.info(f"[Inline Parse] 已保存file_id到缓存: {url[:50]}...")
-                        except Exception as e:
-                            logger.warning(f"[Inline Parse] 保存file_id失败: {e}")
+                    try:
+                        await context.bot.delete_message(chat_id=temp_channel_id, message_id=sent_message.message_id)
+                    except Exception:
+                        pass
         else:
-            # >50MB → 上传到图床
+            # >2GB → 上传到图床
             await context.bot.edit_message_caption(
                 inline_message_id=inline_message_id,
                 caption=f"📤 视频过大 ({video_size_mb:.1f}MB)，上传到图床中..."
             )
-
             image_host_url = await parse_adapter.upload_to_image_host(video_path)
-
             if image_host_url:
-                # 图床成功 - 使用纯文本格式避免转义问题
-                from html import escape as html_escape
                 plain_caption = f"{parse_result.title or '无标题'}\n\n⚠️ 视频文件过大 ({video_size_mb:.1f}MB)\n📤 已上传到图床\n🔗 点击查看视频: {image_host_url}\n\n原链接: {url}"
-                await context.bot.edit_message_caption(
-                    inline_message_id=inline_message_id,
-                    caption=plain_caption
-                )
             else:
-                # 图床失败 - 使用纯文本格式
                 plain_caption = f"{parse_result.title or '无标题'}\n\n⚠️ 视频文件过大 ({video_size_mb:.1f}MB)，无法上传\n💡 请使用 /parse 命令获取完整视频\n\n原链接: {url}"
-                await context.bot.edit_message_caption(
-                    inline_message_id=inline_message_id,
-                    caption=plain_caption
-                )
+            await context.bot.edit_message_caption(
+                inline_message_id=inline_message_id,
+                caption=plain_caption
+            )
 
         # 清理临时文件
         try:
