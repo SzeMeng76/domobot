@@ -155,7 +155,7 @@ def permission_required(require_admin=False):
     def decorator(func):
         @functools.wraps(func)
         async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
-            from utils.message_manager import send_and_auto_delete
+            from utils.message_manager import send_error, delete_user_command
 
             user_id = update.effective_user.id
             chat_type = update.effective_chat.type
@@ -174,16 +174,19 @@ def permission_required(require_admin=False):
                 if require_admin:
                     is_admin = user_id == config.super_admin_id or await user_manager.is_admin(user_id)
                     if not is_admin:
-                        await send_and_auto_delete(
+                        await send_error(
                             context=context,
                             chat_id=update.effective_chat.id,
-                            text="❌ **管理员权限不足**\n\n此命令仅限管理员使用。",
-                            delay=config.auto_delete_delay,
-                            command_message_id=update.message.message_id
-                            if update.message and config.delete_user_commands
-                            else None,
+                            text="**管理员权限不足**\n\n此命令仅限管理员使用。",
                             parse_mode="Markdown",
                         )
+                        # 删除用户命令
+                        if update.message:
+                            await delete_user_command(
+                                context=context,
+                                chat_id=update.effective_chat.id,
+                                message_id=update.message.message_id,
+                            )
                         return
                 else:
                     # 检查基本使用权限
@@ -201,16 +204,19 @@ def permission_required(require_admin=False):
                         has_permission = await user_manager.is_group_whitelisted(chat_id)
 
                     if not has_permission:
-                        await send_and_auto_delete(
+                        await send_error(
                             context=context,
                             chat_id=update.effective_chat.id,
-                            text="❌ **权限不足**\n\n你没有使用此机器人的权限。\n请联系管理员申请权限。",
-                            delay=config.auto_delete_delay,
-                            command_message_id=update.message.message_id
-                            if update.message and config.delete_user_commands
-                            else None,
+                            text="**权限不足**\n\n你没有使用此机器人的权限。\n请联系管理员申请权限。",
                             parse_mode="Markdown",
                         )
+                        # 删除用户命令
+                        if update.message:
+                            await delete_user_command(
+                                context=context,
+                                chat_id=update.effective_chat.id,
+                                message_id=update.message.message_id,
+                            )
                         return
 
             except Exception as e:

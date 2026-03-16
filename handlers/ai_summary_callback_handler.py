@@ -158,7 +158,7 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             # 替换模式：只显示AI总结（类似parse_hub_bot）
             # 构建新caption：只包含AI总结和原链接
             # 清理AI总结中的不支持的HTML标签
-            cleaned_summary = ai_summary.replace('<br>', '\n').replace('<br/>', '\n').replace('<br />', '\n')
+            cleaned_summary = _clean_html_tags(ai_summary)
             summary_caption = f"📝 AI总结:\n\n{cleaned_summary}"
 
             # 添加原链接（从缓存数据中获取）
@@ -222,6 +222,26 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     except Exception as e:
         logger.error(f"AI总结callback处理失败: {e}", exc_info=True)
         await query.answer("❌ 处理失败", show_alert=True)
+
+
+def _clean_html_tags(text: str) -> str:
+    """
+    清理不支持的HTML标签，只保留Telegram支持的标签
+    Telegram支持的HTML标签: b, strong, i, em, u, ins, s, strike, del, code, pre, a, blockquote
+    """
+    import re
+
+    # 替换 <br> 标签为换行
+    text = text.replace('<br>', '\n').replace('<br/>', '\n').replace('<br />', '\n')
+
+    # 移除所有不支持的标签（保留内容）
+    # 匹配所有 <xxx> 和 </xxx> 标签，但排除支持的标签
+    allowed_tags = r'(?!/?(?:b|strong|i|em|u|ins|s|strike|del|code|pre|a|blockquote)\b)'
+
+    # 移除不支持的开始标签和结束标签（包括带属性的）
+    text = re.sub(r'<' + allowed_tags + r'[^>]*?>', '', text)
+
+    return text
 
 
 def _get_buttons_with_hide(original_markup, url_hash: str):

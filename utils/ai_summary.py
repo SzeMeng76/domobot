@@ -23,7 +23,8 @@ DEFAULT_PROMPT = """你是一个活泼友好的社交媒体助手，帮助用户
 请用生动有趣的方式总结这个内容，要求：
 
 **格式要求：**
-- 使用 HTML 格式（<b>粗体</b>、<i>斜体</i>、<code>代码</code>、<blockquote>引用</blockquote>等）
+- 使用 HTML 格式，仅允许以下标签：<b>粗体</b>、<i>斜体</i>、<code>代码</code>、<strong>加粗</strong>、<blockquote>引用</blockquote>、<a href="url">链接</a>
+- **严禁使用其他 HTML 标签**（如 <div>、<span>、<|begin_of_box|> 等都不允许）
 - 中英文之间需要空格
 - 技术关键词使用 <code>行内代码</code>
 - 重要引用使用 <blockquote>引用内容</blockquote>

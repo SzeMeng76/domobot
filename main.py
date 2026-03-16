@@ -133,20 +133,13 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     # 尝试向用户发送错误信息
     if isinstance(update, Update) and update.effective_message:
         try:
-            from utils.config_manager import get_config
-            from utils.message_manager import send_and_auto_delete
-
-            config = get_config()
+            from utils.message_manager import send_error
 
             # 使用自动删除功能发送错误消息
-            await send_and_auto_delete(
+            await send_error(
                 context=context,
                 chat_id=update.effective_chat.id,
-                text="❌ 处理请求时发生错误，请稍后重试。\n如果问题持续存在，请联系管理员。",
-                delay=config.auto_delete_delay,
-                command_message_id=update.effective_message.message_id
-                if hasattr(update.effective_message, "message_id")
-                else None,
+                text="处理请求时发生错误，请稍后重试。\n如果问题持续存在，请联系管理员。",
             )
         except Exception as e:
             logger.error(f"发送错误消息失败: {e}")  # 记录失败原因而不是静默忽略
