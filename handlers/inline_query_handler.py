@@ -89,8 +89,22 @@ class InlineQueryHandler:
 
             # 调用 parse handler
             from handlers.inline_parse_handler import handle_inline_parse_query
-            results = await handle_inline_parse_query(update, context, query)
-            await update.inline_query.answer(results, cache_time=10)
+            try:
+                results = await handle_inline_parse_query(update, context, query)
+                logger.info(f"[Inline Parse] 返回 {len(results)} 个结果, query={query[:50]}")
+                await update.inline_query.answer(results, cache_time=10)
+            except Exception as e:
+                logger.error(f"[Inline Parse] answer_inline_query 失败: {e}", exc_info=True)
+                await update.inline_query.answer([
+                    InlineQueryResultArticle(
+                        id=str(uuid4()),
+                        title="❌ 解析结果返回失败",
+                        description=str(e)[:100],
+                        input_message_content=InputTextMessageContent(
+                            message_text=f"❌ 解析结果返回失败\n\n错误: {str(e)}"
+                        ),
+                    )
+                ])
             return
 
         # ========================================

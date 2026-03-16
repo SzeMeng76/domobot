@@ -242,6 +242,8 @@ async def handle_inline_parse_query(
             # 添加原链接按钮
             keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔗 原链接", url=url)]])
 
+            logger.info(f"[Inline Parse] 构建视频结果: title={title[:30]}, thumb={thumb_url}, caption_len={len(caption_text)}")
+
             return [
                 InlineQueryResultPhoto(
                     id=result_id,
