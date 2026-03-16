@@ -515,8 +515,9 @@ class InlineCommandAdapter:
                 None
             )
 
-        # 获取 movie_service
-        movie_service = self.context.bot_data.get("movie_service")
+        # 获取 movie_service（使用全局变量）
+        from commands.movie import movie_service
+
         if not movie_service:
             return (
                 "❌ *电影服务未初始化*\n\n"
