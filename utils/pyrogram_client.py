@@ -410,7 +410,7 @@ class PyrogramHelper:
         chat_id: int,
         video_path: str,
         caption: str = "",
-        reply_to_message_id: Optional[int] = None,
+        reply_parameters = None,
         width: int = 0,
         height: int = 0,
         duration: int = 0,
@@ -430,7 +430,7 @@ class PyrogramHelper:
             chat_id: 聊天ID
             video_path: 视频文件路径
             caption: 视频说明文字
-            reply_to_message_id: 回复的消息ID
+            reply_parameters: ReplyParameters 对象（用于回复消息）
             width: 视频宽度
             height: 视频高度
             duration: 视频时长（秒）
@@ -500,11 +500,18 @@ class PyrogramHelper:
                 elif parse_mode.lower() == "html":
                     pyrogram_parse_mode = enums.ParseMode.HTML
 
+            # 转换 reply_parameters: python-telegram-bot ReplyParameters → message_id
+            reply_to_msg_id = None
+            if reply_parameters:
+                # python-telegram-bot ReplyParameters 对象
+                if hasattr(reply_parameters, 'message_id'):
+                    reply_to_msg_id = reply_parameters.message_id
+
             message = await self.client.send_video(
                 chat_id=chat_id,
                 video=video_path,
                 caption=caption,
-                reply_to_message_id=reply_to_message_id,
+                reply_to_message_id=reply_to_msg_id,
                 width=width,
                 height=height,
                 duration=duration,
@@ -527,7 +534,7 @@ class PyrogramHelper:
         chat_id: int,
         photo_path: str,
         caption: str = "",
-        reply_to_message_id: Optional[int] = None
+        reply_parameters = None
     ):
         """
         使用 Pyrogram 发送大图片文件
@@ -536,7 +543,7 @@ class PyrogramHelper:
             chat_id: 聊天ID
             photo_path: 图片文件路径
             caption: 图片说明文字
-            reply_to_message_id: 回复的消息ID
+            reply_parameters: ReplyParameters 对象（用于回复消息）
 
         Returns:
             发送的消息对象
@@ -547,11 +554,16 @@ class PyrogramHelper:
         try:
             logger.info(f"📤 使用 Pyrogram 上传图片: {photo_path}")
 
+            # 转换 reply_parameters
+            reply_to_msg_id = None
+            if reply_parameters and hasattr(reply_parameters, 'message_id'):
+                reply_to_msg_id = reply_parameters.message_id
+
             message = await self.client.send_photo(
                 chat_id=chat_id,
                 photo=photo_path,
                 caption=caption,
-                reply_to_message_id=reply_to_message_id
+                reply_to_message_id=reply_to_msg_id
             )
 
             logger.info(f"✅ 图片上传成功: {photo_path}")

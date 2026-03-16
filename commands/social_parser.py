@@ -8,7 +8,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from telegram import Update
+from telegram import Update, ReplyParameters
 from telegram.ext import ContextTypes
 from PIL import Image as PILImage
 import pillow_heif
@@ -337,7 +337,8 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             logger.info(f"✅ 已缓存解析数据: cache:social_parser:summary:{url_hash}")
 
         # 发送媒体（带按钮）
-        sent_messages = await _send_media(context, chat_id, result, caption, reply_to_message_id=update.message.message_id if update.message else None, reply_markup=reply_markup, parse_result=parse_result)
+        reply_params = ReplyParameters(message_id=update.message.message_id) if update.message else None
+        sent_messages = await _send_media(context, chat_id, result, caption, reply_parameters=reply_params, reply_markup=reply_markup, parse_result=parse_result)
 
         # 删除状态消息
         await status_msg.delete()
@@ -361,27 +362,27 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             await delete_user_command(context, chat_id, update.message.message_id)
 
 
-async def _send_media(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None, reply_markup=None, parse_result=None):
+async def _send_media(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_parameters: ReplyParameters = None, reply_markup=None, parse_result=None):
     """发送媒体文件，返回发送的消息列表"""
     try:
         # 使用 parse_result（parsehub 2.0.0 不再存储在 download_result 中）
         pr = parse_result
         if isinstance(pr, VideoParseResult):
             # 发送视频
-            return await _send_video(context, chat_id, download_result, caption, reply_to_message_id, reply_markup, parse_result=pr)
+            return await _send_video(context, chat_id, download_result, caption, reply_parameters, reply_markup, parse_result=pr)
         elif isinstance(pr, ImageParseResult) or isinstance(pr, RichTextParseResult):
             # 发送图片
-            return await _send_images(context, chat_id, download_result, caption, reply_to_message_id, reply_markup, parse_result=pr)
+            return await _send_images(context, chat_id, download_result, caption, reply_parameters, reply_markup, parse_result=pr)
         elif isinstance(pr, MultimediaParseResult):
             # 发送混合媒体
-            return await _send_multimedia(context, chat_id, download_result, caption, reply_to_message_id, reply_markup, parse_result=pr)
+            return await _send_multimedia(context, chat_id, download_result, caption, reply_parameters, reply_markup, parse_result=pr)
         else:
             # 只发送文本
             msg = await context.bot.send_message(
                 chat_id=chat_id,
                 text=caption,
                 parse_mode="MarkdownV2",
-                reply_to_message_id=reply_to_message_id,
+                reply_parameters=reply_parameters,
                 disable_web_page_preview=True,
                 reply_markup=reply_markup
             )
@@ -391,7 +392,7 @@ async def _send_media(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
         raise
 
 
-async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None, reply_markup=None, parse_result=None):
+async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_parameters: ReplyParameters = None, reply_markup=None, parse_result=None):
     """发送视频（支持视频分割和图床上传），返回发送的消息列表"""
     media = download_result.media
 
@@ -425,7 +426,7 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
                         chat_id=chat_id,
                         text=f"{_escape_markdown(summary)}\n\n📰 [查看完整内容]({telegraph_url})",
                         parse_mode="MarkdownV2",
-                        reply_to_message_id=reply_to_message_id,
+                        reply_parameters=reply_parameters,
                         disable_web_page_preview=False,
                         reply_markup=reply_markup
                     )
@@ -438,7 +439,7 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
             chat_id=chat_id,
             text=caption,
             parse_mode="MarkdownV2",
-            reply_to_message_id=reply_to_message_id,
+            reply_parameters=reply_parameters,
             disable_web_page_preview=True,
             reply_markup=reply_markup
         )
@@ -474,7 +475,7 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
                     photo=thumb_url,
                     caption=preview_caption,
                     parse_mode="MarkdownV2",
-                    reply_to_message_id=reply_to_message_id,
+                    reply_parameters=reply_parameters,
                     reply_markup=reply_markup
                 )
             except Exception as e:
@@ -486,7 +487,7 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
                 chat_id=chat_id,
                 text=preview_caption,
                 parse_mode="MarkdownV2",
-                reply_to_message_id=reply_to_message_id,
+                reply_parameters=reply_parameters,
                 disable_web_page_preview=True
             )
 
@@ -506,7 +507,7 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
                         chat_id=chat_id,
                         video_path=str(video_path),
                         caption=caption,
-                        reply_to_message_id=reply_to_message_id,
+                        reply_parameters=reply_parameters,
                         width=media.width or 0,
                         height=media.height or 0,
                         duration=media.duration or 0,
@@ -622,7 +623,7 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
             width=media.width or 0,
             height=media.height or 0,
             duration=media.duration or 0,
-            reply_to_message_id=reply_to_message_id,
+            reply_parameters=reply_parameters,
             supports_streaming=True,
             reply_markup=reply_markup,
             read_timeout=300,
@@ -632,7 +633,7 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
     return [msg]
 
 
-async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None, reply_markup=None, parse_result=None):
+async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_parameters: ReplyParameters = None, reply_markup=None, parse_result=None):
     """发送图片，返回发送的消息列表"""
     from parsehub.parsers.parser.coolapk import CoolapkImageParseResult
     from markdown import markdown
@@ -652,7 +653,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                             chat_id=chat_id,
                             text=f"{caption}\n\n📰 [查看完整文章]({telegraph_url})",
                             parse_mode="MarkdownV2",
-                            reply_to_message_id=reply_to_message_id,
+                            reply_parameters=reply_parameters,
                             disable_web_page_preview=False,
                             reply_markup=reply_markup
                         )
@@ -675,7 +676,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                                 chat_id=chat_id,
                                 text=f"{caption}\n\n📰 [查看完整内容]({telegraph_url})",
                                 parse_mode="MarkdownV2",
-                                reply_to_message_id=reply_to_message_id,
+                                reply_parameters=reply_parameters,
                                 disable_web_page_preview=False,
                                 reply_markup=reply_markup
                             )
@@ -721,7 +722,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                         chat_id=chat_id,
                         text=f"{_escape_markdown(summary)}\n\n📰 [查看完整内容]({telegraph_url})",
                         parse_mode="MarkdownV2",
-                        reply_to_message_id=reply_to_message_id,
+                        reply_parameters=reply_parameters,
                         disable_web_page_preview=False,
                         reply_markup=reply_markup
                     )
@@ -734,7 +735,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
             chat_id=chat_id,
             text=caption,
             parse_mode="MarkdownV2",
-            reply_to_message_id=reply_to_message_id,
+            reply_parameters=reply_parameters,
             disable_web_page_preview=True,
             reply_markup=reply_markup
         )
@@ -750,7 +751,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                 photo=photo_file,
                 caption=caption,
                 parse_mode="MarkdownV2",
-                reply_to_message_id=reply_to_message_id,
+                reply_parameters=reply_parameters,
                 reply_markup=reply_markup
             )
         return [msg]
@@ -802,7 +803,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
         messages = await context.bot.send_media_group(
             chat_id=chat_id,
             media=media_group,
-            reply_to_message_id=reply_to_message_id
+            reply_parameters=reply_parameters
         )
 
         # 单独发送文本消息带caption和按钮
@@ -810,7 +811,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
             chat_id=chat_id,
             text=caption,
             parse_mode="MarkdownV2",
-            reply_to_message_id=messages[0].message_id,  # 回复到第一张图片
+            reply_parameters=ReplyParameters(message_id=messages[0].message_id),  # 回复到第一张图片
             disable_web_page_preview=True,
             reply_markup=reply_markup
         )
@@ -868,7 +869,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                         chat_id=chat_id,
                         text=f"{caption}\n\n📷 共 {len(media_list)} 张图片\n🔗 [查看完整图集]({telegraph_url})",
                         parse_mode="MarkdownV2",
-                        reply_to_message_id=reply_to_message_id,
+                        reply_parameters=reply_parameters,
                         disable_web_page_preview=False,
                         reply_markup=reply_markup
                     )
@@ -881,7 +882,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
             chat_id=chat_id,
             text=f"{caption}\n\n📷 共{len(media_list)}张图片，分批发送中...",
             parse_mode="MarkdownV2",
-            reply_to_message_id=reply_to_message_id,
+            reply_parameters=reply_parameters,
             disable_web_page_preview=True,
             reply_markup=reply_markup
         )
@@ -901,7 +902,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
         return sent_messages
 
 
-async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_to_message_id: int = None, reply_markup=None, parse_result=None):
+async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_parameters: ReplyParameters = None, reply_markup=None, parse_result=None):
     """发送混合媒体（参考parse_hub_bot的实现，使用media_group分批发送），返回发送的消息列表"""
     from telegram import InputMediaPhoto, InputMediaVideo
 
@@ -939,7 +940,7 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
                         chat_id=chat_id,
                         text=f"{_escape_markdown(summary)}\n\n📰 [查看完整内容]({telegraph_url})",
                         parse_mode="MarkdownV2",
-                        reply_to_message_id=reply_to_message_id,
+                        reply_parameters=reply_parameters,
                         disable_web_page_preview=False,
                         reply_markup=reply_markup
                     )
@@ -952,7 +953,7 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
             chat_id=chat_id,
             text=caption,
             parse_mode="MarkdownV2",
-            reply_to_message_id=reply_to_message_id,
+            reply_parameters=reply_parameters,
             disable_web_page_preview=True,
             reply_markup=reply_markup
         )
@@ -972,7 +973,7 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
                     chat_id=chat_id,
                     text=f"{caption}\n\n⚠️ 视频文件过大 \\({video_size_mb:.1f}MB\\)，无法直接发送",
                     parse_mode="MarkdownV2",
-                    reply_to_message_id=reply_to_message_id,
+                    reply_parameters=reply_parameters,
                     disable_web_page_preview=True,
                     reply_markup=reply_markup
                 )
@@ -984,7 +985,7 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
                     video=video_file,
                     caption=caption,
                     parse_mode="MarkdownV2",
-                    reply_to_message_id=reply_to_message_id,
+                    reply_parameters=reply_parameters,
                     supports_streaming=True,
                     reply_markup=reply_markup,
                     read_timeout=300,
@@ -999,7 +1000,7 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
                     photo=photo_file,
                     caption=caption,
                     parse_mode="MarkdownV2",
-                    reply_to_message_id=reply_to_message_id,
+                    reply_parameters=reply_parameters,
                     reply_markup=reply_markup
                 )
             return [msg]
@@ -1033,7 +1034,7 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
                     messages = await context.bot.send_media_group(
                         chat_id=chat_id,
                         media=media_group,
-                        reply_to_message_id=reply_to_message_id
+                        reply_parameters=reply_parameters
                     )
                     media_groups.append(messages)
                 except Exception as e:
@@ -1052,7 +1053,7 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
                     chat_id=chat_id,
                     text=caption,
                     parse_mode="MarkdownV2",
-                    reply_to_message_id=first_message.message_id,
+                    reply_parameters=ReplyParameters(message_id=first_message.message_id),
                     disable_web_page_preview=True,
                     reply_markup=reply_markup
                 )
