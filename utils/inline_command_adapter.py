@@ -555,7 +555,7 @@ class InlineCommandAdapter:
 
                 # 过滤掉命令行（/movie_detail, /tv_detail 等）
                 lines = result_text.split('\n')
-                filtered_lines = [line for line in lines if not line.strip().startswith('/')]
+                filtered_lines = [line for line in lines if not line.strip().strip('`').startswith('/')]
 
                 # 简化输出（保留前50行以包含所有3个数据源）
                 message = '\n'.join(filtered_lines[:50])
@@ -591,7 +591,7 @@ class InlineCommandAdapter:
 
                 # 过滤掉命令行（/movie_detail, /tv_detail 等）
                 lines = result_text.split('\n')
-                filtered_lines = [line for line in lines if not line.strip().startswith('/')]
+                filtered_lines = [line for line in lines if not line.strip().strip('`').startswith('/')]
 
                 # 简化输出（保留前50行以包含所有3个数据源）
                 message = '\n'.join(filtered_lines[:50])
