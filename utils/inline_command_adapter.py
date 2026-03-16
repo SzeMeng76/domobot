@@ -58,6 +58,7 @@ class InlineCommandAdapter:
             "map": self._handle_map,
             "flight": self._handle_flight,
             "hotel": self._handle_hotel,
+            "chart": self._handle_chart,
         }
 
         handler = command_handlers.get(command)
@@ -472,3 +473,162 @@ class InlineCommandAdapter:
             ParseMode.MARKDOWN_V2,
             None
         )
+
+    # ============================================================================
+    # 📊 影视排行榜
+    # ============================================================================
+
+    async def _handle_chart(self, args: str):
+        """处理 chart 命令"""
+        from utils.formatter import escape_v2
+
+        # 参数映射
+        chart_types = {
+            "movie": "综合热门电影",
+            "tv": "综合热门剧集",
+            "trending": "今日热门",
+            "playing": "正在上映",
+            "upcoming": "即将上映",
+        }
+
+        if not args:
+            # 无参数，显示帮助
+            help_text = "*📊 影视排行榜*\n\n"
+            help_text += "*使用方法:*\n"
+            help_text += "`chart movie` \\- 综合热门电影\n"
+            help_text += "`chart tv` \\- 综合热门剧集\n"
+            help_text += "`chart trending` \\- 今日热门\n"
+            help_text += "`chart playing` \\- 正在上映\n"
+            help_text += "`chart upcoming` \\- 即将上映\n\n"
+            help_text += "💡 完整功能请使用 `/chart`"
+
+            return (help_text, ParseMode.MARKDOWN_V2, None)
+
+        chart_type = args.strip().lower()
+
+        if chart_type not in chart_types:
+            return (
+                f"❌ *未知的排行榜类型*\n\n"
+                f"支持的类型: {escape_v2(', '.join(chart_types.keys()))}\n\n"
+                f"💡 请在私聊中使用 `/chart` 获取完整功能",
+                ParseMode.MARKDOWN_V2,
+                None
+            )
+
+        # 获取 movie_service
+        movie_service = self.context.bot_data.get("movie_service")
+        if not movie_service:
+            return (
+                "❌ *电影服务未初始化*\n\n"
+                "💡 请在私聊中使用 `/chart` 重试",
+                ParseMode.MARKDOWN_V2,
+                None
+            )
+
+        try:
+            # 根据类型获取数据
+            if chart_type == "movie":
+                # 综合热门电影 - 混合 TMDB + JustWatch + Trakt
+                tmdb_data = await movie_service.get_popular_movies()
+                justwatch_data = None
+                trakt_data = None
+
+                # 获取 JustWatch 数据
+                try:
+                    justwatch_data = await movie_service.get_multi_country_streaming_ranking(
+                        content_type="movie", countries=None, limit=4
+                    )
+                except Exception as e:
+                    logger.warning(f"获取JustWatch电影数据失败: {e}")
+
+                # 获取 Trakt 数据
+                try:
+                    trakt_data = await movie_service._get_trakt_trending_movies(8)
+                except Exception as e:
+                    logger.warning(f"获取Trakt电影数据失败: {e}")
+
+                # 使用原始的混合格式化函数
+                result_text = movie_service.format_mixed_popular_content(
+                    tmdb_data, justwatch_data, content_type="movie", trakt_data=trakt_data
+                )
+
+                # 简化输出（只保留前10行）
+                lines = result_text.split('\n')
+                message = '\n'.join(lines[:30])  # 保留标题和前10个条目
+                message += "\n\n💡 完整排行榜请使用 `/chart`"
+
+                return (message, ParseMode.MARKDOWN_V2, None)
+
+            elif chart_type == "tv":
+                # 综合热门剧集 - 混合 TMDB + JustWatch + Trakt
+                tmdb_data = await movie_service.get_popular_tv_shows()
+                justwatch_data = None
+                trakt_data = None
+
+                # 获取 JustWatch 数据
+                try:
+                    justwatch_data = await movie_service.get_multi_country_streaming_ranking(
+                        content_type="tv", countries=None, limit=4
+                    )
+                except Exception as e:
+                    logger.warning(f"获取JustWatch剧集数据失败: {e}")
+
+                # 获取 Trakt 数据
+                try:
+                    trakt_data = await movie_service._get_trakt_trending_tv(8)
+                except Exception as e:
+                    logger.warning(f"获取Trakt剧集数据失败: {e}")
+
+                # 使用原始的混合格式化函数
+                result_text = movie_service.format_mixed_popular_content(
+                    tmdb_data, justwatch_data, content_type="tv", trakt_data=trakt_data
+                )
+
+                # 简化输出（只保留前10行）
+                lines = result_text.split('\n')
+                message = '\n'.join(lines[:30])  # 保留标题和前10个条目
+                message += "\n\n💡 完整排行榜请使用 `/chart`"
+
+                return (message, ParseMode.MARKDOWN_V2, None)
+
+            elif chart_type == "trending":
+                data = await movie_service.get_trending()
+                title = "🔥 今日热门"
+            elif chart_type == "playing":
+                data = await movie_service.get_now_playing()
+                title = "🎭 正在上映"
+            elif chart_type == "upcoming":
+                data = await movie_service.get_upcoming()
+                title = "📈 即将上映"
+            else:
+                return self._default_handler("chart", args)
+
+            if not data:
+                return (
+                    f"❌ *获取{escape_v2(chart_types[chart_type])}失败*\n\n"
+                    "💡 请稍后重试或在私聊中使用 `/chart`",
+                    ParseMode.MARKDOWN_V2,
+                    None
+                )
+
+            # 格式化结果（只显示前10个）
+            message = f"*{escape_v2(title)}*\n\n"
+            for i, item in enumerate(data[:10], 1):
+                title_text = escape_v2(item.get("title") or item.get("name", "未知"))
+                rating = item.get("vote_average", 0)
+                rating_text = escape_v2(f"{rating:.1f}")
+                message += f"{i}\\. {title_text} ⭐ {rating_text}\n"
+
+            message += f"\n💡 完整排行榜请使用 `/chart`"
+
+            return (message, ParseMode.MARKDOWN_V2, None)
+
+        except Exception as e:
+            logger.error(f"获取排行榜失败: {e}", exc_info=True)
+            return (
+                f"❌ *查询失败*\n\n"
+                f"错误: {escape_v2(str(e))}\n\n"
+                f"💡 请在私聊中使用 `/chart` 重试",
+                ParseMode.MARKDOWN_V2,
+                None
+            )

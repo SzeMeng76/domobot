@@ -229,6 +229,7 @@ class InlineQueryHandler:
 • `news$` - 热门新闻汇总
 • `whois google.com$` - WHOIS/DNS查询
 • `cooking$` - 随机菜谱推荐
+• `chart movie$` - 影视排行榜
 
 **📱 社交媒体解析:**
 • 直接输入链接(无需$符号) - 解析视频/图片/图文
@@ -277,6 +278,7 @@ class InlineQueryHandler:
             "news": "📰 新闻 - 添加 $ 执行查询",
             "whois": "🌐 域名查询 - 添加 $ 执行查询",
             "cooking": "👨‍🍳 菜谱 - 添加 $ 执行查询",
+            "chart": "📊 排行榜 - 添加 $ 执行查询",
         }
 
         hint = command_hints.get(command, f"💡 添加 '{self.trigger_suffix}' 执行命令")
@@ -322,6 +324,7 @@ class InlineQueryHandler:
             "news": {"icon": "📰", "title": "新闻", "desc": "最新资讯"},
             "whois": {"icon": "🌐", "title": "域名查询", "desc": "WHOIS信息"},
             "cooking": {"icon": "👨‍🍳", "title": "菜谱", "desc": "烹饪指南"},
+            "chart": {"icon": "📊", "title": "排行榜", "desc": "影视排行"},
         }
 
         info = command_info.get(command, {"icon": "🔍", "title": command.upper(), "desc": "执行命令"})
