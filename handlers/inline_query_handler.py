@@ -170,14 +170,24 @@ class InlineQueryHandler:
             await update.inline_query.answer(results, cache_time=10)
         except Exception as e:
             logger.error(f"[Inline] answer 失败，尝试去除格式重试: {e}")
-            # parse entities 失败，去掉格式重试
+            # parse entities 失败，重建结果（去掉 parse_mode）
             try:
+                plain_results = []
                 for r in results:
                     if hasattr(r, 'input_message_content') and r.input_message_content:
-                        r.input_message_content = InputTextMessageContent(
-                            message_text=r.input_message_content.message_text
+                        plain_results.append(
+                            InlineQueryResultArticle(
+                                id=str(uuid4()),
+                                title=r.title if hasattr(r, 'title') else "查询结果",
+                                description=r.description if hasattr(r, 'description') else None,
+                                input_message_content=InputTextMessageContent(
+                                    message_text=r.input_message_content.message_text
+                                ),
+                            )
                         )
-                await update.inline_query.answer(results, cache_time=10)
+                    else:
+                        plain_results.append(r)
+                await update.inline_query.answer(plain_results, cache_time=10)
             except Exception as e2:
                 logger.error(f"[Inline] 去除格式后仍然失败: {e2}")
                 await update.inline_query.answer([
