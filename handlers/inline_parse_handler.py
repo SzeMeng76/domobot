@@ -588,13 +588,14 @@ async def _handle_video_inline(
 
             if pyrogram_helper and pyrogram_helper.is_started and pyrogram_helper.client:
                 from pyrogram.types import InputMediaVideo as PyrogramInputMediaVideo
+                from pyrogram.enums import ParseMode as PyrogramParseMode
 
                 await pyrogram_helper.client.edit_inline_media(
                     inline_message_id=inline_message_id,
                     media=PyrogramInputMediaVideo(
                         media=str(video_path),
                         caption=caption,
-                        parse_mode="html",
+                        parse_mode=PyrogramParseMode.HTML,
                         width=media.width or 0,
                         height=media.height or 0,
                         duration=media.duration or 0,
