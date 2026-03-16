@@ -230,6 +230,10 @@ class InlineQueryHandler:
 • `whois google.com$` - WHOIS/DNS查询
 • `cooking$` - 随机菜谱推荐
 
+**🚀 Boost查询:**
+• `boost @channel$` - 查询频道Boost状态
+• `myboosts$` - 查看我的Boost列表
+
 **📱 社交媒体解析:**
 • 直接输入链接(无需$符号) - 解析视频/图片/图文
 • 支持抖音、B站、YouTube、TikTok、小红书、Twitter等20+平台
@@ -277,6 +281,8 @@ class InlineQueryHandler:
             "news": "📰 新闻 - 添加 $ 执行查询",
             "whois": "🌐 域名查询 - 添加 $ 执行查询",
             "cooking": "👨‍🍳 菜谱 - 添加 $ 执行查询",
+            "boost": "🚀 Boost查询 - 添加 $ 执行查询",
+            "myboosts": "📋 我的Boost - 添加 $ 执行查询",
         }
 
         hint = command_hints.get(command, f"💡 添加 '{self.trigger_suffix}' 执行命令")
@@ -322,6 +328,8 @@ class InlineQueryHandler:
             "news": {"icon": "📰", "title": "新闻", "desc": "最新资讯"},
             "whois": {"icon": "🌐", "title": "域名查询", "desc": "WHOIS信息"},
             "cooking": {"icon": "👨‍🍳", "title": "菜谱", "desc": "烹饪指南"},
+            "boost": {"icon": "🚀", "title": "Boost查询", "desc": "频道Boost状态"},
+            "myboosts": {"icon": "📋", "title": "我的Boost", "desc": "Boost列表"},
         }
 
         info = command_info.get(command, {"icon": "🔍", "title": command.upper(), "desc": "执行命令"})
