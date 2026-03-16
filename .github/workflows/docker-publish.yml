@@ -41,20 +41,7 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "Version is: $VERSION"
 
-      # 第三步：设置 Python 环境
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          # ✨ ParseHub 需要 Python 3.12+
-          python-version: '3.12' 
-      
-      # 第四步：安装 Python 依赖
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
- 
-      # 第五步：动态生成 Docker 镜像的标签 (已更新为总是包含 latest)
+      # 第三步：动态生成 Docker 镜像的标签 (已更新为总是包含 latest)
       - name: Generate Docker tags
         id: meta
         run: |
@@ -80,22 +67,22 @@ jobs:
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
           echo "Generated tags: ${TAGS}"
 
-      # 第六步：设置 QEMU，用于多平台构建
+      # 第四步：设置 QEMU，用于多平台构建
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
-      # 第七步：设置 Docker Buildx，新一代的构建工具
+      # 第五步：设置 Docker Buildx，新一代的构建工具
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 第八步：登录到 Docker Hub (暂时禁用，只用GitHub Container Registry)
+      # 第六步：登录到 Docker Hub (暂时禁用，只用GitHub Container Registry)
       # - name: Log in to Docker Hub
       #   uses: docker/login-action@v3
       #   with:
       #     username: ${{ secrets.DOCKERHUB_USERNAME }}
       #     password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 第九步：登录到 GitHub Container Registry (GHCR)
+      # 第七步：登录到 GitHub Container Registry (GHCR)
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -103,11 +90,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Clean up Docker build cache
-        run: |
-          docker system prune -af
-          
-      # 第十步：构建并推送 Docker 镜像
+      # 第八步：构建并推送 Docker 镜像
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
