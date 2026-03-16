@@ -553,12 +553,16 @@ class InlineCommandAdapter:
                     tmdb_data, justwatch_data, content_type="movie", trakt_data=trakt_data
                 )
 
-                # 简化输出（只保留前10行）
+                # 过滤掉命令行（/movie_detail, /tv_detail 等）
                 lines = result_text.split('\n')
-                message = '\n'.join(lines[:30])  # 保留标题和前10个条目
-                message += "\n\n💡 完整排行榜请使用 `/chart`"
+                filtered_lines = [line for line in lines if not line.strip().startswith('/')]
 
-                return (message, ParseMode.MARKDOWN_V2, None)
+                # 简化输出（保留前50行以包含所有3个数据源）
+                message = '\n'.join(filtered_lines[:50])
+                message += "\n\n💡 完整排行榜请使用 /chart"
+
+                # 不使用 parse_mode，避免转义问题
+                return (message, None, None)
 
             elif chart_type == "tv":
                 # 综合热门剧集 - 混合 TMDB + JustWatch + Trakt
@@ -585,12 +589,16 @@ class InlineCommandAdapter:
                     tmdb_data, justwatch_data, content_type="tv", trakt_data=trakt_data
                 )
 
-                # 简化输出（只保留前10行）
+                # 过滤掉命令行（/movie_detail, /tv_detail 等）
                 lines = result_text.split('\n')
-                message = '\n'.join(lines[:30])  # 保留标题和前10个条目
-                message += "\n\n💡 完整排行榜请使用 `/chart`"
+                filtered_lines = [line for line in lines if not line.strip().startswith('/')]
 
-                return (message, ParseMode.MARKDOWN_V2, None)
+                # 简化输出（保留前50行以包含所有3个数据源）
+                message = '\n'.join(filtered_lines[:50])
+                message += "\n\n💡 完整排行榜请使用 /chart"
+
+                # 不使用 parse_mode，避免转义问题
+                return (message, None, None)
 
             elif chart_type == "trending":
                 data = await movie_service.get_trending()
