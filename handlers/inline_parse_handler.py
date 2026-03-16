@@ -196,6 +196,9 @@ async def handle_inline_parse_query(
         # InlineQueryResultPhoto 的 photo_url 不支持 WebP，跳过使用默认图片
         if thumb_url and thumb_url.endswith('.webp'):
             thumb_url = None
+        # Instagram/Threads CDN 链接有时效性，Telegram 服务器可能无法访问
+        if thumb_url and ('cdninstagram.com' in thumb_url or 'fbcdn.net' in thumb_url):
+            thumb_url = None
 
         # 根据类型返回不同的结果
         if isinstance(parse_result, RichTextParseResult):
@@ -326,9 +329,12 @@ async def handle_inline_parse_query(
                 elif isinstance(media_item, (VideoRef, AniRef)):
                     # 视频/动画 → 返回照片（缩略图），用户选择后自动下载
                     result_id = f"parse_video_{uuid4()}"
-                    # 检查缩略图有效性（WebP不支持）
+                    # 检查缩略图有效性（WebP不支持，CDN链接可能被Telegram拒绝）
                     valid_thumb = item_thumb
                     if valid_thumb and valid_thumb.endswith('.webp'):
+                        valid_thumb = None
+                    # Instagram/Threads CDN 链接有时效性，Telegram 服务器可能无法访问
+                    if valid_thumb and ('cdninstagram.com' in valid_thumb or 'fbcdn.net' in valid_thumb):
                         valid_thumb = None
                     mm_is_article = not valid_thumb
                     # 缓存解析结果（使用 result_id，包含 media_index）
