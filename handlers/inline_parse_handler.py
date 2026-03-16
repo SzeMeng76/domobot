@@ -649,6 +649,8 @@ async def _handle_video_inline(
             return
 
         media = download_result.media
+        if isinstance(media, list):
+            media = media[0]
         video_path = Path(media.path)
 
         # 检查文件大小
