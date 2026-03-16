@@ -4,7 +4,7 @@
 """
 
 import logging
-from telegram import Update
+from telegram import Update, ReplyParameters
 from telegram.ext import ContextTypes, MessageHandler, filters
 
 logger = logging.getLogger(__name__)
@@ -136,7 +136,8 @@ async def auto_parse_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
             reply_markup = InlineKeyboardMarkup(buttons)
 
         # 发送媒体（带按钮）
-        sent_messages = await _send_media(context, group_id, result, caption, message.message_id, reply_markup, parse_result=parse_result)
+        reply_params = ReplyParameters(message_id=message.message_id)
+        sent_messages = await _send_media(context, group_id, result, caption, reply_params, reply_markup, parse_result=parse_result)
 
         # 删除状态消息
         await status_msg.delete()
