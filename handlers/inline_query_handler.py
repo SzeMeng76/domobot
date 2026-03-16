@@ -166,7 +166,30 @@ class InlineQueryHandler:
         results = await self._execute_and_create_results(command_text, user_id, context)
 
         # 返回结果
-        await update.inline_query.answer(results, cache_time=10)
+        try:
+            await update.inline_query.answer(results, cache_time=10)
+        except Exception as e:
+            logger.error(f"[Inline] answer 失败，尝试去除格式重试: {e}")
+            # parse entities 失败，去掉格式重试
+            try:
+                for r in results:
+                    if hasattr(r, 'input_message_content') and r.input_message_content:
+                        r.input_message_content = InputTextMessageContent(
+                            message_text=r.input_message_content.message_text
+                        )
+                await update.inline_query.answer(results, cache_time=10)
+            except Exception as e2:
+                logger.error(f"[Inline] 去除格式后仍然失败: {e2}")
+                await update.inline_query.answer([
+                    InlineQueryResultArticle(
+                        id=str(uuid4()),
+                        title="❌ 结果格式错误",
+                        description=str(e)[:100],
+                        input_message_content=InputTextMessageContent(
+                            message_text=f"❌ 结果格式错误\n\n错误: {str(e)}\n\n💡 请在私聊中使用 /{command_text} 重试"
+                        ),
+                    )
+                ])
 
     def _get_help_results(self, bot_username: str) -> list:
         """返回帮助信息"""
@@ -319,25 +342,6 @@ class InlineQueryHandler:
 
         except Exception as e:
             logger.error(f"执行 inline 命令 {command} 失败: {e}", exc_info=True)
-
-            # 如果是 parse entities 错误，尝试不带格式重新返回
-            if "parse" in str(e).lower() and "entit" in str(e).lower():
-                try:
-                    return [
-                        InlineQueryResultArticle(
-                            id=str(uuid4()),
-                            title=f"{info['icon']} {info['title']}",
-                            description=f"{info['desc']} - {args[:50]}..." if len(args) > 50 else (f"{info['desc']} - {args}" if args else info['desc']),
-                            thumbnail_url=f"https://img.icons8.com/color/96/000000/checkmark.png",
-                            input_message_content=InputTextMessageContent(
-                                message_text=result_text,
-                            ),
-                            reply_markup=reply_markup
-                        )
-                    ]
-                except Exception:
-                    pass
-
             # 返回错误结果
             return [
                 InlineQueryResultArticle(
