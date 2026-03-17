@@ -120,6 +120,12 @@ def _clean_expired_cache():
         _cache_timestamps.pop(key, None)
 
 
+def _remove_cache_entry(result_id: str):
+    """删除指定的缓存条目（上传成功后调用）"""
+    _parse_cache.pop(result_id, None)
+    _cache_timestamps.pop(result_id, None)
+
+
 async def handle_inline_parse_query(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -491,8 +497,8 @@ async def handle_inline_parse_chosen(
         return
 
     # 从缓存中获取解析结果（使用 result_id）
-    cached_data = _parse_cache.pop(result_id, None)
-    _cache_timestamps.pop(result_id, None)
+    # 注意：不立即删除缓存，等上传成功后再删除，这样失败时用户可以重试
+    cached_data = _parse_cache.get(result_id, None)
 
     if not cached_data:
         # 缓存过期或不存在，不知道原始消息类型，尝试两种方式
@@ -575,12 +581,12 @@ async def handle_inline_parse_chosen(
         if isinstance(parse_result, RichTextParseResult):
             # 富文本 → 发布到 Telegraph
             await _handle_richtext_inline(
-                context, inline_message_id, parse_result, parse_adapter, caption, url
+                context, inline_message_id, parse_result, parse_adapter, caption, url, result_id
             )
         elif isinstance(parse_result, (VideoParseResult, ImageParseResult, MultimediaParseResult)):
             # 视频/混合媒体中的视频
             await _handle_video_inline(
-                context, inline_message_id, parse_result, parse_adapter, caption, url, media_index, is_article
+                context, inline_message_id, parse_result, parse_adapter, caption, url, media_index, is_article, result_id
             )
         else:
             # 其他类型（不应该到这里，因为前面已经过滤了）
@@ -620,7 +626,8 @@ async def _handle_richtext_inline(
     parse_result,
     parse_adapter,
     caption: str,
-    url: str
+    url: str,
+    result_id: str
 ) -> None:
     """处理富文本 inline 结果（发布到 Telegraph）"""
     try:
@@ -645,14 +652,15 @@ async def _handle_richtext_inline(
         telegraph_url = await parse_adapter.publish_to_telegraph(parse_result, html_content)
 
         if telegraph_url:
-            # 成功
+            # 成功 → 清理缓存
+            _remove_cache_entry(result_id)
             await context.bot.edit_message_text(
                 inline_message_id=inline_message_id,
                 text=f"{caption}\n\n📰 <a href=\"{telegraph_url}\">查看完整文章</a>",
                 parse_mode=ParseMode.HTML
             )
         else:
-            # 失败
+            # 失败 → 保留缓存以便重试
             await context.bot.edit_message_text(
                 inline_message_id=inline_message_id,
                 text=f"{caption}\n\n❌ Telegraph 发布失败",
@@ -660,6 +668,7 @@ async def _handle_richtext_inline(
             )
     except Exception as e:
         logger.error(f"富文本 inline 处理失败: {e}", exc_info=True)
+        # 失败 → 保留缓存以便重试
         await context.bot.edit_message_text(
             inline_message_id=inline_message_id,
             text=f"❌ Telegraph 发布失败\n\n错误: {str(e)}"
@@ -674,7 +683,8 @@ async def _handle_video_inline(
     caption: str,
     url: str,
     media_index: int = 0,
-    is_article: bool = False
+    is_article: bool = False,
+    result_id: str = None
 ) -> None:
     """处理视频 inline 结果"""
     try:
@@ -742,6 +752,9 @@ async def _handle_video_inline(
                     )
                 )
                 logger.info(f"[Inline Parse] Pyrogram edit_inline_media 成功: {url[:50]}...")
+                # 上传成功 → 清理缓存
+                if result_id:
+                    _remove_cache_entry(result_id)
             else:
                 # Pyrogram 不可用，fallback 到临时频道方案 (50MB 限制)
                 if video_size_mb > 50:
@@ -750,8 +763,12 @@ async def _handle_video_inline(
                     image_host_url = await parse_adapter.upload_to_image_host(video_path)
                     if image_host_url:
                         plain_caption = f"{parse_result.title or '无标题'}\n\n⚠️ 视频文件过大 ({video_size_mb:.1f}MB)\n📤 已上传到图床\n🔗 点击查看视频: {image_host_url}\n\n原链接: {url}"
+                        # 上传成功 → 清理缓存
+                        if result_id:
+                            _remove_cache_entry(result_id)
                     else:
                         plain_caption = f"{parse_result.title or '无标题'}\n\n⚠️ 视频文件过大 ({video_size_mb:.1f}MB)，无法上传\n💡 请使用 /parse 命令获取完整视频\n\n原链接: {url}"
+                        # 上传失败 → 保留缓存以便重试
                     await _update_status(plain_caption)
                 else:
                     # ≤50MB，用临时频道方案
@@ -790,6 +807,10 @@ async def _handle_video_inline(
                         ),
                     )
 
+                    # 上传成功 → 清理缓存
+                    if result_id:
+                        _remove_cache_entry(result_id)
+
                     try:
                         await context.bot.delete_message(chat_id=temp_channel_id, message_id=sent_message.message_id)
                     except Exception:
@@ -800,8 +821,12 @@ async def _handle_video_inline(
             image_host_url = await parse_adapter.upload_to_image_host(video_path)
             if image_host_url:
                 plain_caption = f"{parse_result.title or '无标题'}\n\n⚠️ 视频文件过大 ({video_size_mb:.1f}MB)\n📤 已上传到图床\n🔗 点击查看视频: {image_host_url}\n\n原链接: {url}"
+                # 上传成功 → 清理缓存
+                if result_id:
+                    _remove_cache_entry(result_id)
             else:
                 plain_caption = f"{parse_result.title or '无标题'}\n\n⚠️ 视频文件过大 ({video_size_mb:.1f}MB)，无法上传\n💡 请使用 /parse 命令获取完整视频\n\n原链接: {url}"
+                # 上传失败 → 保留缓存以便重试
             await _update_status(plain_caption)
 
         # 清理临时文件
