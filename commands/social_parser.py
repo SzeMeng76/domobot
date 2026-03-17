@@ -92,18 +92,17 @@ def _convert_image_to_webp(image_path: Path) -> Path:
 
         logger.info(f"🔄 Converting {suffix} image to WebP: {image_path.name}")
 
-        # Open image
-        img = PILImage.open(image_path)
+        # Open image with context manager to ensure proper resource cleanup
+        with PILImage.open(image_path) as img:
+            # Convert to RGBA if necessary (WebP supports transparency)
+            if img.mode not in ('RGBA', 'RGB'):
+                img = img.convert('RGBA')
 
-        # Convert to RGBA if necessary (WebP supports transparency)
-        if img.mode not in ('RGBA', 'RGB'):
-            img = img.convert('RGBA')
+            # Create new path with .webp extension
+            new_path = image_path.with_suffix('.webp')
 
-        # Create new path with .webp extension
-        new_path = image_path.with_suffix('.webp')
-
-        # Save as WebP with high quality
-        img.save(new_path, 'WEBP', quality=95, method=6)
+            # Save as WebP with high quality
+            img.save(new_path, 'WEBP', quality=95, method=6)
 
         logger.info(f"✅ Image converted: {image_path.name} -> {new_path.name}")
 
@@ -176,6 +175,74 @@ def _generate_thumbnail(image_path: Path, max_width: int = 800, quality: int = 7
 
     except Exception as e:
         logger.warning(f"⚠️ 生成缩略图失败: {e}，使用原图")
+        return image_path
+
+
+def _downscale_image(image_path: Path, max_dimension: int = 2560) -> Path:
+    """
+    对超大尺寸图片进行缩放，避免 Telegram 上传失败或处理超时。
+
+    Telegram 对图片有以下限制：
+    - 文件大小：10MB
+    - 分辨率：建议不超过 2560px（长边）
+
+    Args:
+        image_path: 原始图片路径
+        max_dimension: 最大尺寸（长边，默认2560px）
+
+    Returns:
+        缩放后的图片路径（如果不需要缩放则返回原图）
+    """
+    try:
+        with PILImage.open(image_path) as img:
+            width, height = img.size
+            max_side = max(width, height)
+
+            # 如果长边已经小于等于 max_dimension，不需要缩放
+            if max_side <= max_dimension:
+                logger.debug(f"图片尺寸 {width}x{height} 在限制内，跳过缩放")
+                return image_path
+
+            # 计算缩放比例（保持宽高比）
+            scale_ratio = max_dimension / max_side
+            new_width = int(width * scale_ratio)
+            new_height = int(height * scale_ratio)
+
+            logger.info(f"🔽 缩放超大图片: {width}x{height} -> {new_width}x{new_height}")
+
+            # 使用 LANCZOS 高质量缩放
+            img_resized = img.resize((new_width, new_height), PILImage.Resampling.LANCZOS)
+
+            # 生成新文件名
+            downscaled_path = image_path.parent / f"{image_path.stem}_downscaled{image_path.suffix}"
+
+            # 保存缩放后的图片（保持原格式）
+            if image_path.suffix.lower() in ['.jpg', '.jpeg']:
+                img_resized.save(downscaled_path, 'JPEG', quality=90, optimize=True)
+            elif image_path.suffix.lower() == '.png':
+                img_resized.save(downscaled_path, 'PNG', optimize=True)
+            elif image_path.suffix.lower() == '.webp':
+                img_resized.save(downscaled_path, 'WEBP', quality=90, method=6)
+            else:
+                # 其他格式转为 JPEG
+                if img_resized.mode in ('RGBA', 'LA', 'P'):
+                    background = PILImage.new('RGB', img_resized.size, (255, 255, 255))
+                    if img_resized.mode == 'P':
+                        img_resized = img_resized.convert('RGBA')
+                    background.paste(img_resized, mask=img_resized.split()[-1] if img_resized.mode == 'RGBA' else None)
+                    img_resized = background
+                downscaled_path = image_path.parent / f"{image_path.stem}_downscaled.jpg"
+                img_resized.save(downscaled_path, 'JPEG', quality=90, optimize=True)
+
+        # 记录文件大小变化
+        original_size = image_path.stat().st_size / (1024 * 1024)
+        downscaled_size = downscaled_path.stat().st_size / (1024 * 1024)
+        logger.info(f"✅ 缩放完成: {original_size:.2f}MB -> {downscaled_size:.2f}MB")
+
+        return downscaled_path
+
+    except Exception as e:
+        logger.warning(f"⚠️ 图片缩放失败: {e}，使用原图")
         return image_path
 
 
@@ -742,9 +809,12 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
         return [msg]
     elif len(media_list) == 1:
         # 单张图片
-        # Convert to WebP if needed to avoid Telegram image_process_failed error
+        # Step 1: Convert to WebP if needed to avoid Telegram image_process_failed error
         converted_path = _convert_image_to_webp(Path(media_list[0].path))
-        image_path = str(converted_path)
+        # Step 2: Downscale if image is too large (>2560px)
+        final_path = _downscale_image(converted_path)
+        image_path = str(final_path)
+
         with open(image_path, 'rb') as photo_file:
             msg = await context.bot.send_photo(
                 chat_id=chat_id,
@@ -763,9 +833,11 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
         media_group = []
         for img in media_list[:10]:
             try:
-                # Convert to WebP if needed to avoid Telegram image_process_failed error
+                # Step 1: Convert to WebP if needed to avoid Telegram image_process_failed error
                 converted_path = _convert_image_to_webp(Path(img.path))
-                image_path = str(converted_path)
+                # Step 2: Downscale if image is too large (>2560px)
+                downscaled_path = _downscale_image(converted_path)
+                image_path = str(downscaled_path)
 
                 # Verify file is actually an image
                 if not imghdr.what(image_path):
