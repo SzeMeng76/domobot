@@ -106,11 +106,8 @@ def _convert_image_to_webp(image_path: Path) -> Path:
 
         logger.info(f"✅ Image converted: {image_path.name} -> {new_path.name}")
 
-        # Delete original file to save space
-        try:
-            image_path.unlink()
-        except Exception as e:
-            logger.warning(f"Failed to delete original image: {e}")
+        # Note: Original file is preserved for debugging and will be cleaned up
+        # by the scheduled cleanup_temp_files() task (runs daily at UTC 4:00)
 
         return new_path
 
@@ -809,139 +806,180 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
         return [msg]
     elif len(media_list) == 1:
         # 单张图片
-        # Step 1: Convert to WebP if needed to avoid Telegram image_process_failed error
-        converted_path = _convert_image_to_webp(Path(media_list[0].path))
-        # Step 2: Downscale if image is too large (>2560px)
-        final_path = _downscale_image(converted_path)
-        image_path = str(final_path)
+        intermediates: list[Path] = []  # 收集生成的中间文件
+        original_path = Path(media_list[0].path)
 
         try:
-            with open(image_path, 'rb') as photo_file:
-                msg = await context.bot.send_photo(
-                    chat_id=chat_id,
-                    photo=photo_file,
-                    caption=caption,
-                    parse_mode="MarkdownV2",
-                    reply_parameters=reply_parameters,
-                    reply_markup=reply_markup
-                )
-            return [msg]
-        except Exception as e:
-            # Fallback: send as document if photo upload fails
-            logger.warning(f"⚠️ Photo upload failed: {e}, fallback to document")
+            # Step 1: Convert to WebP if needed to avoid Telegram image_process_failed error
+            converted_path = _convert_image_to_webp(original_path)
+            if converted_path != original_path:
+                intermediates.append(converted_path)
+
+            # Step 2: Downscale if image is too large (>2560px)
+            final_path = _downscale_image(converted_path)
+            if final_path != converted_path:
+                intermediates.append(final_path)
+
+            image_path = str(final_path)
+
             try:
-                with open(image_path, 'rb') as doc_file:
-                    msg = await context.bot.send_document(
+                with open(image_path, 'rb') as photo_file:
+                    msg = await context.bot.send_photo(
                         chat_id=chat_id,
-                        document=doc_file,
+                        photo=photo_file,
                         caption=caption,
                         parse_mode="MarkdownV2",
                         reply_parameters=reply_parameters,
                         reply_markup=reply_markup
                     )
                 return [msg]
-            except Exception as doc_error:
-                logger.error(f"❌ Document upload also failed: {doc_error}")
-                raise
+            except Exception as e:
+                # Fallback: send as document if photo upload fails
+                logger.warning(f"⚠️ Photo upload failed: {e}, fallback to document")
+                try:
+                    with open(image_path, 'rb') as doc_file:
+                        msg = await context.bot.send_document(
+                            chat_id=chat_id,
+                            document=doc_file,
+                            caption=caption,
+                            parse_mode="MarkdownV2",
+                            reply_parameters=reply_parameters,
+                            reply_markup=reply_markup
+                        )
+                    return [msg]
+                except Exception as doc_error:
+                    logger.error(f"❌ Document upload also failed: {doc_error}")
+                    raise
+        finally:
+            # Clean up intermediate files (preserve original for debugging)
+            for f in intermediates:
+                try:
+                    f.unlink(missing_ok=True)
+                    logger.debug(f"🗑️ Cleaned intermediate file: {f.name}")
+                except Exception as e:
+                    logger.debug(f"Failed to clean intermediate file: {e}")
     elif len(media_list) <= 10:
         # 多张图片（使用媒体组，最多10张）
         from telegram import InputMediaPhoto
         import imghdr
 
-        media_group = []
-        for img in media_list[:10]:
-            try:
-                # Step 1: Convert to WebP if needed to avoid Telegram image_process_failed error
-                converted_path = _convert_image_to_webp(Path(img.path))
-                # Step 2: Downscale if image is too large (>2560px)
-                downscaled_path = _downscale_image(converted_path)
-                image_path = str(downscaled_path)
+        intermediates: list[Path] = []  # 收集所有生成的中间文件
 
-                # Verify file is actually an image
-                if not imghdr.what(image_path):
-                    logger.warning(f"⚠️ Skipping invalid image file: {image_path}")
-                    continue
-
-                # 检查文件大小，如果超过9MB则压缩
-                file_size = os.path.getsize(image_path)
-                max_size = 9 * 1024 * 1024  # 9MB（留1MB余量）
-
-                if file_size > max_size:
-                    logger.warning(f"⚠️ 图片大小 {file_size / 1024 / 1024:.2f}MB 超过限制，压缩中...")
-                    # 使用缩略图功能压缩（质量60%，最大宽度1920）
-                    compressed_path = _generate_thumbnail(Path(image_path), max_width=1920, quality=60)
-                    image_path = str(compressed_path)
-                    logger.info(f"✅ 压缩后大小: {os.path.getsize(image_path) / 1024 / 1024:.2f}MB")
-
-                # 使用open()打开文件对象，python-telegram-bot会正确处理
-                # 使用with语句确保文件正确关闭
-                with open(image_path, 'rb') as photo_file:
-                    # 复制文件内容到内存，避免文件句柄在异步发送时关闭
-                    photo_data = photo_file.read()
-                    media_group.append(InputMediaPhoto(media=photo_data))
-
-            except Exception as e:
-                logger.warning(f"⚠️ Failed to process image {img.path}: {e}, skipping")
-                continue
-
-        # Check if we have any valid images
-        if not media_group:
-            logger.error("❌ No valid images to send")
-            raise ValueError("All images failed validation")
-
-        # 发送媒体组（不带caption）
         try:
-            messages = await context.bot.send_media_group(
-                chat_id=chat_id,
-                media=media_group,
-                reply_parameters=reply_parameters
-            )
-
-            # 单独发送文本消息带caption和按钮
-            text_msg = await context.bot.send_message(
-                chat_id=chat_id,
-                text=caption,
-                parse_mode="MarkdownV2",
-                reply_parameters=ReplyParameters(message_id=messages[0].message_id),  # 回复到第一张图片
-                disable_web_page_preview=True,
-                reply_markup=reply_markup
-            )
-            return list(messages) + [text_msg]
-
-        except Exception as e:
-            # Fallback: send images as documents if media_group fails
-            logger.warning(f"⚠️ Media group upload failed: {e}, fallback to documents")
-            sent_messages = []
-
-            # 先发送说明消息
-            info_msg = await context.bot.send_message(
-                chat_id=chat_id,
-                text=f"{caption}\n\n⚠️ 图片上传失败，以文档形式发送",
-                parse_mode="MarkdownV2",
-                reply_parameters=reply_parameters,
-                disable_web_page_preview=True,
-                reply_markup=reply_markup
-            )
-            sent_messages.append(info_msg)
-
-            # 逐个发送为文档
+            media_group = []
             for img in media_list[:10]:
                 try:
-                    converted_path = _convert_image_to_webp(Path(img.path))
+                    original_path = Path(img.path)
+
+                    # Step 1: Convert to WebP if needed to avoid Telegram image_process_failed error
+                    converted_path = _convert_image_to_webp(original_path)
+                    if converted_path != original_path:
+                        intermediates.append(converted_path)
+
+                    # Step 2: Downscale if image is too large (>2560px)
                     downscaled_path = _downscale_image(converted_path)
+                    if downscaled_path != converted_path:
+                        intermediates.append(downscaled_path)
+
                     image_path = str(downscaled_path)
 
-                    with open(image_path, 'rb') as doc_file:
-                        doc_msg = await context.bot.send_document(
-                            chat_id=chat_id,
-                            document=doc_file
-                        )
-                        sent_messages.append(doc_msg)
-                except Exception as doc_error:
-                    logger.error(f"❌ Failed to send document for {img.path}: {doc_error}")
+                    # Verify file is actually an image
+                    if not imghdr.what(image_path):
+                        logger.warning(f"⚠️ Skipping invalid image file: {image_path}")
+                        continue
+
+                    # 检查文件大小，如果超过9MB则压缩
+                    file_size = os.path.getsize(image_path)
+                    max_size = 9 * 1024 * 1024  # 9MB（留1MB余量）
+
+                    if file_size > max_size:
+                        logger.warning(f"⚠️ 图片大小 {file_size / 1024 / 1024:.2f}MB 超过限制，压缩中...")
+                        # 使用缩略图功能压缩（质量60%，最大宽度1920）
+                        compressed_path = _generate_thumbnail(Path(image_path), max_width=1920, quality=60)
+                        if compressed_path != Path(image_path):
+                            intermediates.append(compressed_path)
+                        image_path = str(compressed_path)
+                        logger.info(f"✅ 压缩后大小: {os.path.getsize(image_path) / 1024 / 1024:.2f}MB")
+
+                    # 使用open()打开文件对象，python-telegram-bot会正确处理
+                    # 使用with语句确保文件正确关闭
+                    with open(image_path, 'rb') as photo_file:
+                        # 复制文件内容到内存，避免文件句柄在异步发送时关闭
+                        photo_data = photo_file.read()
+                        media_group.append(InputMediaPhoto(media=photo_data))
+
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to process image {img.path}: {e}, skipping")
                     continue
 
-            return sent_messages
+            # Check if we have any valid images
+            if not media_group:
+                logger.error("❌ No valid images to send")
+                raise ValueError("All images failed validation")
+
+            # 发送媒体组（不带caption）
+            try:
+                messages = await context.bot.send_media_group(
+                    chat_id=chat_id,
+                    media=media_group,
+                    reply_parameters=reply_parameters
+                )
+
+                # 单独发送文本消息带caption和按钮
+                text_msg = await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=caption,
+                    parse_mode="MarkdownV2",
+                    reply_parameters=ReplyParameters(message_id=messages[0].message_id),  # 回复到第一张图片
+                    disable_web_page_preview=True,
+                    reply_markup=reply_markup
+                )
+                return list(messages) + [text_msg]
+
+            except Exception as e:
+                # Fallback: send images as documents if media_group fails
+                logger.warning(f"⚠️ Media group upload failed: {e}, fallback to documents")
+                sent_messages = []
+
+                # 先发送说明消息
+                info_msg = await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"{caption}\n\n⚠️ 图片上传失败，以文档形式发送",
+                    parse_mode="MarkdownV2",
+                    reply_parameters=reply_parameters,
+                    disable_web_page_preview=True,
+                    reply_markup=reply_markup
+                )
+                sent_messages.append(info_msg)
+
+                # 逐个发送为文档（使用已处理的中间文件）
+                for img in media_list[:10]:
+                    try:
+                        original_path = Path(img.path)
+                        converted_path = _convert_image_to_webp(original_path)
+                        downscaled_path = _downscale_image(converted_path)
+                        image_path = str(downscaled_path)
+
+                        with open(image_path, 'rb') as doc_file:
+                            doc_msg = await context.bot.send_document(
+                                chat_id=chat_id,
+                                document=doc_file
+                            )
+                            sent_messages.append(doc_msg)
+                    except Exception as doc_error:
+                        logger.error(f"❌ Failed to send document for {img.path}: {doc_error}")
+                        continue
+
+                return sent_messages
+
+        finally:
+            # Clean up all intermediate files (preserve originals for debugging)
+            for f in intermediates:
+                try:
+                    f.unlink(missing_ok=True)
+                    logger.debug(f"🗑️ Cleaned intermediate file: {f.name}")
+                except Exception as e:
+                    logger.debug(f"Failed to clean intermediate file: {e}")
     else:
         # 超过10张图片，自动尝试图床+Telegraph（参考parse_hub_bot逻辑）
         logger.info(f"检测到 {len(media_list)} 张图片（>10张），尝试图床+Telegraph")
@@ -1120,34 +1158,57 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
                 )
             return [msg]
         elif isinstance(media, ImageFile):
+            intermediates: list[Path] = []  # 收集生成的中间文件
+            original_path = Path(media.path)
+
             try:
-                with open(str(media.path), 'rb') as photo_file:
-                    msg = await context.bot.send_photo(
-                        chat_id=chat_id,
-                        photo=photo_file,
-                        caption=caption,
-                        parse_mode="MarkdownV2",
-                        reply_parameters=reply_parameters,
-                        reply_markup=reply_markup
-                    )
-                return [msg]
-            except Exception as e:
-                # Fallback: send as document if photo upload fails
-                logger.warning(f"⚠️ Photo upload failed in multimedia: {e}, fallback to document")
+                # Process image (convert + downscale)
+                converted_path = _convert_image_to_webp(original_path)
+                if converted_path != original_path:
+                    intermediates.append(converted_path)
+
+                downscaled_path = _downscale_image(converted_path)
+                if downscaled_path != converted_path:
+                    intermediates.append(downscaled_path)
+
+                image_path = str(downscaled_path)
+
                 try:
-                    with open(str(media.path), 'rb') as doc_file:
-                        msg = await context.bot.send_document(
+                    with open(image_path, 'rb') as photo_file:
+                        msg = await context.bot.send_photo(
                             chat_id=chat_id,
-                            document=doc_file,
+                            photo=photo_file,
                             caption=caption,
                             parse_mode="MarkdownV2",
                             reply_parameters=reply_parameters,
                             reply_markup=reply_markup
                         )
                     return [msg]
-                except Exception as doc_error:
-                    logger.error(f"❌ Document upload also failed: {doc_error}")
-                    raise
+                except Exception as e:
+                    # Fallback: send as document if photo upload fails
+                    logger.warning(f"⚠️ Photo upload failed in multimedia: {e}, fallback to document")
+                    try:
+                        with open(image_path, 'rb') as doc_file:
+                            msg = await context.bot.send_document(
+                                chat_id=chat_id,
+                                document=doc_file,
+                                caption=caption,
+                                parse_mode="MarkdownV2",
+                                reply_parameters=reply_parameters,
+                                reply_markup=reply_markup
+                            )
+                        return [msg]
+                    except Exception as doc_error:
+                        logger.error(f"❌ Document upload also failed: {doc_error}")
+                        raise
+            finally:
+                # Clean up intermediate files (preserve original for debugging)
+                for f in intermediates:
+                    try:
+                        f.unlink(missing_ok=True)
+                        logger.debug(f"🗑️ Cleaned intermediate file: {f.name}")
+                    except Exception as e:
+                        logger.debug(f"Failed to clean intermediate file: {e}")
     else:
         # 多个媒体文件，使用media_group分批发送（每批最多10个）
         # 参考: parse_hub_bot/methods/tg_parse_hub.py:809
