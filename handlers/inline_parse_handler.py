@@ -439,8 +439,8 @@ async def handle_inline_parse_chosen(
     inline_message_id = chosen_result.inline_message_id
     result_id = chosen_result.result_id
 
-    # 只处理视频（ID 以 parse_video_ 开头），图片直接用 URL 不需要下载
-    if not result_id.startswith("parse_video_"):
+    # 只处理视频和富文本，图片直接用 URL 不需要下载
+    if not (result_id.startswith("parse_video_") or result_id.startswith("parse_richtext_")):
         return
 
     # 从缓存中获取解析结果（使用 result_id）
@@ -524,8 +524,13 @@ async def handle_inline_parse_chosen(
         caption = content_text + link_part
 
 
-        # 根据类型处理（只处理视频和混合媒体中的视频）
-        if isinstance(parse_result, (VideoParseResult, ImageParseResult, MultimediaParseResult)):
+        # 根据类型处理
+        if isinstance(parse_result, RichTextParseResult):
+            # 富文本 → 发布到 Telegraph
+            await _handle_richtext_inline(
+                context, inline_message_id, parse_result, parse_adapter, caption, url
+            )
+        elif isinstance(parse_result, (VideoParseResult, ImageParseResult, MultimediaParseResult)):
             # 视频/混合媒体中的视频
             await _handle_video_inline(
                 context, inline_message_id, parse_result, parse_adapter, caption, url, media_index, is_article
@@ -596,15 +601,15 @@ async def _handle_richtext_inline(
             # 成功
             await context.bot.edit_message_text(
                 inline_message_id=inline_message_id,
-                text=f"{caption}\n\n📰 [查看完整文章]({telegraph_url})",
-                parse_mode=ParseMode.MARKDOWN_V2
+                text=f"{caption}\n\n📰 <a href=\"{telegraph_url}\">查看完整文章</a>",
+                parse_mode=ParseMode.HTML
             )
         else:
             # 失败
             await context.bot.edit_message_text(
                 inline_message_id=inline_message_id,
                 text=f"{caption}\n\n❌ Telegraph 发布失败",
-                parse_mode=ParseMode.MARKDOWN_V2
+                parse_mode=ParseMode.HTML
             )
     except Exception as e:
         logger.error(f"富文本 inline 处理失败: {e}", exc_info=True)
