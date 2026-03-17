@@ -4,6 +4,7 @@ AI反垃圾消息处理器
 """
 import logging
 import asyncio
+from datetime import datetime
 from telegram import Update, ChatMember
 from telegram.ext import ContextTypes
 from telegram.constants import ChatMemberStatus
@@ -175,7 +176,12 @@ class AntiSpamHandler:
                 return
 
             # 判断是否需要检测
-            if not await self.manager.should_check_user(user_info, config):
+            should_check = await self.manager.should_check_user(user_info, config)
+            if not should_check:
+                logger.debug(f"User {user_id} skipped detection: is_verified={user_info.get('is_verified')}, "
+                            f"days_since_join={(datetime.now() - user_info.get('joined_time')).days if user_info.get('joined_time') else 'N/A'}, "
+                            f"speech_count={user_info.get('number_of_speeches', 0)}, "
+                            f"verification_times={user_info.get('verification_times', 0)}")
                 return
 
             # 异步执行检测
