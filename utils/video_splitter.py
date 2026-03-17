@@ -129,7 +129,7 @@ class VideoSplitter:
                 stderr=asyncio.subprocess.PIPE
             )
 
-            _, stderr = await proc.wait()
+            _, stderr = await proc.communicate()
 
             if proc.returncode != 0:
                 error_msg = stderr.decode('utf-8', errors='ignore')
@@ -164,28 +164,116 @@ async def get_video_codec(file: str) -> str:
     return out.lower() if out else ""
 
 
+async def get_video_info(file: str) -> tuple[float, int, int]:
+    """
+    获取视频信息：时长、宽度、高度
+
+    Returns:
+        (duration_seconds, width, height)
+    """
+    proc = await asyncio.create_subprocess_exec(
+        "ffprobe",
+        "-v", "error",
+        "-select_streams", "v:0",
+        "-show_entries", "stream=duration,width,height",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        file,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    stdout, _ = await proc.communicate()
+    lines = stdout.decode().strip().split('\n')
+
+    try:
+        # ffprobe 输出顺序: duration, width, height
+        duration = float(lines[0]) if len(lines) > 0 and lines[0] else 0.0
+        width = int(lines[1]) if len(lines) > 1 and lines[1] else 0
+        height = int(lines[2]) if len(lines) > 2 and lines[2] else 0
+        return duration, width, height
+    except (ValueError, IndexError):
+        logger.warning(f"无法解析视频信息，使用默认值")
+        return 0.0, 0, 0
+
+
 async def ensure_h264(file: str) -> str:
-    """如果视频不是 H.264 编码，转码为 H.264。返回最终文件路径。"""
+    """
+    如果视频不是 H.264 编码，转码为 H.264。
+    根据视频时长和分辨率动态选择转码参数以优化质量和速度。
+
+    转码策略：
+    - ≤30s: slow preset, crf=18 (高质量)
+    - ≤60s: medium preset, crf=20
+    - ≤600s (10min): fast preset, crf=23
+    - ≤1800s (30min): veryfast preset, crf=26
+    - >1800s: ultrafast preset, crf=28, 缩放到720p (快速处理超长视频)
+
+    返回最终文件路径。
+    """
     codec = await get_video_codec(file)
     if codec == "h264":
         return file
 
+    # 获取视频信息
+    duration, width, height = await get_video_info(file)
+
+    # 根据时长选择转码参数
+    if duration <= 30:
+        preset, crf = "slow", "18"
+        scale_filter = None
+        logger.info(f"短视频 ({duration:.1f}s)，使用高质量转码: preset={preset}, crf={crf}")
+    elif duration <= 60:
+        preset, crf = "medium", "20"
+        scale_filter = None
+        logger.info(f"中短视频 ({duration:.1f}s)，使用中等质量转码: preset={preset}, crf={crf}")
+    elif duration <= 600:
+        preset, crf = "fast", "23"
+        scale_filter = None
+        logger.info(f"中等视频 ({duration:.1f}s)，使用标准转码: preset={preset}, crf={crf}")
+    elif duration <= 1800:
+        preset, crf = "veryfast", "26"
+        scale_filter = None
+        logger.info(f"较长视频 ({duration:.1f}s)，使用快速转码: preset={preset}, crf={crf}")
+    else:
+        preset, crf = "ultrafast", "28"
+        # 超长视频缩放到720p以加快处理速度
+        scale_filter = "scale='min(1280,iw)':'min(720,ih)':force_original_aspect_ratio=decrease"
+        logger.info(f"超长视频 ({duration:.1f}s)，使用极速转码+720p缩放: preset={preset}, crf={crf}")
+
     src = Path(file)
     out = src.with_stem(src.stem + "_h264")
-    proc = await asyncio.create_subprocess_exec(
+
+    # 构建 ffmpeg 命令
+    cmd = [
         "ffmpeg",
         "-i", str(file),
         "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "23",
+        "-preset", preset,
+        "-crf", crf,
+    ]
+
+    # 添加缩放滤镜（如果需要）
+    if scale_filter:
+        cmd.extend(["-vf", scale_filter])
+
+    cmd.extend([
         "-c:a", "aac",
-        "-y", str(out),
+        "-y", str(out)
+    ])
+
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
         stdout=asyncio.subprocess.DEVNULL,
         stderr=asyncio.subprocess.DEVNULL,
     )
     await proc.wait()
+
     if out.exists() and out.stat().st_size > 0:
+        original_size = src.stat().st_size / (1024 * 1024)
+        converted_size = out.stat().st_size / (1024 * 1024)
+        logger.info(f"✅ 转码完成: {original_size:.1f}MB -> {converted_size:.1f}MB")
         return str(out)
+
+    logger.warning(f"转码失败，使用原文件")
     return file
 
 
