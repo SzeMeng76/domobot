@@ -16,6 +16,7 @@ from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
 from utils.config_manager import ConfigManager
+from utils.media_helpers import get_media_dimensions
 
 logger = logging.getLogger(__name__)
 
@@ -314,6 +315,7 @@ async def handle_inline_parse_query(
 
                 if isinstance(media_item, ImageRef):
                     # 图片 → 直接用 InlineQueryResultPhoto（不需要下载）
+                    width, height = get_media_dimensions(media_item)
                     results.append(
                         InlineQueryResultPhoto(
                             id=f"parse_image_{uuid4()}",
@@ -322,8 +324,8 @@ async def handle_inline_parse_query(
                             title=f"🖼️ 图片 {index + 1}/{len(media_list)} - {title}",
                             description=description,
                             caption=caption_text,
-                            photo_width=getattr(media_item, 'width', None),
-                            photo_height=getattr(media_item, 'height', None),
+                            photo_width=width,
+                            photo_height=height,
                             reply_markup=keyboard,
                         )
                     )
