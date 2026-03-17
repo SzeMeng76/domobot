@@ -545,54 +545,87 @@ def patch_parsehub_yt_dlp():
                     raise ParseError(f"无法从URL提取note_id: {url}")
 
                 note_id = note_id_match.group(1)
-                logger.info(f"🎬 [TikHub] Fetching XHS via TikHub: {note_id}")
+                logger.info(f"🎬 [TikHub] Fetching XHS via TikHub (app_v2): {note_id}")
 
-                api_url = f"https://api.tikhub.io/api/v1/xiaohongshu/app/get_note_info_v2?note_id={note_id}"
                 headers = {"Authorization": f"Bearer {tikhub_api_key}"}
 
+                # Try video endpoint first (most common case)
+                video_api_url = f"https://api.tikhub.io/api/v1/xiaohongshu/app_v2/get_video_note_detail?note_id={note_id}"
+
                 async with httpx.AsyncClient(timeout=30.0, proxy=self.proxy) as client:
-                    response = await client.get(api_url, headers=headers)
+                    response = await client.get(video_api_url, headers=headers)
 
-                if response.status_code != 200:
-                    raise ParseError(f"TikHub API请求失败: HTTP {response.status_code}")
+                video_result = None
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("code") == 200 and data.get("data", {}).get("data"):
+                        note_data = data["data"]["data"][0]
+                        note_type = note_data.get("type", "")
 
-                data = response.json()
-                if data.get("code") != 200:
-                    raise ParseError(f"TikHub API返回错误: {data.get('message', 'Unknown error')}")
+                        if note_type == "video":
+                            # Extract video from new API structure
+                            title = note_data.get("title", "")
+                            desc = note_data.get("desc", "")
+                            k = {"title": title, "content": desc}
 
-                inner_data = data.get("data", {}).get("data", {})
+                            video_info_v2 = note_data.get("video_info_v2", {})
+                            media = video_info_v2.get("media", {})
+                            stream = media.get("stream", {})
 
-                # Extract title/desc from TikHub response
-                # Note: TikHub uses "content" not "desc", and "imagesList" not "imageList"
-                title = inner_data.get("title", "")
-                desc = inner_data.get("content", "")  # Changed from "desc" to "content"
-                k = {"title": title, "content": desc}
+                            # Prefer h264 for better compatibility
+                            h264_list = stream.get("h264", [])
+                            if h264_list:
+                                video_stream = h264_list[0]
+                                video_url = video_stream.get("master_url", "")
+                                if not video_url:
+                                    backup_urls = video_stream.get("backup_urls", [])
+                                    if backup_urls:
+                                        video_url = backup_urls[0]
 
-                # Check for video
-                video_info = inner_data.get("videoInfo")
-                if video_info:
-                    video_url = video_info.get("videoUrl")
-                    if video_url:
-                        logger.info(f"✅ [TikHub] Got XHS video URL: {video_url[:80]}")
-                        return VideoParseResult(video=video_url, **k)
+                                if video_url:
+                                    video_meta = media.get("video", {})
+                                    width = video_stream.get("width", 0) or video_meta.get("width", 0)
+                                    height = video_stream.get("height", 0) or video_meta.get("height", 0)
+                                    # Use stream duration (in milliseconds), convert to seconds
+                                    duration = video_stream.get("duration", 0) // 1000
 
-                # Check for images
-                images_list = inner_data.get("imagesList", [])  # Changed from "imageList" to "imagesList"
-                if images_list:
-                    photos = []
-                    for img in images_list:
-                        # TikHub returns dict with "url", "original", "width", "height"
-                        img_url = img.get("url") or img.get("original")
-                        if img_url:
-                            width = img.get("width", 0)
-                            height = img.get("height", 0)
-                            photos.append(ImageRef(url=img_url, ext="jpg", width=width, height=height))
+                                    logger.info(f"✅ [TikHub] Got XHS video URL (app_v2): {video_url[:80]}")
+                                    return VideoParseResult(
+                                        video=VideoRef(url=video_url, width=width, height=height, duration=duration),
+                                        **k
+                                    )
 
-                    if photos:
-                        logger.info(f"✅ [TikHub] Got XHS {len(photos)} images")
-                        return MultimediaParseResult(media=photos, **k)
+                # If video endpoint didn't work, try image endpoint
+                logger.info(f"🎬 [TikHub] Video endpoint failed, trying image endpoint...")
+                image_api_url = f"https://api.tikhub.io/api/v1/xiaohongshu/app_v2/get_image_note_detail?note_id={note_id}"
 
-                raise ParseError("TikHub返回数据中没有视频或图片URL")
+                async with httpx.AsyncClient(timeout=30.0, proxy=self.proxy) as client:
+                    response = await client.get(image_api_url, headers=headers)
+
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("code") == 200 and data.get("data", {}).get("data"):
+                        note_data = data["data"]["data"][0]
+
+                        title = note_data.get("title", "")
+                        desc = note_data.get("desc", "")
+                        k = {"title": title, "content": desc}
+
+                        images_list = note_data.get("images_list", [])
+                        if images_list:
+                            photos = []
+                            for img in images_list:
+                                img_url = img.get("url", "")
+                                if img_url:
+                                    width = img.get("width", 0)
+                                    height = img.get("height", 0)
+                                    photos.append(ImageRef(url=img_url, ext="jpg", width=width, height=height))
+
+                            if photos:
+                                logger.info(f"✅ [TikHub] Got XHS {len(photos)} images (app_v2)")
+                                return MultimediaParseResult(media=photos, **k)
+
+                raise ParseError("TikHub app_v2 API返回数据中没有视频或图片URL")
 
             except ParseError:
                 raise
