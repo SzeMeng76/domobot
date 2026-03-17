@@ -136,8 +136,7 @@ class AntiSpamDetector:
 
             response = await self.client.chat.completions.create(
                 model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                response_format={"type": "json_object"}
+                messages=[{"role": "user", "content": prompt}]
             )
 
             result_text = response.choices[0].message.content
@@ -199,8 +198,7 @@ class AntiSpamDetector:
                         {"type": "text", "text": prompt},
                         {"type": "image_url", "image_url": {"url": photo_url}}
                     ]
-                }],
-                response_format={"type": "json_object"}
+                }]
             )
 
             result_text = response.choices[0].message.content
