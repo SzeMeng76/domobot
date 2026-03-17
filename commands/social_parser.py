@@ -15,6 +15,7 @@ import pillow_heif
 
 from parsehub.types import VideoFile, ImageFile, VideoParseResult, ImageParseResult, MultimediaParseResult, RichTextParseResult
 from utils.command_factory import command_factory
+from utils.converter import clean_article_html
 from utils.error_handling import with_error_handling
 
 
@@ -481,6 +482,7 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
                 from markdown import markdown
                 # 将文本转换为HTML
                 html_content = markdown(raw_text)
+                html_content = clean_article_html(html_content)  # 清理 HTML
                 telegraph_url = await _adapter.publish_to_telegraph(parse_result, html_content)
 
                 if telegraph_url:
@@ -709,7 +711,9 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
             try:
                 logger.info("检测到微信文章，自动发布到Telegraph")
                 if parse_result.markdown_content:
+                    from markdown import markdown
                     html_content = markdown(parse_result.markdown_content.replace("mmbiz.qpic.cn", "mmbiz.qpic.cn.in"))
+                    html_content = clean_article_html(html_content)  # 清理 HTML
                     telegraph_url = await _adapter.publish_to_telegraph(parse_result, html_content)
 
                     if telegraph_url:
@@ -732,7 +736,9 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                     markdown_content = parse_result.coolapk.markdown_content
                     if markdown_content:
                         logger.info("检测到酷安图文，自动发布到Telegraph")
+                        from markdown import markdown
                         html_content = markdown(markdown_content.replace("image.coolapk.com", "qpic.cn.in/image.coolapk.com"))
+                        html_content = clean_article_html(html_content)  # 清理 HTML
                         telegraph_url = await _adapter.publish_to_telegraph(parse_result, html_content)
 
                         if telegraph_url:
@@ -776,7 +782,9 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
         if len(raw_text) > 500:
             try:
                 logger.info(f"检测到长文本 ({len(raw_text)}字)，自动发布到Telegraph")
+                from markdown import markdown
                 html_content = markdown(raw_text)
+                html_content = clean_article_html(html_content)  # 清理 HTML
                 telegraph_url = await _adapter.publish_to_telegraph(parse_result, html_content)
 
                 if telegraph_url:
@@ -1095,6 +1103,7 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
                 logger.info(f"检测到长文本 ({len(raw_text)}字)，自动发布到Telegraph")
                 from markdown import markdown
                 html_content = markdown(raw_text)
+                html_content = clean_article_html(html_content)  # 清理 HTML
                 telegraph_url = await _adapter.publish_to_telegraph(parse_result, html_content)
 
                 if telegraph_url:
