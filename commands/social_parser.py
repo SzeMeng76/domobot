@@ -19,6 +19,92 @@ from utils.converter import clean_article_html
 from utils.error_handling import with_error_handling
 
 
+def _should_segment_image(image_path: Path, segment_height: int = 1920) -> bool:
+    """
+    判断图片是否需要切割
+
+    Telegram 对图片有宽高比限制：
+    - 横图：宽高比不能超过 20:1
+    - 竖图：高宽比不能超过 20:1（但实际上 5:1 以上就建议切割）
+
+    Args:
+        image_path: 图片路径
+        segment_height: 切割高度阈值（默认 1920px）
+
+    Returns:
+        是否需要切割
+    """
+    try:
+        with PILImage.open(image_path) as img:
+            width, height = img.size
+
+            # 只处理竖图（高度大于宽度）
+            if height <= width:
+                return False
+
+            # 高宽比
+            hw_ratio = height / width
+
+            # 宽度太窄（<200px）且高宽比超过 20:1，需要填充而不是切割
+            if width < 200 and hw_ratio > 20:
+                return False
+
+            # 高宽比超过 5:1 且高度超过切割阈值的 2 倍，建议切割
+            if hw_ratio > 5 and height > segment_height * 2:
+                logger.info(f"检测到超长图片: {width}x{height}, 高宽比={hw_ratio:.2f}, 建议切割")
+                return True
+
+            return False
+
+    except Exception as e:
+        logger.error(f"检查图片是否需要切割失败: {e}")
+        return False
+
+
+def _segment_image(image_path: Path, segment_height: int = 1920, overlap: int = 100) -> list[Path]:
+    """
+    将超长图片切割成多个片段
+
+    Args:
+        image_path: 原始图片路径
+        segment_height: 每段的高度（默认 1920px）
+        overlap: 片段之间的重叠像素（默认 100px，避免内容被截断）
+
+    Returns:
+        切割后的图片路径列表
+    """
+    try:
+        segments = []
+
+        with PILImage.open(image_path) as img:
+            width, height = img.size
+            num_segments = (height + segment_height - 1) // segment_height
+
+            logger.info(f"🔪 切割超长图片: {width}x{height} -> {num_segments} 段 (每段 {segment_height}px)")
+
+            for i in range(num_segments):
+                # 计算切割区域
+                top = i * segment_height - (overlap if i != 0 else 0)
+                bottom = min((i + 1) * segment_height, height)
+
+                # 切割
+                segment = img.crop((0, top, width, bottom))
+
+                # 保存片段
+                segment_path = image_path.parent / f"{image_path.stem}_seg{i+1:03d}{image_path.suffix}"
+                segment.save(segment_path)
+                segments.append(segment_path)
+
+                logger.debug(f"片段 {i+1}/{num_segments}: {segment_path.name}, 区域=[{top}, {bottom}]")
+
+        logger.info(f"✅ 图片切割完成: {len(segments)} 个片段")
+        return segments
+
+    except Exception as e:
+        logger.error(f"图片切割失败: {e}")
+        return [image_path]  # 失败时返回原图
+
+
 def _escape_markdown(text: str) -> str:
     """转义Markdown特殊字符"""
     if not text:
@@ -828,6 +914,37 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
             if final_path != converted_path:
                 intermediates.append(final_path)
 
+            # Step 3: Check if image needs segmentation (tall images)
+            if _should_segment_image(final_path):
+                logger.info(f"🔪 Image needs segmentation: {final_path}")
+                segments = _segment_image(final_path)
+                intermediates.extend(segments)
+
+                # Send segments as media group
+                from telegram import InputMediaPhoto
+                media_group = []
+                for seg_path in segments:
+                    with open(seg_path, 'rb') as seg_file:
+                        seg_data = seg_file.read()
+                        media_group.append(InputMediaPhoto(media=seg_data))
+
+                messages = await context.bot.send_media_group(
+                    chat_id=chat_id,
+                    media=media_group,
+                    reply_parameters=reply_parameters
+                )
+
+                # Send caption separately with buttons
+                text_msg = await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=caption,
+                    parse_mode="MarkdownV2",
+                    reply_parameters=ReplyParameters(message_id=messages[0].message_id),
+                    disable_web_page_preview=True,
+                    reply_markup=reply_markup
+                )
+                return list(messages) + [text_msg]
+
             image_path = str(final_path)
 
             try:
@@ -888,6 +1005,23 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                     downscaled_path = _downscale_image(converted_path)
                     if downscaled_path != converted_path:
                         intermediates.append(downscaled_path)
+
+                    # Step 3: Check if image needs segmentation (tall images)
+                    if _should_segment_image(downscaled_path):
+                        logger.info(f"🔪 Image needs segmentation in media group: {downscaled_path}")
+                        segments = _segment_image(downscaled_path)
+                        intermediates.extend(segments)
+
+                        # Add all segments to media group
+                        for seg_path in segments:
+                            if not imghdr.what(str(seg_path)):
+                                logger.warning(f"⚠️ Skipping invalid segment: {seg_path}")
+                                continue
+
+                            with open(seg_path, 'rb') as seg_file:
+                                seg_data = seg_file.read()
+                                media_group.append(InputMediaPhoto(media=seg_data))
+                        continue  # Skip normal processing for this image
 
                     image_path = str(downscaled_path)
 
