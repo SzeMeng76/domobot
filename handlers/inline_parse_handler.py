@@ -24,9 +24,56 @@ logger = logging.getLogger(__name__)
 _parse_cache: Dict[str, Dict[str, Any]] = {}
 _cache_timestamps: Dict[str, float] = {}
 CACHE_TTL = 300  # 5分钟
+CACHE_CLEANUP_INTERVAL = 60  # 清理间隔：60秒
+
+# 后台清理任务
+_cleanup_task: Optional[asyncio.Task] = None
+
+
+async def _cache_cleanup_loop():
+    """后台缓存清理循环任务"""
+    while True:
+        try:
+            await asyncio.sleep(CACHE_CLEANUP_INTERVAL)
+            current_time = time.time()
+            expired_keys = [
+                key for key, timestamp in _cache_timestamps.items()
+                if current_time - timestamp > CACHE_TTL
+            ]
+            for key in expired_keys:
+                _parse_cache.pop(key, None)
+                _cache_timestamps.pop(key, None)
+
+            if expired_keys:
+                logger.debug(f"[Cache] 清理了 {len(expired_keys)} 个过期缓存项，当前缓存数: {len(_parse_cache)}")
+        except Exception as e:
+            logger.error(f"[Cache] 清理任务异常: {e}", exc_info=True)
+
+
+def start_cache_cleanup_task():
+    """启动后台缓存清理任务"""
+    global _cleanup_task
+    if _cleanup_task is None or _cleanup_task.done():
+        _cleanup_task = asyncio.create_task(_cache_cleanup_loop())
+        logger.info("[Cache] 后台清理任务已启动")
+
+
+def stop_cache_cleanup_task():
+    """停止后台缓存清理任务"""
+    global _cleanup_task
+    if _cleanup_task and not _cleanup_task.done():
+        _cleanup_task.cancel()
+        logger.info("[Cache] 后台清理任务已停止")
+
+
+def _clean_expired_cache():
+    """清理过期缓存（已弃用，保留用于兼容性）"""
+    # 现在由后台任务处理，这个函数保留但不做任何事
+    pass
 
 
 def _build_cached_inline_results(cached_data: dict, url: str) -> list:
+
     """使用file_id缓存构建inline结果（直接使用Telegram服务器上的文件）"""
     keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔗 原链接", url=url)]])
 
@@ -89,9 +136,6 @@ async def handle_inline_parse_query(
     Returns:
         InlineQueryResult 列表
     """
-    # 清理过期缓存
-    _clean_expired_cache()
-
     # 获取 parse_adapter
     parse_adapter = context.bot_data.get("parse_adapter")
     if not parse_adapter:

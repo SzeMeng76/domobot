@@ -700,6 +700,16 @@ async def setup_application(application: Application, config) -> None:
     else:
         logger.info(" 自定义脚本加载已禁用")
 
+    # ========================================
+    # 启动后台任务
+    # ========================================
+    logger.info(" 启动后台任务...")
+
+    # 启动 inline parse 缓存清理任务
+    from handlers.inline_parse_handler import start_cache_cleanup_task
+    start_cache_cleanup_task()
+    logger.info("✅ Inline parse 缓存清理任务已启动")
+
     logger.info(" 机器人应用初始化完成！")
 
 
@@ -708,6 +718,13 @@ async def cleanup_application(application: Application) -> None:
     logger.info(" 开始清理应用资源...")
 
     try:
+        # ========================================
+        # 第零步：停止后台任务
+        # ========================================
+        from handlers.inline_parse_handler import stop_cache_cleanup_task
+        stop_cache_cleanup_task()
+        logger.info("✅ Inline parse 缓存清理任务已停止")
+
         # ========================================
         # 第一步：关闭 Pyrogram 客户端
         # ========================================
