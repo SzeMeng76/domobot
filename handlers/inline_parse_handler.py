@@ -31,7 +31,8 @@ def _build_cached_inline_results(cached_data: dict, url: str) -> list:
 
     file_id = cached_data.get("file_id")
     file_type = cached_data.get("file_type", "video")
-    title = cached_data.get("title", "无标题")[:60]
+    title = (cached_data.get("title", "") or "").strip() or "无标题"
+    title = title[:60]  # Telegram限制
     caption = cached_data.get("caption", "")
 
     if file_type == "video":
@@ -182,8 +183,8 @@ async def handle_inline_parse_query(
         # 构建 inline 结果
         from parsehub.types import VideoParseResult, ImageParseResult, RichTextParseResult, MultimediaParseResult
 
-        title = (parse_result.title or "无标题")[:60]  # Telegram限制64字符
-        description = (parse_result.content or "点击下载")[:100]
+        title = ((parse_result.title or "").strip() or "无标题")[:60]  # Telegram限制64字符
+        description = ((parse_result.content or "").strip() or "点击下载")[:100]
 
         # 获取缩略图
         thumb_url = None
@@ -321,8 +322,8 @@ async def handle_inline_parse_query(
                             title=f"🖼️ 图片 {index + 1}/{len(media_list)} - {title}",
                             description=description,
                             caption=caption_text,
-                            photo_width=getattr(media_item, 'width', None) or 300,
-                            photo_height=getattr(media_item, 'height', None) or 300,
+                            photo_width=getattr(media_item, 'width', None),
+                            photo_height=getattr(media_item, 'height', None),
                             reply_markup=keyboard,
                         )
                     )
