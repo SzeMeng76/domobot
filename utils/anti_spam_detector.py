@@ -50,6 +50,39 @@ class AntiSpamDetector:
             self.client = AsyncOpenAI(api_key=api_key)
         logger.info(f"AntiSpamDetector initialized with model: {model}")
 
+    def _extract_json(self, text: str) -> Dict:
+        """
+        从模型响应中提取 JSON
+        处理 markdown 代码块和其他格式
+        """
+        import re
+
+        # Try to parse directly first
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+
+        # Try to extract JSON from markdown code block
+        json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
+        if json_match:
+            try:
+                return json.loads(json_match.group(1))
+            except json.JSONDecodeError:
+                pass
+
+        # Try to find JSON object in text
+        json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', text, re.DOTALL)
+        if json_match:
+            try:
+                return json.loads(json_match.group(0))
+            except json.JSONDecodeError:
+                pass
+
+        # If all fails, log the raw response and raise
+        logger.error(f"Failed to extract JSON from response: {text[:500]}")
+        raise ValueError(f"Could not extract valid JSON from response")
+
     def _build_user_info_prompt(self, user_info: Dict) -> str:
         """构建用户信息提示词（包含风险评分）"""
         joined_time = user_info.get('joined_time')
@@ -140,7 +173,9 @@ class AntiSpamDetector:
             )
 
             result_text = response.choices[0].message.content
-            result_json = json.loads(result_text)
+
+            # Extract JSON from response (handle markdown code blocks)
+            result_json = self._extract_json(result_text)
 
             detection_time = int((time.time() - start_time) * 1000)
 
@@ -202,7 +237,9 @@ class AntiSpamDetector:
             )
 
             result_text = response.choices[0].message.content
-            result_json = json.loads(result_text)
+
+            # Extract JSON from response (handle markdown code blocks)
+            result_json = self._extract_json(result_text)
 
             detection_time = int((time.time() - start_time) * 1000)
 
