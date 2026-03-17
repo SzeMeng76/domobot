@@ -22,6 +22,10 @@ from parsehub.types import ParseResult, VideoParseResult, ImageParseResult, Mult
 
 logger = logging.getLogger(__name__)
 
+# Singleflight: 同一 URL 只会有一条解析任务在执行，后续请求等待完成
+_inflight: Dict[str, asyncio.Event] = {}
+_inflight_results: Dict[str, Any] = {}
+
 
 class ParseHubAdapter:
     """ParseHub 适配器类"""
@@ -94,10 +98,75 @@ class ParseHubAdapter:
         text: str,
         user_id: int,
         group_id: Optional[int] = None,
+        proxy: Optional[str] = None,
+        use_singleflight: bool = True
+    ) -> Tuple[Optional[Any], Optional[Any], Optional[str], float, Optional[str]]:
+        """
+        解析URL并下载媒体（带 Singleflight 机制）
+
+        Args:
+            text: 包含URL的文本
+            user_id: 用户ID
+            group_id: 群组ID（可选）
+            proxy: 代理地址（可选，不传则使用配置中的代理）
+            use_singleflight: 是否使用 Singleflight 机制（默认True）
+
+        Returns:
+            (DownloadResult, ParseResult, platform_name, parse_time, error_msg)
+        """
+        # 提取 URL 用于 Singleflight key
+        url = await self._extract_url(text)
+        if not url or not use_singleflight:
+            # 如果没有URL或禁用Singleflight，直接调用实现
+            return await self._parse_url_impl(text, user_id, group_id, proxy)
+
+        # Singleflight 机制：检查是否已有相同 URL 正在解析
+        if url in _inflight:
+            logger.info(f"[Singleflight] 等待已有解析任务: {url[:50]}...")
+            # 等待已有任务完成
+            await _inflight[url].wait()
+            # 从结果缓存中获取
+            result = _inflight_results.get(url)
+            if result:
+                logger.info(f"[Singleflight] 获取到缓存结果: {url[:50]}...")
+                return result
+            else:
+                # 缓存已被清理，重新解析
+                logger.warning(f"[Singleflight] 缓存已清理，重新解析: {url[:50]}...")
+                return await self._parse_url_impl(text, user_id, group_id, proxy)
+
+        # 创建 Event 标记正在解析
+        event = asyncio.Event()
+        _inflight[url] = event
+
+        try:
+            # 执行实际解析
+            result = await self._parse_url_impl(text, user_id, group_id, proxy)
+            # 缓存结果（5秒内有效，避免内存泄漏）
+            _inflight_results[url] = result
+            # 5秒后清理结果缓存
+            asyncio.create_task(self._cleanup_singleflight_result(url, 5))
+            return result
+        finally:
+            # 完成后释放等待者
+            event.set()
+            _inflight.pop(url, None)
+
+    async def _cleanup_singleflight_result(self, url: str, delay: int):
+        """清理 Singleflight 结果缓存"""
+        await asyncio.sleep(delay)
+        _inflight_results.pop(url, None)
+        logger.debug(f"[Singleflight] 清理结果缓存: {url[:50]}...")
+
+    async def _parse_url_impl(
+        self,
+        text: str,
+        user_id: int,
+        group_id: Optional[int] = None,
         proxy: Optional[str] = None
     ) -> Tuple[Optional[Any], Optional[Any], Optional[str], float, Optional[str]]:
         """
-        解析URL并下载媒体
+        解析URL并下载媒体（实际实现）
 
         Args:
             text: 包含URL的文本
