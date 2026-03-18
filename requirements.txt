@@ -67,6 +67,7 @@ pandas>=3.0.0  # Latest stable version as of Feb 2026
 
 # Social Media Parser (ParseHub) - 社交媒体解析功能
 parsehub~=2.0.8  # 社交媒体聚合解析器，支持20+平台 (2.0.8: replace opencv-python with opencv-python-headless for lighter installation)
+yt-dlp>=2026.3.17  # 升级到最新版本以支持YouTube最新反爬虫机制（n challenge）
 pytubefix @ git+https://github.com/SzeMeng76/pytubefix.git@main  # YouTube 下载库（fork修复cipher.py, ref: pytubefix#579）
 pillow>=12.1.1  # 图像处理库
 pillow-heif>=1.3.0  # HEIF/HEIC 图片格式支持
