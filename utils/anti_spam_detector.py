@@ -167,10 +167,17 @@ class AntiSpamDetector:
                 user_info_text, message_text, days_since_join, speech_count
             )
 
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}]
-            )
+            try:
+                response = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[{"role": "user", "content": prompt}],
+                    response_format={"type": "json_object"}
+                )
+            except Exception:
+                response = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[{"role": "user", "content": prompt}]
+                )
 
             result_text = response.choices[0].message.content
 
@@ -225,16 +232,29 @@ class AntiSpamDetector:
   "spam_mock_text": "讽刺性评论"
 }}"""
 
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[{
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {"type": "image_url", "image_url": {"url": photo_url}}
-                    ]
-                }]
-            )
+            try:
+                response = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[{
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {"type": "image_url", "image_url": {"url": photo_url}}
+                        ]
+                    }],
+                    response_format={"type": "json_object"}
+                )
+            except Exception:
+                response = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[{
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {"type": "image_url", "image_url": {"url": photo_url}}
+                        ]
+                    }]
+                )
 
             result_text = response.choices[0].message.content
 
