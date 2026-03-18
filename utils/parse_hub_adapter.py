@@ -296,11 +296,32 @@ class ParseHubAdapter:
             else:
                 logger.info(f"⚠️ 未传递cookie给ParseHub")
 
+            # 解析URL（带重试机制，最多3次）
             parsehub = ParseHub()
-            result = await parsehub.parse(url, proxy=parser_proxy, cookie=platform_cookie)
+            max_retries = 3
+            result = None
+            last_error = None
+
+            for attempt in range(1, max_retries + 1):
+                try:
+                    logger.debug(f"🔄 解析尝试 {attempt}/{max_retries}: {url[:50]}...")
+                    result = await parsehub.parse(url, proxy=parser_proxy, cookie=platform_cookie)
+                    if result:
+                        logger.debug(f"✅ 解析成功 (尝试 {attempt}/{max_retries})")
+                        break
+                    else:
+                        logger.warning(f"⚠️ 解析返回空结果 (尝试 {attempt}/{max_retries})")
+                        last_error = "解析失败，未返回结果"
+                except Exception as parse_error:
+                    last_error = str(parse_error)
+                    logger.warning(f"⚠️ 解析失败 (尝试 {attempt}/{max_retries}): {last_error}")
+                    if attempt < max_retries:
+                        await asyncio.sleep(1)  # 重试前等待1秒
+                    else:
+                        raise parse_error
 
             if not result:
-                return None, None, None, 0, "解析失败，未返回结果"
+                return None, None, None, 0, last_error or "解析失败，未返回结果"
 
             # 下载媒体
             try:
