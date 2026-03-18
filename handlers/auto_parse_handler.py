@@ -61,7 +61,10 @@ async def auto_parse_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         result, parse_result, platform, parse_time, error_msg = await _adapter.parse_url(text, user_id, group_id)
 
         if not result:
-            error_text = f"❌ 自动解析失败: {error_msg}" if error_msg else "❌ 自动解析失败"
+            if error_msg:
+                error_text = f"**❌ 自动解析失败:**\n```\n{error_msg}\n```"
+            else:
+                error_text = "❌ 自动解析失败"
             error_msg_obj = await status_msg.edit_text(error_text)
 
             # 调度删除错误消息和原始消息
@@ -160,7 +163,7 @@ async def auto_parse_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except Exception as e:
         logger.error(f"自动解析失败: {e}", exc_info=True)
         try:
-            error_msg_obj = await status_msg.edit_text("❌ 自动解析失败")
+            error_msg_obj = await status_msg.edit_text(f"**❌ 自动解析失败:**\n```\n{str(e)}\n```")
             # 调度删除错误消息和原始消息
             from commands.social_parser import delete_user_command, _schedule_deletion
             # 删除错误消息（5秒后）

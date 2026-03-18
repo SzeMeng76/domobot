@@ -404,7 +404,10 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         if not result:
             # 显示具体错误信息
-            error_text = f"❌ {error_msg}" if error_msg else "❌ 解析失败，请检查链接是否正确"
+            if error_msg:
+                error_text = f"**❌ 解析失败:**\n```\n{error_msg}\n```"
+            else:
+                error_text = "❌ 解析失败，请检查链接是否正确"
             await status_msg.edit_text(error_text)
             if update.message:
                 await delete_user_command(context, chat_id, update.message.message_id)

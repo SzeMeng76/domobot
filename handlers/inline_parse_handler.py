@@ -471,7 +471,7 @@ async def handle_inline_parse_query(
                 title="❌ 解析失败",
                 description=str(e)[:100],
                 input_message_content=InputTextMessageContent(
-                    message_text=f"❌ 解析失败\n\n错误: {str(e)}"
+                    message_text=f"**❌ 解析失败:**\n```\n{str(e)}\n```"
                 ),
             )
         ]
@@ -609,12 +609,12 @@ async def handle_inline_parse_chosen(
             if is_article:
                 await context.bot.edit_message_text(
                     inline_message_id=inline_message_id,
-                    text=f"❌ 处理失败\n\n错误: {str(e)}"
+                    text=f"**❌ 处理失败:**\n```\n{str(e)}\n```"
                 )
             else:
                 await context.bot.edit_message_caption(
                     inline_message_id=inline_message_id,
-                    caption=f"❌ 处理失败\n\n错误: {str(e)}"
+                    caption=f"**❌ 处理失败:**\n```\n{str(e)}\n```"
                 )
         except Exception as ex:
             logger.error(f"[Inline Parse] 更新错误消息失败: {ex}")
@@ -671,7 +671,7 @@ async def _handle_richtext_inline(
         # 失败 → 保留缓存以便重试
         await context.bot.edit_message_text(
             inline_message_id=inline_message_id,
-            text=f"❌ Telegraph 发布失败\n\n错误: {str(e)}"
+            text=f"**❌ Telegraph 发布失败:**\n```\n{str(e)}\n```"
         )
 
 
@@ -839,7 +839,7 @@ async def _handle_video_inline(
     except Exception as e:
         logger.error(f"视频 inline 处理失败: {e}", exc_info=True)
         try:
-            await _update_status(f"❌ 视频处理失败\n\n错误: {str(e)}")
+            await _update_status(f"**❌ 视频处理失败:**\n```\n{str(e)}\n```")
         except Exception:
             pass
 
@@ -981,5 +981,5 @@ async def _handle_image_inline(
         logger.error(f"图片 inline 处理失败: {e}", exc_info=True)
         await context.bot.edit_message_text(
             inline_message_id=inline_message_id,
-            text=f"❌ 图片处理失败\n\n错误: {str(e)}"
+            text=f"**❌ 图片处理失败:**\n```\n{str(e)}\n```"
         )

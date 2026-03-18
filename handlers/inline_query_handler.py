@@ -81,7 +81,7 @@ class InlineQueryHandler:
                             title="❌ 权限检查失败",
                             description="请稍后重试或联系管理员",
                             input_message_content=InputTextMessageContent(
-                                message_text=f"❌ 权限检查失败\n\n错误: {str(e)}"
+                                message_text=f"**❌ 权限检查失败:**\n```\n{str(e)}\n```"
                             ),
                         )
                     ])
@@ -101,7 +101,7 @@ class InlineQueryHandler:
                         title="❌ 解析结果返回失败",
                         description=str(e)[:100],
                         input_message_content=InputTextMessageContent(
-                            message_text=f"❌ 解析结果返回失败\n\n错误: {str(e)}"
+                            message_text=f"**❌ 解析结果返回失败:**\n```\n{str(e)}\n```"
                         ),
                     )
                 ])
