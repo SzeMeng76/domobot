@@ -801,7 +801,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                 logger.info("检测到微信文章，自动发布到Telegraph")
                 if parse_result.markdown_content:
                     from markdown import markdown
-                    html_content = markdown(parse_result.markdown_content.replace("mmbiz.qpic.cn", "mmbiz.qpic.cn.in"))
+                    html_content = markdown(parse_result.markdown_content.replace("mmbiz.qpic.cn", "qpic.cn.in/mmbiz.qpic.cn"))
                     html_content = clean_article_html(html_content)  # 清理 HTML
                     telegraph_url = await _adapter.publish_to_telegraph(parse_result, html_content)
 

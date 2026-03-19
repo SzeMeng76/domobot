@@ -642,7 +642,7 @@ async def _handle_richtext_inline(
         # 转换为 HTML
         md_content = parse_result.markdown_content
         if parse_result.platform.id == 'weixin':
-            md_content = md_content.replace("mmbiz.qpic.cn", "mmbiz.qpic.cn.in")
+            md_content = md_content.replace("mmbiz.qpic.cn", "qpic.cn.in/mmbiz.qpic.cn")
         elif parse_result.platform.id == 'coolapk':
             md_content = md_content.replace("image.coolapk.com", "qpic.cn.in/image.coolapk.com")
 
