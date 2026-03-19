@@ -50,6 +50,24 @@ class AntiSpamDetector:
             self.client = AsyncOpenAI(api_key=api_key)
         logger.info(f"AntiSpamDetector initialized with model: {model}")
 
+    async def _chat(self, messages: list, use_json_mode: bool = False) -> str:
+        """统一的流式 chat 调用，兼容强制流式的模型（如 grok）"""
+        kwargs = {"model": self.model, "messages": messages, "stream": True}
+        if use_json_mode:
+            try:
+                stream = await self.client.chat.completions.create(
+                    **kwargs, response_format={"type": "json_object"}
+                )
+            except Exception:
+                stream = await self.client.chat.completions.create(**kwargs)
+        else:
+            stream = await self.client.chat.completions.create(**kwargs)
+        result = ""
+        async for chunk in stream:
+            if chunk.choices and chunk.choices[0].delta.content:
+                result += chunk.choices[0].delta.content
+        return result
+
     def _extract_json(self, text: str) -> Dict:
         """
         从模型响应中提取 JSON
@@ -167,19 +185,9 @@ class AntiSpamDetector:
                 user_info_text, message_text, days_since_join, speech_count
             )
 
-            try:
-                response = await self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[{"role": "user", "content": prompt}],
-                    response_format={"type": "json_object"}
-                )
-            except Exception:
-                response = await self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-
-            result_text = response.choices[0].message.content
+            result_text = await self._chat(
+                [{"role": "user", "content": prompt}], use_json_mode=True
+            )
 
             # Extract JSON from response (handle markdown code blocks)
             result_json = self._extract_json(result_text)
@@ -232,31 +240,13 @@ class AntiSpamDetector:
   "spam_mock_text": "讽刺性评论"
 }}"""
 
-            try:
-                response = await self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[{
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {"type": "image_url", "image_url": {"url": photo_url}}
-                        ]
-                    }],
-                    response_format={"type": "json_object"}
-                )
-            except Exception:
-                response = await self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[{
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {"type": "image_url", "image_url": {"url": photo_url}}
-                        ]
-                    }]
-                )
-
-            result_text = response.choices[0].message.content
+            result_text = await self._chat([{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": photo_url}}
+                ]
+            }], use_json_mode=True)
 
             # Extract JSON from response (handle markdown code blocks)
             result_json = self._extract_json(result_text)

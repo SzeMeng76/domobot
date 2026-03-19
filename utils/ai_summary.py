@@ -144,11 +144,16 @@ class AISummarizer:
 
             # Call LLM
             client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url)
-            response = await client.chat.completions.create(
+            stream = await client.chat.completions.create(
                 model=self.model,
                 messages=messages,
+                stream=True,
             )
-            return response.choices[0].message.content
+            result = ""
+            async for chunk in stream:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    result += chunk.choices[0].delta.content
+            return result
 
         except Exception as e:
             logger.error(f"AI summary failed: {e}", exc_info=True)
