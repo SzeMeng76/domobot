@@ -22,6 +22,7 @@ from utils.error_handling import with_error_handling
 from utils.message_manager import (
     send_message_with_auto_delete,
     delete_user_command,
+    _schedule_deletion,
     send_error,
 )
 from utils.netease_api import (
@@ -92,7 +93,7 @@ async def _download_and_send_music(
             caption = cached.get("caption", "")
             keyboard = _build_music_keyboard(song_id, cached.get("name", ""), cached.get("artists", ""))
 
-            await context.bot.send_audio(
+            sent_cached = await context.bot.send_audio(
                 chat_id=chat_id,
                 audio=file_id,
                 caption=caption,
@@ -100,6 +101,9 @@ async def _download_and_send_music(
                 reply_markup=keyboard,
                 reply_to_message_id=reply_to_message_id,
             )
+            # 自动删除缓存命中的音频消息
+            if config.auto_delete_delay > 0:
+                await _schedule_deletion(context, chat_id, sent_cached.message_id, config.auto_delete_delay)
             if status_message:
                 try:
                     await status_message.delete()
@@ -125,6 +129,8 @@ async def _download_and_send_music(
         if status_message:
             try:
                 await status_message.edit_text("❌ 未找到该歌曲")
+                if config.auto_delete_delay > 0:
+                    await _schedule_deletion(context, status_message.chat_id, status_message.message_id, min(config.auto_delete_delay, 30))
             except Exception:
                 pass
         return False
@@ -133,6 +139,8 @@ async def _download_and_send_music(
         if status_message:
             try:
                 await status_message.edit_text("❌ 该歌曲暂无可用音源（可能需要 VIP 或版权限制）")
+                if config.auto_delete_delay > 0:
+                    await _schedule_deletion(context, status_message.chat_id, status_message.message_id, min(config.auto_delete_delay, 30))
             except Exception:
                 pass
         return False
@@ -162,6 +170,8 @@ async def _download_and_send_music(
                 if status_message:
                     try:
                         await status_message.edit_text("❌ 下载失败，请稍后重试")
+                        if config.auto_delete_delay > 0:
+                            await _schedule_deletion(context, status_message.chat_id, status_message.message_id, min(config.auto_delete_delay, 30))
                     except Exception:
                         pass
                 return False
@@ -205,22 +215,38 @@ async def _download_and_send_music(
             file_size_mb = audio_path.stat().st_size / (1024 * 1024)
 
             sent_msg = None
-            if file_size_mb > 50 and _pyrogram_helper and _pyrogram_helper.is_started:
-                # 大文件：使用 Kurigram MTProto 上传
-                logger.info(f"🚀 使用 Pyrogram 上传 {file_size_mb:.1f}MB 音频")
-                sent_msg = await _pyrogram_helper.send_large_audio(
-                    chat_id=chat_id,
-                    audio_path=str(audio_path),
-                    caption=caption,
-                    duration=detail.get("duration", 0),
-                    performer=detail.get("artists", ""),
-                    title=detail.get("name", ""),
-                    thumb=str(thumb_path) if cover_downloaded else None,
-                    reply_markup=keyboard,
-                    parse_mode="HTML",
-                )
-            else:
-                # 普通上传：python-telegram-bot
+            # 优先使用 Pyrogram 上传（更稳定，支持大文件）
+            # 参考 social_parser 的瀑布流：Pyrogram → python-telegram-bot fallback
+            if _pyrogram_helper and _pyrogram_helper.is_started:
+                try:
+                    logger.info(f"🚀 使用 Pyrogram 上传 {file_size_mb:.1f}MB 音频")
+                    sent_msg = await _pyrogram_helper.send_large_audio(
+                        chat_id=chat_id,
+                        audio_path=str(audio_path),
+                        caption=caption,
+                        duration=detail.get("duration", 0),
+                        performer=detail.get("artists", ""),
+                        title=detail.get("name", ""),
+                        thumb=str(thumb_path) if cover_downloaded else None,
+                        reply_markup=keyboard,
+                        parse_mode="HTML",
+                    )
+                except Exception as e:
+                    logger.warning(f"⚠️ Pyrogram 上传失败，降级到 python-telegram-bot: {e}")
+                    sent_msg = None
+
+            # Fallback: python-telegram-bot（仅 <= 50MB）
+            if not sent_msg:
+                if file_size_mb > 50:
+                    logger.error(f"❌ 文件 {file_size_mb:.1f}MB 超过50MB且Pyrogram不可用")
+                    if status_message:
+                        try:
+                            await status_message.edit_text(f"❌ 文件过大 ({file_size_mb:.1f}MB)，上传失败")
+                            if config.auto_delete_delay > 0:
+                                await _schedule_deletion(context, status_message.chat_id, status_message.message_id, min(config.auto_delete_delay, 30))
+                        except Exception:
+                            pass
+                    return False
                 with open(audio_path, "rb") as audio_file:
                     thumb_file = open(thumb_path, "rb") if cover_downloaded else None
                     try:
@@ -261,6 +287,12 @@ async def _download_and_send_music(
                         cache_key, cache_data, ttl=config.music_cache_duration
                     )
 
+            # 7. 自动删除 bot 发送的音频消息
+            if sent_msg and config.auto_delete_delay > 0:
+                await _schedule_deletion(
+                    context, sent_msg.chat_id, sent_msg.message_id, config.auto_delete_delay
+                )
+
             if status_message:
                 try:
                     await status_message.delete()
@@ -273,6 +305,8 @@ async def _download_and_send_music(
             if status_message:
                 try:
                     await status_message.edit_text(f"❌ 处理失败: {e}")
+                    if config.auto_delete_delay > 0:
+                        await _schedule_deletion(context, status_message.chat_id, status_message.message_id, min(config.auto_delete_delay, 30))
                 except Exception:
                     pass
             return False
@@ -456,6 +490,10 @@ async def music_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if not songs:
         try:
             await status_msg.edit_text("❌ 未找到相关歌曲")
+            # 自动删除错误消息
+            config = get_config()
+            if config.auto_delete_delay > 0:
+                await _schedule_deletion(context, update.message.chat_id, status_msg.message_id, min(config.auto_delete_delay, 30))
         except Exception:
             pass
         return
@@ -485,6 +523,10 @@ async def music_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             parse_mode="HTML",
             reply_markup=keyboard,
         )
+        # 自动删除搜索结果
+        config = get_config()
+        if config.auto_delete_delay > 0:
+            await _schedule_deletion(context, update.message.chat_id, status_msg.message_id, config.auto_delete_delay)
     except Exception as e:
         logger.error(f"更新搜索结果失败: {e}")
 
@@ -536,6 +578,9 @@ async def lyric_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if not lyric:
         try:
             await status_msg.edit_text("❌ 该歌曲暂无歌词")
+            config = get_config()
+            if config.auto_delete_delay > 0:
+                await _schedule_deletion(context, update.message.chat_id, status_msg.message_id, min(config.auto_delete_delay, 30))
         except Exception:
             pass
         return
@@ -547,16 +592,20 @@ async def lyric_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     # 清理文件名中的特殊字符
     filename = "".join(c for c in filename if c not in r'\/:*?"<>|')
 
+    config = get_config()
     tmp_path = Path(tempfile.mktemp(suffix=".lrc", prefix="lyric_"))
     try:
         tmp_path.write_text(lyric, encoding="utf-8")
         with open(tmp_path, "rb") as f:
-            await context.bot.send_document(
+            sent_lyric = await context.bot.send_document(
                 chat_id=update.message.chat_id,
                 document=InputFile(f, filename=filename),
                 caption=f"📝 {_escape_html(name)} - {_escape_html(artists)}",
                 parse_mode="HTML",
             )
+        # 自动删除歌词文件消息
+        if config.auto_delete_delay > 0:
+            await _schedule_deletion(context, update.message.chat_id, sent_lyric.message_id, config.auto_delete_delay)
         try:
             await status_msg.delete()
         except Exception:
@@ -620,9 +669,12 @@ async def music_lyric_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
     if not lyric:
-        await context.bot.send_message(
+        no_lyric_msg = await context.bot.send_message(
             chat_id=query.message.chat_id, text="❌ 该歌曲暂无歌词"
         )
+        config = get_config()
+        if config.auto_delete_delay > 0:
+            await _schedule_deletion(context, query.message.chat_id, no_lyric_msg.message_id, min(config.auto_delete_delay, 30))
         return
 
     name = detail["name"] if detail else str(song_id)
@@ -634,12 +686,15 @@ async def music_lyric_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         tmp_path.write_text(lyric, encoding="utf-8")
         with open(tmp_path, "rb") as f:
-            await context.bot.send_document(
+            sent_cb_lyric = await context.bot.send_document(
                 chat_id=query.message.chat_id,
                 document=InputFile(f, filename=filename),
                 caption=f"📝 {_escape_html(name)} - {_escape_html(artists)}",
                 parse_mode="HTML",
             )
+        config = get_config()
+        if config.auto_delete_delay > 0:
+            await _schedule_deletion(context, query.message.chat_id, sent_cb_lyric.message_id, config.auto_delete_delay)
     finally:
         try:
             tmp_path.unlink(missing_ok=True)
