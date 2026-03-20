@@ -59,6 +59,8 @@ class InlineCommandAdapter:
             "flight": self._handle_flight,
             "hotel": self._handle_hotel,
             "chart": self._handle_chart,
+            "music": self._handle_music,
+            "netease": self._handle_music,
         }
 
         handler = command_handlers.get(command)
@@ -457,6 +459,59 @@ class InlineCommandAdapter:
             ParseMode.MARKDOWN_V2,
             None
         )
+
+    # ============================================================================
+    # 🎵 网易云音乐
+    # ============================================================================
+
+    async def _handle_music(self, args: str) -> Tuple[str, ParseMode, None]:
+        """处理音乐搜索 - 返回搜索结果文本（inline 中点击发送命令）"""
+        if not args:
+            return (
+                "🎵 **网易云音乐搜索**\n\n"
+                "请提供关键词\n\n"
+                "**使用方法:**\n"
+                "`music 周杰伦 晴天`\n"
+                "`music 186016`",
+                ParseMode.MARKDOWN,
+                None
+            )
+
+        from utils.netease_api import NeteaseAPI, parse_music_id
+        from utils.config_manager import get_config
+
+        config = get_config()
+        api = NeteaseAPI(music_u=config.music_u_cookie, httpx_client=self.httpx_client)
+
+        # 如果是 ID，返回直接下载提示
+        song_id = parse_music_id(args)
+        if song_id:
+            detail = await api.get_song_detail(song_id)
+            if detail:
+                return (
+                    f"🎵 **{detail['name']}** - {detail['artists']}\n"
+                    f"💿 {detail['album']}\n\n"
+                    f"💡 发送 `/music {song_id}` 下载",
+                    ParseMode.MARKDOWN,
+                    None
+                )
+
+        # 搜索
+        songs = await api.search_songs(args, limit=8)
+        if not songs:
+            return ("❌ 未找到相关歌曲", None, None)
+
+        lines = ["🔍 **搜索结果**\n"]
+        for i, s in enumerate(songs):
+            dur_min = s["duration"] // 60
+            dur_sec = s["duration"] % 60
+            lines.append(
+                f"**{i+1}.** {s['name']} - {s['artists']} [{dur_min}:{dur_sec:02d}]\n"
+                f"   `/music {s['id']}`"
+            )
+
+        lines.append("\n💡 点击命令即可下载")
+        return ("\n".join(lines), ParseMode.MARKDOWN, None)
 
     # ============================================================================
     # 默认处理器

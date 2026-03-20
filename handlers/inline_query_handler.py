@@ -46,6 +46,29 @@ class InlineQueryHandler:
         user_id = update.inline_query.from_user.id
 
         # ========================================
+        # 检查是否是网易云音乐链接
+        # ========================================
+        from utils.netease_api import contains_music_link
+        if contains_music_link(query):
+            from handlers.inline_music_handler import handle_inline_music_link
+            try:
+                results = await handle_inline_music_link(query, update.inline_query, context)
+                await update.inline_query.answer(results, cache_time=60)
+            except Exception as e:
+                logger.error(f"[Inline Music] 处理失败: {e}", exc_info=True)
+                await update.inline_query.answer([
+                    InlineQueryResultArticle(
+                        id=str(uuid4()),
+                        title="❌ 音乐链接解析失败",
+                        description=str(e)[:100],
+                        input_message_content=InputTextMessageContent(
+                            message_text=f"❌ 音乐链接解析失败: {str(e)}"
+                        ),
+                    )
+                ])
+            return
+
+        # ========================================
         # 检查是否是 URL（社交媒体解析）
         # ========================================
         if query.startswith('http://') or query.startswith('https://'):
@@ -162,6 +185,15 @@ class InlineQueryHandler:
         # 去掉触发后缀，准备执行命令
         command_text = query[:-len(self.trigger_suffix)].strip()
 
+        # 音乐搜索单独处理：返回多条结果（参考 Go processInlineSearch）
+        parts = command_text.split(None, 1)
+        if parts and parts[0].lower() in ("music", "netease"):
+            keyword = parts[1].strip() if len(parts) > 1 else ""
+            from handlers.inline_music_handler import handle_inline_music_search
+            results = await handle_inline_music_search(keyword, context)
+            await update.inline_query.answer(results, cache_time=60)
+            return
+
         # 直接执行命令并返回结果
         results = await self._execute_and_create_results(command_text, user_id, context)
 
@@ -231,6 +263,10 @@ class InlineQueryHandler:
 • `cooking$` - 随机菜谱推荐
 • `chart movie$` - 影视排行榜
 
+**🎵 音乐:**
+• `music 晴天$` - 搜索网易云音乐
+• 直接输入网易云链接(无需$) - 解析音乐
+
 **📱 社交媒体解析:**
 • 直接输入链接(无需$符号) - 解析视频/图片/图文
 • 支持抖音、B站、YouTube、TikTok、小红书、Twitter等20+平台
@@ -278,6 +314,7 @@ class InlineQueryHandler:
             "news": "📰 新闻 - 添加 $ 执行查询",
             "whois": "🌐 域名查询 - 添加 $ 执行查询",
             "cooking": "👨‍🍳 菜谱 - 添加 $ 执行查询",
+            "music": "🎵 网易云音乐 - 添加 $ 搜索歌曲",
             "chart": "📊 排行榜 - 添加 $ 执行查询",
         }
 
@@ -325,6 +362,8 @@ class InlineQueryHandler:
             "whois": {"icon": "🌐", "title": "域名查询", "desc": "WHOIS信息"},
             "cooking": {"icon": "👨‍🍳", "title": "菜谱", "desc": "烹饪指南"},
             "chart": {"icon": "📊", "title": "排行榜", "desc": "影视排行"},
+            "music": {"icon": "🎵", "title": "网易云音乐", "desc": "搜索歌曲"},
+            "netease": {"icon": "🎵", "title": "网易云音乐", "desc": "搜索歌曲"},
         }
 
         info = command_info.get(command, {"icon": "🔍", "title": command.upper(), "desc": "执行命令"})
@@ -381,10 +420,20 @@ async def setup_inline_query_handler(application) -> None:
         TelegramInlineQueryHandler(handler.handle_inline_query)
     )
 
-    # 注册 chosen inline result 处理器（用于 parse 功能）
+    # 注册 chosen inline result 处理器（parse + music）
     from handlers.inline_parse_handler import handle_inline_parse_chosen
+    from handlers.inline_music_handler import handle_inline_music_chosen
+
+    async def _chosen_inline_dispatcher(update, context):
+        """分发 chosen inline result 到对应处理器"""
+        result_id = update.chosen_inline_result.result_id
+        if result_id.startswith("music_dl_"):
+            await handle_inline_music_chosen(update, context)
+        elif result_id.startswith("parse_"):
+            await handle_inline_parse_chosen(update, context)
+
     application.add_handler(
-        ChosenInlineResultHandler(handle_inline_parse_chosen)
+        ChosenInlineResultHandler(_chosen_inline_dispatcher)
     )
 
-    logger.info("✅ Inline Query 处理器已注册（含 Parse 支持）")
+    logger.info("✅ Inline Query 处理器已注册（含 Parse + Music 支持）")

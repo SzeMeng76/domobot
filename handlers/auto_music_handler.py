@@ -10,6 +10,7 @@ from telegram import Update
 from telegram.ext import ContextTypes, MessageHandler, filters
 
 from utils.netease_api import contains_music_link, parse_music_id, parse_program_id, resolve_short_url
+from utils.message_manager import delete_user_command
 
 logger = logging.getLogger(__name__)
 
@@ -61,13 +62,15 @@ async def auto_music_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     chat_id = message.chat_id
     logger.info(f"检测到网易云链接，歌曲ID: {song_id}, 群组: {chat_id}")
 
-    status_msg = await message.reply_text("🎵 检测到网易云音乐链接，处理中...")
+    # 删除用户的链接消息
+    await delete_user_command(context, chat_id, message.message_id)
+
+    status_msg = await context.bot.send_message(chat_id=chat_id, text="🎵 检测到网易云音乐链接，处理中...")
 
     # 复用 music.py 的下载逻辑
     from commands.music import _download_and_send_music
     await _download_and_send_music(
         song_id, chat_id, context,
-        reply_to_message_id=message.message_id,
         status_message=status_msg,
     )
 

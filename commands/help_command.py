@@ -44,6 +44,14 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 ✈️ `/flight 北京 洛杉矶 2024-12-25` - 智能航班搜索
 🏨 `/hotel 东京 2024-12-25 2024-12-28` - 智能酒店搜索
 📱 `/parse <链接>` - 社交媒体解析 | `/platforms` - 支持平台
+🎵 `/music <关键词>` - 网易云音乐搜索下载 | `/lyric <关键词>` - 歌词
+
+🎵 *网易云音乐*
+搜索: `/music <关键词>` - 搜索歌曲并下载
+下载: `/music <ID/链接>` - 直接下载歌曲
+歌词: `/lyric <关键词/ID>` - 获取LRC歌词
+识别: 发送网易云链接自动下载
+Inline: `@bot music 关键词$` - Inline搜索(有缓存直接发音频)
 
 💱 *汇率* `/rate [货币] [数额]` - 支持表达式计算
 🪙 *加密货币* `/crypto <币种> [数量] [货币]` - 实时价格
@@ -75,7 +83,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 🌍 *支持地区* US CN TR IN MY JP GB DE 等40+国家
 💡 *特色* 支持中文地名 | 自动CNY转换 | 智能缓存 | 表达式计算
 
-⚡ 快速试用: `/nf` `/crypto btc` `/tq 北京` `/movie 复仇者` `/tv 权力的游戏` `/chart` `/news` `/time 北京` `/whois google.com` `/dns github.com` `/recipe` `/meme 3` `/finance AAPL` `/map 天安门` `/flight 北京 洛杉矶 2024-12-25` `/hotel 东京 2024-12-25 2024-12-28`"""
+⚡ 快速试用: `/nf` `/crypto btc` `/tq 北京` `/movie 复仇者` `/tv 权力的游戏` `/chart` `/news` `/time 北京` `/whois google.com` `/dns github.com` `/recipe` `/meme 3` `/finance AAPL` `/map 天安门` `/flight 北京 洛杉矶 2024-12-25` `/hotel 东京 2024-12-25 2024-12-28` `/music 晴天`"""
 
     admin_help_text = """
 
@@ -103,6 +111,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 📰 *新闻聚合* `/news` `/newslist` `/hotnews` - 40+源实时资讯
 🌐 *WHOIS&DNS查询* `/whois <查询>` - 域名/IP/ASN/TLD信息(含DNS) | `/dns <域名>` - 仅DNS记录
 📊 *股票金融* `/finance <代号/公司名>` - 实时股价 | `/finance` - 15类排行榜
+🎵 *网易云音乐* `/music <关键词>` - 搜索下载 | `/lyric <关键词>` - 歌词 | 自动识别链接
 
 🍳 *烹饪助手*
 统一入口: `/recipe` - 交互式菜单，包含所有烹饪功能
@@ -115,7 +124,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 🌍 *支持地区* US CN TR IN MY JP GB DE 等40+国家
 💡 *特色* 支持中文地名 | 自动CNY转换 | 时区智能识别 | 新闻分类 | 1000+中文菜谱 | 多市场股票
 
-⚡ *快速试用* `/nf` `/ds` `/sp` `/max` `/when` `/id` `/time 北京` `/news` `/recipe` `/meme 3` `/finance AAPL`
+⚡ *快速试用* `/nf` `/ds` `/sp` `/max` `/when` `/id` `/time 北京` `/news` `/recipe` `/meme 3` `/finance AAPL` `/music 晴天`
 
 🔧 *命令问题?* 如果新功能不显示，请使用 `/refresh` 刷新命令列表
 
@@ -175,6 +184,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 🍳 烹饪助手 `/recipe` - 统一菜谱界面
 🎭 表情包娱乐 `/meme` - 随机表情包获取
 📊 股票金融 `/finance` - 实时股价&15类排行榜
+🎵 网易云音乐 `/music` - 搜索下载 | `/lyric` - 歌词
 
 🚀 *试试看*
 `/nf` - Netflix全球价格
@@ -192,6 +202,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 `/recipe 红烧肉` - 直接搜索菜谱
 `/finance AAPL` - 苹果股票查询
 `/finance Tesla` - 特斯拉股票搜索
+`/music 晴天` - 搜索网易云音乐
+`/lyric 月光` - 获取歌词
 `/help` - 查看详细功能
 
 🌟 支持40+国家 | 自动CNY转换 | 中文地名 | 时区智能识别 | 新闻分类 | 1000+中文菜谱 | 随机表情包 | 多市场股票
@@ -207,11 +219,11 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         welcome_text = f"""👋 *欢迎 {user.first_name}! 多功能价格查询机器人*
 
 🎯 *全功能版本*
-💱 汇率 🪙 币价 💳 BIN 🌦️ 天气 🎬 影视 🎮 游戏 📺 流媒体 📱 应用 ⏰ 时间 📰 新闻 🍳 烹饪 🎭 表情包 📊 股票金融 🗺️ 地图服务 ✈️ 航班服务 🏨 酒店服务
+💱 汇率 🪙 币价 💳 BIN 🌦️ 天气 🎬 影视 🎮 游戏 📺 流媒体 📱 应用 ⏰ 时间 📰 新闻 🍳 烹饪 🎭 表情包 📊 股票金融 🗺️ 地图服务 ✈️ 航班服务 🏨 酒店服务 🎵 网易云音乐
 
 🚀 *快速开始*
 `/rate USD 100` `/crypto btc` `/tq 北京` `/movie 复仇者` `/tv 权力的游戏` `/chart`
-`/steam 赛博朋克` `/nf` `/time 北京` `/whois google.com` `/dns github.com` `/news` `/recipe` `/meme 3` `/finance AAPL` `/map 天安门` `/flight 北京 洛杉矶 2024-12-25` `/hotel 东京 2024-12-25 2024-12-28` `/help`
+`/steam 赛博朋克` `/nf` `/time 北京` `/whois google.com` `/dns github.com` `/news` `/recipe` `/meme 3` `/finance AAPL` `/map 天安门` `/flight 北京 洛杉矶 2024-12-25` `/hotel 东京 2024-12-25 2024-12-28` `/music 晴天` `/help`
 
 🌟 40+国家 | CNY转换 | 智能缓存 | 表达式计算 | 时区转换 | 新闻聚合 | 1000+中文菜谱 | 股市数据"""
 
