@@ -572,3 +572,102 @@ class PyrogramHelper:
         except Exception as e:
             logger.error(f"❌ Pyrogram上传图片失败: {e}")
             raise
+
+    async def send_large_audio(
+        self,
+        chat_id: int,
+        audio_path: str,
+        caption: str = "",
+        reply_parameters=None,
+        duration: int = 0,
+        performer: str = None,
+        title: str = None,
+        thumb: Optional[str] = None,
+        progress_callback=None,
+        reply_markup=None,
+        parse_mode: Optional[str] = None
+    ):
+        """
+        使用 Pyrogram 发送大音频文件（支持最大2GB）
+
+        适用场景：
+        - 音频大小 > 50MB（python-telegram-bot限制）
+        - 音频大小 ≤ 2GB（Pyrogram MTProto API限制）
+        """
+        if not self.is_started or not self.client:
+            raise RuntimeError("Pyrogram client not started")
+
+        try:
+            logger.info(f"📤 使用 Pyrogram 上传大音频: {audio_path}")
+
+            # 处理缩略图
+            thumb_path = None
+            if thumb:
+                if not thumb.startswith(('http://', 'https://')):
+                    from pathlib import Path
+                    if Path(thumb).exists():
+                        thumb_path = thumb
+                    else:
+                        logger.debug(f"缩略图路径不存在，忽略: {thumb}")
+                else:
+                    logger.debug(f"缩略图是URL，忽略: {thumb}")
+
+            # 转换reply_markup: python-telegram-bot → Pyrogram格式
+            pyrogram_reply_markup = None
+            if reply_markup:
+                from pyrogram.types import InlineKeyboardMarkup as PyrogramInlineKeyboardMarkup
+                from pyrogram.types import InlineKeyboardButton as PyrogramInlineKeyboardButton
+
+                keyboard = []
+                for row in reply_markup.inline_keyboard:
+                    button_row = []
+                    for button in row:
+                        if button.url:
+                            button_row.append(PyrogramInlineKeyboardButton(button.text, url=button.url))
+                        elif button.callback_data:
+                            button_row.append(PyrogramInlineKeyboardButton(button.text, callback_data=button.callback_data))
+                    if button_row:
+                        keyboard.append(button_row)
+
+                if keyboard:
+                    pyrogram_reply_markup = PyrogramInlineKeyboardMarkup(keyboard)
+
+            # 转换parse_mode
+            from pyrogram import enums
+
+            pyrogram_parse_mode = None
+            if parse_mode:
+                if parse_mode.lower() == "markdownv2":
+                    caption = caption.replace(r'\|', '|').replace(r'\[', '[').replace(r'\]', ']').replace(r'\(', '(').replace(r'\)', ')').replace(r'\.', '.').replace(r'\-', '-').replace(r'\+', '+').replace(r'\=', '=').replace(r'\{', '{').replace(r'\}', '}').replace(r'\!', '!').replace(r'\#', '#')
+                    pyrogram_parse_mode = enums.ParseMode.MARKDOWN
+                elif parse_mode.lower() == "markdown":
+                    pyrogram_parse_mode = enums.ParseMode.MARKDOWN
+                elif parse_mode.lower() == "html":
+                    pyrogram_parse_mode = enums.ParseMode.HTML
+
+            # 转换 reply_parameters
+            reply_to_msg_id = None
+            if reply_parameters:
+                if hasattr(reply_parameters, 'message_id'):
+                    reply_to_msg_id = reply_parameters.message_id
+
+            message = await self.client.send_audio(
+                chat_id=chat_id,
+                audio=audio_path,
+                caption=caption,
+                reply_to_message_id=reply_to_msg_id,
+                duration=duration,
+                performer=performer,
+                title=title,
+                thumb=thumb_path,
+                progress=progress_callback,
+                reply_markup=pyrogram_reply_markup,
+                parse_mode=pyrogram_parse_mode
+            )
+
+            logger.info(f"✅ 大音频上传成功: {audio_path}")
+            return message
+
+        except Exception as e:
+            logger.error(f"❌ Pyrogram上传音频失败: {e}")
+            raise

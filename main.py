@@ -98,6 +98,7 @@ from commands import (
     max,
     memes,
     movie,
+    music,
     netflix,
     news,
     spotify,
@@ -195,6 +196,10 @@ def setup_handlers(application: Application):
     # 注册社交媒体自动解析处理器（必须在 UnifiedTextHandler 之前）
     from handlers.auto_parse_handler import setup_auto_parse_handler
     setup_auto_parse_handler(application)
+
+    # 注册网易云音乐自动识别处理器
+    from handlers.auto_music_handler import setup_auto_music_handler
+    setup_auto_music_handler(application)
 
     # 注册AI总结callback handler
     from handlers.ai_summary_callback_handler import get_ai_summary_handler, set_adapter
@@ -357,6 +362,11 @@ async def setup_application(application: Application, config) -> None:
     from handlers import auto_parse_handler
     social_parser.set_adapter(parse_adapter)
     auto_parse_handler.set_adapter(parse_adapter)
+
+    # 注入网易云音乐依赖
+    music.set_dependencies(cache_manager, httpx_client, pyrogram_helper)
+    from handlers import auto_music_handler
+    auto_music_handler.set_dependencies(cache_manager, httpx_client, pyrogram_helper)
 
     # 新增：为需要用户缓存的模块注入依赖
     # 这里可以根据实际需要为特定命令模块注入用户缓存管理器

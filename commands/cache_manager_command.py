@@ -43,6 +43,7 @@ CACHE_SERVICES = {
     'flights': '航班服务缓存',
     'hotels': '酒店服务缓存',
     'social_parser': '社交解析缓存',
+    'music': '网易云音乐缓存',
 }
 
 async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):

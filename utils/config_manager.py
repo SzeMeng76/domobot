@@ -99,6 +99,11 @@ class BotConfig:
         self.flight_price_cache_duration = 7200  # 2小时，航班价格洞察缓存
         self.hotel_cache_duration = 3600  # 1小时，酒店搜索缓存
         self.hotel_details_cache_duration = 7200  # 2小时，酒店详情缓存
+        self.music_cache_duration = 604800  # 7天，音乐文件缓存
+
+        # 网易云音乐配置
+        self.music_u_cookie: str = ""  # 网易云 MUSIC_U cookie
+        self.music_download_timeout: int = 60  # 下载超时（秒）
 
         # 定时清理配置
         self.spotify_weekly_cleanup = True  # 默认启用
@@ -361,6 +366,11 @@ class ConfigManager:
         self.config.finance_weekly_cleanup = get_bool_env("FINANCE_WEEKLY_CLEANUP", "True")
         self.config.map_weekly_cleanup = get_bool_env("MAP_WEEKLY_CLEANUP", "True")
         self.config.flight_weekly_cleanup = get_bool_env("FLIGHT_WEEKLY_CLEANUP", "True")
+
+        # 网易云音乐配置
+        self.config.music_u_cookie = os.getenv("MUSIC_U", "")
+        self.config.music_cache_duration = get_int_env("MUSIC_CACHE_DURATION", "604800")
+        self.config.music_download_timeout = get_int_env("MUSIC_DOWNLOAD_TIMEOUT", "60")
 
         # API配置
         keys_str = os.getenv("EXCHANGE_RATE_API_KEYS") or os.getenv("EXCHANGE_RATE_API_KEY", "")
