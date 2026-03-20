@@ -1,10 +1,9 @@
 """
 网易云音乐 API 封装模块
-参考 Music163bot-Go (github.com/XiaoMengXinX/Music163Api-Go) 实现
-使用 WeAPI 加密方式调用网易云音乐接口
+参考 Music163Api-Go (github.com/XiaoMengXinX/Music163Api-Go) 实现
+使用 EAPI 加密方式调用网易云音乐接口（AES-ECB，与 Go 源码一致）
 """
 
-import base64
 import hashlib
 import json
 import logging
@@ -12,61 +11,71 @@ import os
 import re
 import secrets
 import string
+import time
 from typing import Optional
 
 import httpx
 from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad
 
 logger = logging.getLogger(__name__)
 
-# WeAPI 加密常量（来自网易云音乐 Web 端 JS 逆向）
-_NONCE = b"0CoJUm6Qyw8W8jud"
-_IV = b"0102030405060708"
-_RSA_PUBKEY_E = 0x10001
-_RSA_PUBKEY_N = int(
-    "00e0b509f6259df8642dbc35662901477df22677ec152b5ff68ace615bb7b725152b3ab17a876aea8a5aa76d2e417629ec4ee341f56135fccf695280104e0312ecbda92557c93870114af6c9d05c4f7f0c3685b7a46bee255932575cce10b424d813cfe4875d3e82047b97ddef52741d546b8e289dc6935b3ece0462db0a22b8e7",
-    16,
-)
-_ALPHABET = string.ascii_letters + string.digits
+# EAPI 加密密钥（来自 Music163Api-Go/utils/crypto.go）
+_EAPI_KEY = b"e82ckenh8dichen8"
 
 
-def _aes_encrypt(text: bytes, key: bytes) -> str:
-    cipher = AES.new(key, AES.MODE_CBC, _IV)
-    return base64.b64encode(cipher.encrypt(pad(text, AES.block_size))).decode()
+def _generate_key(key: bytes) -> bytes:
+    """generateKey — 与 Go 源码一致"""
+    gen_key = bytearray(key[:16].ljust(16, b"\x00"))
+    i = 16
+    while i < len(key):
+        for j in range(16):
+            if i >= len(key):
+                break
+            gen_key[j] ^= key[i]
+            i += 1
+    return bytes(gen_key)
 
 
-def _rsa_encrypt(text: bytes, e: int, n: int) -> str:
-    """RSA 加密（无填充，网易云专用）"""
-    # 反转字节序（网易云特有）
-    num = int.from_bytes(text[::-1], "big")
-    encrypted = pow(num, e, n)
-    return format(encrypted, "0256x")
+def _pkcs7_pad(data: bytes, block_size: int = 16) -> bytes:
+    pad_len = block_size - (len(data) % block_size)
+    return data + bytes([pad_len] * pad_len)
 
 
-def _weapi_encrypt(payload: dict) -> dict:
-    """WeAPI 加密：双重 AES + RSA encSecKey"""
-    # 每次请求生成随机 16 字节 secretKey
-    secret_key = "".join(secrets.choice(_ALPHABET) for _ in range(16)).encode()
-
-    text = json.dumps(payload).encode()
-    # 第一次 AES：用 NONCE 加密原文
-    enc1 = _aes_encrypt(text, _NONCE)
-    # 第二次 AES：用 secretKey 加密第一次结果
-    enc2 = _aes_encrypt(enc1.encode(), secret_key)
-    # RSA：用公钥加密 secretKey，得到 encSecKey
-    enc_sec_key = _rsa_encrypt(secret_key, _RSA_PUBKEY_E, _RSA_PUBKEY_N)
-
-    return {"params": enc2, "encSecKey": enc_sec_key}
+def _eapi_encrypt(text: str) -> bytes:
+    """AES-ECB 加密 — 对应 Go 的 encryptECB / EapiEncrypt"""
+    key = _generate_key(_EAPI_KEY)
+    cipher = AES.new(key, AES.MODE_ECB)
+    padded = _pkcs7_pad(text.encode())
+    return cipher.encrypt(padded)
 
 
-# 网易云 API 请求头
-_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-    "Referer": "https://music.163.com",
-    "Content-Type": "application/x-www-form-urlencoded",
-    "Origin": "https://music.163.com",
-}
+def _splice_str(path: str, data: str) -> str:
+    """SpliceStr — 拼接签名字符串（来自 Go utils/request.go）"""
+    nobody = "36cd479b6b5"
+    text = f"nobody{path}use{data}md5forencrypt"
+    md5_hex = hashlib.md5(text.encode()).hexdigest()
+    return f"{path}-{nobody}-{data}-{nobody}-{md5_hex}"
+
+
+def _format_params(spliced: str) -> str:
+    """Format2Params — 加密后转大写十六进制"""
+    encrypted = _eapi_encrypt(spliced)
+    return f"params={encrypted.hex().upper()}"
+
+
+def _generate_device_id() -> str:
+    charset = string.ascii_lowercase + string.digits
+    return "".join(secrets.choice(charset) for _ in range(32))
+
+
+# 随机 User-Agent 列表（来自 Go utils/request.go）
+_USER_AGENTS = [
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 9_1 like Mac OS X) AppleWebKit/601.1.46 (KHTML, like Gecko) Version/9.0 Mobile/13B143 Safari/601.1",
+    "Mozilla/5.0 (Linux; Android 5.0; SM-G900P Build/LRX21T) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.115 Mobile Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.115 Mobile Safari/537.36",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 10_0 like Mac OS X) AppleWebKit/602.1.38 (KHTML, like Gecko) Version/10.0 Mobile/14A300 Safari/602.1",
+    "NeteaseMusic/9.3.40.1753206443(164);Dalvik/2.1.0 (Linux; U; Android 9; MIX 2 MIUI/V12.0.1.0.PDECNXM)",
+]
 
 # URL 解析正则
 _REG_SONG_ID = re.compile(r"song[/?].*?(?:id=)?(\d+)")
@@ -76,61 +85,84 @@ _REG_MUSIC_DOMAIN = re.compile(r"music\.163\.com|163cn\.tv|163cn\.link")
 
 
 class NeteaseAPI:
-    """网易云音乐 API 客户端"""
+    """网易云音乐 API 客户端（EAPI 加密，与 Music163Api-Go 一致）"""
 
     BASE_URL = "https://music.163.com"
 
     def __init__(self, music_u: str = "", httpx_client: Optional[httpx.AsyncClient] = None):
         self.music_u = music_u
         self._client = httpx_client
+        self._device_id = _generate_device_id()
 
-    def _get_cookies(self) -> dict:
-        cookies = {"os": "pc", "appver": "2.10.14"}
+    def _build_cookie_str(self) -> str:
+        """构建 Cookie 字符串（对应 Go CreateNewRequest 中的 cookie 拼接）"""
+        cookie = {
+            "deviceId": self._device_id,
+            "appver": "9.3.40",
+            "buildver": str(int(time.time()))[:10],
+            "resolution": "1920x1080",
+            "os": "Android",
+        }
         if self.music_u:
-            cookies["MUSIC_U"] = self.music_u
-        return cookies
+            cookie["MUSIC_U"] = self.music_u
+        else:
+            # 无登录时使用匿名 token（来自 Go 源码）
+            cookie["MUSIC_A"] = (
+                "4ee5f776c9ed1e4d5f031b09e084c6cb333e43ee4a841afeebbef9bbf4b7e4152b51ff20ecb9e8ee"
+                "9e89ab23044cf50d1609e4781e805e73a138419e5583bc7fd1e5933c52368d9127ba9ce4e2f233bf"
+                "5a77ba40ea6045ae1fc612ead95d7b0e0edf70a74334194e1a190979f5fc12e9968c3666a981495b"
+                "33a649814e309366"
+            )
+        parts = [f"{k}={v}" for k, v in cookie.items()]
+        return "; ".join(parts)
 
-    async def _request(self, endpoint: str, payload: dict) -> dict:
-        """发送加密 API 请求"""
-        url = f"{self.BASE_URL}/weapi{endpoint}"
-        data = _weapi_encrypt(payload)
+    async def _request(self, api_path: str, payload_json: str) -> dict:
+        """
+        发送 EAPI 请求（ApiRequest — 响应未加密）
+        api_path: 如 /api/v1/search/song/get
+        payload_json: JSON 字符串
+        """
+        spliced = _splice_str(api_path, payload_json)
+        body = _format_params(spliced)
+        url = f"{self.BASE_URL}/eapi{api_path.removeprefix('/api')}"
+
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": secrets.choice(_USER_AGENTS),
+            "Cookie": self._build_cookie_str(),
+        }
+
         client = self._client or httpx.AsyncClient(timeout=30)
         try:
-            resp = await client.post(
-                url,
-                data=data,
-                headers=_HEADERS,
-                cookies=self._get_cookies(),
-            )
+            resp = await client.post(url, content=body, headers=headers)
+            logger.debug(f"NetEase EAPI {api_path} status={resp.status_code} body={resp.text[:200]}")
             resp.raise_for_status()
-            return resp.json()
+            result = resp.json()
+            if not isinstance(result, dict):
+                raise ValueError(f"Unexpected response type: {type(result)}")
+            return result
         finally:
             if not self._client:
                 await client.aclose()
 
     async def search_songs(self, keyword: str, limit: int = 10) -> list[dict]:
         """
-        搜索歌曲
+        搜索歌曲（对应 Go SearchSong / SearchSongAPI = /api/v1/search/song/get）
         返回: [{"id": int, "name": str, "artists": str, "album": str, "duration": int}, ...]
         """
-        payload = {
-            "s": keyword,
-            "type": 1,  # 1=歌曲
-            "limit": limit,
-            "offset": 0,
-        }
-        result = await self._request("/cloudsearch/get/web", payload)
+        payload = json.dumps({"s": keyword, "offset": 0, "limit": limit})
+        result = await self._request("/api/v1/search/song/get", payload)
 
         songs = []
         try:
             for s in result.get("result", {}).get("songs", []):
-                artists = "/".join(ar.get("name", "") for ar in s.get("ar", []))
+                artists = "/".join(ar.get("name", "") for ar in s.get("artists", []))
                 songs.append({
                     "id": s["id"],
                     "name": s.get("name", ""),
                     "artists": artists,
-                    "album": s.get("al", {}).get("name", ""),
-                    "duration": s.get("dt", 0) // 1000,
+                    "album": s.get("album", {}).get("name", ""),
+                    "duration": s.get("duration", 0) // 1000,
                 })
         except (KeyError, TypeError) as e:
             logger.error(f"解析搜索结果失败: {e}")
@@ -138,14 +170,11 @@ class NeteaseAPI:
 
     async def get_song_detail(self, song_id: int) -> Optional[dict]:
         """
-        获取歌曲详情
-        返回: {"id", "name", "artists", "album", "pic_url", "duration"}
+        获取歌曲详情（对应 Go GetSongDetail / SongDetailAPI = /api/v3/song/detail）
         """
-        payload = {
-            "c": json.dumps([{"id": song_id}]),
-            "ids": json.dumps([song_id]),
-        }
-        result = await self._request("/v3/song/detail", payload)
+        c_json = json.dumps([{"id": song_id}])
+        payload = json.dumps({"c": c_json})
+        result = await self._request("/api/v3/song/detail", payload)
 
         try:
             s = result["songs"][0]
@@ -162,18 +191,19 @@ class NeteaseAPI:
             logger.error(f"获取歌曲详情失败: {e}")
             return None
 
-    async def get_song_url(self, song_id: int, level: str = "exhigh") -> Optional[dict]:
+    async def get_song_url(self, song_id: int, level: str = "hires") -> Optional[dict]:
         """
-        获取歌曲下载链接
+        获取歌曲下载链接（对应 Go GetSongURL / SongUrlAPI = /api/song/enhance/player/url/v1）
         level: standard, higher, exhigh, lossless, hires
-        返回: {"url", "size", "md5", "type"}
+        注意：Go 源码中 ids 是 JSON string array（如 ["12345"]），encodeType 默认 mp3
         """
-        payload = {
-            "ids": json.dumps([song_id]),
+        ids_json = json.dumps([str(song_id)])
+        payload = json.dumps({
+            "ids": ids_json,
             "level": level,
-            "encodeType": "flac",
-        }
-        result = await self._request("/song/enhance/player/url/v1", payload)
+            "encodeType": "mp3",
+        })
+        result = await self._request("/api/song/enhance/player/url/v1", payload)
 
         try:
             d = result["data"][0]
@@ -181,7 +211,6 @@ class NeteaseAPI:
             if not url:
                 logger.warning(f"歌曲 {song_id} 无可用下载链接")
                 return None
-            # 文件类型检测（参考 processMusic.go）
             base_url = url.split("?")[0]
             ext = os.path.splitext(base_url)[1].lstrip(".")
             if ext not in ("mp3", "flac"):
@@ -198,14 +227,15 @@ class NeteaseAPI:
             return None
 
     async def get_song_lyric(self, song_id: int) -> Optional[str]:
-        """获取歌词（LRC 格式），无歌词返回 None"""
-        payload = {
+        """获取歌词（对应 Go GetSongLyric / SongLyricAPI = /api/song/lyric）"""
+        payload = json.dumps({
             "id": song_id,
             "lv": -1,
+            "kv": -1,
             "tv": -1,
-            "rv": -1,
-        }
-        result = await self._request("/song/lyric", payload)
+            "yv": -1,
+        })
+        result = await self._request("/api/song/lyric", payload)
         try:
             lyric = result.get("lrc", {}).get("lyric", "")
             return lyric if lyric else None
@@ -213,9 +243,9 @@ class NeteaseAPI:
             return None
 
     async def get_program_song_id(self, program_id: int) -> Optional[int]:
-        """获取电台节目的真实歌曲 ID"""
-        payload = {"id": program_id}
-        result = await self._request("/dj/program/detail", payload)
+        """获取电台节目的真实歌曲 ID（对应 Go GetProgramDetail）"""
+        payload = json.dumps({"id": str(program_id)})
+        result = await self._request("/api/dj/program/detail", payload)
         try:
             return result["program"]["mainSong"]["id"]
         except (KeyError, TypeError):
@@ -235,7 +265,6 @@ def parse_music_id(text: str) -> Optional[int]:
             return int(match.group(1))
         except ValueError:
             pass
-    # 尝试纯数字
     nums = re.findall(r"\d+", text)
     if nums:
         try:
