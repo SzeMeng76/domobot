@@ -190,10 +190,15 @@ async def _download_and_send_music(
                 except Exception:
                     pass
 
+            file_ext = song_url.get("type", "mp3").upper()
+            bitrate_kbps = song_url.get("br", 0) / 1000
+            size_mb = song_url.get("size", 0) / (1024 * 1024)
+            quality_tag = "FLAC 无损" if file_ext == "FLAC" else f"MP3 {bitrate_kbps:.0f}kbps"
             caption = (
                 f"🎵 <b>{_escape_html(detail['name'])}</b>\n"
                 f"👤 {_escape_html(detail['artists'])}\n"
-                f"💿 {_escape_html(detail['album'])}"
+                f"💿 {_escape_html(detail['album'])}\n"
+                f"🎧 {quality_tag} | {size_mb:.1f}MB"
             )
             keyboard = _build_music_keyboard(song_id, detail["name"], detail["artists"])
 
