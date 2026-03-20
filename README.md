@@ -22,7 +22,6 @@ Read this in other languages: [简体中文](./README.zh-CN.md)
 - 🍳 **Cooking Assistant:** Recipe search, categorized browsing, intelligent meal planning, and daily menu recommendations
 - 🎭 **Memes & Entertainment:** Random meme fetching with AI-generated descriptions, custom quantities (1-20), smart retry for quality content, auto-deletion, and intelligent caching
 - 📊 **Finance & Stocks:** Real-time stock prices, 15 ranking categories (gainers/losers, tech stocks, funds), analyst recommendations, financial statements, multi-market support (US/HK/CN/MY), intelligent search by symbol or company name
-- 🎵 **NetEase Cloud Music:** Search and download music from NetEase (网易云音乐) with `/music`, get lyrics with `/lyric`, auto-detect music links, inline search with cached audio playback *(Whitelist required)*
 - 📱 **Social Media Platforms:** View supported platforms list with `/platforms` command
 - 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`, `/dns`, `/recipe`, `/meme`, `/finance`, `/platforms`
 - 👥 **Group Friendly:** Works in any Telegram group without requiring whitelist approval
