@@ -288,10 +288,12 @@ async def _download_and_send_music(
                     )
 
             # 7. 自动删除 bot 发送的音频消息
+            # 兼容 python-telegram-bot (.chat_id/.message_id) 和 Pyrogram (.chat.id/.id)
             if sent_msg and config.auto_delete_delay > 0:
-                await _schedule_deletion(
-                    context, sent_msg.chat_id, sent_msg.message_id, config.auto_delete_delay
-                )
+                msg_chat_id = getattr(sent_msg, 'chat_id', None) or getattr(sent_msg.chat, 'id', None)
+                msg_id = getattr(sent_msg, 'message_id', None) or getattr(sent_msg, 'id', None)
+                if msg_chat_id and msg_id:
+                    await _schedule_deletion(context, msg_chat_id, msg_id, config.auto_delete_delay)
 
             if status_message:
                 try:
