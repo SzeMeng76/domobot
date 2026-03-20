@@ -251,6 +251,56 @@ class NeteaseAPI:
         except (KeyError, TypeError):
             return None
 
+    async def get_playlist_detail(self, playlist_id: int, limit: int = 10) -> Optional[dict]:
+        """
+        获取歌单/榜单详情（对应 Go GetPlaylistDetail / PlaylistDetailAPI = /api/v6/playlist/detail）
+        榜单就是特殊歌单，用固定的 playlist ID 即可获取
+        返回: {"name": str, "description": str, "track_count": int, "songs": [{"id", "name", "artists", "duration"}, ...]}
+        """
+        payload = json.dumps({
+            "id": str(playlist_id),
+            "t": "0",
+            "n": str(limit),
+            "s": "0",
+        })
+        result = await self._request("/api/v6/playlist/detail", payload)
+        try:
+            p = result["playlist"]
+            songs = []
+            for s in (p.get("tracks") or [])[:limit]:
+                artists = "/".join(ar.get("name", "") for ar in s.get("ar", []))
+                songs.append({
+                    "id": s["id"],
+                    "name": s.get("name", ""),
+                    "artists": artists,
+                    "album": s.get("al", {}).get("name", ""),
+                    "duration": s.get("dt", 0) // 1000,
+                })
+            return {
+                "name": p.get("name", ""),
+                "description": p.get("description", ""),
+                "track_count": p.get("trackCount", 0),
+                "songs": songs,
+            }
+        except (KeyError, TypeError) as e:
+            logger.error(f"获取歌单详情失败: {e}")
+            return None
+
+
+# 网易云音乐官方榜单 ID（榜单本质是特殊歌单）
+CHART_PLAYLISTS = {
+    "hot":        {"id": 3778678,    "name": "热歌榜",    "icon": "🔥"},
+    "new":        {"id": 3779629,    "name": "新歌榜",    "icon": "🆕"},
+    "surge":      {"id": 19723756,   "name": "飙升榜",    "icon": "🚀"},
+    "original":   {"id": 2884035,    "name": "原创榜",    "icon": "✨"},
+    "rap":        {"id": 991319590,  "name": "说唱榜",    "icon": "🎤"},
+    "acg":        {"id": 71385702,   "name": "ACG榜",     "icon": "🎮"},
+    "electronic": {"id": 745956260,  "name": "电音榜",    "icon": "🎧"},
+    "billboard":  {"id": 60198,      "name": "Billboard", "icon": "🇺🇸"},
+    "uk":         {"id": 180106,     "name": "UK排行榜",  "icon": "🇬🇧"},
+    "japan":      {"id": 60131,      "name": "日本Oricon", "icon": "🇯🇵"},
+}
+
 
 # ============================================================
 # URL 解析工具函数（参考 bot/tools.go）

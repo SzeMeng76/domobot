@@ -27,6 +27,7 @@ from utils.message_manager import (
 )
 from utils.netease_api import (
     NeteaseAPI,
+    CHART_PLAYLISTS,
     parse_music_id,
     parse_program_id,
     contains_music_link,
@@ -451,12 +452,18 @@ async def music_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "用法:\n"
             "<code>/music 关键词</code> — 搜索歌曲\n"
             "<code>/music 歌曲ID</code> — 直接获取\n"
-            "<code>/music 网易云链接</code> — 解析链接",
+            "<code>/music 网易云链接</code> — 解析链接\n"
+            "<code>/music chart</code> — 查看音乐榜单",
             parse_mode="HTML",
         )
         return
 
     query = args[1].strip()
+
+    # 榜单子命令
+    if query.lower() in ("chart", "charts", "top", "榜单", "排行榜"):
+        await _show_chart_menu(update.message.chat_id, context)
+        return
 
     # 尝试解析为歌曲 ID（数字或链接）
     song_id = parse_music_id(query)
@@ -705,6 +712,132 @@ async def music_lyric_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 # ============================================================
+# 榜单功能
+# ============================================================
+
+async def _show_chart_menu(chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """显示榜单选择菜单（参考 finance 的排行榜按钮布局）"""
+    buttons = []
+    row = []
+    for key, info in CHART_PLAYLISTS.items():
+        row.append(InlineKeyboardButton(
+            text=f"{info['icon']} {info['name']}",
+            callback_data=f"music_chart_{key}",
+        ))
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+
+    keyboard = InlineKeyboardMarkup(buttons)
+    msg = await context.bot.send_message(
+        chat_id=chat_id,
+        text="🏆 <b>网易云音乐榜单</b>\n\n选择一个榜单查看：",
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+    config = get_config()
+    if config.auto_delete_delay > 0:
+        await _schedule_deletion(context, chat_id, msg.message_id, config.auto_delete_delay)
+
+
+@with_error_handling
+async def music_chart_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """榜单按钮回调 — 显示榜单歌曲列表"""
+    query = update.callback_query
+    if not query:
+        return
+    await query.answer()
+
+    data = query.data or ""
+    # 格式: music_chart_{key}
+    chart_key = data.replace("music_chart_", "")
+    chart_info = CHART_PLAYLISTS.get(chart_key)
+    if not chart_info or not _netease_api:
+        return
+
+    try:
+        await query.edit_message_text(
+            f"{chart_info['icon']} 加载 <b>{chart_info['name']}</b> 中...",
+            parse_mode="HTML",
+        )
+    except Exception:
+        pass
+
+    playlist = await _netease_api.get_playlist_detail(chart_info["id"], limit=10)
+    if not playlist or not playlist["songs"]:
+        try:
+            await query.edit_message_text(f"❌ 获取 {chart_info['name']} 失败")
+        except Exception:
+            pass
+        return
+
+    # 构建歌曲列表 + 下载按钮（参考 processSearch.go）
+    text_lines = [f"{chart_info['icon']} <b>{_escape_html(playlist['name'])}</b>\n"]
+    buttons = []
+    for i, s in enumerate(playlist["songs"]):
+        dur_min = s["duration"] // 60
+        dur_sec = s["duration"] % 60
+        text_lines.append(
+            f"<b>{i + 1}.</b> {_escape_html(s['name'])} - {_escape_html(s['artists'])} "
+            f"[{dur_min}:{dur_sec:02d}]"
+        )
+        buttons.append(
+            InlineKeyboardButton(
+                text=str(i + 1),
+                callback_data=f"music_dl_{s['id']}",
+            )
+        )
+
+    keyboard_rows = [buttons]
+    # 返回榜单菜单按钮
+    keyboard_rows.append([InlineKeyboardButton("🔙 返回榜单", callback_data="music_chart_menu")])
+    keyboard = InlineKeyboardMarkup(keyboard_rows)
+
+    try:
+        await query.edit_message_text(
+            "\n".join(text_lines),
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
+    except Exception as e:
+        logger.error(f"更新榜单结果失败: {e}")
+
+
+@with_error_handling
+async def music_chart_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """返回榜单菜单按钮回调"""
+    query = update.callback_query
+    if not query:
+        return
+    await query.answer()
+
+    buttons = []
+    row = []
+    for key, info in CHART_PLAYLISTS.items():
+        row.append(InlineKeyboardButton(
+            text=f"{info['icon']} {info['name']}",
+            callback_data=f"music_chart_{key}",
+        ))
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+
+    keyboard = InlineKeyboardMarkup(buttons)
+    try:
+        await query.edit_message_text(
+            "🏆 <b>网易云音乐榜单</b>\n\n选择一个榜单查看：",
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
+    except Exception:
+        pass
+
+
+# ============================================================
 # 注册命令和回调
 # ============================================================
 
@@ -741,6 +874,20 @@ command_factory.register_callback(
     music_lyric_callback,
     permission=Permission.NONE,
     description="歌词获取回调",
+)
+
+command_factory.register_callback(
+    r"^music_chart_menu$",
+    music_chart_menu_callback,
+    permission=Permission.NONE,
+    description="返回榜单菜单回调",
+)
+
+command_factory.register_callback(
+    r"^music_chart_(?!menu$)[a-z]+$",
+    music_chart_callback,
+    permission=Permission.NONE,
+    description="榜单选择回调",
 )
 
 logger.info("🎵 网易云音乐命令模块已加载")
