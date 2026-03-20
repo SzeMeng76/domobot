@@ -495,7 +495,7 @@ async def music_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         chat_id=update.message.chat_id, text="🔍 搜索中..."
     )
 
-    songs = await _netease_api.search_songs(query, limit=8)
+    songs = await _netease_api.search_songs(query, limit=10)
     if not songs:
         try:
             await status_msg.edit_text("❌ 未找到相关歌曲")
@@ -524,7 +524,7 @@ async def music_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             )
         )
 
-    keyboard = InlineKeyboardMarkup([buttons])
+    keyboard = InlineKeyboardMarkup([buttons[:5], buttons[5:]] if len(buttons) > 5 else [buttons])
 
     try:
         await status_msg.edit_text(
@@ -790,7 +790,7 @@ async def music_chart_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             )
         )
 
-    keyboard_rows = [buttons]
+    keyboard_rows = [buttons[:5], buttons[5:]]
     # 返回榜单菜单按钮
     keyboard_rows.append([InlineKeyboardButton("🔙 返回榜单", callback_data="music_chart_menu")])
     keyboard = InlineKeyboardMarkup(keyboard_rows)
