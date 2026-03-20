@@ -217,6 +217,14 @@ async def _build_song_result(
     }
     _pending_timestamps[result_id] = time.time()
 
+    # reply_markup 必须存在，否则 Telegram 不会在 ChosenInlineResult 中返回 inline_message_id
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton(
+            text=f"🎵 {name or song_id}",
+            url=f"https://music.163.com/song?id={song_id}",
+        )],
+    ])
+
     return [
         InlineQueryResultArticle(
             id=result_id,
@@ -226,6 +234,7 @@ async def _build_song_result(
                 message_text=f"🎵 <b>{html_escape(display)}</b>\n⏳ 下载中...",
                 parse_mode="HTML",
             ),
+            reply_markup=keyboard,
         )
     ]
 

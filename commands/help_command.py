@@ -111,7 +111,6 @@ Inline: `@bot music 关键词$` - Inline搜索(有缓存直接发音频)
 📰 *新闻聚合* `/news` `/newslist` `/hotnews` - 40+源实时资讯
 🌐 *WHOIS&DNS查询* `/whois <查询>` - 域名/IP/ASN/TLD信息(含DNS) | `/dns <域名>` - 仅DNS记录
 📊 *股票金融* `/finance <代号/公司名>` - 实时股价 | `/finance` - 15类排行榜
-🎵 *网易云音乐* `/music <关键词>` - 搜索下载 | `/lyric <关键词>` - 歌词 | 自动识别链接
 
 🍳 *烹饪助手*
 统一入口: `/recipe` - 交互式菜单，包含所有烹饪功能
@@ -124,14 +123,14 @@ Inline: `@bot music 关键词$` - Inline搜索(有缓存直接发音频)
 🌍 *支持地区* US CN TR IN MY JP GB DE 等40+国家
 💡 *特色* 支持中文地名 | 自动CNY转换 | 时区智能识别 | 新闻分类 | 1000+中文菜谱 | 多市场股票
 
-⚡ *快速试用* `/nf` `/ds` `/sp` `/max` `/when` `/id` `/time 北京` `/news` `/recipe` `/meme 3` `/finance AAPL` `/music 晴天`
+⚡ *快速试用* `/nf` `/ds` `/sp` `/max` `/when` `/id` `/time 北京` `/news` `/recipe` `/meme 3` `/finance AAPL`
 
 🔧 *命令问题?* 如果新功能不显示，请使用 `/refresh` 刷新命令列表
 
 🔒 *白名单专享*
 💱 汇率换算 | 🪙 加密货币 | 💳 BIN查询 | 🌦️ 天气预报
 🎬 影视信息 | 🎮 Steam游戏 | 📱 应用&内购价格 | 🍎 Apple服务
-🗺️ 地图服务 | ✈️ 航班服务 | 🏨 酒店服务
+🗺️ 地图服务 | ✈️ 航班服务 | 🏨 酒店服务 | 🎵 网易云音乐
 
 📞 白名单功能暂不开放申请，敬请期待付费服务"""
     else:
@@ -184,7 +183,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 🍳 烹饪助手 `/recipe` - 统一菜谱界面
 🎭 表情包娱乐 `/meme` - 随机表情包获取
 📊 股票金融 `/finance` - 实时股价&15类排行榜
-🎵 网易云音乐 `/music` - 搜索下载 | `/lyric` - 歌词
 
 🚀 *试试看*
 `/nf` - Netflix全球价格
@@ -202,8 +200,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 `/recipe 红烧肉` - 直接搜索菜谱
 `/finance AAPL` - 苹果股票查询
 `/finance Tesla` - 特斯拉股票搜索
-`/music 晴天` - 搜索网易云音乐
-`/lyric 月光` - 获取歌词
 `/help` - 查看详细功能
 
 🌟 支持40+国家 | 自动CNY转换 | 中文地名 | 时区智能识别 | 新闻分类 | 1000+中文菜谱 | 随机表情包 | 多市场股票
