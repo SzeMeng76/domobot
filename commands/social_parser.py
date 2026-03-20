@@ -768,7 +768,28 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
 
         return [preview_msg]
 
-    # 文件大小正常，直接发送
+    # 文件大小正常（<=50MB），优先 Pyrogram，失败 fallback python-telegram-bot
+    pyrogram_helper = getattr(_adapter, 'pyrogram_helper', None)
+    if pyrogram_helper and pyrogram_helper.is_started:
+        try:
+            logger.info(f"🚀 使用 Pyrogram 上传 {video_size_mb:.1f}MB 视频")
+            video_msg = await pyrogram_helper.send_large_video(
+                chat_id=chat_id,
+                video_path=str(video_path),
+                caption=caption,
+                reply_parameters=reply_parameters,
+                width=media.width or 0,
+                height=media.height or 0,
+                duration=media.duration or 0,
+                thumb=getattr(parse_result.media, 'thumb_url', None) if parse_result and hasattr(parse_result, 'media') else None,
+                reply_markup=reply_markup,
+                parse_mode="MarkdownV2"
+            )
+            return [video_msg]
+        except Exception as e:
+            logger.warning(f"⚠️ Pyrogram 上传失败，降级到 python-telegram-bot: {e}")
+
+    # Fallback: python-telegram-bot
     with open(video_path, 'rb') as video_file:
         msg = await context.bot.send_video(
             chat_id=chat_id,
