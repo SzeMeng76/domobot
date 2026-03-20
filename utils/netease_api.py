@@ -5,12 +5,13 @@
 """
 
 import base64
-import binascii
 import hashlib
 import json
 import logging
 import os
 import re
+import secrets
+import string
 from typing import Optional
 
 import httpx
@@ -19,37 +20,44 @@ from Crypto.Util.Padding import pad
 
 logger = logging.getLogger(__name__)
 
-# WeAPI 加密常量
-MODULUS = "00e0b509f6259df8642dbc35662901477df22677ec152b5ff68ace615bb7b725152b3ab17a876aea8a5aa76d2e417629ec4ee341f56135fccf695280104e0312ecbda92557c93870114af6c9d05c4f7f0c3685b7a46bee255932575cce10b424d813cfe4875d3e82047b97ddef52741d546b8e289dc6935b3ece0462db0a22b8e7"
-NONCE = "0CoJUm6Qyw8W8jud"
-PUB_KEY = "010001"
-# 固定的 secretKey (与 Go 源码一致)
-SECRET_KEY = "TA3YiYCfY2dDJQgg"
-# 预计算的 encSecKey
-ENC_SEC_KEY = "84ca47bca10bad09a6b04c561b7c0dc0eb27dc7263830df2fa26e119d0d4974ac1b4ee93e2ce7404da5f tried34e3d55a5e593e94b3acf2a0eeb2f18c26f1c5e4a5f69c733e1f7d1e3c1e9e2e1f3c5d4f6a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3"
-
-# 固定随机字节（简化实现，与 Go 源码保持一致）
+# WeAPI 加密常量（来自网易云音乐 Web 端 JS 逆向）
+_NONCE = b"0CoJUm6Qyw8W8jud"
 _IV = b"0102030405060708"
+_RSA_PUBKEY_E = 0x10001
+_RSA_PUBKEY_N = int(
+    "00e0b509f6259df8642dbc35662901477df22677ec152b5ff68ace615bb7b725152b3ab17a876aea8a5aa76d2e417629ec4ee341f56135fccf695280104e0312ecbda92557c93870114af6c9d05c4f7f0c3685b7a46bee255932575cce10b424d813cfe4875d3e82047b97ddef52741d546b8e289dc6935b3ece0462db0a22b8e7",
+    16,
+)
+_ALPHABET = string.ascii_letters + string.digits
 
 
-def _aes_encrypt(text: str, key: str) -> str:
-    """AES-CBC-128 加密"""
-    cipher = AES.new(key.encode("utf-8"), AES.MODE_CBC, _IV)
-    encrypted = cipher.encrypt(pad(text.encode("utf-8"), AES.block_size))
-    return base64.b64encode(encrypted).decode("utf-8")
+def _aes_encrypt(text: bytes, key: bytes) -> str:
+    cipher = AES.new(key, AES.MODE_CBC, _IV)
+    return base64.b64encode(cipher.encrypt(pad(text, AES.block_size))).decode()
+
+
+def _rsa_encrypt(text: bytes, e: int, n: int) -> str:
+    """RSA 加密（无填充，网易云专用）"""
+    # 反转字节序（网易云特有）
+    num = int.from_bytes(text[::-1], "big")
+    encrypted = pow(num, e, n)
+    return format(encrypted, "0256x")
 
 
 def _weapi_encrypt(payload: dict) -> dict:
-    """WeAPI 加密请求参数"""
-    text = json.dumps(payload)
-    # 第一次加密：使用 NONCE
-    enc1 = _aes_encrypt(text, NONCE)
-    # 第二次加密：使用 SECRET_KEY
-    enc2 = _aes_encrypt(enc1, SECRET_KEY)
-    return {
-        "params": enc2,
-        "encSecKey": ENC_SEC_KEY,
-    }
+    """WeAPI 加密：双重 AES + RSA encSecKey"""
+    # 每次请求生成随机 16 字节 secretKey
+    secret_key = "".join(secrets.choice(_ALPHABET) for _ in range(16)).encode()
+
+    text = json.dumps(payload).encode()
+    # 第一次 AES：用 NONCE 加密原文
+    enc1 = _aes_encrypt(text, _NONCE)
+    # 第二次 AES：用 secretKey 加密第一次结果
+    enc2 = _aes_encrypt(enc1.encode(), secret_key)
+    # RSA：用公钥加密 secretKey，得到 encSecKey
+    enc_sec_key = _rsa_encrypt(secret_key, _RSA_PUBKEY_E, _RSA_PUBKEY_N)
+
+    return {"params": enc2, "encSecKey": enc_sec_key}
 
 
 # 网易云 API 请求头
