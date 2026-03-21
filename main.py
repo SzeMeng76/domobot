@@ -833,6 +833,7 @@ def main() -> None:
         .read_timeout(60)  # 增加读取超时到60秒（发送大图片/视频时需要）
         .write_timeout(60)  # 增加写入超时到60秒
         .media_write_timeout(120)  # 上传媒体文件（视频/图片）的写入超时120秒
+        .concurrent_updates(True)  # 允许并发处理update，上传大文件时不阻塞其他命令
         .build()
     )
 
