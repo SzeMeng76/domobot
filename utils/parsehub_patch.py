@@ -135,12 +135,21 @@ def patch_parsehub_yt_dlp():
 
             # Add cookies if configured (FIX: YtParser doesn't handle cookies)
             # 参考: yt_dlp/YoutubeDL.py:349 - cookiefile: File name or text stream from where cookies should be read
-            temp_cookie_file = None
 
             # 其他平台cookie处理（从ParseConfig传递）
             # 只有在cookiefile还没设置时才处理
             if self.cookie and "cookiefile" not in params:
                 logger.info(f"🍪 [Patch] Received cookie type: {type(self.cookie)}, value preview: {str(self.cookie)[:100]}")
+
+                # 根据cookie内容生成固定路径，避免重复创建临时文件
+                def _get_cookie_file(cookie_data, domain):
+                    """获取或创建固定路径的cookie文件"""
+                    import hashlib
+                    cookie_hash = hashlib.md5(str(cookie_data).encode()).hexdigest()[:8]
+                    cookie_dir = os.path.join(tempfile.gettempdir(), "parsehub_cookies")
+                    os.makedirs(cookie_dir, exist_ok=True)
+                    return os.path.join(cookie_dir, f"{domain.strip('.')}_{cookie_hash}.txt")
+
                 # 检查cookie类型：文件路径或字符串
                 if isinstance(self.cookie, str):
                     logger.info(f"🍪 [Patch] Cookie is string, checking if file exists: {self.cookie}")
@@ -151,7 +160,7 @@ def patch_parsehub_yt_dlp():
                         params["cookiefile"] = self.cookie
                         logger.info(f"🍪 [Patch] Using cookie file: {self.cookie}")
                     else:
-                        # Bilibili/Twitter等cookie字符串，解析后写临时文件
+                        # Bilibili/Twitter等cookie字符串，解析后写固定路径文件
                         logger.info(f"🍪 [Patch] Parsing cookie string (len={len(self.cookie)})")
 
                         # 解析cookie字符串为dict
@@ -175,18 +184,18 @@ def patch_parsehub_yt_dlp():
                         else:
                             domain = ".example.com"
 
-                        # 写入临时Netscape格式文件
-                        temp_cookie_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt')
-                        temp_cookie_file.write("# Netscape HTTP Cookie File\n")
-                        for key, value in cookie_dict.items():
-                            temp_cookie_file.write(f"{domain}\tTRUE\t/\tFALSE\t0\t{key}\t{value}\n")
-                        temp_cookie_file.close()
+                        # 写入固定路径Netscape格式文件（复用同一文件，下载阶段也能读取）
+                        cookie_path = _get_cookie_file(self.cookie, domain)
+                        with open(cookie_path, 'w') as f:
+                            f.write("# Netscape HTTP Cookie File\n")
+                            for key, value in cookie_dict.items():
+                                f.write(f"{domain}\tTRUE\t/\tFALSE\t0\t{key}\t{value}\n")
 
-                        params["cookiefile"] = temp_cookie_file.name
-                        logger.info(f"🍪 [Patch] Created temp cookie file for {domain}")
+                        params["cookiefile"] = cookie_path
+                        logger.info(f"🍪 [Patch] Cookie file ready for {domain}: {cookie_path}")
 
                 elif isinstance(self.cookie, dict):
-                    # ParseHub将cookie字符串转换为dict后传入，需要写临时Netscape文件
+                    # ParseHub将cookie字符串转换为dict后传入，需要写Netscape文件
                     logger.info(f"🍪 [Patch] Cookie is dict with {len(self.cookie)} keys")
 
                     url_lower = url.lower()
@@ -201,27 +210,21 @@ def patch_parsehub_yt_dlp():
                     else:
                         domain = ".example.com"
 
-                    temp_cookie_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt')
-                    temp_cookie_file.write("# Netscape HTTP Cookie File\n")
-                    for key, value in self.cookie.items():
-                        temp_cookie_file.write(f"{domain}\tTRUE\t/\tFALSE\t0\t{key}\t{value}\n")
-                    temp_cookie_file.close()
+                    cookie_path = _get_cookie_file(self.cookie, domain)
+                    with open(cookie_path, 'w') as f:
+                        f.write("# Netscape HTTP Cookie File\n")
+                        for key, value in self.cookie.items():
+                            f.write(f"{domain}\tTRUE\t/\tFALSE\t0\t{key}\t{value}\n")
 
-                    params["cookiefile"] = temp_cookie_file.name
-                    logger.info(f"🍪 [Patch] Created temp cookie file from dict for {domain}")
+                    params["cookiefile"] = cookie_path
+                    logger.info(f"🍪 [Patch] Cookie file ready from dict for {domain}: {cookie_path}")
 
             try:
                 with YoutubeDL(params) as ydl:
                     result = ydl.extract_info(url, download=False)
 
-                # 不在此处清理临时cookie文件：下载阶段会通过 paramss 复用 cookiefile 路径
-                # 临时文件由操作系统在进程退出时清理，或在下载完成后由 _run_download 清理
-
                 return result
             except Exception as e:
-                # 解析失败时清理临时cookie文件
-                if temp_cookie_file and os.path.exists(temp_cookie_file.name):
-                    os.unlink(temp_cookie_file.name)
                 error_msg = f"{type(e).__name__}: {str(e)}"
                 raise RuntimeError(error_msg) from None
 
