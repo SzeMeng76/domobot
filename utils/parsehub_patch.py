@@ -425,6 +425,8 @@ def patch_parsehub_yt_dlp():
             from parsehub.types import VideoParseResult, ImageParseResult, MultimediaParseResult, VideoRef, ImageRef
             from parsehub.errors import ParseError
 
+            xhs_post_type = None  # Track type from official API for TikHub fallback
+
             if USE_NEW_XHS_API:
                 # ParseHub 1.5.11+ uses new XHSAPI
                 xhs = XHSAPI(proxy=self.proxy)
@@ -437,6 +439,15 @@ def patch_parsehub_yt_dlp():
                 if result:
                     desc = self.hashtag_handler(result.desc)
                     k = {"title": result.title, "content": desc}
+                    xhs_post_type = result.type  # Remember for TikHub fallback
+
+                    # XHS CDN headers for URL validation (bypass anti-crawler)
+                    xhs_headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Referer': 'https://www.xiaohongshu.com/',
+                        'Origin': 'https://www.xiaohongshu.com',
+                        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                    }
 
                     if result.type == PostType.VIDEO:
                         media = result.media[0] if result.media else None
@@ -444,7 +455,7 @@ def patch_parsehub_yt_dlp():
                             # Validate video URL before returning (check if accessible)
                             try:
                                 async with httpx.AsyncClient(timeout=10.0, proxy=self.proxy) as client:
-                                    head_response = await client.head(media.url, follow_redirects=True)
+                                    head_response = await client.head(media.url, headers=xhs_headers, follow_redirects=True)
                                     if head_response.status_code == 404:
                                         logger.warning(f"🌐 [Patch] XHS video URL returns 404, trying TikHub...")
                                         result = None  # Trigger TikHub fallback
@@ -460,7 +471,6 @@ def patch_parsehub_yt_dlp():
                         # No video URL, will try TikHub below
                     elif result.type == PostType.IMAGE:
                         photos = []
-                        url_validation_failed = False
 
                         for i in result.media:
                             if i.type == MediaType.LIVE_PHOTO:
@@ -473,22 +483,28 @@ def patch_parsehub_yt_dlp():
                                 photos.append(ImageRef(url=i.url, ext=ext, thumb_url=i.thumb_url, width=i.width, height=i.height))
 
                         if photos:
-                            # Validate first image URL before returning (sample check)
+                            # Validate ALL media URLs, filter out 404s (CDN node sync issues)
+                            valid_photos = []
                             try:
-                                first_url = photos[0].url if hasattr(photos[0], 'url') else None
-                                if first_url:
-                                    async with httpx.AsyncClient(timeout=10.0, proxy=self.proxy) as client:
-                                        head_response = await client.head(first_url, follow_redirects=True)
-                                        if head_response.status_code == 404:
-                                            logger.warning(f"🌐 [Patch] XHS image URL returns 404, trying TikHub...")
-                                            url_validation_failed = True
+                                async with httpx.AsyncClient(timeout=10.0, proxy=self.proxy) as client:
+                                    for idx, photo in enumerate(photos):
+                                        try:
+                                            head_response = await client.head(photo.url, headers=xhs_headers, follow_redirects=True)
+                                            if head_response.status_code == 404:
+                                                logger.warning(f"🌐 [Patch] XHS media [{idx}] URL returns 404, skipping: {photo.url[:80]}")
+                                            else:
+                                                valid_photos.append(photo)
+                                        except Exception as e:
+                                            logger.warning(f"🌐 [Patch] XHS media [{idx}] URL validation failed: {e}, skipping")
                             except Exception as e:
-                                logger.warning(f"🌐 [Patch] XHS image URL validation failed: {e}, trying TikHub...")
-                                url_validation_failed = True
+                                logger.warning(f"🌐 [Patch] XHS URL validation client error: {e}, using all photos")
+                                valid_photos = photos
 
-                            if not url_validation_failed:
-                                return MultimediaParseResult(media=photos, **k)
+                            if valid_photos:
+                                logger.info(f"✅ [Patch] XHS media validated: {len(valid_photos)}/{len(photos)} items OK")
+                                return MultimediaParseResult(media=valid_photos, **k)
                             else:
+                                logger.warning(f"🌐 [Patch] All XHS media URLs return 404, trying TikHub...")
                                 result = None  # Trigger TikHub fallback
                     else:
                         raise ParseError("不支持的类型")
@@ -534,7 +550,8 @@ def patch_parsehub_yt_dlp():
                         raise ParseError("不支持的类型")
 
             # TikHub fallback for both new and old API when no video URL
-            logger.warning(f"🌐 [Patch] XHS parse failed or no download URLs, trying TikHub...")
+            # Use xhs_post_type (from official API) to choose the right endpoint first
+            logger.warning(f"🌐 [Patch] XHS parse failed or no download URLs, trying TikHub... (type_hint={xhs_post_type})")
             tikhub_api_key = os.getenv("TIKHUB_API_KEY")
             if not tikhub_api_key:
                 raise ParseError("小红书解析失败：无法获取下载地址（未配置TikHub API）")
@@ -545,85 +562,101 @@ def patch_parsehub_yt_dlp():
                     raise ParseError(f"无法从URL提取note_id: {url}")
 
                 note_id = note_id_match.group(1)
-                logger.info(f"🎬 [TikHub] Fetching XHS via TikHub (app_v2): {note_id}")
+                logger.info(f"🎬 [TikHub] Fetching XHS via TikHub (app_v2): {note_id} (type_hint={xhs_post_type})")
 
                 headers = {"Authorization": f"Bearer {tikhub_api_key}"}
 
-                # Try video endpoint first (most common case)
-                video_api_url = f"https://api.tikhub.io/api/v1/xiaohongshu/app_v2/get_video_note_detail?note_id={note_id}"
+                # Determine endpoint order based on known post type from official API
+                # This avoids video endpoint returning wrong data for image posts
+                is_image_type = xhs_post_type == PostType.IMAGE if xhs_post_type and USE_NEW_XHS_API else False
+                if is_image_type:
+                    endpoint_order = ["image", "video"]
+                    logger.info(f"🎬 [TikHub] Official API says IMAGE type, trying image endpoint first")
+                else:
+                    endpoint_order = ["video", "image"]
 
-                async with httpx.AsyncClient(timeout=30.0, proxy=self.proxy) as client:
-                    response = await client.get(video_api_url, headers=headers)
+                for endpoint_type in endpoint_order:
+                    if endpoint_type == "video":
+                        api_url = f"https://api.tikhub.io/api/v1/xiaohongshu/app_v2/get_video_note_detail?note_id={note_id}"
+                        async with httpx.AsyncClient(timeout=30.0, proxy=self.proxy) as client:
+                            response = await client.get(api_url, headers=headers)
 
-                video_result = None
-                if response.status_code == 200:
-                    data = response.json()
-                    if data.get("code") == 200 and data.get("data", {}).get("data"):
-                        note_data = data["data"]["data"][0]
-                        note_type = note_data.get("type", "")
+                        if response.status_code == 200:
+                            data = response.json()
+                            if data.get("code") == 200 and data.get("data", {}).get("data"):
+                                note_data = data["data"]["data"][0]
+                                note_type = note_data.get("type", "")
 
-                        if note_type == "video":
-                            # Extract video from new API structure
-                            title = note_data.get("title", "")
-                            desc = note_data.get("desc", "")
-                            k = {"title": title, "content": desc}
+                                if note_type == "video":
+                                    title = note_data.get("title", "")
+                                    desc = note_data.get("desc", "")
+                                    k_th = {"title": title, "content": desc}
 
-                            video_info_v2 = note_data.get("video_info_v2", {})
-                            media = video_info_v2.get("media", {})
-                            stream = media.get("stream", {})
+                                    video_info_v2 = note_data.get("video_info_v2", {})
+                                    media = video_info_v2.get("media", {})
+                                    stream = media.get("stream", {})
 
-                            # Prefer h264 for better compatibility
-                            h264_list = stream.get("h264", [])
-                            if h264_list:
-                                video_stream = h264_list[0]
-                                video_url = video_stream.get("master_url", "")
-                                if not video_url:
-                                    backup_urls = video_stream.get("backup_urls", [])
-                                    if backup_urls:
-                                        video_url = backup_urls[0]
+                                    h264_list = stream.get("h264", [])
+                                    if h264_list:
+                                        video_stream = h264_list[0]
+                                        video_url = video_stream.get("master_url", "")
+                                        if not video_url:
+                                            backup_urls = video_stream.get("backup_urls", [])
+                                            if backup_urls:
+                                                video_url = backup_urls[0]
 
-                                if video_url:
-                                    video_meta = media.get("video", {})
-                                    width = video_stream.get("width", 0) or video_meta.get("width", 0)
-                                    height = video_stream.get("height", 0) or video_meta.get("height", 0)
-                                    # Use stream duration (in milliseconds), convert to seconds
-                                    duration = video_stream.get("duration", 0) // 1000
+                                        if video_url:
+                                            video_meta = media.get("video", {})
+                                            width = video_stream.get("width", 0) or video_meta.get("width", 0)
+                                            height = video_stream.get("height", 0) or video_meta.get("height", 0)
+                                            duration = video_stream.get("duration", 0) // 1000
 
-                                    logger.info(f"✅ [TikHub] Got XHS video URL (app_v2): {video_url[:80]}")
-                                    return VideoParseResult(
-                                        video=VideoRef(url=video_url, width=width, height=height, duration=duration),
-                                        **k
-                                    )
+                                            logger.info(f"✅ [TikHub] Got XHS video URL (app_v2): {video_url[:80]}")
+                                            return VideoParseResult(
+                                                video=VideoRef(url=video_url, width=width, height=height, duration=duration),
+                                                **k_th
+                                            )
 
-                # If video endpoint didn't work, try image endpoint
-                logger.info(f"🎬 [TikHub] Video endpoint failed, trying image endpoint...")
-                image_api_url = f"https://api.tikhub.io/api/v1/xiaohongshu/app_v2/get_image_note_detail?note_id={note_id}"
+                        logger.info(f"🎬 [TikHub] Video endpoint didn't return valid video data, trying next...")
 
-                async with httpx.AsyncClient(timeout=30.0, proxy=self.proxy) as client:
-                    response = await client.get(image_api_url, headers=headers)
+                    elif endpoint_type == "image":
+                        api_url = f"https://api.tikhub.io/api/v1/xiaohongshu/app_v2/get_image_note_detail?note_id={note_id}"
+                        async with httpx.AsyncClient(timeout=30.0, proxy=self.proxy) as client:
+                            response = await client.get(api_url, headers=headers)
 
-                if response.status_code == 200:
-                    data = response.json()
-                    if data.get("code") == 200 and data.get("data", {}).get("data"):
-                        note_data = data["data"]["data"][0]
+                        if response.status_code == 200:
+                            data = response.json()
+                            if data.get("code") == 200 and data.get("data", {}).get("data"):
+                                note_data = data["data"]["data"][0]
 
-                        title = note_data.get("title", "")
-                        desc = note_data.get("desc", "")
-                        k = {"title": title, "content": desc}
+                                # Try data.data[0].note_list[0] structure first (app_v2 format)
+                                note_list = note_data.get("note_list", [])
+                                if note_list:
+                                    note_item = note_list[0]
+                                    title = note_item.get("title", "")
+                                    desc = note_item.get("desc", "")
+                                    k_th = {"title": title, "content": desc}
+                                    images_list = note_item.get("images_list", [])
+                                else:
+                                    # Fallback: data.data[0] directly
+                                    title = note_data.get("title", "")
+                                    desc = note_data.get("desc", "")
+                                    k_th = {"title": title, "content": desc}
+                                    images_list = note_data.get("images_list", [])
+                                if images_list:
+                                    photos = []
+                                    for img in images_list:
+                                        img_url = img.get("url", "")
+                                        if img_url:
+                                            width = img.get("width", 0)
+                                            height = img.get("height", 0)
+                                            photos.append(ImageRef(url=img_url, ext="jpg", width=width, height=height))
 
-                        images_list = note_data.get("images_list", [])
-                        if images_list:
-                            photos = []
-                            for img in images_list:
-                                img_url = img.get("url", "")
-                                if img_url:
-                                    width = img.get("width", 0)
-                                    height = img.get("height", 0)
-                                    photos.append(ImageRef(url=img_url, ext="jpg", width=width, height=height))
+                                    if photos:
+                                        logger.info(f"✅ [TikHub] Got XHS {len(photos)} images (app_v2)")
+                                        return MultimediaParseResult(media=photos, **k_th)
 
-                            if photos:
-                                logger.info(f"✅ [TikHub] Got XHS {len(photos)} images (app_v2)")
-                                return MultimediaParseResult(media=photos, **k)
+                        logger.info(f"🎬 [TikHub] Image endpoint didn't return valid image data, trying next...")
 
                 raise ParseError("TikHub app_v2 API返回数据中没有视频或图片URL")
 
@@ -1087,6 +1120,70 @@ def patch_parsehub_yt_dlp():
 
         FacebookParse._do_parse = patched_facebook_parse
         logger.info("✅ FacebookParse._do_parse patched: Skip internal get_raw_url for watch/?v= URLs")
+
+        # Patch ParseResult.download to support headers parameter
+        from parsehub.types.result import ParseResult
+        original_download = ParseResult.download
+
+        async def patched_download(self, path=None, *, callback=None, callback_args=(), callback_kwargs=None, proxy=None, save_metadata=False, headers=None):
+            """Patched download that passes headers to _do_download, auto-injects XHS CDN headers"""
+            from pathlib import Path
+            import shutil
+            import aiofiles
+            from parsehub.config import GlobalConfig
+            from slugify import slugify
+
+            # Auto-inject XHS CDN headers if media URLs contain xhscdn.com
+            if not headers:
+                media_list = self.media if isinstance(self.media, list) else ([self.media] if self.media else [])
+                has_xhs = any('xhscdn.com' in (getattr(m, 'url', '') or '') for m in media_list)
+                if has_xhs:
+                    headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Referer': 'https://www.xiaohongshu.com/',
+                        'Origin': 'https://www.xiaohongshu.com',
+                        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                        'Accept-Encoding': 'gzip, deflate, br',
+                        'Sec-Fetch-Dest': 'image',
+                        'Sec-Fetch-Mode': 'no-cors',
+                        'Sec-Fetch-Site': 'same-site',
+                        'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                        'sec-ch-ua-mobile': '?0',
+                        'sec-ch-ua-platform': '"Windows"',
+                    }
+                    logger.debug("🔧 Auto-injected XHS CDN headers for xhscdn.com download")
+
+            save_dir = Path(path) if path else GlobalConfig.default_save_dir
+            r = slugify(
+                self.title or self.content or str(time.time_ns()), allow_unicode=True, max_length=20, lowercase=False
+            )
+            output_dir = save_dir.joinpath(r)
+            counter = 2
+            while output_dir.exists():
+                output_dir = save_dir.joinpath(f"{r}_{counter}")
+                counter += 1
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            if save_metadata:
+                async with aiofiles.open(output_dir.joinpath("metadata.json"), "w", encoding="utf-8") as f:
+                    await f.write(json.dumps(self.to_dict(), ensure_ascii=False, indent=4))
+
+            try:
+                return await self._do_download(
+                    output_dir=output_dir,
+                    callback=callback,
+                    callback_args=callback_args,
+                    callback_kwargs=callback_kwargs,
+                    proxy=proxy,
+                    headers=headers,
+                )
+            except Exception as e:
+                shutil.rmtree(output_dir, ignore_errors=True)
+                raise e
+
+        ParseResult.download = patched_download
+        logger.info("✅ ParseResult.download patched: support headers parameter")
 
         return True
 

@@ -325,7 +325,7 @@ class ParseHubAdapter:
 
             # 下载媒体
             try:
-                download_result = await result.download(path=self.temp_dir, proxy=downloader_proxy)
+                download_result = await result.download(path=self.temp_dir, proxy=downloader_proxy, headers=download_headers)
             except Exception as download_error:
                 # 下载失败（例如小红书CDN 500错误），但解析成功
                 # 返回解析结果但没有下载的媒体文件
