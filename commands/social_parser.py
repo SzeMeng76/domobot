@@ -169,11 +169,19 @@ def _convert_image_to_webp(image_path: Path) -> Path:
         suffix = image_path.suffix.lower()
 
         # JPG, PNG, WebP are directly supported by Telegram
+        # But verify actual content - XHS CDN may return HEIF with .jpg extension
         if suffix in ['.jpg', '.jpeg', '.png', '.webp']:
-            return image_path
+            try:
+                with PILImage.open(image_path) as img:
+                    if img.format in ('HEIF', 'HEIC', 'AVIF'):
+                        logger.info(f"🔄 Detected {img.format} content in {suffix} file, converting to WebP")
+                    else:
+                        return image_path
+            except Exception:
+                return image_path
 
         # HEIF/HEIC/AVIF need conversion (Telegram doesn't support them)
-        if suffix not in ['.heif', '.heic', '.avif']:
+        elif suffix not in ['.heif', '.heic', '.avif']:
             # Other formats: try to send directly first
             return image_path
 
