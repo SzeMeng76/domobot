@@ -176,19 +176,41 @@ async def get_video_info(file: str) -> tuple[float, int, int]:
         "-v", "error",
         "-select_streams", "v:0",
         "-show_entries", "stream=duration,width,height",
+        "-show_entries", "format=duration",
         "-of", "default=noprint_wrappers=1:nokey=1",
         file,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.DEVNULL,
     )
     stdout, _ = await proc.communicate()
-    lines = stdout.decode().strip().split('\n')
+    lines = [l for l in stdout.decode().strip().split('\n') if l.strip()]
 
     try:
-        # ffprobe 输出顺序: duration, width, height
-        duration = float(lines[0]) if len(lines) > 0 and lines[0] else 0.0
-        width = int(lines[1]) if len(lines) > 1 and lines[1] else 0
-        height = int(lines[2]) if len(lines) > 2 and lines[2] else 0
+        duration = 0.0
+        width = 0
+        height = 0
+        float_values = []
+        int_values = []
+        for line in lines:
+            line = line.strip()
+            try:
+                val = float(line)
+                if '.' in line or val > 10000:  # duration通常有小数或很大
+                    float_values.append(val)
+                else:
+                    int_values.append(int(val))
+            except ValueError:
+                continue
+
+        # duration: 取最大的浮点数（format duration通常比stream duration更可靠）
+        if float_values:
+            duration = max(float_values)
+        # width, height: 前两个整数值
+        if len(int_values) >= 2:
+            width, height = int_values[0], int_values[1]
+        elif len(int_values) == 1:
+            width = int_values[0]
+
         return duration, width, height
     except (ValueError, IndexError):
         logger.warning(f"无法解析视频信息，使用默认值")
@@ -217,7 +239,12 @@ async def ensure_h264(file: str) -> str:
     duration, width, height = await get_video_info(file)
 
     # 根据时长选择转码参数
-    if duration <= 30:
+    if duration <= 0:
+        # 无法获取时长，使用保守的快速转码避免卡死
+        preset, crf = "fast", "23"
+        scale_filter = None
+        logger.warning(f"无法获取视频时长，使用快速转码: preset={preset}, crf={crf}")
+    elif duration <= 30:
         preset, crf = "slow", "18"
         scale_filter = None
         logger.info(f"短视频 ({duration:.1f}s)，使用高质量转码: preset={preset}, crf={crf}")
