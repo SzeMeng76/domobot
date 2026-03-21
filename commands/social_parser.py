@@ -816,10 +816,13 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
 
     # 检查是否是微信文章或酷安图文 - 自动使用 Telegraph
     if parse_result:
-        # 微信公众号文章 (parsehub 2.0.0: WXParser returns RichTextParseResult)
+        # 微信公众号文章 / Twitter Article (parsehub 2.0.0+: RichTextParseResult)
         if isinstance(parse_result, RichTextParseResult) and hasattr(parse_result, 'markdown_content'):
             try:
-                logger.info("检测到微信文章，自动发布到Telegraph")
+                raw_url = getattr(parse_result, 'raw_url', '') or ''
+                is_twitter = 'twitter.com' in raw_url or 'x.com' in raw_url
+                source_label = "Twitter Article" if is_twitter else "微信文章"
+                logger.info(f"检测到{source_label}，自动发布到Telegraph")
                 if parse_result.markdown_content:
                     from markdown import markdown
                     html_content = markdown(parse_result.markdown_content.replace("mmbiz.qpic.cn", "qpic.cn.in/mmbiz.qpic.cn"))
