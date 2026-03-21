@@ -323,9 +323,15 @@ class ParseHubAdapter:
             if not result:
                 return None, None, None, 0, last_error or "解析失败，未返回结果"
 
-            # 下载媒体
+            # 下载媒体（30分钟超时保护，防止CDN卡死导致流程挂起）
             try:
-                download_result = await result.download(path=self.temp_dir, proxy=downloader_proxy, headers=download_headers)
+                download_result = await asyncio.wait_for(
+                    result.download(path=self.temp_dir, proxy=downloader_proxy, headers=download_headers),
+                    timeout=60 * 30,  # 30分钟
+                )
+            except TimeoutError:
+                logger.warning(f"媒体下载超时（>30分钟）: {url[:50]}...")
+                download_result = None
             except Exception as download_error:
                 # 下载失败（例如小红书CDN 500错误），但解析成功
                 # 返回解析结果但没有下载的媒体文件
