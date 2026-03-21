@@ -232,6 +232,45 @@ def patch_parsehub_yt_dlp():
         YtParser._extract_info = fixed_extract_info
         logger.info("✅ YtParser patched: js_runtimes + cookie handling + headers")
 
+        # Patch YtParser._parse to handle missing 'description' field (e.g. bangumi)
+        import asyncio
+        from parsehub.parsers.base.ytdlp import YtVideoInfo
+        original_yt_parse = YtParser._parse
+
+        async def fixed_yt_parse(self, url):
+            try:
+                dl = await asyncio.wait_for(asyncio.to_thread(self._extract_info, url), timeout=30)
+            except TimeoutError as e:
+                from parsehub.errors import ParseError
+                raise ParseError("解析视频信息超时") from e
+            except Exception as e:
+                from parsehub.errors import ParseError
+                raise ParseError(f"解析视频信息失败: {str(e)}") from e
+
+            if dl.get("_type") and dl["_type"] == "playlist":
+                entries = dl.get("entries", [])
+                if entries:
+                    entries = list(entries)
+                if not entries:
+                    from parsehub.errors import ParseError
+                    raise ParseError("播放列表为空")
+                dl = entries[0]
+                url = dl.get("webpage_url", url)
+            return YtVideoInfo(
+                raw_video_info=dl,
+                title=dl.get("title", ""),
+                description=dl.get("description", ""),
+                thumbnail=dl.get("thumbnail", ""),
+                duration=dl.get("duration", 0),
+                url=url,
+                width=dl.get("width", 0),
+                height=dl.get("height", 0),
+                paramss=self.params,
+            )
+
+        YtParser._parse = fixed_yt_parse
+        logger.info("✅ YtParser._parse patched: safe .get() for missing fields (bangumi support)")
+
         # Note: YtParser._parse doesn't need patching anymore - using original implementation
         # YouTube downloads will be handled by pytubefix in the download method
         logger.info("ℹ️ YtParser._parse: using original implementation (YouTube download via pytubefix)")
