@@ -223,6 +223,9 @@ def patch_parsehub_yt_dlp():
                 with YoutubeDL(params) as ydl:
                     result = ydl.extract_info(url, download=False)
 
+                # 将含有cookiefile等动态参数的params存回self，供下载阶段复用
+                self._patched_params = params
+
                 return result
             except Exception as e:
                 error_msg = f"{type(e).__name__}: {str(e)}"
@@ -267,7 +270,7 @@ def patch_parsehub_yt_dlp():
                 url=url,
                 width=dl.get("width", 0),
                 height=dl.get("height", 0),
-                paramss=self.params,
+                paramss=getattr(self, '_patched_params', self.params),
             )
 
         YtParser._parse = fixed_yt_parse
