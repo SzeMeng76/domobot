@@ -313,15 +313,22 @@ class ParseHubAdapter:
                         logger.warning(f"⚠️ 解析返回空结果 (尝试 {attempt}/{max_retries})")
                         last_error = "解析失败，未返回结果"
                 except Exception as parse_error:
-                    last_error = str(parse_error)
+                    # 获取完整的异常链文本（ParseHub会多层包装错误信息）
+                    full_error = str(parse_error)
+                    cause = parse_error.__cause__
+                    while cause:
+                        full_error += f" {cause}"
+                        cause = cause.__cause__
+                    last_error = full_error
                     logger.warning(f"⚠️ 解析失败 (尝试 {attempt}/{max_retries}): {last_error}")
 
-                    # Bilibili地区限制：自动使用地区代理重试
-                    if self._is_geo_restriction_error(last_error) and platform_id == 'bilibili':
+                    # Bilibili地区限制：自动使用地区代理重试（不消耗重试次数）
+                    if self._is_geo_restriction_error(full_error) and platform_id == 'bilibili':
                         geo_proxy = self.config.bilibili_geo_proxy if self.config else None
                         if geo_proxy and parser_proxy != geo_proxy:
                             logger.info(f"🌐 检测到Bilibili地区限制，使用地区代理重试...")
                             parser_proxy = geo_proxy
+                            max_retries = attempt + 1  # 额外给一次重试机会
                             continue
 
                     if attempt < max_retries:
