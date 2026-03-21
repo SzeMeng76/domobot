@@ -315,6 +315,15 @@ class ParseHubAdapter:
                 except Exception as parse_error:
                     last_error = str(parse_error)
                     logger.warning(f"⚠️ 解析失败 (尝试 {attempt}/{max_retries}): {last_error}")
+
+                    # Bilibili地区限制：自动使用地区代理重试
+                    if self._is_geo_restriction_error(last_error) and platform_id == 'bilibili':
+                        geo_proxy = self.config.bilibili_geo_proxy if self.config else None
+                        if geo_proxy and parser_proxy != geo_proxy:
+                            logger.info(f"🌐 检测到Bilibili地区限制，使用地区代理重试...")
+                            parser_proxy = geo_proxy
+                            continue
+
                     if attempt < max_retries:
                         await asyncio.sleep(1)  # 重试前等待1秒
                     else:
@@ -366,6 +375,20 @@ class ParseHubAdapter:
 
             return None, None, None, parse_time, error_msg
 
+    @staticmethod
+    def _is_geo_restriction_error(error_str: str) -> bool:
+        """检测是否为地区限制错误"""
+        geo_keywords = [
+            "geo restriction",
+            "geo-restricted",
+            "not available from your location",
+            "地区限制",
+            "仅限",
+            "This video is not available",
+        ]
+        error_lower = error_str.lower()
+        return any(kw.lower() in error_lower for kw in geo_keywords)
+
     def _format_error_message(self, error: Exception) -> str:
         """格式化错误信息，使其对用户更友好"""
         error_str = str(error)
@@ -375,6 +398,11 @@ class ParseHubAdapter:
             return "Bilibili风控限制（412错误），请检查cookie配置或稍后重试"
         if "Bilibili解析失败" in error_str:
             return "Bilibili解析失败，可能是链接失效或需要登录"
+        if self._is_geo_restriction_error(error_str):
+            geo_proxy = self.config.bilibili_geo_proxy if self.config else None
+            if not geo_proxy:
+                return "该内容受地区限制，请配置 BILIBILI_GEO_PROXY 环境变量以使用大陆代理"
+            return "该内容受地区限制，地区代理也无法访问，请检查代理配置"
 
         # YouTube相关错误
         if "Sign in to confirm" in error_str or "not a bot" in error_str:

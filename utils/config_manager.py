@@ -201,6 +201,7 @@ class BotConfig:
         self.inline_parse_temp_channel = None  # Inline Parse 临时存储频道 ID
         self.parser_proxy = None  # 解析代理
         self.downloader_proxy = None  # 下载代理
+        self.bilibili_geo_proxy = None  # Bilibili地区限制代理（用于番剧等地区限制内容）
         self.parser_cache_duration = 86400  # 解析缓存时间（默认24小时）
         self.douyin_api = None  # 抖音API地址
         self.tikhub_api_key = ""  # TikHub API密钥（用于YouTube直接下载）
@@ -480,6 +481,7 @@ class ConfigManager:
         self.config.inline_parse_temp_channel = get_int_env("INLINE_PARSE_TEMP_CHANNEL", "0") or None
         self.config.parser_proxy = os.getenv("PARSER_PROXY", None)
         self.config.downloader_proxy = os.getenv("DOWNLOADER_PROXY", None)
+        self.config.bilibili_geo_proxy = os.getenv("BILIBILI_GEO_PROXY", None)
         self.config.parser_cache_duration = get_int_env("PARSER_CACHE_DURATION", "86400")
         self.config.douyin_api = os.getenv("DOUYIN_API", None)
         self.config.tikhub_api_key = os.getenv("TIKHUB_API_KEY", "")

@@ -1036,6 +1036,15 @@ def patch_parsehub_yt_dlp():
         MyInstaloaderContext.get_anonymous_session = patched_get_anonymous_session
         logger.info("✅ MyInstaloaderContext patched: Enhanced headers for better compatibility")
 
+        # Patch BiliParse to support bangumi/play/ URL format (番剧/影视)
+        from parsehub.parsers.parser.bilibili import BiliParse
+
+        # Original regex: r"^(http(s)?://)?((((w){3}.|(m).|(t).)?bilibili\.com)/(video|opus|\b\d{18,19}\b)|b23.tv|bili2233.cn).*"
+        # Problem: bangumi/play/epXXX URLs (番剧) are not matched
+        # Fix: Add bangumi/play to the path alternatives
+        BiliParse.__match__ = r"^(http(s)?://)?((((w){3}.|(m).|(t).)?bilibili\.com)/(video|opus|bangumi/play|\b\d{18,19}\b)|b23.tv|bili2233.cn).*"
+        logger.info("✅ BiliParse patched: Support bangumi/play/ URL format (番剧/影视)")
+
         # Patch FacebookParse to support watch/?v= URL format (with optional slash)
         from parsehub.parsers.parser.facebook import FacebookParse
 
