@@ -185,6 +185,31 @@ def patch_parsehub_yt_dlp():
                         params["cookiefile"] = temp_cookie_file.name
                         logger.info(f"🍪 [Patch] Created temp cookie file for {domain}")
 
+                elif isinstance(self.cookie, dict):
+                    # ParseHub将cookie字符串转换为dict后传入，需要写临时Netscape文件
+                    logger.info(f"🍪 [Patch] Cookie is dict with {len(self.cookie)} keys")
+
+                    url_lower = url.lower()
+                    if "bili" in url_lower:
+                        domain = ".bilibili.com"
+                    elif "twitter.com" in url_lower or "x.com" in url_lower:
+                        domain = ".twitter.com"
+                    elif "instagram.com" in url_lower:
+                        domain = ".instagram.com"
+                    elif "kuaishou.com" in url_lower:
+                        domain = ".kuaishou.com"
+                    else:
+                        domain = ".example.com"
+
+                    temp_cookie_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt')
+                    temp_cookie_file.write("# Netscape HTTP Cookie File\n")
+                    for key, value in self.cookie.items():
+                        temp_cookie_file.write(f"{domain}\tTRUE\t/\tFALSE\t0\t{key}\t{value}\n")
+                    temp_cookie_file.close()
+
+                    params["cookiefile"] = temp_cookie_file.name
+                    logger.info(f"🍪 [Patch] Created temp cookie file from dict for {domain}")
+
             try:
                 with YoutubeDL(params) as ydl:
                     result = ydl.extract_info(url, download=False)
