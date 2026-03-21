@@ -214,13 +214,12 @@ def patch_parsehub_yt_dlp():
                 with YoutubeDL(params) as ydl:
                     result = ydl.extract_info(url, download=False)
 
-                # 清理临时cookie文件
-                if temp_cookie_file and os.path.exists(temp_cookie_file.name):
-                    os.unlink(temp_cookie_file.name)
+                # 不在此处清理临时cookie文件：下载阶段会通过 paramss 复用 cookiefile 路径
+                # 临时文件由操作系统在进程退出时清理，或在下载完成后由 _run_download 清理
 
                 return result
             except Exception as e:
-                # 清理临时cookie文件
+                # 解析失败时清理临时cookie文件
                 if temp_cookie_file and os.path.exists(temp_cookie_file.name):
                     os.unlink(temp_cookie_file.name)
                 error_msg = f"{type(e).__name__}: {str(e)}"
