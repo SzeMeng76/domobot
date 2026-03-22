@@ -717,6 +717,8 @@ def patch_parsehub_yt_dlp():
                                     for img in images_list:
                                         img_url = img.get("url", "")
                                         if img_url:
+                                            # Force JPEG: replace heif/webp/avif format params in URL
+                                            img_url = re.sub(r'format/(heif|heic|webp|avif)', 'format/jpg', img_url)
                                             width = img.get("width", 0)
                                             height = img.get("height", 0)
                                             photos.append(ImageRef(url=img_url, ext="jpg", width=width, height=height))
