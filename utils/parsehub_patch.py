@@ -511,6 +511,7 @@ def patch_parsehub_yt_dlp():
 
         async def patched_xhs_parse(self, url: str):
             """Patched XhsParser._do_parse to handle empty download list and use TikHub as fallback"""
+            import asyncio
             from parsehub.types import VideoParseResult, ImageParseResult, MultimediaParseResult, VideoRef, ImageRef, LivePhotoRef
             from parsehub.errors import ParseError
 
@@ -554,8 +555,21 @@ def patch_parsehub_yt_dlp():
                                 photos.append(ImageRef(url=i.url, ext=ext, thumb_url=i.thumb_url, width=i.width, height=i.height))
 
                         if photos:
-                            # XHS CDN URLs are time-limited (expire within seconds), skip validation
-                            logger.info(f"✅ [Patch] XHS got {len(photos)} images, returning directly")
+                            # Concurrently validate all URLs; replace 404s with thumb_url (urlPre)
+                            # instead of skipping — parsehub will fail the whole group on any 404
+                            async def check_and_fix(photo):
+                                try:
+                                    async with httpx.AsyncClient(timeout=5.0) as c:
+                                        r = await c.head(photo.url, follow_redirects=True)
+                                        if r.status_code == 404 and photo.thumb_url:
+                                            logger.warning(f"🌐 [Patch] XHS urlDefault 404, falling back to thumb_url: {photo.url[-40:]}")
+                                            return ImageRef(url=photo.thumb_url, ext=photo.ext, thumb_url=photo.thumb_url, width=photo.width, height=photo.height)
+                                except Exception:
+                                    pass
+                                return photo
+
+                            photos = list(await asyncio.gather(*[check_and_fix(p) for p in photos]))
+                            logger.info(f"✅ [Patch] XHS got {len(photos)} images (with fallback check)")
                             return ImageParseResult(photo=photos, **k)
                     else:
                         raise ParseError("不支持的类型")
