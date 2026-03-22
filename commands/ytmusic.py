@@ -291,8 +291,8 @@ async def _download_and_send(
 @with_error_handling
 async def ytmusic_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    /ytmusic <关键词|videoId|链接> — 搜索或下载 YouTube Music
-    /ytmusic chart — 查看排行榜
+    /yt <关键词|videoId|链接> — 搜索或下载 YouTube Music
+    /yt chart — 查看排行榜
     """
     if not update.message:
         return
@@ -304,9 +304,9 @@ async def ytmusic_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             context, update.message.chat_id,
             "🎵 <b>YouTube Music</b>\n\n"
             "用法：\n"
-            "<code>/ytmusic 关键词</code> — 搜索歌曲\n"
-            "<code>/ytmusic videoId或链接</code> — 直接下载\n"
-            "<code>/ytmusic chart</code> — 查看排行榜",
+            "<code>/yt 关键词</code> — 搜索歌曲\n"
+            "<code>/yt videoId或链接</code> — 直接下载\n"
+            "<code>/yt chart</code> — 查看排行榜",
             parse_mode="HTML",
         )
         return

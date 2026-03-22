@@ -69,6 +69,29 @@ class InlineQueryHandler:
             return
 
         # ========================================
+        # 检查是否是 YouTube / YouTube Music 链接
+        # ========================================
+        from utils.ytmusic_api import contains_ytmusic_link
+        if contains_ytmusic_link(query):
+            from handlers.inline_ytmusic_handler import handle_inline_ytmusic_link
+            try:
+                results = await handle_inline_ytmusic_link(query, context)
+                await update.inline_query.answer(results, cache_time=60)
+            except Exception as e:
+                logger.error(f"[Inline YTMusic] 处理失败: {e}", exc_info=True)
+                await update.inline_query.answer([
+                    InlineQueryResultArticle(
+                        id=str(uuid4()),
+                        title="❌ YouTube 链接解析失败",
+                        description=str(e)[:100],
+                        input_message_content=InputTextMessageContent(
+                            message_text=f"❌ YouTube 链接解析失败: {str(e)}"
+                        ),
+                    )
+                ])
+            return
+
+        # ========================================
         # 检查是否是 URL（社交媒体解析）
         # ========================================
         if query.startswith('http://') or query.startswith('https://'):
@@ -194,6 +217,14 @@ class InlineQueryHandler:
             await update.inline_query.answer(results, cache_time=60)
             return
 
+        # YouTube Music 搜索单独处理
+        if parts and parts[0].lower() in ("yt", "ytmusic"):
+            keyword = parts[1].strip() if len(parts) > 1 else ""
+            from handlers.inline_ytmusic_handler import handle_inline_ytmusic_search
+            results = await handle_inline_ytmusic_search(keyword, context)
+            await update.inline_query.answer(results, cache_time=60)
+            return
+
         # 直接执行命令并返回结果
         results = await self._execute_and_create_results(command_text, user_id, context)
 
@@ -315,6 +346,7 @@ class InlineQueryHandler:
             "whois": "🌐 域名查询 - 添加 $ 执行查询",
             "cooking": "👨‍🍳 菜谱 - 添加 $ 执行查询",
             "netease": "🎵 网易云音乐 - 添加 $ 搜索歌曲",
+            "yt": "🎵 YouTube Music - 添加 $ 搜索歌曲",
             "chart": "📊 排行榜 - 添加 $ 执行查询",
         }
 
@@ -363,6 +395,8 @@ class InlineQueryHandler:
             "cooking": {"icon": "👨‍🍳", "title": "菜谱", "desc": "烹饪指南"},
             "chart": {"icon": "📊", "title": "排行榜", "desc": "影视排行"},
             "netease": {"icon": "🎵", "title": "网易云音乐", "desc": "搜索歌曲"},
+            "yt": {"icon": "🎵", "title": "YouTube Music", "desc": "搜索歌曲"},
+            "ytmusic": {"icon": "🎵", "title": "YouTube Music", "desc": "搜索歌曲"},
         }
 
         info = command_info.get(command, {"icon": "🔍", "title": command.upper(), "desc": "执行命令"})
@@ -422,12 +456,15 @@ async def setup_inline_query_handler(application) -> None:
     # 注册 chosen inline result 处理器（parse + music）
     from handlers.inline_parse_handler import handle_inline_parse_chosen
     from handlers.inline_music_handler import handle_inline_music_chosen
+    from handlers.inline_ytmusic_handler import handle_inline_ytmusic_chosen
 
     async def _chosen_inline_dispatcher(update, context):
         """分发 chosen inline result 到对应处理器"""
         result_id = update.chosen_inline_result.result_id
         if result_id.startswith("music_dl_"):
             await handle_inline_music_chosen(update, context)
+        elif result_id.startswith("ytm_dl_"):
+            await handle_inline_ytmusic_chosen(update, context)
         elif result_id.startswith("parse_"):
             await handle_inline_parse_chosen(update, context)
 
@@ -435,4 +472,4 @@ async def setup_inline_query_handler(application) -> None:
         ChosenInlineResultHandler(_chosen_inline_dispatcher)
     )
 
-    logger.info("✅ Inline Query 处理器已注册（含 Parse + Music 支持）")
+    logger.info("✅ Inline Query 处理器已注册（含 Parse + Music + YTMusic 支持）")
