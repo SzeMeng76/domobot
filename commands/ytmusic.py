@@ -678,14 +678,14 @@ def _fmt_duration(seconds: int) -> str:
 # ============================================================
 
 command_factory.register_command(
-    "ytmusic",
+    "yt",
     ytmusic_command,
     permission=Permission.USER,
     description="搜索/下载 YouTube Music",
 )
 
 command_factory.register_command(
-    "yt",
+    "ytmusic",
     ytmusic_command,
     permission=Permission.USER,
     description="搜索/下载 YouTube Music (别名)",

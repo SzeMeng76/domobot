@@ -59,7 +59,6 @@ class InlineCommandAdapter:
             "flight": self._handle_flight,
             "hotel": self._handle_hotel,
             "chart": self._handle_chart,
-            "music": self._handle_music,
             "netease": self._handle_music,
         }
 

@@ -842,17 +842,10 @@ async def music_chart_menu_callback(update: Update, context: ContextTypes.DEFAUL
 # ============================================================
 
 command_factory.register_command(
-    "music",
-    music_command,
-    permission=Permission.USER,
-    description="搜索/下载网易云音乐",
-)
-
-command_factory.register_command(
     "netease",
     music_command,
     permission=Permission.USER,
-    description="搜索/下载网易云音乐 (别名)",
+    description="搜索/下载网易云音乐",
 )
 
 command_factory.register_command(

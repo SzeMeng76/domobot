@@ -187,7 +187,7 @@ class InlineQueryHandler:
 
         # 音乐搜索单独处理：返回多条结果（参考 Go processInlineSearch）
         parts = command_text.split(None, 1)
-        if parts and parts[0].lower() in ("music", "netease"):
+        if parts and parts[0].lower() in ("netease",):
             keyword = parts[1].strip() if len(parts) > 1 else ""
             from handlers.inline_music_handler import handle_inline_music_search
             results = await handle_inline_music_search(keyword, context)
@@ -314,7 +314,7 @@ class InlineQueryHandler:
             "news": "📰 新闻 - 添加 $ 执行查询",
             "whois": "🌐 域名查询 - 添加 $ 执行查询",
             "cooking": "👨‍🍳 菜谱 - 添加 $ 执行查询",
-            "music": "🎵 网易云音乐 - 添加 $ 搜索歌曲",
+            "netease": "🎵 网易云音乐 - 添加 $ 搜索歌曲",
             "chart": "📊 排行榜 - 添加 $ 执行查询",
         }
 
@@ -362,7 +362,6 @@ class InlineQueryHandler:
             "whois": {"icon": "🌐", "title": "域名查询", "desc": "WHOIS信息"},
             "cooking": {"icon": "👨‍🍳", "title": "菜谱", "desc": "烹饪指南"},
             "chart": {"icon": "📊", "title": "排行榜", "desc": "影视排行"},
-            "music": {"icon": "🎵", "title": "网易云音乐", "desc": "搜索歌曲"},
             "netease": {"icon": "🎵", "title": "网易云音乐", "desc": "搜索歌曲"},
         }
 
