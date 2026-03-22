@@ -530,15 +530,33 @@ def patch_parsehub_yt_dlp():
                     k = {"title": result.title, "content": desc}
                     xhs_post_type = result.type  # Remember for TikHub fallback
 
+                    # XHS CDN headers for URL validation (bypass anti-crawler)
+                    xhs_headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Referer': 'https://www.xiaohongshu.com/',
+                        'Origin': 'https://www.xiaohongshu.com',
+                        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                    }
+
                     if result.type == PostType.VIDEO:
                         media = result.media[0] if result.media else None
                         if media and media.url:
-                            # XHS CDN URLs are time-limited, return directly without validation
-                            return VideoParseResult(
-                                video=VideoRef(url=media.url, thumb_url=media.thumb_url,
-                                           duration=media.duration, height=media.height, width=media.width),
-                                **k,
-                            )
+                            # Validate video URL before returning (check if accessible)
+                            try:
+                                async with httpx.AsyncClient(timeout=10.0, proxy=self.proxy) as client:
+                                    head_response = await client.head(media.url, headers=xhs_headers, follow_redirects=True)
+                                    if head_response.status_code == 404:
+                                        logger.warning(f"🌐 [Patch] XHS video URL returns 404, trying TikHub...")
+                                        result = None  # Trigger TikHub fallback
+                                    else:
+                                        return VideoParseResult(
+                                            video=VideoRef(url=media.url, thumb_url=media.thumb_url,
+                                                       duration=media.duration, height=media.height, width=media.width),
+                                            **k,
+                                        )
+                            except Exception as e:
+                                logger.warning(f"🌐 [Patch] XHS video URL validation failed: {e}, trying TikHub...")
+                                result = None  # Trigger TikHub fallback
                         # No video URL, will try TikHub below
                     elif result.type == PostType.IMAGE:
                         photos = []
@@ -554,9 +572,29 @@ def patch_parsehub_yt_dlp():
                                 photos.append(ImageRef(url=i.url, ext=ext, thumb_url=i.thumb_url, width=i.width, height=i.height))
 
                         if photos:
-                            # XHS CDN URLs are time-limited (expire within seconds), skip validation
-                            logger.info(f"✅ [Patch] XHS got {len(photos)} images, returning directly")
-                            return ImageParseResult(photo=photos, **k)
+                            # Validate ALL media URLs, filter out 404s (CDN node sync issues)
+                            valid_photos = []
+                            try:
+                                async with httpx.AsyncClient(timeout=10.0, proxy=self.proxy) as client:
+                                    for idx, photo in enumerate(photos):
+                                        try:
+                                            head_response = await client.head(photo.url, headers=xhs_headers, follow_redirects=True)
+                                            if head_response.status_code == 404:
+                                                logger.warning(f"🌐 [Patch] XHS media [{idx}] URL returns 404, skipping: {photo.url[:80]}")
+                                            else:
+                                                valid_photos.append(photo)
+                                        except Exception as e:
+                                            logger.warning(f"🌐 [Patch] XHS media [{idx}] URL validation failed: {e}, skipping")
+                            except Exception as e:
+                                logger.warning(f"🌐 [Patch] XHS URL validation client error: {e}, using all photos")
+                                valid_photos = photos
+
+                            if valid_photos:
+                                logger.info(f"✅ [Patch] XHS media validated: {len(valid_photos)}/{len(photos)} items OK")
+                                return ImageParseResult(photo=valid_photos, **k)
+                            else:
+                                logger.warning(f"🌐 [Patch] All XHS media URLs return 404, trying TikHub...")
+                                result = None  # Trigger TikHub fallback
                     else:
                         raise ParseError("不支持的类型")
             else:
