@@ -183,36 +183,83 @@ class YTMusicAPI:
 
 async def download_audio(video_id: str, output_dir: Path) -> Optional[tuple[Path, str, int, str]]:
     """
-    使用 pytubefix 下载 YouTube 音频
+    下载 YouTube 音频：yt-dlp 优先，失败自动 fallback 到 pytubefix
 
-    复用 parsehub_patch.py 的配置：
-      - YOUTUBE_PROXY 环境变量 → 代理
-      - YOUTUBE_OAUTH_TOKEN 环境变量 → OAuth token 文件路径
-
-    Args:
-        video_id: YouTube video ID
-        output_dir: 输出目录
+    环境变量（与 parsehub_patch.py 保持一致）：
+      YOUTUBE_PROXY       → 代理地址
+      YOUTUBE_COOKIE      → yt-dlp cookie 文件路径（Netscape 格式）
+      YOUTUBE_OAUTH_TOKEN → pytubefix OAuth token 文件路径（fallback 用）
 
     Returns:
         (file_path, title, duration_seconds, author) 或 None
     """
     video_url = f"https://www.youtube.com/watch?v={video_id}"
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    def _download_sync():
+    # --- yt-dlp (主) ---
+    def _ytdlp_download():
+        from yt_dlp import YoutubeDL
+
+        youtube_proxy = os.getenv("YOUTUBE_PROXY")
+        cookie_file = os.getenv("YOUTUBE_COOKIE")
+        output_template = str(output_dir / f"ytm_{video_id}_{time.time_ns()}.%(ext)s")
+
+        ydl_params = {
+            "format": "bestaudio[ext=m4a]/bestaudio/best",
+            "outtmpl": {"default": output_template},
+            "quiet": True,
+            "no_warnings": True,
+            "noprogress": True,
+            "http_headers": {
+                "Referer": "https://www.youtube.com/",
+                "Origin": "https://www.youtube.com",
+            },
+        }
+        if youtube_proxy:
+            ydl_params["proxy"] = youtube_proxy
+            logger.info(f"🌐 [YTMusic/yt-dlp] 代理: {youtube_proxy[:30]}...")
+        if cookie_file and os.path.exists(cookie_file):
+            ydl_params["cookiefile"] = cookie_file
+            logger.info(f"🍪 [YTMusic/yt-dlp] cookie: {cookie_file}")
+
+        with YoutubeDL(ydl_params) as ydl:  # type: ignore[arg-type]
+            info = ydl.extract_info(video_url, download=True)
+
+        downloads = (info or {}).get("requested_downloads") or []
+        if downloads:
+            out_path = Path(downloads[0]["filepath"])
+        else:
+            matches = list(output_dir.glob(f"ytm_{video_id}_*"))
+            if not matches:
+                raise RuntimeError("yt-dlp 下载后找不到输出文件")
+            out_path = matches[0]
+
+        title = (info or {}).get("title") or ""
+        duration = int((info or {}).get("duration") or 0)
+        author = (info or {}).get("uploader") or (info or {}).get("channel") or ""
+        logger.info(f"✅ [YTMusic/yt-dlp] 下载完成: {title}")
+        return out_path, title, duration, author
+
+    try:
+        return await asyncio.to_thread(_ytdlp_download)
+    except Exception as e:
+        logger.warning(f"[YTMusic] yt-dlp 失败，切换到 pytubefix: {e}")
+
+    # --- pytubefix (fallback) ---
+    def _pytubefix_download():
         from pytubefix import YouTube
 
-        # 代理配置（与 parsehub_patch.py 保持一致）
         youtube_proxy = os.getenv("YOUTUBE_PROXY")
-        proxies = None
-        if youtube_proxy:
-            proxies = {"http": youtube_proxy, "https": youtube_proxy}
-            logger.info(f"🌐 [YTMusic] 使用代理: {youtube_proxy[:30]}...")
+        proxies: Optional[dict] = (
+            {"http": youtube_proxy, "https": youtube_proxy} if youtube_proxy else None
+        )
+        if proxies:
+            logger.info(f"🌐 [YTMusic/pytubefix] 代理: {youtube_proxy[:30]}...")  # type: ignore[index]
 
-        # OAuth token 配置（与 parsehub_patch.py 保持一致）
         token_path = os.getenv("YOUTUBE_OAUTH_TOKEN")
         use_oauth = bool(token_path and os.path.exists(token_path))
         if use_oauth:
-            logger.info(f"🔐 [YTMusic] 使用 OAuth token: {token_path}")
+            logger.info(f"🔐 [YTMusic/pytubefix] OAuth token: {token_path}")
 
         yt = YouTube(
             video_url,
@@ -220,33 +267,24 @@ async def download_audio(video_id: str, output_dir: Path) -> Optional[tuple[Path
             proxies=proxies,
             use_oauth=use_oauth,
             allow_oauth_cache=True,
-            token_file=token_path if (use_oauth and token_path) else None,
+            token_file=token_path if use_oauth else None,  # type: ignore[arg-type]
         )
 
-        # 优先 m4a（aac），更兼容 Telegram 音频播放
-        stream = yt.streams.get_audio_only(subtype="mp4")
-        if not stream:
-            # fallback: 任意最高码率音频流
-            stream = (
-                yt.streams.filter(only_audio=True)
-                .order_by("abr")
-                .desc()
-                .first()
-            )
+        stream = yt.streams.get_audio_only(subtype="mp4") or (
+            yt.streams.filter(only_audio=True).order_by("abr").desc().first()
+        )
         if not stream:
             raise RuntimeError("找不到可用的音频流")
 
         filename = f"ytm_{video_id}_{time.time_ns()}.m4a"
-        logger.info(f"🎵 [YTMusic] 开始下载: {yt.title} | {stream.abr}")
-        out_path = stream.download(output_path=str(output_dir), filename=filename)
-
+        logger.info(f"🎵 [YTMusic/pytubefix] {yt.title} | {stream.abr}")
+        out_path = stream.download(output_path=str(output_dir), filename=filename) or ""
         return Path(out_path), yt.title or "", int(yt.length or 0), yt.author or ""
 
     try:
-        output_dir.mkdir(parents=True, exist_ok=True)
-        return await asyncio.to_thread(_download_sync)
+        return await asyncio.to_thread(_pytubefix_download)
     except Exception as e:
-        logger.error(f"[YTMusic] 下载失败 {video_id}: {e}")
+        logger.error(f"[YTMusic] pytubefix 也失败了: {e}")
         return None
 
 
