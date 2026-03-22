@@ -481,18 +481,25 @@ def patch_parsehub_yt_dlp():
             USE_NEW_XHS_API = True
             logger.info("🔍 [XHS] Detected ParseHub 1.5.13+ (new XHSAPI)")
 
-            # Patch XHSAPI.__fetch_html to add follow_redirects=True
-            # Required for xhslink.com short URLs (302 redirect)
+            # Patch XHSAPI.__fetch_html to add follow_redirects=True and cookie support
+            # - follow_redirects: required for xhslink.com short URLs (302 redirect)
+            # - XHS_COOKIE: required to get complete urlDefault (without it XHS returns truncated /no URLs)
+            xhs_cookie_str = os.getenv("XHS_COOKIE")
+            if xhs_cookie_str:
+                logger.info("🌐 [XHS] Loaded cookie from XHS_COOKIE env var")
+
             async def patched_xhsapi_fetch(self, url: str):
                 headers = {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                     'Referer': 'https://www.xiaohongshu.com/',
                 }
+                if xhs_cookie_str:
+                    headers['Cookie'] = xhs_cookie_str
                 async with httpx.AsyncClient(proxy=self.proxy, follow_redirects=True, timeout=30) as client:
                     return (await client.get(url, headers=headers)).text
 
             XHSAPI._XHSAPI__fetch_html = patched_xhsapi_fetch
-            logger.info("✅ XHSAPI.__fetch_html patched: follow_redirects")
+            logger.info("✅ XHSAPI.__fetch_html patched: follow_redirects + cookie support")
         except ImportError:
             try:
                 from parsehub.provider_api.xhs import XHSAPI, MediaType, PostType
@@ -548,53 +555,22 @@ def patch_parsehub_yt_dlp():
                                 photos.append(ImageRef(url=i.url, ext=ext, thumb_url=i.thumb_url, width=i.width, height=i.height))
 
                         if photos:
-                            # XHS CDN URLs expire quickly — download all concurrently before returning
-                            # so later images don't expire while earlier ones are still downloading
-                            import types, tempfile
-                            from pathlib import Path
-                            from parsehub.utils.downloader import download as ph_download
-                            from parsehub.errors import DownloadError
-                            from parsehub.types.result import DownloadResult, ImageFile
+                            # Concurrently validate all URLs; replace 404s with thumb_url (urlPre)
+                            # instead of skipping — parsehub will fail the whole group on any 404
+                            async def check_and_fix(photo):
+                                try:
+                                    async with httpx.AsyncClient(timeout=5.0) as c:
+                                        r = await c.head(photo.url, follow_redirects=True)
+                                        if r.status_code == 404 and photo.thumb_url:
+                                            logger.warning(f"🌐 [Patch] XHS urlDefault 404, falling back to thumb_url: {photo.url[-40:]}")
+                                            return ImageRef(url=photo.thumb_url, ext=photo.ext, thumb_url=photo.thumb_url, width=photo.width, height=photo.height)
+                                except Exception:
+                                    pass
+                                return photo
 
-                            async def xhs_concurrent_download(self, path=None, *, proxy=None, headers=None, **kwargs):
-                                output_dir = str(path) if path else tempfile.mkdtemp()
-                                Path(output_dir).mkdir(parents=True, exist_ok=True)
-
-                                async def download_one(i, media):
-                                    ext = getattr(media, 'ext', None) or 'jpeg'
-                                    try:
-                                        f = await ph_download(
-                                            media.url,
-                                            f"{output_dir}/{i}.{ext}",
-                                            headers=headers,
-                                            proxies=proxy,
-                                        )
-                                        return ImageFile(path=f, width=media.width, height=media.height)
-                                    except Exception as e:
-                                        logger.warning(f"🌐 [Patch] XHS image [{i}] download failed: {e}, trying thumb_url")
-                                        if media.thumb_url and media.thumb_url != media.url:
-                                            try:
-                                                f = await ph_download(
-                                                    media.thumb_url,
-                                                    f"{output_dir}/{i}_thumb.{ext}",
-                                                    headers=headers,
-                                                    proxies=proxy,
-                                                )
-                                                return ImageFile(path=f, width=media.width, height=media.height)
-                                            except Exception as e2:
-                                                logger.warning(f"🌐 [Patch] XHS image [{i}] thumb_url also failed: {e2}")
-                                        return None
-
-                                results = await asyncio.gather(*[download_one(i, m) for i, m in enumerate(self.photo)])
-                                valid = [r for r in results if r is not None]
-                                if not valid:
-                                    raise DownloadError("All XHS images failed to download")
-                                logger.info(f"✅ [Patch] XHS concurrent download: {len(valid)}/{len(self.photo)} images OK")
-                                return DownloadResult(valid, output_dir)  # type: ignore[arg-type]
-
-                            result_obj = ImageParseResult(photo=photos, **k)
-                            result_obj.download = types.MethodType(xhs_concurrent_download, result_obj)
-                            return result_obj
+                            photos = list(await asyncio.gather(*[check_and_fix(p) for p in photos]))
+                            logger.info(f"✅ [Patch] XHS got {len(photos)} images (with fallback check)")
+                            return ImageParseResult(photo=photos, **k)
                     else:
                         raise ParseError("不支持的类型")
             else:
