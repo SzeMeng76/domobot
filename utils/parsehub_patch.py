@@ -480,6 +480,16 @@ def patch_parsehub_yt_dlp():
             from parsehub.provider_api.xhs import XHSAPI, XHSMediaType as MediaType, XHSPostType as PostType
             USE_NEW_XHS_API = True
             logger.info("🔍 [XHS] Detected ParseHub 1.5.13+ (new XHSAPI)")
+
+            # Patch XHSAPI.__fetch_html to add follow_redirects=True
+            # Without this, xhslink.com short URLs (302 redirect) are not followed,
+            # causing empty HTML and truncated /no urlDefault fields on non-mainland IPs
+            async def patched_xhsapi_fetch(self, url: str):
+                async with httpx.AsyncClient(proxy=self.proxy, follow_redirects=True) as client:
+                    return (await client.get(url, timeout=30)).text
+
+            XHSAPI._XHSAPI__fetch_html = patched_xhsapi_fetch
+            logger.info("✅ XHSAPI.__fetch_html patched: follow_redirects=True for short URL support")
         except ImportError:
             try:
                 from parsehub.provider_api.xhs import XHSAPI, MediaType, PostType
