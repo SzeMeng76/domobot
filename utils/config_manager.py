@@ -245,6 +245,7 @@ class BotConfig:
         self.kuaishou_cookie = None
         self.youtube_cookie = None
         self.tieba_cookie = None  # 贴吧完整Cookie字符串（绕过安全验证）
+        self.xhs_cookie = None  # 小红书Cookie（获取完整图片URL）
 
 
 class ConfigManager:
@@ -532,6 +533,7 @@ class ConfigManager:
         self.config.bilibili_cookie = os.getenv("BILIBILI_COOKIE", None)
         self.config.kuaishou_cookie = os.getenv("KUAISHOU_COOKIE", None)
         self.config.tieba_cookie = os.getenv("TIEBA_COOKIE", None)
+        self.config.xhs_cookie = os.getenv("XHS_COOKIE", None)
 
         # YouTube Cookie: 保持Netscape文件路径字符串（不解析，直接传给yt-dlp）
         self.config.youtube_cookie = os.getenv("YOUTUBE_COOKIE", None)

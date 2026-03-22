@@ -481,18 +481,25 @@ def patch_parsehub_yt_dlp():
             USE_NEW_XHS_API = True
             logger.info("🔍 [XHS] Detected ParseHub 1.5.13+ (new XHSAPI)")
 
-            # Patch XHSAPI.__fetch_html to add follow_redirects=True
-            # Required for xhslink.com short URLs (302 redirect)
+            # Patch XHSAPI.__fetch_html to add follow_redirects=True and cookie support
+            # - follow_redirects: required for xhslink.com short URLs (302 redirect)
+            # - XHS_COOKIE: required to get complete urlDefault from some IPs
+            xhs_cookie_str = os.getenv("XHS_COOKIE")
+            if xhs_cookie_str:
+                logger.info(f"🌐 [XHS] Loaded cookie from XHS_COOKIE env var (len={len(xhs_cookie_str)})")
+
             async def patched_xhsapi_fetch(self, url: str):
                 headers = {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                     'Referer': 'https://www.xiaohongshu.com/',
                 }
+                if xhs_cookie_str:
+                    headers['Cookie'] = xhs_cookie_str
                 async with httpx.AsyncClient(proxy=self.proxy, follow_redirects=True, timeout=30) as client:
                     return (await client.get(url, headers=headers)).text
 
             XHSAPI._XHSAPI__fetch_html = patched_xhsapi_fetch
-            logger.info("✅ XHSAPI.__fetch_html patched: follow_redirects")
+            logger.info("✅ XHSAPI.__fetch_html patched: follow_redirects + cookie support")
         except ImportError:
             try:
                 from parsehub.provider_api.xhs import XHSAPI, MediaType, PostType
