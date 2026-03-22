@@ -100,6 +100,7 @@ from commands import (
     movie,
     music,
     netflix,
+    ytmusic,
     news,
     spotify,
     steam,
@@ -367,6 +368,9 @@ async def setup_application(application: Application, config) -> None:
     music.set_dependencies(cache_manager, httpx_client, pyrogram_helper)
     from handlers import auto_music_handler
     auto_music_handler.set_dependencies(cache_manager, httpx_client, pyrogram_helper)
+
+    # 注入 YouTube Music 依赖
+    ytmusic.set_dependencies(cache_manager, httpx_client, pyrogram_helper)
 
     # 新增：为需要用户缓存的模块注入依赖
     # 这里可以根据实际需要为特定命令模块注入用户缓存管理器

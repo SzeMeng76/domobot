@@ -69,6 +69,7 @@ pandas>=3.0.0  # Latest stable version as of Feb 2026
 parsehub~=2.0.12  # 社交媒体聚合解析器，支持20+平台 (2.0.12: Twitter Article 支持，xiaoheihe API 密钥更新)
 yt-dlp>=2026.3.17  # 升级到最新版本以支持YouTube最新反爬虫机制（n challenge）
 pytubefix @ git+https://github.com/SzeMeng76/pytubefix.git@main  # YouTube 下载库（fork修复cipher.py, ref: pytubefix#579）
+ytmusicapi>=1.11.5  # YouTube Music API（搜索、排行榜、歌词）
 pillow>=12.1.1  # 图像处理库
 pillow-heif>=1.3.0  # HEIF/HEIC 图片格式支持
 lxml-html-clean>=0.4.4  # HTML 清理工具
