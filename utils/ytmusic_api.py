@@ -152,13 +152,12 @@ class YTMusicAPI:
         try:
             data = await asyncio.to_thread(self._ytmusic.get_charts, country=country)
 
-            # 取第一个 Top Music Videos 播放列表 ID
+            # 取第一个 PL 开头的 Top Music Videos 播放列表（跳过 OLAK 专辑列表）
             videos_list = data.get("videos") or data.get("daily") or data.get("weekly") or []
-            if not videos_list:
-                logger.warning(f"YTMusic charts ({country}): 没有找到 videos/daily/weekly 字段，keys={list(data.keys())}")
-                return []
-
-            playlist_id = videos_list[0].get("playlistId") if videos_list else None
+            playlist_id = next(
+                (v.get("playlistId") for v in videos_list if (v.get("playlistId") or "").startswith("PL")),
+                None,
+            )
             if not playlist_id:
                 return []
 
