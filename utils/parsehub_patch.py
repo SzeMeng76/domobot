@@ -1228,6 +1228,70 @@ def patch_parsehub_yt_dlp():
         FacebookParse._do_parse = patched_facebook_parse
         logger.info("✅ FacebookParse._do_parse patched: Skip internal get_raw_url for watch/?v= URLs")
 
+        # Patch ParseResult.download to support headers parameter
+        from parsehub.types.result import ParseResult
+        original_download = ParseResult.download
+
+        async def patched_download(self, path=None, *, callback=None, callback_args=(), callback_kwargs=None, proxy=None, save_metadata=False, headers=None):
+            """Patched download that passes headers to _do_download, auto-injects XHS CDN headers"""
+            from pathlib import Path
+            import shutil
+            import aiofiles
+            from parsehub.config import GlobalConfig
+            from slugify import slugify
+
+            # Auto-inject XHS CDN headers if media URLs contain xhscdn.com
+            if not headers:
+                media_list = getattr(self, 'photo', None) or (self.media if isinstance(self.media, list) else ([self.media] if self.media else []))
+                has_xhs = any('xhscdn.com' in (getattr(m, 'url', '') or '') for m in media_list)
+                if has_xhs:
+                    headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Referer': 'https://www.xiaohongshu.com/',
+                        'Origin': 'https://www.xiaohongshu.com',
+                        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                        'Accept-Encoding': 'gzip, deflate, br',
+                        'Sec-Fetch-Dest': 'image',
+                        'Sec-Fetch-Mode': 'no-cors',
+                        'Sec-Fetch-Site': 'same-site',
+                        'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                        'sec-ch-ua-mobile': '?0',
+                        'sec-ch-ua-platform': '"Windows"',
+                    }
+                    logger.debug("🔧 Auto-injected XHS CDN headers for xhscdn.com download")
+
+            save_dir = Path(path) if path else GlobalConfig.default_save_dir
+            r = slugify(
+                self.title or self.content or str(time.time_ns()), allow_unicode=True, max_length=20, lowercase=False
+            )
+            output_dir = save_dir.joinpath(r)
+            counter = 2
+            while output_dir.exists():
+                output_dir = save_dir.joinpath(f"{r}_{counter}")
+                counter += 1
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            if save_metadata:
+                async with aiofiles.open(output_dir.joinpath("metadata.json"), "w", encoding="utf-8") as f:
+                    await f.write(json.dumps(self.to_dict(), ensure_ascii=False, indent=4))
+
+            try:
+                return await self._do_download(
+                    output_dir=output_dir,
+                    callback=callback,
+                    callback_args=callback_args,
+                    callback_kwargs=callback_kwargs,
+                    proxy=proxy,
+                    headers=headers,
+                )
+            except Exception as e:
+                shutil.rmtree(output_dir, ignore_errors=True)
+                raise e
+
+        ParseResult.download = patched_download
+        logger.info("✅ ParseResult.download patched: support headers parameter")
+
         return True
 
     except Exception as e:
