@@ -491,7 +491,7 @@ def patch_parsehub_yt_dlp():
 
         async def patched_xhs_parse(self, url: str):
             """Patched XhsParser._do_parse to handle empty download list and use TikHub as fallback"""
-            from parsehub.types import VideoParseResult, ImageParseResult, MultimediaParseResult, VideoRef, ImageRef
+            from parsehub.types import VideoParseResult, ImageParseResult, MultimediaParseResult, VideoRef, ImageRef, LivePhotoRef
             from parsehub.errors import ParseError
 
             xhs_post_type = None  # Track type from official API for TikHub fallback
@@ -543,10 +543,10 @@ def patch_parsehub_yt_dlp():
 
                         for i in result.media:
                             if i.type == MediaType.LIVE_PHOTO:
-                                photos.append(VideoRef(url=i.url, thumb_url=i.thumb_url, width=i.width, height=i.height))
+                                photos.append(LivePhotoRef(url=i.thumb_url, video_url=i.url, width=i.width, height=i.height))
                             else:
                                 # ParseHub 1.5.12+: validate image extension
-                                ext = await self.get_ext_by_url(i.url) if hasattr(self.get_ext_by_url, '__self__') else await XhsParser.get_ext_by_url(i.url)
+                                ext = await self.get_ext_by_url(i.url)
                                 if ext not in ["png", "webp", "jpeg", "heic", "avif"]:
                                     ext = "jpeg"
                                 photos.append(ImageRef(url=i.url, ext=ext, thumb_url=i.thumb_url, width=i.width, height=i.height))
@@ -571,7 +571,7 @@ def patch_parsehub_yt_dlp():
 
                             if valid_photos:
                                 logger.info(f"✅ [Patch] XHS media validated: {len(valid_photos)}/{len(photos)} items OK")
-                                return MultimediaParseResult(media=valid_photos, **k)
+                                return ImageParseResult(photo=valid_photos, **k)
                             else:
                                 logger.warning(f"🌐 [Patch] All XHS media URLs return 404, trying TikHub...")
                                 result = None  # Trigger TikHub fallback
@@ -725,7 +725,7 @@ def patch_parsehub_yt_dlp():
 
                                     if photos:
                                         logger.info(f"✅ [TikHub] Got XHS {len(photos)} images (app_v2)")
-                                        return MultimediaParseResult(media=photos, **k_th)
+                                        return ImageParseResult(photo=photos, **k_th)
 
                         logger.info(f"🎬 [TikHub] Image endpoint didn't return valid image data, trying next...")
 
