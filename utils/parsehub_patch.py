@@ -1242,7 +1242,7 @@ def patch_parsehub_yt_dlp():
 
             # Auto-inject XHS CDN headers if media URLs contain xhscdn.com
             if not headers:
-                media_list = getattr(self, 'photo', None) or (self.media if isinstance(self.media, list) else ([self.media] if self.media else []))
+                media_list = self.media if isinstance(self.media, list) else ([self.media] if self.media else [])
                 has_xhs = any('xhscdn.com' in (getattr(m, 'url', '') or '') for m in media_list)
                 if has_xhs:
                     headers = {
