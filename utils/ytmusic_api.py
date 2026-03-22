@@ -152,11 +152,12 @@ class YTMusicAPI:
         try:
             data = await asyncio.to_thread(self._ytmusic.get_charts, country=country)
 
-            # 取第一个 PL 开头的 Top Music Videos 播放列表（跳过 OLAK 专辑列表）
+            # 跳过 OLAK 专辑列表，优先取 "Top 100 Music Videos" PL，其次取第一个 PL
             videos_list = data.get("videos") or data.get("daily") or data.get("weekly") or []
+            pl_list = [v for v in videos_list if (v.get("playlistId") or "").startswith("PL")]
             playlist_id = next(
-                (v.get("playlistId") for v in videos_list if (v.get("playlistId") or "").startswith("PL")),
-                None,
+                (v.get("playlistId") for v in pl_list if "Top 100" in (v.get("title") or "")),
+                next((v.get("playlistId") for v in pl_list), None),
             )
             if not playlist_id:
                 return []
@@ -196,8 +197,8 @@ class YTMusicAPI:
             lyrics_id = watch.get("lyrics")
             if not lyrics_id:
                 return None
-            lyrics_data = await asyncio.to_thread(self._ytmusic.get_lyrics, lyrics_id)
-            return lyrics_data.get("lyrics")
+            lyrics_data = await asyncio.to_thread(self._ytmusic.get_lyrics, str(lyrics_id))
+            return (lyrics_data or {}).get("lyrics")
         except Exception as e:
             logger.debug(f"YTMusic 获取歌词失败 {video_id}: {e}")
             return None
