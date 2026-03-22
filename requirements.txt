@@ -66,7 +66,7 @@ yfinance>=1.2.0  # Latest stable version as of Feb 2026
 pandas>=3.0.0  # Latest stable version as of Feb 2026
 
 # Social Media Parser (ParseHub) - 社交媒体解析功能
-parsehub~=2.0.12  # 社交媒体聚合解析器，支持20+平台 (2.0.12: Twitter Article 支持，xiaoheihe API 密钥更新)
+parsehub~=2.0.13  # 社交媒体聚合解析器，支持20+平台 (2.0.13: Bilibili fallback日志优化，移除多余raise_for_status)
 yt-dlp>=2026.3.17  # 升级到最新版本以支持YouTube最新反爬虫机制（n challenge）
 pytubefix @ git+https://github.com/SzeMeng76/pytubefix.git@main  # YouTube 下载库（fork修复cipher.py, ref: pytubefix#579）
 ytmusicapi>=1.11.5  # YouTube Music API（搜索、排行榜、歌词）

@@ -501,6 +501,21 @@ class ParseHubAdapter:
         else:
             return "unknown"
 
+    async def extract_all_urls(self, text: str) -> list[str]:
+        """
+        从文本中提取所有受支持的平台 URL（去重，最多10条）
+        每条 URL 会经过 _extract_url 的短链展开和平台验证逻辑
+        """
+        import re
+        url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+(?:\?[^\s<>"{}|\\^`\[\]]*)?(?:#[^\s<>"{}|\\^`\[\]]*)?'
+        raw_urls = list(dict.fromkeys(re.findall(url_pattern, text)))  # 保序去重
+        results = []
+        for raw in raw_urls[:10]:
+            resolved = await self._extract_url(raw)
+            if resolved and resolved not in results:
+                results.append(resolved)
+        return results
+
     async def _extract_url(self, text: str) -> Optional[str]:
         """从文本中提取URL"""
         import re

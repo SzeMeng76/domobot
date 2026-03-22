@@ -295,8 +295,11 @@ class InlineQueryHandler:
 • `chart movie$` - 影视排行榜
 
 **🎵 音乐:**
-• `music 晴天$` - 搜索网易云音乐
-• 直接输入网易云链接(无需$) - 解析音乐
+• `netease 晴天$` - 搜索网易云音乐
+• `yt 晴天$` - 搜索YouTube Music
+• `yt chart$` - YouTube Music排行榜
+• 直接输入网易云链接(无需$) - 解析网易云音乐
+• 直接输入YouTube链接(无需$) - 下载YouTube音乐
 
 **📱 社交媒体解析:**
 • 直接输入链接(无需$符号) - 解析视频/图片/图文

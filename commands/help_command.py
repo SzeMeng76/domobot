@@ -83,7 +83,7 @@ Inline: `@bot music 关键词$` - Inline搜索(有缓存直接发音频)
 🌍 *支持地区* US CN TR IN MY JP GB DE 等40+国家
 💡 *特色* 支持中文地名 | 自动CNY转换 | 智能缓存 | 表达式计算
 
-⚡ 快速试用: `/nf` `/crypto btc` `/tq 北京` `/movie 复仇者` `/tv 权力的游戏` `/chart` `/news` `/time 北京` `/whois google.com` `/dns github.com` `/recipe` `/meme 3` `/finance AAPL` `/map 天安门` `/flight 北京 洛杉矶 2024-12-25` `/hotel 东京 2024-12-25 2024-12-28` `/music 晴天`"""
+⚡ 快速试用: `/nf` `/crypto btc` `/tq 北京` `/movie 复仇者` `/tv 权力的游戏` `/chart` `/news` `/time 北京` `/whois google.com` `/dns github.com` `/recipe` `/meme 3` `/finance AAPL` `/map 天安门` `/flight 北京 洛杉矶 2024-12-25` `/hotel 东京 2024-12-25 2024-12-28` `/netease 晴天` `/yt chart`"""
 
     admin_help_text = """
 
@@ -219,7 +219,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 🚀 *快速开始*
 `/rate USD 100` `/crypto btc` `/tq 北京` `/movie 复仇者` `/tv 权力的游戏` `/chart`
-`/steam 赛博朋克` `/nf` `/time 北京` `/whois google.com` `/dns github.com` `/news` `/recipe` `/meme 3` `/finance AAPL` `/map 天安门` `/flight 北京 洛杉矶 2024-12-25` `/hotel 东京 2024-12-25 2024-12-28` `/music 晴天` `/help`
+`/steam 赛博朋克` `/nf` `/time 北京` `/whois google.com` `/dns github.com` `/news` `/recipe` `/meme 3` `/finance AAPL` `/map 天安门` `/flight 北京 洛杉矶 2024-12-25` `/hotel 东京 2024-12-25 2024-12-28` `/netease 晴天` `/yt chart` `/help`
 
 🌟 40+国家 | CNY转换 | 智能缓存 | 表达式计算 | 时区转换 | 新闻聚合 | 1000+中文菜谱 | 股市数据"""
 

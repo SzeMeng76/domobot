@@ -3,6 +3,7 @@
 支持20+平台的视频、图片、图文解析
 """
 
+import asyncio
 import hashlib
 import logging
 import os
@@ -357,7 +358,7 @@ def set_adapter(adapter):
 @with_error_handling
 async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    /parse <URL> - 解析社交媒体链接
+    /parse <URL> - 解析社交媒体链接（支持一次发多条链接）
     /parse reply - 回复一条消息解析其中的链接
     """
     if not _adapter:
@@ -392,8 +393,9 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             await delete_user_command(context, chat_id, update.message.message_id)
         return
 
-    # 检查是否包含支持的URL
-    if not await _adapter.check_url_supported(text):
+    # 提取所有支持的 URL
+    urls = await _adapter.extract_all_urls(text)
+    if not urls:
         await send_error(
             context,
             chat_id,
@@ -403,22 +405,38 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             await delete_user_command(context, chat_id, update.message.message_id)
         return
 
-    # 发送处理中消息
-    status_msg = await send_info(context, chat_id, "🔄 解析中...")
+    # 并发解析所有 URL
+    reply_msg_id = update.message.message_id if update.message else None
+    tasks = [
+        _handle_single_parse(url, user_id, chat_id, group_id, context, reply_msg_id)
+        for url in urls
+    ]
+    await asyncio.gather(*tasks)
+
+    if update.message:
+        await delete_user_command(context, chat_id, update.message.message_id)
+
+
+async def _handle_single_parse(
+    url: str,
+    user_id: int,
+    chat_id: int,
+    group_id,
+    context: ContextTypes.DEFAULT_TYPE,
+    reply_to_message_id=None,
+) -> None:
+    """解析单条 URL 并发送结果"""
+    status_msg = await context.bot.send_message(chat_id=chat_id, text="🔄 解析中...")
 
     try:
-        # 解析URL
-        result, parse_result, platform, parse_time, error_msg = await _adapter.parse_url(text, user_id, group_id)
+        result, parse_result, platform, parse_time, error_msg = await _adapter.parse_url(url, user_id, group_id)
 
         if not result:
-            # 显示具体错误信息
             if error_msg:
                 error_text = f"**❌ 解析失败:**\n```\n{error_msg}\n```"
             else:
                 error_text = "❌ 解析失败，请检查链接是否正确"
             await status_msg.edit_text(error_text)
-            if update.message:
-                await delete_user_command(context, chat_id, update.message.message_id)
             return
 
         # 更新状态
@@ -436,15 +454,12 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
             # 去重：如果title包含desc或desc包含title，只显示一个
             if title and desc:
-                # 检查是否重复（title包含desc的前50个字符，或desc包含title的前50个字符）
                 if desc[:50] in title or title[:50] in desc:
-                    # 重复了，只显示较长的那个
                     if len(title) >= len(desc):
                         caption_parts.append(f"**{_escape_markdown(title)}**")
                     else:
                         caption_parts.append(_escape_markdown(_format_text(desc)))
                 else:
-                    # 不重复，都显示
                     caption_parts.append(f"**{_escape_markdown(title)}**")
                     caption_parts.append(_escape_markdown(_format_text(desc)))
             elif title:
@@ -473,7 +488,6 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         # 如果启用了AI总结，添加AI总结按钮
         if _adapter.config and _adapter.config.enable_ai_summary:
-            # 使用URL哈希作为callback_data（类似parse_hub_bot）
             buttons[0].append(InlineKeyboardButton("📝 AI总结", callback_data=f"summary_{url_hash}"))
             logger.info(f"✅ AI总结按钮已添加: summary_{url_hash}")
         else:
@@ -493,13 +507,13 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             await _adapter.cache_manager.set(
                 f"summary:{url_hash}",
                 cache_data,
-                ttl=86400,  # 缓存24小时
+                ttl=86400,
                 subdirectory="social_parser"
             )
             logger.info(f"✅ 已缓存解析数据: cache:social_parser:summary:{url_hash}")
 
         # 发送媒体（带按钮）
-        reply_params = ReplyParameters(message_id=update.message.message_id) if update.message else None
+        reply_params = ReplyParameters(message_id=reply_to_message_id) if reply_to_message_id else None
         sent_messages = await _send_media(context, chat_id, result, caption, reply_parameters=reply_params, reply_markup=reply_markup, parse_result=parse_result)
 
         # 删除状态消息
@@ -511,17 +525,11 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             for msg in sent_messages:
                 await _schedule_deletion(context, chat_id, msg.message_id, config.auto_delete_delay)
 
-        # 删除用户命令
-        if update.message:
-            await delete_user_command(context, chat_id, update.message.message_id)
-
         logger.info(f"用户 {user_id} 解析成功: {platform} - {formatted['title']}")
 
     except Exception as e:
         logger.error(f"解析失败: {e}", exc_info=True)
         await status_msg.edit_text(f"❌ 处理失败: {str(e)}")
-        if update.message:
-            await delete_user_command(context, chat_id, update.message.message_id)
 
 
 async def _send_media(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_parameters: ReplyParameters = None, reply_markup=None, parse_result=None):
