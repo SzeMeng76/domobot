@@ -99,7 +99,13 @@ class BotConfig:
         self.flight_price_cache_duration = 7200  # 2小时，航班价格洞察缓存
         self.hotel_cache_duration = 3600  # 1小时，酒店搜索缓存
         self.hotel_details_cache_duration = 7200  # 2小时，酒店详情缓存
-        self.music_cache_duration = 604800  # 7天，音乐文件缓存
+        self.music_cache_duration = 604800  # 7天，网易云音乐文件缓存
+        self.netease_search_cache_duration = 3600  # 1小时，网易云搜索缓存
+        self.netease_chart_cache_duration = 1800  # 30分钟，网易云榜单缓存
+        self.netease_lyric_cache_duration = 86400  # 24小时，网易云歌词缓存
+        self.ytmusic_chart_cache_duration = 1800  # 30分钟，YouTube Music榜单缓存
+        self.ytmusic_search_cache_duration = 3600  # 1小时，YouTube Music搜索缓存
+        self.ytmusic_lyric_cache_duration = 86400  # 24小时，YouTube Music歌词缓存
 
         # 网易云音乐配置
         self.music_u_cookie: str = ""  # 网易云 MUSIC_U cookie
@@ -371,6 +377,12 @@ class ConfigManager:
         # 网易云音乐配置
         self.config.music_u_cookie = os.getenv("MUSIC_U", "")
         self.config.music_cache_duration = get_int_env("MUSIC_CACHE_DURATION", "604800")
+        self.config.netease_search_cache_duration = get_int_env("NETEASE_SEARCH_CACHE_DURATION", "3600")
+        self.config.netease_chart_cache_duration = get_int_env("NETEASE_CHART_CACHE_DURATION", "1800")
+        self.config.netease_lyric_cache_duration = get_int_env("NETEASE_LYRIC_CACHE_DURATION", "86400")
+        self.config.ytmusic_chart_cache_duration = get_int_env("YTMUSIC_CHART_CACHE_DURATION", "1800")
+        self.config.ytmusic_search_cache_duration = get_int_env("YTMUSIC_SEARCH_CACHE_DURATION", "3600")
+        self.config.ytmusic_lyric_cache_duration = get_int_env("YTMUSIC_LYRIC_CACHE_DURATION", "86400")
         self.config.music_download_timeout = get_int_env("MUSIC_DOWNLOAD_TIMEOUT", "60")
 
         # API配置

@@ -44,14 +44,20 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 ✈️ `/flight 北京 洛杉矶 2024-12-25` - 智能航班搜索
 🏨 `/hotel 东京 2024-12-25 2024-12-28` - 智能酒店搜索
 📱 `/parse <链接>` - 社交媒体解析 | `/platforms` - 支持平台
-🎵 `/music <关键词>` - 网易云音乐搜索下载 | `/lyric <关键词>` - 歌词
+🎵 `/netease <关键词>` - 网易云音乐搜索下载 | `/lyric <关键词>` - 歌词
 
 🎵 *网易云音乐*
-搜索: `/music <关键词>` - 搜索歌曲并下载
-下载: `/music <ID/链接>` - 直接下载歌曲
+搜索: `/netease <关键词>` - 搜索歌曲并下载
+下载: `/netease <ID/链接>` - 直接下载歌曲
 歌词: `/lyric <关键词/ID>` - 获取LRC歌词
 识别: 发送网易云链接自动下载
-Inline: `@bot music 关键词$` - Inline搜索(有缓存直接发音频)
+Inline: `@bot netease 关键词$` - Inline搜索(有缓存直接发音频)
+
+🎵 *YouTube Music*
+搜索: `/yt <关键词>` - 搜索歌曲并下载
+下载: `/yt <ID/链接>` - 直接下载歌曲
+歌词: `/ytlyric <关键词/ID>` - 获取歌词
+榜单: `/yt chart` - 查看全球/各国榜单
 
 💱 *汇率* `/rate [货币] [数额]` - 支持表达式计算
 🪙 *加密货币* `/crypto <币种> [数量] [货币]` - 实时价格

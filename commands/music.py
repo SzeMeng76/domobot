@@ -50,6 +50,8 @@ _download_semaphore = asyncio.Semaphore(4)
 CACHE_PREFIX = "music"
 CACHE_FILE_PREFIX = "music:file"
 CACHE_SEARCH_PREFIX = "music:search"
+CACHE_CHART_PREFIX = "music:chart"
+CACHE_LYRIC_PREFIX = "music:lyric"
 
 
 def set_dependencies(cache_manager, httpx_client, pyrogram_helper=None):
@@ -495,7 +497,14 @@ async def music_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         chat_id=update.message.chat_id, text="🔍 搜索中..."
     )
 
-    songs = await _netease_api.search_songs(query, limit=10)
+    # 搜索缓存检查（缓存1小时）
+    cache_key_search = f"{CACHE_SEARCH_PREFIX}:{query}"
+    songs = await _cache_manager.get(cache_key_search) if _cache_manager else None
+    if not songs:
+        songs = await _netease_api.search_songs(query, limit=10)
+        if songs and _cache_manager:
+            config_s = get_config()
+            await _cache_manager.set(cache_key_search, songs, ttl=config_s.netease_search_cache_duration)
     if not songs:
         try:
             await status_msg.edit_text("❌ 未找到相关歌曲")
@@ -579,10 +588,19 @@ async def lyric_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         chat_id=update.message.chat_id, text="📝 获取歌词中..."
     )
 
-    detail, lyric = await asyncio.gather(
-        _netease_api.get_song_detail(song_id),
-        _netease_api.get_song_lyric(song_id),
-    )
+    lyric_cache_key = f"{CACHE_LYRIC_PREFIX}:{song_id}"
+    cached_lyric = await _cache_manager.get(lyric_cache_key) if _cache_manager else None
+    if cached_lyric:
+        detail = await _netease_api.get_song_detail(song_id)
+        lyric = cached_lyric
+    else:
+        detail, lyric = await asyncio.gather(
+            _netease_api.get_song_detail(song_id),
+            _netease_api.get_song_lyric(song_id),
+        )
+        if lyric and _cache_manager:
+            config_l = get_config()
+            await _cache_manager.set(lyric_cache_key, lyric, ttl=config_l.netease_lyric_cache_duration)
 
     if not lyric:
         try:
@@ -672,10 +690,19 @@ async def music_lyric_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     if not _netease_api:
         return
 
-    detail, lyric = await asyncio.gather(
-        _netease_api.get_song_detail(song_id),
-        _netease_api.get_song_lyric(song_id),
-    )
+    lyric_cache_key = f"{CACHE_LYRIC_PREFIX}:{song_id}"
+    cached_lyric = await _cache_manager.get(lyric_cache_key) if _cache_manager else None
+    if cached_lyric:
+        detail = await _netease_api.get_song_detail(song_id)
+        lyric = cached_lyric
+    else:
+        detail, lyric = await asyncio.gather(
+            _netease_api.get_song_detail(song_id),
+            _netease_api.get_song_lyric(song_id),
+        )
+        if lyric and _cache_manager:
+            config_l = get_config()
+            await _cache_manager.set(lyric_cache_key, lyric, ttl=config_l.netease_lyric_cache_duration)
 
     if not lyric:
         no_lyric_msg = await context.bot.send_message(
@@ -765,7 +792,13 @@ async def music_chart_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     except Exception:
         pass
 
-    playlist = await _netease_api.get_playlist_detail(chart_info["id"], limit=10)
+    cache_key = f"{CACHE_CHART_PREFIX}:{chart_key}"
+    playlist = await _cache_manager.get(cache_key) if _cache_manager else None
+    if not playlist:
+        playlist = await _netease_api.get_playlist_detail(chart_info["id"], limit=10)
+        if playlist and playlist["songs"] and _cache_manager:
+            config_c = get_config()
+            await _cache_manager.set(cache_key, playlist, ttl=config_c.netease_chart_cache_duration)
     if not playlist or not playlist["songs"]:
         try:
             await query.edit_message_text(f"❌ 获取 {chart_info['name']} 失败")

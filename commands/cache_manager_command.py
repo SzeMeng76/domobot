@@ -44,6 +44,7 @@ CACHE_SERVICES = {
     'hotels': '酒店服务缓存',
     'social_parser': '社交解析缓存',
     'music': '网易云音乐缓存',
+    'ytmusic': 'YouTube Music缓存',
 }
 
 async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
@@ -106,6 +107,14 @@ async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
                     elif svc == 'social_parser':
                         # 特殊处理social_parser的缓存结构
                         await cache_manager.clear_cache(subdirectory="social_parser")
+                    elif svc == 'music':
+                        prefixes = ["music:file:", "music:search:", "music:chart:", "music:lyric:"]
+                        for prefix in prefixes:
+                            await cache_manager.clear_cache(subdirectory="music", key_prefix=prefix)
+                    elif svc == 'ytmusic':
+                        prefixes = ["ytmusic:file:", "ytmusic:search:", "ytmusic:chart:", "ytmusic:lyric:"]
+                        for prefix in prefixes:
+                            await cache_manager.clear_cache(subdirectory="ytmusic", key_prefix=prefix)
                     else:
                         await cache_manager.clear_cache(subdirectory=svc)
             return True, "✅ 所有缓存已清理完成"
@@ -160,6 +169,14 @@ async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
             elif service == 'social_parser':
                 # 特殊处理social_parser的缓存结构
                 await cache_manager.clear_cache(subdirectory="social_parser")
+            elif service == 'ytmusic':
+                prefixes = ["ytmusic:file:", "ytmusic:search:", "ytmusic:chart:", "ytmusic:lyric:"]
+                for prefix in prefixes:
+                    await cache_manager.clear_cache(subdirectory="ytmusic", key_prefix=prefix)
+            elif service == 'music':
+                prefixes = ["music:file:", "music:search:", "music:chart:", "music:lyric:"]
+                for prefix in prefixes:
+                    await cache_manager.clear_cache(subdirectory="music", key_prefix=prefix)
             else:
                 await cache_manager.clear_cache(subdirectory=service)
             

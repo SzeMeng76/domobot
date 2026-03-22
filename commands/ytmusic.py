@@ -48,6 +48,8 @@ _download_semaphore = asyncio.Semaphore(4)
 # 缓存键前缀
 CACHE_FILE_PREFIX = "ytmusic:file"
 CACHE_SEARCH_PREFIX = "ytmusic:search"
+CACHE_CHART_PREFIX = "ytmusic:chart"
+CACHE_LYRIC_PREFIX = "ytmusic:lyric"
 
 
 def set_dependencies(cache_manager, httpx_client, pyrogram_helper=None):
@@ -342,7 +344,14 @@ async def ytmusic_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             pass
         return
 
-    songs = await _ytmusic_api.search_songs(query, limit=10)
+    # 搜索缓存检查（缓存1小时）
+    cache_key_search = f"{CACHE_SEARCH_PREFIX}:{query}"
+    songs = await _cache_manager.get(cache_key_search) if _cache_manager else None
+    if not songs:
+        songs = await _ytmusic_api.search_songs(query, limit=10)
+        if songs and _cache_manager:
+            config_s = get_config()
+            await _cache_manager.set(cache_key_search, songs, ttl=config_s.ytmusic_search_cache_duration)
     if not songs:
         config = get_config()
         try:
@@ -412,10 +421,19 @@ async def ytlyric_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not _ytmusic_api:
         await send_error(context, update.message.chat_id, "YouTube Music 服务未初始化")
         return
-    detail, lyrics = await asyncio.gather(
-        _ytmusic_api.get_song_detail(video_id),
-        _ytmusic_api.get_lyrics(video_id),
-    )
+    lyric_cache_key = f"{CACHE_LYRIC_PREFIX}:{video_id}"
+    cached_lyrics = await _cache_manager.get(lyric_cache_key) if _cache_manager else None
+    if cached_lyrics:
+        detail = await _ytmusic_api.get_song_detail(video_id)
+        lyrics = cached_lyrics
+    else:
+        detail, lyrics = await asyncio.gather(
+            _ytmusic_api.get_song_detail(video_id),
+            _ytmusic_api.get_lyrics(video_id),
+        )
+        if lyrics and _cache_manager:
+            config_l = get_config()
+            await _cache_manager.set(lyric_cache_key, lyrics, ttl=config_l.ytmusic_lyric_cache_duration)
 
     if not lyrics:
         config = get_config()
@@ -506,7 +524,13 @@ async def ytm_chart_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except Exception:
         pass
 
-    songs = await _ytmusic_api.get_charts(country=chart_info["country"])
+    cache_key = f"{CACHE_CHART_PREFIX}:{chart_key}"
+    songs = await _cache_manager.get(cache_key) if _cache_manager else None
+    if not songs:
+        songs = await _ytmusic_api.get_charts(country=chart_info["country"])
+        if songs and _cache_manager:
+            config = get_config()
+            await _cache_manager.set(cache_key, songs, ttl=config.ytmusic_chart_cache_duration)
     if not songs:
         try:
             await query.edit_message_text(f"❌ 获取 {chart_info['name']} 失败")
@@ -625,10 +649,19 @@ async def ytm_lyric_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if not video_id or not _ytmusic_api:
         return
 
-    detail, lyrics = await asyncio.gather(
-        _ytmusic_api.get_song_detail(video_id),
-        _ytmusic_api.get_lyrics(video_id),
-    )
+    lyric_cache_key = f"{CACHE_LYRIC_PREFIX}:{video_id}"
+    cached_lyrics = await _cache_manager.get(lyric_cache_key) if _cache_manager else None
+    if cached_lyrics:
+        detail = await _ytmusic_api.get_song_detail(video_id)
+        lyrics = cached_lyrics
+    else:
+        detail, lyrics = await asyncio.gather(
+            _ytmusic_api.get_song_detail(video_id),
+            _ytmusic_api.get_lyrics(video_id),
+        )
+        if lyrics and _cache_manager:
+            config_l = get_config()
+            await _cache_manager.set(lyric_cache_key, lyrics, ttl=config_l.ytmusic_lyric_cache_duration)
 
     if not lyrics:
         no_lyric = await context.bot.send_message(
