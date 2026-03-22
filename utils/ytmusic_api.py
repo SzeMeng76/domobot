@@ -50,7 +50,21 @@ class YTMusicAPI:
     def _init_client(self):
         try:
             from ytmusicapi import YTMusic
+            # 只有包含 ytmusicapi OAuth 字段的 JSON 才传给 YTMusic()
+            # pytubefix 的 token 文件格式不兼容，传进去会报错
+            token_valid = False
             if self._token_path and os.path.exists(self._token_path):
+                try:
+                    import json
+                    with open(self._token_path) as f:
+                        token_data = json.load(f)
+                    # ytmusicapi OAuth JSON 必须有 access_token + oauth_credentials
+                    if "access_token" in token_data and "oauth_credentials" in token_data:
+                        token_valid = True
+                except Exception:
+                    pass
+
+            if token_valid:
                 self._ytmusic = YTMusic(self._token_path)
                 logger.info(f"✅ YTMusic 已使用 OAuth token 初始化: {self._token_path}")
             else:
@@ -121,10 +135,14 @@ class YTMusicAPI:
 
     async def get_charts(self, country: str = "ZZ") -> list[dict]:
         """
-        获取排行榜歌曲
+        获取排行榜
 
-        Args:
-            country: 国家代码，"ZZ" 为全球榜
+        get_charts() 实际返回结构：
+          - "videos"  → 播放列表条目（Top Music Videos playlist）
+          - "artists" → 艺人排行
+          - "daily"/"weekly" → Premium 账号才有
+
+        这里取 "videos" 播放列表的第一个，再用 get_playlist 拿实际歌曲列表。
 
         Returns:
             [{rank, trend, videoId, playlistId, name, artists, album, thumbnails}, ...]
@@ -133,26 +151,35 @@ class YTMusicAPI:
             return []
         try:
             data = await asyncio.to_thread(self._ytmusic.get_charts, country=country)
-            songs = []
-            # get_charts 返回 data["songs"]["items"]
-            items = []
-            if "songs" in data and "items" in data.get("songs", {}):
-                items = data["songs"]["items"]
-            elif "videos" in data and "items" in data.get("videos", {}):
-                items = data["videos"]["items"]
 
-            for item in items:
-                artists = ", ".join(a["name"] for a in item.get("artists") or [])
-                album = item.get("album") or {}
+            # 取第一个 Top Music Videos 播放列表 ID
+            videos_list = data.get("videos") or data.get("daily") or data.get("weekly") or []
+            if not videos_list:
+                logger.warning(f"YTMusic charts ({country}): 没有找到 videos/daily/weekly 字段，keys={list(data.keys())}")
+                return []
+
+            playlist_id = videos_list[0].get("playlistId") if videos_list else None
+            if not playlist_id:
+                return []
+
+            # 用 playlist 拿实际歌曲列表（limit 20）
+            playlist = await asyncio.to_thread(
+                self._ytmusic.get_playlist, playlist_id, limit=20
+            )
+            tracks = playlist.get("tracks") or []
+            songs = []
+            for i, track in enumerate(tracks):
+                artists = ", ".join(a["name"] for a in track.get("artists") or [])
+                album = track.get("album") or {}
                 songs.append({
-                    "rank": item.get("rank"),
-                    "trend": item.get("trend"),  # "up" / "down" / "neutral"
-                    "videoId": item.get("videoId", ""),
-                    "playlistId": item.get("playlistId", ""),
-                    "name": item.get("title", ""),
+                    "rank": str(i + 1),
+                    "trend": None,
+                    "videoId": track.get("videoId", ""),
+                    "playlistId": playlist_id,
+                    "name": track.get("title", ""),
                     "artists": artists,
                     "album": album.get("name", "") if isinstance(album, dict) else "",
-                    "thumbnails": item.get("thumbnails") or [],
+                    "thumbnails": track.get("thumbnails") or [],
                 })
             return songs
         except Exception as e:
