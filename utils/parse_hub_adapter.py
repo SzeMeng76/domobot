@@ -269,9 +269,10 @@ class ParseHubAdapter:
                     'Origin': 'https://www.tiktok.com',
                 })
                 logger.info(f"✅ 配置TikTok headers: Referer + Origin")
-            elif platform_id == 'xiaohongshu':
+            elif platform_id in ('xiaohongshu', 'xhs'):
                 # 小红书CDN需要完整的浏览器headers才能绕过反爬虫
                 download_headers.update({
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                     'Referer': 'https://www.xiaohongshu.com/',
                     'Origin': 'https://www.xiaohongshu.com',
                     'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
@@ -356,7 +357,7 @@ class ParseHubAdapter:
                 download_result = None
 
                 # 小红书CDN URL会快速过期，下载失败时尝试用TikHub重新解析
-                if platform_id == 'xiaohongshu':
+                if platform_id in ('xiaohongshu', 'xhs'):
                     tikhub_api_key = os.getenv("TIKHUB_API_KEY")
                     if tikhub_api_key:
                         logger.info(f"🔄 [XHS] CDN下载失败，尝试TikHub重新解析...")
