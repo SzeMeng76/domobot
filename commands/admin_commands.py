@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import re
 
@@ -288,6 +289,7 @@ async def addgroup_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     ADMIN_PANEL,
     ANTISPAM_PANEL,
     SOCIAL_PARSER_PANEL,
+    API_USAGE_PANEL,
     AWAITING_USER_ID_TO_ADD,
     AWAITING_USER_ID_TO_REMOVE,
     AWAITING_GROUP_ID_TO_ADD,
@@ -296,7 +298,7 @@ async def addgroup_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     AWAITING_ADMIN_ID_TO_REMOVE,
     AWAITING_ANTISPAM_GROUP_ID,
     AWAITING_SOCIAL_PARSER_GROUP_ID,
-) = range(14)
+) = range(15)
 
 
 class AdminPanelHandler:
@@ -334,6 +336,7 @@ class AdminPanelHandler:
             [InlineKeyboardButton("👨‍👩‍👧‍👦 管理群组白名单", callback_data="manage_groups")],
             [InlineKeyboardButton("🛡️ AI反垃圾管理", callback_data="manage_antispam")],
             [InlineKeyboardButton("📱 社交解析管理", callback_data="manage_social_parser")],
+            [InlineKeyboardButton("📊 API用量查询", callback_data="manage_api_usage")],
         ]
         if await is_super_admin(user_id):
             keyboard.insert(0, [InlineKeyboardButton("👥 管理管理员", callback_data="manage_admins")])
@@ -896,6 +899,101 @@ class AdminPanelHandler:
     async def _to_social_parser_panel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["current_panel"] = "social_parser"
         return await self.show_social_parser_panel(update.callback_query, context)
+
+    async def _to_api_usage_panel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        context.user_data["current_panel"] = "api_usage"
+        return await self.show_api_usage_panel(update.callback_query, context)
+
+    async def show_api_usage_panel(
+        self, query: CallbackQuery, context: ContextTypes.DEFAULT_TYPE, status_message: str | None = None
+    ) -> int:
+        """显示TikHub API用量面板"""
+        import httpx
+        config = get_config()
+        tikhub_key = getattr(config, 'tikhub_api_key', '')
+
+        if not tikhub_key:
+            await self._show_panel(
+                query,
+                "❌ TikHub API Key 未配置\n\n请在 `.env` 中设置 `TIKHUB_API_KEY`",
+                InlineKeyboardMarkup([[InlineKeyboardButton("🔙 返回", callback_data="back_to_main")]]),
+            )
+            return API_USAGE_PANEL
+
+        headers = {"Authorization": f"Bearer {tikhub_key}"}
+
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                info_resp, usage_resp = await asyncio.gather(
+                    client.get("https://api.tikhub.io/api/v1/tikhub/user/get_user_info", headers=headers),
+                    client.get("https://api.tikhub.io/api/v1/tikhub/user/get_user_daily_usage", headers=headers),
+                )
+
+            if info_resp.status_code != 200 or usage_resp.status_code != 200:
+                raise ValueError(f"HTTP error: info={info_resp.status_code} usage={usage_resp.status_code}")
+
+            info = info_resp.json()
+            usage = usage_resp.json()
+
+            user = info.get("user_data", {})
+            key_data = info.get("api_key_data", {})
+            day = usage.get("data", {})
+
+            # 账户状态
+            status_icon = "✅" if key_data.get("api_key_status") == 1 else "❌"
+            balance = user.get("balance", 0)
+            free_credit = user.get("free_credit", 0)
+            email = user.get("email", "N/A")
+            key_name = key_data.get("api_key_name", "N/A")
+            expires = key_data.get("expires_at") or "永不过期"
+            created = key_data.get("created_at", "N/A")[:10]
+
+            # 今日用量
+            date = day.get("date", "N/A")
+            today_cost = day.get("usage", 0)
+            balance_cost = day.get("balance_usage", 0)
+            free_cost = day.get("free_credit_usage", 0)
+            total_reqs = day.get("total_request_per_day", 0)
+            paid_reqs = day.get("paid_request_per_day", 0)
+            last_req = (day.get("last_requests_time") or "N/A")[:19].replace("T", " ")
+
+            # Top endpoints
+            uri_counts: dict = day.get("uri_counts", {})
+            top_uris = sorted(uri_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+            uri_lines = "\n".join(f"  • `{uri.split('/')[-1]}`: {cnt}次" for uri, cnt in top_uris) or "  暂无记录"
+
+            text = (
+                f"📊 *TikHub API 用量面板*\n"
+                f"{'─' * 28}\n\n"
+                f"👤 *账户信息*\n"
+                f"  邮箱: `{email}`\n"
+                f"  Key名称: `{key_name}`\n"
+                f"  状态: {status_icon} {'正常' if key_data.get('api_key_status') == 1 else '异常'}\n"
+                f"  创建: `{created}`  到期: `{expires}`\n\n"
+                f"💰 *余额*\n"
+                f"  账户余额: `${balance:.4f}`\n"
+                f"  免费额度: `${free_credit:.4f}`\n\n"
+                f"📅 *今日用量* ({date})\n"
+                f"  总费用: `${today_cost:.4f}`"
+                f"  (余额 ${balance_cost:.4f} + 免费 ${free_cost:.4f})\n"
+                f"  总请求: `{total_reqs}次`  付费请求: `{paid_reqs}次`\n"
+                f"  最后请求: `{last_req}`\n\n"
+                f"🔥 *今日热门端点*\n{uri_lines}\n"
+            )
+
+            if status_message:
+                text += f"\n_{status_message}_"
+
+        except Exception as e:
+            logger.error(f"TikHub API usage fetch failed: {e}")
+            text = f"❌ 获取API用量失败\n\n`{e}`"
+
+        keyboard = [
+            [InlineKeyboardButton("🔄 刷新", callback_data="api_usage_refresh")],
+            [InlineKeyboardButton("🔙 返回主菜单", callback_data="back_to_main")],
+        ]
+        await self._show_panel(query, text, InlineKeyboardMarkup(keyboard))
+        return API_USAGE_PANEL
 
     async def _prompt_user_add(self, u, c):
         return await self.prompt_for_input(u.callback_query, c, "请输入要添加的用户ID", AWAITING_USER_ID_TO_ADD)
@@ -1480,6 +1578,7 @@ class AdminPanelHandler:
                     CallbackQueryHandler(self._to_admin_panel, pattern="^manage_admins$"),
                     CallbackQueryHandler(self._to_antispam_panel, pattern="^manage_antispam$"),
                     CallbackQueryHandler(self._to_social_parser_panel, pattern="^manage_social_parser$"),
+                    CallbackQueryHandler(self._to_api_usage_panel, pattern="^manage_api_usage$"),
                     CallbackQueryHandler(self.close_panel, pattern="^close$"),
                 ],
                 USER_PANEL: [
@@ -1554,6 +1653,10 @@ class AdminPanelHandler:
                     CallbackQueryHandler(self._handle_parser_enable, pattern="^parser_enable$"),
                     CallbackQueryHandler(self._handle_parser_disable, pattern="^parser_disable$"),
                     CallbackQueryHandler(self._to_social_parser_panel, pattern="^manage_social_parser$"),
+                    CallbackQueryHandler(self.show_main_panel, pattern="^back_to_main$"),
+                ],
+                API_USAGE_PANEL: [
+                    CallbackQueryHandler(self._to_api_usage_panel, pattern="^api_usage_refresh$"),
                     CallbackQueryHandler(self.show_main_panel, pattern="^back_to_main$"),
                 ],
                 AWAITING_SOCIAL_PARSER_GROUP_ID: [
