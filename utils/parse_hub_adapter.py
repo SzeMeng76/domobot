@@ -269,23 +269,6 @@ class ParseHubAdapter:
                     'Origin': 'https://www.tiktok.com',
                 })
                 logger.info(f"✅ 配置TikTok headers: Referer + Origin")
-            elif platform_id in ('xiaohongshu', 'xhs'):
-                # 小红书CDN需要完整的浏览器headers才能绕过反爬虫
-                download_headers.update({
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Referer': 'https://www.xiaohongshu.com/',
-                    'Origin': 'https://www.xiaohongshu.com',
-                    'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-                    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-                    'Accept-Encoding': 'gzip, deflate, br',
-                    'Sec-Fetch-Dest': 'image',
-                    'Sec-Fetch-Mode': 'no-cors',
-                    'Sec-Fetch-Site': 'same-site',
-                    'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-                    'sec-ch-ua-mobile': '?0',
-                    'sec-ch-ua-platform': '"Windows"',
-                })
-                logger.info(f"✅ 配置小红书 headers: 完整浏览器特征（绕过CDN反爬虫）")
             elif platform_id == 'weibo':
                 download_headers.update({
                     'Referer': 'https://weibo.com/',
@@ -543,9 +526,84 @@ class ParseHubAdapter:
             except Exception as e:
                 logger.warning(f"⚠️ [TikHub] Image endpoint attempt {attempt + 1}/{max_retries} error: {e}")
                 if attempt == max_retries - 1:
-                    raise
+                    break
 
-        raise ParseError("TikHub XHS解析失败：无法获取图片URL")
+        # Fallback: app/get_note_info (handles both video and image, returns international CDN URLs)
+        logger.info(f"🔄 [TikHub] Trying fallback endpoint: app/get_note_info")
+        api_url = f"https://api.tikhub.io/api/v1/xiaohongshu/app/get_note_info?note_id={note_id}"
+        async with httpx.AsyncClient(timeout=30.0, proxy=proxy) as client:
+            response = await client.get(api_url, headers=auth_headers)
+
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("code") == 200 and data.get("data", {}).get("data"):
+                note_data = data["data"]["data"][0]
+                note_list = note_data.get("note_list", [])
+                note_item = note_list[0] if note_list else note_data
+
+                title = note_item.get("title", "")
+                desc = note_item.get("desc", "")
+                note_type = note_item.get("type", "")
+
+                if note_type == "video":
+                    video = note_item.get("video", {})
+                    consumer = video.get("consumer", {})
+                    origin_video_key = consumer.get("origin_video_key", "")
+                    if origin_video_key:
+                        video_url = f"https://sns-na-i6.xhscdn.com/{origin_video_key}"
+                        logger.info(f"✅ [TikHub] XHS video via app/get_note_info")
+                        return VideoParseResult(title=title, content=desc, video=VideoRef(url=video_url))
+
+                images_list = note_item.get("images_list", [])
+                if images_list:
+                    photos = []
+                    for img in images_list:
+                        img_url = img.get("url", "") or img.get("url_multi_level", {}).get("high", "")
+                        if img_url:
+                            img_url = re.sub(r'format/(heif|heic|webp|avif)', 'format/jpg', img_url)
+                            photos.append(ImageRef(url=img_url, ext="jpg", width=img.get("width", 0), height=img.get("height", 0)))
+                    if photos:
+                        logger.info(f"✅ [TikHub] XHS {len(photos)} images via app/get_note_info")
+                        return ImageParseResult(photo=photos, title=title, content=desc)
+
+        # Fallback 2: web/get_note_info_v7
+        logger.info(f"🔄 [TikHub] Trying fallback endpoint: web/get_note_info_v7")
+        api_url = f"https://api.tikhub.io/api/v1/xiaohongshu/web/get_note_info_v7?note_id={note_id}"
+        async with httpx.AsyncClient(timeout=30.0, proxy=proxy) as client:
+            response = await client.get(api_url, headers=auth_headers)
+
+        if response.status_code == 200:
+            data = response.json()
+            # data is a list directly (not data.data)
+            items = data.get("data", [])
+            if isinstance(items, list) and items:
+                note_item = items[0].get("note_list", [{}])[0]
+                title = note_item.get("title", "")
+                desc = note_item.get("desc", "")
+                note_type = note_item.get("type", "")
+
+                if note_type == "video":
+                    video = note_item.get("video", {})
+                    consumer = video.get("consumer", {})
+                    origin_video_key = consumer.get("origin_video_key", "")
+                    if origin_video_key:
+                        video_url = f"https://sns-na-i6.xhscdn.com/{origin_video_key}"
+                        logger.info(f"✅ [TikHub] XHS video via web/get_note_info_v7")
+                        return VideoParseResult(title=title, content=desc, video=VideoRef(url=video_url))
+
+                images_list = note_item.get("images_list", [])
+                if images_list:
+                    photos = []
+                    for img in images_list:
+                        img_url = img.get("url", "") or img.get("url_multi_level", {}).get("high", "")
+                        if img_url:
+                            img_url = re.sub(r'format/(heif|heic|webp|avif)', 'format/jpg', img_url)
+                            photos.append(ImageRef(url=img_url, ext="jpg", width=img.get("width", 0), height=img.get("height", 0)))
+                    if photos:
+                        logger.info(f"✅ [TikHub] XHS {len(photos)} images via web/get_note_info_v7")
+                        return ImageParseResult(photo=photos, title=title, content=desc)
+
+        raise ParseError("TikHub XHS解析失败：所有endpoint均无法获取媒体URL")
 
     @staticmethod
     def _is_geo_restriction_error(error_str: str) -> bool:
