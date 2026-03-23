@@ -345,7 +345,7 @@ class ParseHubAdapter:
             # 下载媒体（30分钟超时保护，防止CDN卡死导致流程挂起）
             try:
                 download_result = await asyncio.wait_for(
-                    result.download(path=self.temp_dir, proxy=downloader_proxy, headers=download_headers),
+                    result.download(path=self.temp_dir, proxy=downloader_proxy),
                     timeout=60 * 30,  # 30分钟
                 )
             except TimeoutError:
@@ -365,7 +365,7 @@ class ParseHubAdapter:
                             tikhub_result = await self._tikhub_xhs_parse(url, downloader_proxy, official_result=result)
                             if tikhub_result:
                                 download_result = await asyncio.wait_for(
-                                    tikhub_result.download(path=self.temp_dir, proxy=downloader_proxy, headers=download_headers),
+                                    tikhub_result.download(path=self.temp_dir, proxy=downloader_proxy),
                                     timeout=60 * 30,
                                 )
                                 result = tikhub_result
@@ -415,6 +415,15 @@ class ParseHubAdapter:
             raise ParseError("未配置TikHub API Key")
 
         note_id_match = re.search(r'/(?:item|explore)/([a-f0-9]+)', url)
+        if not note_id_match:
+            # Try to resolve short URL (e.g. xhslink.com)
+            try:
+                async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
+                    r = await client.get(url)
+                    resolved_url = str(r.url)
+                note_id_match = re.search(r'/(?:item|explore)/([a-f0-9]+)', resolved_url)
+            except Exception:
+                pass
         if not note_id_match:
             raise ParseError(f"无法从URL提取note_id: {url}")
 
