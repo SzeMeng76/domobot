@@ -157,7 +157,12 @@ def extract_currency_and_price(price_str: str, country_code: str | None = None) 
 
     if BABEL_AVAILABLE:
         try:
-            locale_str = SUPPORTED_COUNTRIES.get(country_code, {}).get("locale", "en_US")
+            # For USD prices, always use en_US locale to avoid parsing issues
+            # (e.g., nl_SR treats "." as thousands separator, turning "0.99" into "99")
+            if detected_currency_code == "USD":
+                locale_str = "en_US"
+            else:
+                locale_str = SUPPORTED_COUNTRIES.get(country_code, {}).get("locale", "en_US")
             price_value = float(parse_decimal(amount_part.strip(), locale=locale_str))
         except (NumberFormatError, ValueError, TypeError) as e:
             logger.warning(
