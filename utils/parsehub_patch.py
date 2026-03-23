@@ -528,91 +528,97 @@ def patch_parsehub_yt_dlp():
 
                 headers = {"Authorization": f"Bearer {tikhub_api_key}"}
 
-                # Try video endpoint first, then image endpoint
-                for endpoint_type in ["video", "image"]:
-                    if endpoint_type == "video":
-                        api_url = f"https://api.tikhub.io/api/v1/xiaohongshu/app_v2/get_video_note_detail?note_id={note_id}"
-                        async with httpx.AsyncClient(timeout=30.0, proxy=self.proxy) as client:
-                            response = await client.get(api_url, headers=headers)
+                # First call video endpoint to check note type
+                api_url = f"https://api.tikhub.io/api/v1/xiaohongshu/app_v2/get_video_note_detail?note_id={note_id}"
+                async with httpx.AsyncClient(timeout=30.0, proxy=self.proxy) as client:
+                    response = await client.get(api_url, headers=headers)
 
-                        if response.status_code == 200:
-                            data = response.json()
-                            if data.get("code") == 200 and data.get("data", {}).get("data"):
-                                note_data = data["data"]["data"][0]
-                                note_type = note_data.get("type", "")
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("code") == 200 and data.get("data", {}).get("data"):
+                        note_data = data["data"]["data"][0]
+                        note_type = note_data.get("type", "")
 
-                                if note_type == "video":
-                                    title = note_data.get("title", "")
-                                    desc = note_data.get("desc", "")
-                                    k_th = {"title": title, "content": desc}
+                        if note_type == "video":
+                            title = note_data.get("title", "")
+                            desc = note_data.get("desc", "")
+                            k_th = {"title": title, "content": desc}
 
-                                    video_info_v2 = note_data.get("video_info_v2", {})
-                                    media = video_info_v2.get("media", {})
-                                    stream = media.get("stream", {})
+                            video_info_v2 = note_data.get("video_info_v2", {})
+                            media = video_info_v2.get("media", {})
+                            stream = media.get("stream", {})
 
-                                    h264_list = stream.get("h264", [])
-                                    if h264_list:
-                                        video_stream = h264_list[0]
-                                        video_url = video_stream.get("master_url", "")
-                                        if not video_url:
-                                            backup_urls = video_stream.get("backup_urls", [])
-                                            if backup_urls:
-                                                video_url = backup_urls[0]
+                            h264_list = stream.get("h264", [])
+                            if h264_list:
+                                video_stream = h264_list[0]
+                                video_url = video_stream.get("master_url", "")
+                                if not video_url:
+                                    backup_urls = video_stream.get("backup_urls", [])
+                                    if backup_urls:
+                                        video_url = backup_urls[0]
 
-                                        if video_url:
-                                            video_meta = media.get("video", {})
-                                            width = video_stream.get("width", 0) or video_meta.get("width", 0)
-                                            height = video_stream.get("height", 0) or video_meta.get("height", 0)
-                                            duration = video_stream.get("duration", 0) // 1000
+                                if video_url:
+                                    video_meta = media.get("video", {})
+                                    width = video_stream.get("width", 0) or video_meta.get("width", 0)
+                                    height = video_stream.get("height", 0) or video_meta.get("height", 0)
+                                    duration = video_stream.get("duration", 0) // 1000
 
-                                            logger.info(f"✅ [TikHub] Got XHS video URL (app_v2): {video_url[:80]}")
-                                            return VideoParseResult(
-                                                video=VideoRef(url=video_url, width=width, height=height, duration=duration),
-                                                **k_th
-                                            )
+                                    logger.info(f"✅ [TikHub] Got XHS video URL (app_v2): {video_url[:80]}")
+                                    return VideoParseResult(
+                                        video=VideoRef(url=video_url, width=width, height=height, duration=duration),
+                                        **k_th
+                                    )
+                        else:
+                            # note_type is not "video", it's an image post
+                            # Call image endpoint with retry
+                            max_retries = 3
+                            for attempt in range(max_retries):
+                                try:
+                                    logger.info(f"🎬 [TikHub] Detected image post, calling image endpoint (attempt {attempt + 1}/{max_retries})")
+                                    api_url = f"https://api.tikhub.io/api/v1/xiaohongshu/app_v2/get_image_note_detail?note_id={note_id}"
+                                    async with httpx.AsyncClient(timeout=30.0, proxy=self.proxy) as client:
+                                        response = await client.get(api_url, headers=headers)
 
-                        logger.info(f"🎬 [TikHub] Video endpoint didn't return valid video data, trying next...")
+                                    if response.status_code == 200:
+                                        data = response.json()
+                                        if data.get("code") == 200 and data.get("data", {}).get("data"):
+                                            note_data = data["data"]["data"][0]
 
-                    elif endpoint_type == "image":
-                        api_url = f"https://api.tikhub.io/api/v1/xiaohongshu/app_v2/get_image_note_detail?note_id={note_id}"
-                        async with httpx.AsyncClient(timeout=30.0, proxy=self.proxy) as client:
-                            response = await client.get(api_url, headers=headers)
+                                            # Try data.data[0].note_list[0] structure first (app_v2 format)
+                                            note_list = note_data.get("note_list", [])
+                                            if note_list:
+                                                note_item = note_list[0]
+                                                title = note_item.get("title", "")
+                                                desc = note_item.get("desc", "")
+                                                k_th = {"title": title, "content": desc}
+                                                images_list = note_item.get("images_list", [])
+                                            else:
+                                                # Fallback: data.data[0] directly
+                                                title = note_data.get("title", "")
+                                                desc = note_data.get("desc", "")
+                                                k_th = {"title": title, "content": desc}
+                                                images_list = note_data.get("images_list", [])
 
-                        if response.status_code == 200:
-                            data = response.json()
-                            if data.get("code") == 200 and data.get("data", {}).get("data"):
-                                note_data = data["data"]["data"][0]
+                                            if images_list:
+                                                photos = []
+                                                for img in images_list:
+                                                    img_url = img.get("url", "")
+                                                    if img_url:
+                                                        # Force JPEG: replace heif/webp/avif format params in URL
+                                                        img_url = re.sub(r'format/(heif|heic|webp|avif)', 'format/jpg', img_url)
+                                                        width = img.get("width", 0)
+                                                        height = img.get("height", 0)
+                                                        photos.append(ImageRef(url=img_url, ext="jpg", width=width, height=height))
 
-                                # Try data.data[0].note_list[0] structure first (app_v2 format)
-                                note_list = note_data.get("note_list", [])
-                                if note_list:
-                                    note_item = note_list[0]
-                                    title = note_item.get("title", "")
-                                    desc = note_item.get("desc", "")
-                                    k_th = {"title": title, "content": desc}
-                                    images_list = note_item.get("images_list", [])
-                                else:
-                                    # Fallback: data.data[0] directly
-                                    title = note_data.get("title", "")
-                                    desc = note_data.get("desc", "")
-                                    k_th = {"title": title, "content": desc}
-                                    images_list = note_data.get("images_list", [])
-                                if images_list:
-                                    photos = []
-                                    for img in images_list:
-                                        img_url = img.get("url", "")
-                                        if img_url:
-                                            # Force JPEG: replace heif/webp/avif format params in URL
-                                            img_url = re.sub(r'format/(heif|heic|webp|avif)', 'format/jpg', img_url)
-                                            width = img.get("width", 0)
-                                            height = img.get("height", 0)
-                                            photos.append(ImageRef(url=img_url, ext="jpg", width=width, height=height))
+                                                if photos:
+                                                    logger.info(f"✅ [TikHub] Got XHS {len(photos)} images (app_v2)")
+                                                    return ImageParseResult(photo=photos, **k_th)
 
-                                    if photos:
-                                        logger.info(f"✅ [TikHub] Got XHS {len(photos)} images (app_v2)")
-                                        return ImageParseResult(photo=photos, **k_th)
-
-                        logger.info(f"🎬 [TikHub] Image endpoint didn't return valid image data, trying next...")
+                                    logger.warning(f"⚠️ [TikHub] Image endpoint attempt {attempt + 1} failed, retrying...")
+                                except Exception as e:
+                                    logger.warning(f"⚠️ [TikHub] Image endpoint attempt {attempt + 1} error: {e}")
+                                    if attempt == max_retries - 1:
+                                        raise
 
                 raise ParseError("TikHub app_v2 API返回数据中没有视频或图片URL")
 

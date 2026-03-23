@@ -7,6 +7,8 @@ ParseHub 适配器
 import asyncio
 import hashlib
 import logging
+import os
+import re
 import tempfile
 import time
 from pathlib import Path
@@ -349,10 +351,27 @@ class ParseHubAdapter:
                 logger.warning(f"媒体下载超时（>30分钟）: {url[:50]}...")
                 download_result = None
             except Exception as download_error:
-                # 下载失败（例如小红书CDN 500错误），但解析成功
-                # 返回解析结果但没有下载的媒体文件
+                # 下载失败（例如小红书CDN URL过期），但解析成功
                 logger.warning(f"媒体下载失败但解析成功: {download_error}")
                 download_result = None
+
+                # 小红书CDN URL会快速过期，下载失败时尝试用TikHub重新解析
+                if platform_id == 'xiaohongshu':
+                    tikhub_api_key = os.getenv("TIKHUB_API_KEY")
+                    if tikhub_api_key:
+                        logger.info(f"🔄 [XHS] CDN下载失败，尝试TikHub重新解析...")
+                        try:
+                            tikhub_result = await self._tikhub_xhs_parse(url, downloader_proxy, official_result=result)
+                            if tikhub_result:
+                                download_result = await asyncio.wait_for(
+                                    tikhub_result.download(path=self.temp_dir, proxy=downloader_proxy, headers=download_headers),
+                                    timeout=60 * 30,
+                                )
+                                result = tikhub_result
+                                logger.info(f"✅ [XHS] TikHub重新解析并下载成功")
+                        except Exception as tikhub_error:
+                            logger.error(f"❌ [XHS] TikHub重新解析也失败: {tikhub_error}")
+                            download_result = None
 
             parse_time = time.time() - start_time
 
@@ -381,6 +400,142 @@ class ParseHubAdapter:
             )
 
             return None, None, None, parse_time, error_msg
+
+    async def _tikhub_xhs_parse(self, url: str, proxy: str = None, official_result=None):
+        """Call TikHub API to parse XHS URL, return ParseResult.
+        If official_result is provided, use its type (VideoParseResult/ImageParseResult)
+        to skip the type-detection API call."""
+        import httpx
+        from parsehub.types import VideoParseResult, ImageParseResult, VideoRef, ImageRef
+        from parsehub.errors import ParseError
+
+        tikhub_api_key = os.getenv("TIKHUB_API_KEY")
+        if not tikhub_api_key:
+            raise ParseError("未配置TikHub API Key")
+
+        note_id_match = re.search(r'/(?:item|explore)/([a-f0-9]+)', url)
+        if not note_id_match:
+            raise ParseError(f"无法从URL提取note_id: {url}")
+
+        note_id = note_id_match.group(1)
+        auth_headers = {"Authorization": f"Bearer {tikhub_api_key}"}
+
+        # Determine note type from official_result if available, otherwise call video endpoint
+        if official_result is not None:
+            is_video = isinstance(official_result, VideoParseResult)
+            logger.info(f"🔍 [TikHub] Note type from official result: {'video' if is_video else 'image'}")
+        else:
+            # Call video endpoint to detect note type
+            api_url = f"https://api.tikhub.io/api/v1/xiaohongshu/app_v2/get_video_note_detail?note_id={note_id}"
+            async with httpx.AsyncClient(timeout=30.0, proxy=proxy) as client:
+                response = await client.get(api_url, headers=auth_headers)
+
+            is_video = False
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("code") == 200 and data.get("data", {}).get("data"):
+                    note_type = data["data"]["data"][0].get("type", "")
+                    is_video = (note_type == "video")
+
+                    if is_video:
+                        # Already have the data, process video right now
+                        note_data = data["data"]["data"][0]
+                        title = note_data.get("title", "")
+                        desc = note_data.get("desc", "")
+                        video_info_v2 = note_data.get("video_info_v2", {})
+                        media = video_info_v2.get("media", {})
+                        stream = media.get("stream", {})
+                        h264_list = stream.get("h264", [])
+                        if h264_list:
+                            video_stream = h264_list[0]
+                            video_url = video_stream.get("master_url", "")
+                            if not video_url:
+                                backup_urls = video_stream.get("backup_urls", [])
+                                if backup_urls:
+                                    video_url = backup_urls[0]
+                            if video_url:
+                                video_meta = media.get("video", {})
+                                width = video_stream.get("width", 0) or video_meta.get("width", 0)
+                                height = video_stream.get("height", 0) or video_meta.get("height", 0)
+                                duration = video_stream.get("duration", 0) // 1000
+                                logger.info(f"✅ [TikHub] XHS video via TikHub: {video_url[:80]}")
+                                return VideoParseResult(
+                                    title=title, content=desc,
+                                    video=VideoRef(url=video_url, width=width, height=height, duration=duration)
+                                )
+                        raise ParseError("TikHub video endpoint返回数据中没有视频URL")
+
+        if is_video:
+            # Need to call video endpoint (official_result was VideoParseResult)
+            api_url = f"https://api.tikhub.io/api/v1/xiaohongshu/app_v2/get_video_note_detail?note_id={note_id}"
+            async with httpx.AsyncClient(timeout=30.0, proxy=proxy) as client:
+                response = await client.get(api_url, headers=auth_headers)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("code") == 200 and data.get("data", {}).get("data"):
+                    note_data = data["data"]["data"][0]
+                    title = note_data.get("title", "")
+                    desc = note_data.get("desc", "")
+                    video_info_v2 = note_data.get("video_info_v2", {})
+                    media = video_info_v2.get("media", {})
+                    stream = media.get("stream", {})
+                    h264_list = stream.get("h264", [])
+                    if h264_list:
+                        video_stream = h264_list[0]
+                        video_url = video_stream.get("master_url", "")
+                        if not video_url:
+                            backup_urls = video_stream.get("backup_urls", [])
+                            if backup_urls:
+                                video_url = backup_urls[0]
+                        if video_url:
+                            video_meta = media.get("video", {})
+                            width = video_stream.get("width", 0) or video_meta.get("width", 0)
+                            height = video_stream.get("height", 0) or video_meta.get("height", 0)
+                            duration = video_stream.get("duration", 0) // 1000
+                            logger.info(f"✅ [TikHub] XHS video via TikHub: {video_url[:80]}")
+                            return VideoParseResult(
+                                title=title, content=desc,
+                                video=VideoRef(url=video_url, width=width, height=height, duration=duration)
+                            )
+            raise ParseError("TikHub video endpoint返回数据中没有视频URL")
+
+        # Image post: call image endpoint with retry, never fall back to video
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                img_api_url = f"https://api.tikhub.io/api/v1/xiaohongshu/app_v2/get_image_note_detail?note_id={note_id}"
+                async with httpx.AsyncClient(timeout=30.0, proxy=proxy) as client:
+                    img_response = await client.get(img_api_url, headers=auth_headers)
+
+                if img_response.status_code == 200:
+                    img_data = img_response.json()
+                    if img_data.get("code") == 200 and img_data.get("data", {}).get("data"):
+                        nd = img_data["data"]["data"][0]
+                        note_list = nd.get("note_list", [])
+                        if note_list:
+                            ni = note_list[0]
+                            title, desc = ni.get("title", ""), ni.get("desc", "")
+                            images_list = ni.get("images_list", [])
+                        else:
+                            title, desc = nd.get("title", ""), nd.get("desc", "")
+                            images_list = nd.get("images_list", [])
+                        if images_list:
+                            photos = []
+                            for img in images_list:
+                                img_url = img.get("url", "")
+                                if img_url:
+                                    img_url = re.sub(r'format/(heif|heic|webp|avif)', 'format/jpg', img_url)
+                                    photos.append(ImageRef(url=img_url, ext="jpg", width=img.get("width", 0), height=img.get("height", 0)))
+                            if photos:
+                                logger.info(f"✅ [TikHub] XHS {len(photos)} images via TikHub")
+                                return ImageParseResult(photo=photos, title=title, content=desc)
+                logger.warning(f"⚠️ [TikHub] Image endpoint attempt {attempt + 1}/{max_retries} failed")
+            except Exception as e:
+                logger.warning(f"⚠️ [TikHub] Image endpoint attempt {attempt + 1}/{max_retries} error: {e}")
+                if attempt == max_retries - 1:
+                    raise
+
+        raise ParseError("TikHub XHS解析失败：无法获取图片URL")
 
     @staticmethod
     def _is_geo_restriction_error(error_str: str) -> bool:
