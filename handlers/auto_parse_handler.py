@@ -110,11 +110,11 @@ async def _auto_parse_single(url: str, user_id: int, group_id: int, message, con
         from commands.social_parser import _send_media, get_url_hash, _schedule_deletion, get_config
         from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-        url_hash = get_url_hash(formatted['url'])
-        buttons = [[InlineKeyboardButton("🔗 原链接", url=formatted['url'])]]
+        url_hash = get_url_hash(formatted['url'] or '')
+        buttons = [[InlineKeyboardButton("🔗 原链接", url=formatted['url'])]] if formatted['url'] else []
 
         reply_markup = None
-        if _adapter.config and _adapter.config.enable_ai_summary:
+        if _adapter.config and _adapter.config.enable_ai_summary and buttons:
             buttons[0].append(InlineKeyboardButton("📝 AI总结", callback_data=f"summary_{url_hash}"))
             reply_markup = InlineKeyboardMarkup(buttons)
 

@@ -521,6 +521,15 @@ def patch_parsehub_yt_dlp():
             try:
                 note_id_match = re.search(r'/(?:item|explore)/([a-f0-9]+)', url)
                 if not note_id_match:
+                    # Try to resolve short URL (e.g. xhslink.com)
+                    try:
+                        async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
+                            r = await client.get(url)
+                            resolved_url = str(r.url)
+                        note_id_match = re.search(r'/(?:item|explore)/([a-f0-9]+)', resolved_url)
+                    except Exception:
+                        pass
+                if not note_id_match:
                     raise ParseError(f"无法从URL提取note_id: {url}")
 
                 note_id = note_id_match.group(1)
