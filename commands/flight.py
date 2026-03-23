@@ -1739,7 +1739,17 @@ async def flight_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             arrival_input = args[1]
             outbound_date = args[2]
             return_date = args[3] if len(args) > 3 else None
-            
+
+            # 标准化日期格式为 YYYY-MM-DD
+            try:
+                outbound_date = datetime.strptime(outbound_date, '%Y-%m-%d').strftime('%Y-%m-%d')
+                if return_date:
+                    return_date = datetime.strptime(return_date, '%Y-%m-%d').strftime('%Y-%m-%d')
+            except ValueError:
+                await send_error(context, update.message.chat_id,
+                                "❌ 日期格式错误\n\n请使用 YYYY-MM-DD 格式\n例如: 2024-12-25")
+                return
+
             # 智能解析机场输入
             airport_resolution = resolve_flight_airports(departure_input, arrival_input)
             resolution_status = airport_resolution.get("status")
@@ -2363,16 +2373,16 @@ async def _parse_and_execute_flight_search(update: Update, context: ContextTypes
                         "• `英文城市`: `Kuala Lumpur Bangkok 2024-12-25`")
         return
     
-    # 日期格式验证
+    # 日期格式验证并标准化为 YYYY-MM-DD
     try:
-        datetime.strptime(outbound_date, '%Y-%m-%d')
+        outbound_date = datetime.strptime(outbound_date, '%Y-%m-%d').strftime('%Y-%m-%d')
         if return_date:
-            datetime.strptime(return_date, '%Y-%m-%d')
+            return_date = datetime.strptime(return_date, '%Y-%m-%d').strftime('%Y-%m-%d')
     except ValueError:
-        await send_error(context, update.message.chat_id, 
+        await send_error(context, update.message.chat_id,
                         "❌ 日期格式错误\n\n请使用 YYYY-MM-DD 格式\n例如: 2024-12-25")
         return
-    
+
     # 智能解析机场输入
     airport_resolution = resolve_flight_airports(departure_input, arrival_input)
     resolution_status = airport_resolution.get("status")
@@ -2462,16 +2472,16 @@ async def _parse_and_execute_flight_search_from(update: Update, context: Context
     
     arrival_input = text_without_dates.strip()
     
-    # 日期格式验证
+    # 日期格式验证并标准化为 YYYY-MM-DD
     try:
-        datetime.strptime(outbound_date, '%Y-%m-%d')
+        outbound_date = datetime.strptime(outbound_date, '%Y-%m-%d').strftime('%Y-%m-%d')
         if return_date:
-            datetime.strptime(return_date, '%Y-%m-%d')
+            return_date = datetime.strptime(return_date, '%Y-%m-%d').strftime('%Y-%m-%d')
     except ValueError:
-        await send_error(context, update.message.chat_id, 
+        await send_error(context, update.message.chat_id,
                         "❌ 日期格式错误\n\n请使用 YYYY-MM-DD 格式\n例如: 2024-12-25")
         return
-    
+
     # 智能解析到达机场输入
     from utils.airport_mapper import resolve_airport_codes
     arrival_result = resolve_airport_codes(arrival_input)
