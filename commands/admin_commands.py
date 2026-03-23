@@ -907,8 +907,20 @@ class AdminPanelHandler:
     async def show_api_usage_panel(
         self, query: CallbackQuery, context: ContextTypes.DEFAULT_TYPE, status_message: str | None = None
     ) -> int:
-        """显示TikHub API用量面板"""
+        """显示API用量选择面板"""
+        text = "📊 *API 用量查询*\n\n请选择要查询的服务："
+        keyboard = [
+            [InlineKeyboardButton("🎬 TikHub", callback_data="api_usage_tikhub")],
+            [InlineKeyboardButton("✈️ SerpAPI (Google Flights)", callback_data="api_usage_serp")],
+            [InlineKeyboardButton("🔙 返回主菜单", callback_data="back_to_main")],
+        ]
+        await self._show_panel(query, text, InlineKeyboardMarkup(keyboard))
+        return API_USAGE_PANEL
+
+    async def _show_tikhub_usage(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """显示TikHub API用量"""
         import httpx
+        query = update.callback_query
         config = get_config()
         tikhub_key = getattr(config, 'tikhub_api_key', '')
 
@@ -916,7 +928,9 @@ class AdminPanelHandler:
             await self._show_panel(
                 query,
                 "❌ TikHub API Key 未配置\n\n请在 `.env` 中设置 `TIKHUB_API_KEY`",
-                InlineKeyboardMarkup([[InlineKeyboardButton("🔙 返回", callback_data="back_to_main")]]),
+                InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 返回", callback_data="manage_api_usage")],
+                ]),
             )
             return API_USAGE_PANEL
 
@@ -930,7 +944,7 @@ class AdminPanelHandler:
                 )
 
             if info_resp.status_code != 200 or usage_resp.status_code != 200:
-                raise ValueError(f"HTTP error: info={info_resp.status_code} usage={usage_resp.status_code}")
+                raise ValueError(f"HTTP {info_resp.status_code} / {usage_resp.status_code}")
 
             info = info_resp.json()
             usage = usage_resp.json()
@@ -939,7 +953,6 @@ class AdminPanelHandler:
             key_data = info.get("api_key_data", {})
             day = usage.get("data", {})
 
-            # 账户状态
             status_icon = "✅" if key_data.get("api_key_status") == 1 else "❌"
             balance = user.get("balance", 0)
             free_credit = user.get("free_credit", 0)
@@ -948,7 +961,6 @@ class AdminPanelHandler:
             expires = key_data.get("expires_at") or "永不过期"
             created = key_data.get("created_at", "N/A")[:10]
 
-            # 今日用量
             date = day.get("date", "N/A")
             today_cost = day.get("usage", 0)
             balance_cost = day.get("balance_usage", 0)
@@ -957,13 +969,12 @@ class AdminPanelHandler:
             paid_reqs = day.get("paid_request_per_day", 0)
             last_req = (day.get("last_requests_time") or "N/A")[:19].replace("T", " ")
 
-            # Top endpoints
             uri_counts: dict = day.get("uri_counts", {})
             top_uris = sorted(uri_counts.items(), key=lambda x: x[1], reverse=True)[:5]
             uri_lines = "\n".join(f"  • `{uri.split('/')[-1]}`: {cnt}次" for uri, cnt in top_uris) or "  暂无记录"
 
             text = (
-                f"📊 *TikHub API 用量面板*\n"
+                f"🎬 *TikHub API 用量*\n"
                 f"{'─' * 28}\n\n"
                 f"👤 *账户信息*\n"
                 f"  邮箱: `{email}`\n"
@@ -974,23 +985,103 @@ class AdminPanelHandler:
                 f"  账户余额: `${balance:.4f}`\n"
                 f"  免费额度: `${free_credit:.4f}`\n\n"
                 f"📅 *今日用量* ({date})\n"
-                f"  总费用: `${today_cost:.4f}`"
-                f"  (余额 ${balance_cost:.4f} + 免费 ${free_cost:.4f})\n"
-                f"  总请求: `{total_reqs}次`  付费请求: `{paid_reqs}次`\n"
+                f"  总费用: `${today_cost:.4f}` (余额 ${balance_cost:.4f} \\+ 免费 ${free_cost:.4f})\n"
+                f"  总请求: `{total_reqs}次`  付费: `{paid_reqs}次`\n"
                 f"  最后请求: `{last_req}`\n\n"
                 f"🔥 *今日热门端点*\n{uri_lines}\n"
             )
 
-            if status_message:
-                text += f"\n_{status_message}_"
-
         except Exception as e:
             logger.error(f"TikHub API usage fetch failed: {e}")
-            text = f"❌ 获取API用量失败\n\n`{e}`"
+            text = f"❌ 获取TikHub用量失败\n\n`{e}`"
 
         keyboard = [
-            [InlineKeyboardButton("🔄 刷新", callback_data="api_usage_refresh")],
-            [InlineKeyboardButton("🔙 返回主菜单", callback_data="back_to_main")],
+            [InlineKeyboardButton("🔄 刷新", callback_data="api_usage_tikhub")],
+            [InlineKeyboardButton("🔙 返回", callback_data="manage_api_usage")],
+        ]
+        await self._show_panel(query, text, InlineKeyboardMarkup(keyboard))
+        return API_USAGE_PANEL
+
+    async def _show_serp_usage(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """显示SerpAPI用量"""
+        import httpx
+        query = update.callback_query
+        config = get_config()
+        serp_key = getattr(config, 'serpapi_key', '')
+
+        if not serp_key:
+            await self._show_panel(
+                query,
+                "❌ SerpAPI Key 未配置\n\n请在 `.env` 中设置 `SERPAPI_KEY`",
+                InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 返回", callback_data="manage_api_usage")],
+                ]),
+            )
+            return API_USAGE_PANEL
+
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.get(
+                    "https://serpapi.com/account",
+                    params={"api_key": serp_key},
+                )
+
+            if resp.status_code != 200:
+                raise ValueError(f"HTTP {resp.status_code}")
+
+            d = resp.json()
+
+            email = d.get("account_email", "N/A")
+            status = d.get("account_status", "N/A")
+            status_icon = "✅" if status == "Active" else "❌"
+            plan_name = d.get("plan_name", "N/A")
+            plan_price = d.get("plan_monthly_price", 0)
+            searches_per_month = d.get("searches_per_month", 0)
+            this_month_usage = d.get("this_month_usage", 0)
+            plan_left = d.get("plan_searches_left", 0)
+            extra_credits = d.get("extra_credits", 0)
+            total_left = d.get("total_searches_left", 0)
+            last_hour = d.get("last_hour_searches", 0)
+            this_hour = d.get("this_hour_searches", 0)
+            rate_limit = d.get("account_rate_limit_per_hour", 0)
+
+            # 本月使用进度条
+            if searches_per_month > 0:
+                pct = this_month_usage / searches_per_month
+                filled = int(pct * 10)
+                bar = "█" * filled + "░" * (10 - filled)
+                usage_bar = f"`[{bar}]` {pct*100:.1f}%"
+            else:
+                usage_bar = "N/A"
+
+            text = (
+                f"✈️ *SerpAPI 用量*\n"
+                f"{'─' * 28}\n\n"
+                f"👤 *账户信息*\n"
+                f"  邮箱: `{email}`\n"
+                f"  状态: {status_icon} `{status}`\n\n"
+                f"📋 *套餐*\n"
+                f"  套餐: `{plan_name}`"
+                f"{'  ($' + str(plan_price) + '/月)' if plan_price > 0 else ''}\n"
+                f"  月配额: `{searches_per_month}次`\n\n"
+                f"📊 *本月用量*\n"
+                f"  已用: `{this_month_usage}次` / `{searches_per_month}次`\n"
+                f"  进度: {usage_bar}\n"
+                f"  套餐剩余: `{plan_left}次`\n"
+                f"  额外Credits: `{extra_credits}`\n"
+                f"  总剩余: `{total_left}次`\n\n"
+                f"⚡ *速率*\n"
+                f"  本小时: `{this_hour}次`  上小时: `{last_hour}次`\n"
+                f"  每小时限制: `{rate_limit}次`\n"
+            )
+
+        except Exception as e:
+            logger.error(f"SerpAPI account fetch failed: {e}")
+            text = f"❌ 获取SerpAPI用量失败\n\n`{e}`"
+
+        keyboard = [
+            [InlineKeyboardButton("🔄 刷新", callback_data="api_usage_serp")],
+            [InlineKeyboardButton("🔙 返回", callback_data="manage_api_usage")],
         ]
         await self._show_panel(query, text, InlineKeyboardMarkup(keyboard))
         return API_USAGE_PANEL
@@ -1656,7 +1747,9 @@ class AdminPanelHandler:
                     CallbackQueryHandler(self.show_main_panel, pattern="^back_to_main$"),
                 ],
                 API_USAGE_PANEL: [
-                    CallbackQueryHandler(self._to_api_usage_panel, pattern="^api_usage_refresh$"),
+                    CallbackQueryHandler(self._show_tikhub_usage, pattern="^api_usage_tikhub$"),
+                    CallbackQueryHandler(self._show_serp_usage, pattern="^api_usage_serp$"),
+                    CallbackQueryHandler(self._to_api_usage_panel, pattern="^manage_api_usage$"),
                     CallbackQueryHandler(self.show_main_panel, pattern="^back_to_main$"),
                 ],
                 AWAITING_SOCIAL_PARSER_GROUP_ID: [
