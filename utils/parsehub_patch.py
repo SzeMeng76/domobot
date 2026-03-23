@@ -500,137 +500,20 @@ def patch_parsehub_yt_dlp():
                 logger.info("🔍 [XHS] Detected ParseHub <1.5.11 (old XHS class)")
 
         async def patched_xhs_parse(self, url: str):
-            """Patched XhsParser._do_parse to handle empty download list and use TikHub as fallback"""
-            from parsehub.types import VideoParseResult, ImageParseResult, MultimediaParseResult, VideoRef, ImageRef, LivePhotoRef
+            """Patched XhsParser._do_parse to use TikHub as fallback"""
+            from parsehub.types import VideoParseResult, ImageParseResult, VideoRef, ImageRef
             from parsehub.errors import ParseError
 
-            xhs_post_type = None  # Track type from official API for TikHub fallback
-
-            if USE_NEW_XHS_API:
-                # ParseHub 1.5.11+ uses new XHSAPI
-                xhs = XHSAPI(proxy=self.proxy)
-                try:
-                    result = await xhs.extract(url)
-                except Exception as e:
-                    logger.warning(f"🌐 [Patch] XHS new API failed: {e}, trying TikHub...")
-                    result = None
-
+            # Call original parse, if it fails or returns empty, use TikHub
+            try:
+                result = await original_xhs_parse(self, url)
                 if result:
-                    desc = self.hashtag_handler(result.desc)
-                    k = {"title": result.title, "content": desc}
-                    xhs_post_type = result.type  # Remember for TikHub fallback
+                    return result
+            except Exception as e:
+                logger.warning(f"🌐 [Patch] XHS official parse failed: {e}, trying TikHub...")
 
-                    # XHS CDN headers for URL validation (bypass anti-crawler)
-                    xhs_headers = {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                        'Referer': 'https://www.xiaohongshu.com/',
-                        'Origin': 'https://www.xiaohongshu.com',
-                        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-                    }
-
-                    if result.type == PostType.VIDEO:
-                        media = result.media[0] if result.media else None
-                        if media and media.url:
-                            # Validate video URL before returning (check if accessible)
-                            try:
-                                async with httpx.AsyncClient(timeout=10.0, proxy=self.proxy) as client:
-                                    head_response = await client.head(media.url, headers=xhs_headers, follow_redirects=True)
-                                    if head_response.status_code == 404:
-                                        logger.warning(f"🌐 [Patch] XHS video URL returns 404, trying TikHub...")
-                                        result = None  # Trigger TikHub fallback
-                                    else:
-                                        return VideoParseResult(
-                                            video=VideoRef(url=media.url, thumb_url=media.thumb_url,
-                                                       duration=media.duration, height=media.height, width=media.width),
-                                            **k,
-                                        )
-                            except Exception as e:
-                                logger.warning(f"🌐 [Patch] XHS video URL validation failed: {e}, trying TikHub...")
-                                result = None  # Trigger TikHub fallback
-                        # No video URL, will try TikHub below
-                    elif result.type == PostType.IMAGE:
-                        photos = []
-
-                        for i in result.media:
-                            if i.type == MediaType.LIVE_PHOTO:
-                                photos.append(LivePhotoRef(url=i.thumb_url, video_url=i.url, width=i.width, height=i.height))
-                            else:
-                                # ParseHub 1.5.12+: validate image extension
-                                ext = await self.get_ext_by_url(i.url)
-                                if ext not in ["png", "webp", "jpeg", "heic", "avif"]:
-                                    ext = "jpeg"
-                                photos.append(ImageRef(url=i.url, ext=ext, thumb_url=i.thumb_url, width=i.width, height=i.height))
-
-                        if photos:
-                            # Validate ALL media URLs, filter out 404s (CDN node sync issues)
-                            valid_photos = []
-                            try:
-                                async with httpx.AsyncClient(timeout=10.0, proxy=self.proxy) as client:
-                                    for idx, photo in enumerate(photos):
-                                        try:
-                                            head_response = await client.head(photo.url, headers=xhs_headers, follow_redirects=True)
-                                            if head_response.status_code == 404:
-                                                logger.warning(f"🌐 [Patch] XHS media [{idx}] URL returns 404, skipping: {photo.url[:80]}")
-                                            else:
-                                                valid_photos.append(photo)
-                                        except Exception as e:
-                                            logger.warning(f"🌐 [Patch] XHS media [{idx}] URL validation failed: {e}, skipping")
-                            except Exception as e:
-                                logger.warning(f"🌐 [Patch] XHS URL validation client error: {e}, using all photos")
-                                valid_photos = photos
-
-                            if valid_photos:
-                                logger.info(f"✅ [Patch] XHS media validated: {len(valid_photos)}/{len(photos)} items OK")
-                                return ImageParseResult(photo=valid_photos, **k)
-                            else:
-                                logger.warning(f"🌐 [Patch] All XHS media URLs return 404, trying TikHub...")
-                                result = None  # Trigger TikHub fallback
-                    else:
-                        raise ParseError("不支持的类型")
-            else:
-                # ParseHub <1.5.11 uses old XHS class
-                try:
-                    from parsehub.parsers.parser.xhs_ import XHS, Log
-                except ImportError:
-                    from parsehub.parsers.parser.xhs import XHS, Log
-
-                async with XHS(user_agent="", cookie="") as xhs:
-                    x_result = await xhs.extract(url, False, log=Log)
-
-                if x_result and (old_result := x_result[0]):
-                    desc = self.hashtag_handler(old_result["作品描述"])
-                    k = {"title": old_result["作品标题"], "content": desc}
-
-                    # Livephoto处理
-                    if all(old_result["动图地址"]):
-                        return MultimediaParseResult(media=[VideoRef(url=i) for i in old_result["动图地址"]], **k)
-
-                    # 视频类型
-                    elif old_result["作品类型"] == "视频":
-                        download_list = old_result.get("下载地址", [])
-                        if download_list:
-                            return VideoParseResult(video=download_list[0], **k)
-                        # No video URL, will try TikHub below
-
-                    # 图文类型
-                    elif old_result["作品类型"] == "图文":
-                        download_list = old_result.get("下载地址", [])
-                        if download_list:
-                            photos = []
-                            for i in download_list:
-                                base_url = i.split('?')[0] if '?' in i else i
-                                img_url = f"{base_url}?imageView2/2/w/1080/format/jpg"
-                                photos.append(ImageRef(url=img_url, ext="jpg"))
-                            return ImageParseResult(photo=photos, **k)
-                        logger.warning(f"🌐 [Patch] XHS images have no download URLs, returning empty ImageParseResult")
-                        return ImageParseResult(photo=[], **k)
-
-                    else:
-                        raise ParseError("不支持的类型")
-
-            # TikHub fallback for both new and old API when no video URL
-            # Use xhs_post_type (from official API) to choose the right endpoint first
-            logger.warning(f"🌐 [Patch] XHS parse failed or no download URLs, trying TikHub... (type_hint={xhs_post_type})")
+            # TikHub fallback
+            logger.warning(f"🌐 [Patch] XHS parse failed, trying TikHub...")
             tikhub_api_key = os.getenv("TIKHUB_API_KEY")
             if not tikhub_api_key:
                 raise ParseError("小红书解析失败：无法获取下载地址（未配置TikHub API）")
@@ -641,20 +524,12 @@ def patch_parsehub_yt_dlp():
                     raise ParseError(f"无法从URL提取note_id: {url}")
 
                 note_id = note_id_match.group(1)
-                logger.info(f"🎬 [TikHub] Fetching XHS via TikHub (app_v2): {note_id} (type_hint={xhs_post_type})")
+                logger.info(f"🎬 [TikHub] Fetching XHS via TikHub (app_v2): {note_id}")
 
                 headers = {"Authorization": f"Bearer {tikhub_api_key}"}
 
-                # Determine endpoint order based on known post type from official API
-                # This avoids video endpoint returning wrong data for image posts
-                is_image_type = xhs_post_type == PostType.IMAGE if xhs_post_type and USE_NEW_XHS_API else False
-                if is_image_type:
-                    endpoint_order = ["image", "video"]
-                    logger.info(f"🎬 [TikHub] Official API says IMAGE type, trying image endpoint first")
-                else:
-                    endpoint_order = ["video", "image"]
-
-                for endpoint_type in endpoint_order:
+                # Try video endpoint first, then image endpoint
+                for endpoint_type in ["video", "image"]:
                     if endpoint_type == "video":
                         api_url = f"https://api.tikhub.io/api/v1/xiaohongshu/app_v2/get_video_note_detail?note_id={note_id}"
                         async with httpx.AsyncClient(timeout=30.0, proxy=self.proxy) as client:
