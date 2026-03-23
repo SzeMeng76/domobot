@@ -225,6 +225,14 @@ class InlineQueryHandler:
             await update.inline_query.answer(results, cache_time=60)
             return
 
+        # App Store 搜索单独处理：返回多条结果
+        if parts and parts[0].lower() in ("appstore", "app"):
+            keyword = parts[1].strip() if len(parts) > 1 else ""
+            from commands.app_store import handle_inline_appstore_search
+            results = await handle_inline_appstore_search(keyword, context)
+            await update.inline_query.answer(results, cache_time=60)
+            return
+
         # 直接执行命令并返回结果
         results = await self._execute_and_create_results(command_text, user_id, context)
 
@@ -284,7 +292,11 @@ class InlineQueryHandler:
 • `disney$` - Disney+全球价格排名
 • `max$` - HBO Max全球价格排名
 • `appleservices icloud$` - Apple服务价格
-• `appstore id363590051$` - App Store多国价格
+
+**📱 App Store:**
+• `appstore 微信$` - 搜索应用(返回10个结果)
+• `appstore Photoshop -mac$` - 搜索macOS应用
+• `appstore id363590051$` - 查询多国价格
 
 **🌐 实用工具:**
 • `weather 北京$` - 天气查询(含AI日报)

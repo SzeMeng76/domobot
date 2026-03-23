@@ -115,13 +115,16 @@ async def convert_price_to_cny(price: str, country_code: str, context: ContextTy
     if not country_info:
         return " (不支持的国家)"
 
-    price_value = extract_price_value_from_country_info(price, country_info)
-    if price_value <= 0:
+    # 使用 extract_currency_and_price 来检测实际货币
+    from utils.price_parser import extract_currency_and_price
+    detected_currency, price_value = extract_currency_and_price(price, country_code)
+
+    if price_value is None or price_value <= 0:
         return ""
 
-    # 使用统一的降级转换函数
+    # 使用统一的降级转换函数，使用检测到的货币而不是国家默认货币
     from commands.rate_command import convert_currency_with_fallback
-    cny_price = await convert_currency_with_fallback(price_value, country_info["currency"], "CNY")
+    cny_price = await convert_currency_with_fallback(price_value, detected_currency, "CNY")
     if cny_price is not None:
         return f" ≈ ¥{cny_price:.2f} CNY"
     else:
@@ -1248,12 +1251,15 @@ async def _convert_price_to_cny_inline(price: str, country_code: str) -> str:
     if not country_info:
         return ""
 
-    price_value = extract_price_value_from_country_info(price, country_info)
-    if price_value <= 0:
+    # 使用 extract_currency_and_price 来检测实际货币
+    from utils.price_parser import extract_currency_and_price
+    detected_currency, price_value = extract_currency_and_price(price, country_code)
+
+    if price_value is None or price_value <= 0:
         return ""
 
     from commands.rate_command import convert_currency_with_fallback
-    cny_price = await convert_currency_with_fallback(price_value, country_info["currency"], "CNY")
+    cny_price = await convert_currency_with_fallback(price_value, detected_currency, "CNY")
     if cny_price is not None:
         return f" ≈ ¥{cny_price:.2f} CNY"
     else:
