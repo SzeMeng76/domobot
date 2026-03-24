@@ -392,7 +392,8 @@ class InlineQueryHandler:
             "appleservices": "🍎 Apple服务 - 添加 $ 执行查询",
             "appstore": "📱 App Store - 添加 $ 执行查询",
             "app": "📱 App Store - 添加 $ 执行查询",
-            "weather": "🌤️ 天气查询 - 添加 $ 执行查询",
+            "weather": "🌤️ 天气查询(AI日报) - 添加 $ 后等待✔出现再点击",
+            "tq": "🌤️ 天气查询(AI日报) - 添加 $ 后等待✔出现再点击",
             "time": "🕐 时区查询 - 添加 $ 执行查询",
             "news": "📰 新闻 - 添加 $ 执行查询",
             "whois": "🌐 域名查询 - 添加 $ 执行查询",
@@ -460,9 +461,9 @@ class InlineQueryHandler:
             adapter = InlineCommandAdapter(context)
             result_text, parse_mode, reply_markup = await adapter.execute_command(command, args)
 
-            # 特殊处理：weather 命令显示生成提示
+            # 特殊处理：weather 命令显示已完成提示
             if command in ("weather", "tq"):
-                desc = f"⏳ 生成中，请等待绿色✔出现后再点击 - {args}" if args else "⏳ 生成中，请等待绿色✔出现后再点击"
+                desc = f"✅ AI 日报已生成，点击查看 - {args}" if args else "✅ AI 日报已生成，点击查看"
             else:
                 desc = f"{info['desc']} - {args[:50]}..." if len(args) > 50 else (f"{info['desc']} - {args}" if args else info['desc'])
 
