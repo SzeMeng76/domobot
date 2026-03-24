@@ -464,3 +464,271 @@ command_factory.register_command("gp", gp_command, permission=Permission.USER, d
 # command_factory.register_command(
 #     "gp_cleancache", gp_clean_cache_command, permission=Permission.ADMIN, description="清理Google Play缓存"
 # )
+
+
+# =============================================================================
+# Inline 搜索入口（返回多个结果）
+# =============================================================================
+
+async def handle_inline_googleplay_search(
+    keyword: str,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> list:
+    """
+    Inline 搜索 Google Play 应用（参考 appstore 的 handle_inline_appstore_search）
+    返回多个搜索结果供用户选择
+
+    Args:
+        keyword: 搜索关键词，格式为 "应用名称" 或 "应用名称 US NG TR"
+        context: Telegram context
+
+    Returns:
+        list: InlineQueryResult 列表
+    """
+    from telegram import InlineQueryResultArticle, InputTextMessageContent
+    from uuid import uuid4
+
+    if not keyword.strip():
+        return [
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title="🔍 请输入搜索关键词",
+                description="例如: gp youtube$ 或 gp chatgpt us ng tr$",
+                input_message_content=InputTextMessageContent(
+                    message_text="🔍 请输入应用名称搜索 Google Play\n\n"
+                    "支持格式:\n"
+                    "• gp youtube$\n"
+                    "• gp chatgpt$\n"
+                    "• gp tiktok us ng tr$ (多国价格)"
+                ),
+            )
+        ]
+
+    try:
+        # 解析应用名称和国家参数
+        args_list = keyword.strip().split()
+
+        # 从末尾查找国家代码
+        user_countries = []
+        query_args = args_list[:]
+
+        while len(query_args) > 1:  # 至少保留一个参数作为应用名
+            last_arg = query_args[-1]
+            if (len(last_arg) == 2 and
+                last_arg.isalpha() and
+                last_arg.upper() in SUPPORTED_COUNTRIES):
+                user_countries.insert(0, last_arg.upper())
+                query_args.pop()
+            else:
+                break
+
+        # 剩余参数组成应用名称
+        query = " ".join(query_args)
+
+        if not query:
+            return [
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title="❌ 请输入应用名称",
+                    description="搜索关键词不能为空",
+                    input_message_content=InputTextMessageContent(
+                        message_text="❌ 请输入应用名称"
+                    ),
+                )
+            ]
+
+        # 确定要查询的国家列表
+        countries_to_check = user_countries if user_countries else DEFAULT_SEARCH_COUNTRIES
+        initial_search_country = countries_to_check[0]
+
+        lang_code = "zh-cn"
+
+        # 执行搜索
+        logger.info(f"Inline Google Play 搜索: '{query}' in {initial_search_country}, countries: {countries_to_check}")
+
+        # 搜索应用（最多10个结果）
+        search_cache_key = f"gp_search_{query}_{initial_search_country}_{lang_code}"
+        cached_search = await cache_manager.load_cache(
+            search_cache_key,
+            max_age_seconds=config_manager.config.google_play_search_cache_duration,
+            subdirectory="google_play",
+        )
+
+        if cached_search:
+            search_results = cached_search.get("results", [])
+        else:
+            search_results = await asyncio.to_thread(
+                search, query, n_hits=10, lang=lang_code, country=initial_search_country
+            )
+            if search_results:
+                cache_data = {"results": search_results, "query": query}
+                await cache_manager.save_cache(search_cache_key, cache_data, subdirectory="google_play")
+
+        if not search_results:
+            return [
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title="❌ 未找到结果",
+                    description=f"关键词: {query}",
+                    input_message_content=InputTextMessageContent(
+                        message_text=f"❌ 未找到与 \"{query}\" 相关的应用"
+                    ),
+                )
+            ]
+
+        # 构建搜索结果列表（最多10个）
+        results = []
+        for app_info in search_results[:10]:
+            app_id = app_info.get("appId")
+            app_title = app_info.get("title", "未知应用")
+            developer = app_info.get("developer", "")
+
+            if not app_id:
+                continue
+
+            # 构建描述
+            description_parts = []
+            if developer:
+                description_parts.append(developer)
+
+            # 获取价格信息（如果有）
+            price = app_info.get("price")
+            if price:
+                description_parts.append(price)
+
+            description = " | ".join(description_parts) if description_parts else "点击查看多国价格"
+
+            # 获取多国详细信息
+            try:
+                # 并发获取所有国家的详细信息
+                tasks = [get_app_details_for_country(app_id, c, lang_code) for c in countries_to_check]
+                country_results = await asyncio.gather(*tasks)
+
+                # 构建消息
+                raw_message_parts = []
+
+                # 获取基本信息
+                first_valid_details = next((details for _, details, _ in country_results if details), None)
+                if first_valid_details:
+                    app_title = first_valid_details.get("title", app_title)
+                    developer = first_valid_details.get("developer", "N/A")
+                    icon_url = first_valid_details.get("icon")
+
+                    if icon_url:
+                        raw_message_parts.append(f"[\u200b]({icon_url})")
+
+                    raw_message_parts.append(f"{EMOJI_APP} *应用名称: {app_title}*")
+                    raw_message_parts.append(f"{EMOJI_DEV} 开发者: {developer}")
+                    raw_message_parts.append("")
+
+                    # 添加各国信息
+                    for i, (country, details, error_msg) in enumerate(country_results):
+                        country_info = SUPPORTED_COUNTRIES.get(country, {})
+                        country_name = country_info.get("name", country)
+                        flag_emoji = get_country_flag(country)
+
+                        raw_message_parts.append(f"{EMOJI_COUNTRY} *{flag_emoji} {country_name} ({country})*")
+
+                        if details:
+                            score = details.get("score", 0)
+                            score_str = f"{score:.1f}" if score else "N/A"
+                            rating_stars = "⭐" * int(round(score)) if score else "N/A"
+                            installs = details.get("installs", "N/A")
+
+                            # 价格信息
+                            is_free = details.get("free", True)
+                            price_raw = details.get("price")
+                            if is_free:
+                                price_str = "免费"
+                            elif price_raw:
+                                price_str = str(price_raw)
+                            else:
+                                price_str = "价格未知"
+
+                            # 内购信息
+                            offers_iap = details.get("offersIAP", False)
+                            iap_range_raw = details.get("IAPRange")
+                            iap_price_raw = details.get("inAppProductPrice")
+                            iap_str = "无"
+
+                            if offers_iap:
+                                if iap_range_raw:
+                                    original_price, cny_info = await parse_and_convert_iap_price(iap_range_raw, rate_converter)
+                                    iap_str = original_price
+                                    if cny_info:
+                                        iap_str += f" ({cny_info})"
+                                elif iap_price_raw:
+                                    original_price, cny_info = await parse_and_convert_iap_price(iap_price_raw, rate_converter)
+                                    iap_str = original_price
+                                    if cny_info:
+                                        iap_str += f" ({cny_info})"
+                                else:
+                                    iap_str = "有 (价格范围未知)"
+
+                            raw_message_parts.append(f"  {EMOJI_RATING} 评分: {rating_stars} ({score_str})")
+                            raw_message_parts.append(f"  {EMOJI_INSTALLS} 安装量: {installs}")
+                            raw_message_parts.append(f"  {EMOJI_PRICE} 价格: {price_str}")
+                            raw_message_parts.append(f"  {EMOJI_IAP} 内购: {iap_str}")
+                        else:
+                            raw_message_parts.append(f"  😕 {error_msg}")
+
+                        # 国家之间添加空行
+                        if i < len(country_results) - 1:
+                            raw_message_parts.append("")
+
+                    raw_final_message = "\n".join(raw_message_parts).strip()
+                    message_text = foldable_text_with_markdown_v2(raw_final_message)
+                    parse_mode = "MarkdownV2"
+
+                    # 更新描述，显示查询的国家
+                    if len(countries_to_check) > 1:
+                        countries_str = ", ".join([c.upper() for c in countries_to_check[:3]])
+                        if len(countries_to_check) > 3:
+                            countries_str += f" +{len(countries_to_check) - 3}"
+                        description = f"多国价格: {countries_str}"
+                    elif first_valid_details:
+                        # 单国查询，显示价格
+                        is_free = first_valid_details.get("free", True)
+                        if is_free:
+                            description = "免费"
+                        else:
+                            price_raw = first_valid_details.get("price")
+                            if price_raw:
+                                description = str(price_raw)
+
+                else:
+                    # 没有获取到任何详细信息
+                    message_text = f"📱 *{app_title}*\n\n❌ 获取详细信息失败\n\n💡 请使用 `/gp {query}` 重试"
+                    parse_mode = "Markdown"
+
+            except Exception as e:
+                logger.warning(f"获取应用 {app_id} 详情失败: {e}")
+                message_text = f"📱 *{app_title}*\n\n❌ 获取详细信息失败\n\n💡 请使用 `/gp {query}` 重试"
+                parse_mode = "Markdown"
+
+            results.append(
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title=f"📱 {app_title}",
+                    description=description,
+                    input_message_content=InputTextMessageContent(
+                        message_text=message_text,
+                        parse_mode=parse_mode,
+                    ),
+                )
+            )
+
+        return results
+
+    except Exception as e:
+        logger.error(f"Inline Google Play 搜索失败: {e}", exc_info=True)
+        return [
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title="❌ 搜索失败",
+                description=str(e)[:100],
+                input_message_content=InputTextMessageContent(
+                    message_text=f"❌ 搜索失败: {str(e)}"
+                ),
+            )
+        ]

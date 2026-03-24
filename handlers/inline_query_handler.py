@@ -233,6 +233,30 @@ class InlineQueryHandler:
             await update.inline_query.answer(results, cache_time=60)
             return
 
+        # Finance 搜索单独处理：返回多条结果
+        if parts and parts[0].lower() in ("finance", "stock"):
+            keyword = parts[1].strip() if len(parts) > 1 else ""
+            from commands.finance import handle_inline_finance_search
+            results = await handle_inline_finance_search(keyword, context)
+            await update.inline_query.answer(results, cache_time=60)
+            return
+
+        # Steam 搜索单独处理：返回多条结果
+        if parts and parts[0].lower() in ("steam",):
+            keyword = parts[1].strip() if len(parts) > 1 else ""
+            from commands.steam import handle_inline_steam_search
+            results = await handle_inline_steam_search(keyword, context)
+            await update.inline_query.answer(results, cache_time=60)
+            return
+
+        # Google Play 搜索单独处理：返回多条结果
+        if parts and parts[0].lower() in ("gp", "googleplay"):
+            keyword = parts[1].strip() if len(parts) > 1 else ""
+            from commands.google_play import handle_inline_googleplay_search
+            results = await handle_inline_googleplay_search(keyword, context)
+            await update.inline_query.answer(results, cache_time=60)
+            return
+
         # 直接执行命令并返回结果
         results = await self._execute_and_create_results(command_text, user_id, context)
 
@@ -283,8 +307,21 @@ class InlineQueryHandler:
 **💰 金融查询:**
 • `rate usd 100$` - 汇率转换
 • `crypto btc$` - 加密货币价格
-• `finance AAPL$` - 股票查询
+• `finance AAPL$` - 股票查询（精确代码）
+• `finance apple$` - 股票搜索（模糊搜索，返回10个结果）
 • `bin 123456$` - BIN卡头查询
+
+**🎮 游戏价格:**
+• `steam elden ring$` - Steam游戏搜索（返回10个结果）
+• `steam 双人成行$` - Steam中文游戏搜索
+• `steam CS2 us ru tr ar$` - 多国价格对比
+
+**📱 应用商店:**
+• `appstore 微信$` - App Store搜索（返回10个结果）
+• `appstore Photoshop -mac$` - 搜索macOS应用
+• `appstore id363590051$` - 查询多国价格
+• `gp youtube$` - Google Play搜索（返回10个结果）
+• `gp chatgpt us ng tr$` - 多国价格对比
 
 **🎬 流媒体价格:**
 • `netflix$` - Netflix全球价格排名
@@ -292,11 +329,6 @@ class InlineQueryHandler:
 • `disney$` - Disney+全球价格排名
 • `max$` - HBO Max全球价格排名
 • `appleservices icloud$` - Apple服务价格
-
-**📱 App Store:**
-• `appstore 微信$` - 搜索应用(返回10个结果)
-• `appstore Photoshop -mac$` - 搜索macOS应用
-• `appstore id363590051$` - 查询多国价格
 
 **🌐 实用工具:**
 • `weather 北京$` - 天气查询(含AI日报)
@@ -347,7 +379,11 @@ class InlineQueryHandler:
         command_hints = {
             "rate": "💱 汇率转换 - 添加 $ 执行查询",
             "crypto": "₿ 加密货币 - 添加 $ 执行查询",
-            "finance": "📈 股票查询 - 添加 $ 执行查询",
+            "finance": "📈 股票查询/搜索 - 添加 $ 执行查询",
+            "stock": "📈 股票搜索 - 添加 $ 执行查询",
+            "steam": "🎮 Steam游戏搜索 - 添加 $ 执行查询",
+            "gp": "📱 Google Play搜索 - 添加 $ 执行查询",
+            "googleplay": "📱 Google Play搜索 - 添加 $ 执行查询",
             "bin": "💳 BIN查询 - 添加 $ 执行查询",
             "netflix": "🎬 Netflix - 添加 $ 执行查询",
             "spotify": "🎵 Spotify - 添加 $ 执行查询",
@@ -355,6 +391,7 @@ class InlineQueryHandler:
             "max": "📺 HBO Max - 添加 $ 执行查询",
             "appleservices": "🍎 Apple服务 - 添加 $ 执行查询",
             "appstore": "📱 App Store - 添加 $ 执行查询",
+            "app": "📱 App Store - 添加 $ 执行查询",
             "weather": "🌤️ 天气查询 - 添加 $ 执行查询",
             "time": "🕐 时区查询 - 添加 $ 执行查询",
             "news": "📰 新闻 - 添加 $ 执行查询",

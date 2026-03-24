@@ -1966,3 +1966,219 @@ command_factory.register_command("steamb", steam_bundle_command, permission=Perm
 # 已迁移到统一缓存管理命令 /cleancache
 # command_factory.register_command("steamcc", steam_clean_cache_command, permission=Permission.ADMIN, description="清理Steam缓存")
 command_factory.register_command("steams", steam_search_command, permission=Permission.USER, description="综合搜索游戏和捆绑包")
+
+
+# =============================================================================
+# Inline 搜索入口（返回多个结果）
+# =============================================================================
+
+async def handle_inline_steam_search(
+    keyword: str,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> list:
+    """
+    Inline 搜索 Steam 游戏（参考 appstore 的 handle_inline_appstore_search）
+    返回多个搜索结果供用户选择
+
+    Args:
+        keyword: 搜索关键词，格式为 "游戏名称" 或 "游戏名称 US RU TR"
+        context: Telegram context
+
+    Returns:
+        list: InlineQueryResult 列表
+    """
+    from telegram import InlineQueryResultArticle, InputTextMessageContent
+    from uuid import uuid4
+
+    if not keyword.strip():
+        return [
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title="🔍 请输入搜索关键词",
+                description="例如: steam elden ring$ 或 steam 双人成行 us ru tr$",
+                input_message_content=InputTextMessageContent(
+                    message_text="🔍 请输入游戏名称搜索 Steam\n\n"
+                    "支持格式:\n"
+                    "• steam elden ring$\n"
+                    "• steam 双人成行$\n"
+                    "• steam CS2 us ru tr$ (多国价格)"
+                ),
+            )
+        ]
+
+    if not steam_checker:
+        return [
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title="❌ Steam功能未初始化",
+                description="请稍后重试",
+                input_message_content=InputTextMessageContent(
+                    message_text="❌ Steam功能未初始化，请稍后重试"
+                ),
+            )
+        ]
+
+    try:
+        # 解析游戏名称和国家参数
+        all_params = keyword.strip().split()
+
+        # 分离游戏名称和国家代码
+        game_name_parts = []
+        country_inputs = []
+
+        for param in all_params:
+            country_code = steam_checker.get_country_code(param)
+            if country_code:
+                country_inputs.append(param)
+            else:
+                # 如果已经开始收集国家代码，后面的都当作国家代码
+                if country_inputs:
+                    country_inputs.append(param)
+                else:
+                    game_name_parts.append(param)
+
+        if not game_name_parts:
+            return [
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title="❌ 请输入游戏名称",
+                    description="搜索关键词不能为空",
+                    input_message_content=InputTextMessageContent(
+                        message_text="❌ 请输入游戏名称"
+                    ),
+                )
+            ]
+
+        game_query = " ".join(game_name_parts)
+
+        # 确定要查询的国家列表（默认只查中国区）
+        if not country_inputs:
+            country_inputs = ["CN"]
+
+        # 默认在第一个国家搜索
+        search_country = steam_checker.get_country_code(country_inputs[0]) or "CN"
+
+        # 执行搜索
+        logger.info(f"Inline Steam 搜索: '{game_query}' in {search_country}, countries: {country_inputs}")
+        search_results = await steam_checker.search_game(game_query, search_country, use_cache=False)
+
+        if not search_results:
+            return [
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title="❌ 未找到结果",
+                    description=f"关键词: {game_query}",
+                    input_message_content=InputTextMessageContent(
+                        message_text=f"❌ 未找到与 \"{game_query}\" 相关的游戏"
+                    ),
+                )
+            ]
+
+        # 构建搜索结果列表（最多10个）
+        results = []
+        for i, game in enumerate(search_results[:10]):
+            game_name = game.get("name", "未知游戏")
+            game_id = game.get("id")
+            game_type = game.get("type", "game")
+
+            if not game_id:
+                continue
+
+            # 根据类型添加图标
+            if game_type == "bundle":
+                type_icon = "🛍"
+            elif game_type == "dlc":
+                type_icon = "📦"
+            else:
+                type_icon = "🎮"
+
+            # 获取游戏详细信息（支持多国价格）
+            try:
+                if game_type == "bundle":
+                    # 捆绑包：只查询第一个国家
+                    bundle_details = await steam_checker.get_bundle_details(str(game_id), search_country)
+                    if bundle_details:
+                        result_text = await steam_checker.format_bundle_info(bundle_details, search_country)
+                        message_text = foldable_text_with_markdown_v2(result_text)
+                        parse_mode = "MarkdownV2"
+
+                        # 构建描述
+                        final_price = bundle_details.get('final_price', '未知')
+                        description = f"捆绑包 | {final_price}"
+                    else:
+                        message_text = f"🛍 *{game_name}*\n\n❌ 获取捆绑包信息失败\n\n💡 请使用 `/steamb {game_id}` 重试"
+                        parse_mode = "Markdown"
+                        description = "捆绑包 | 点击查看详情"
+                else:
+                    # 游戏和DLC：支持多国价格查询
+                    if len(country_inputs) > 1:
+                        # 多国价格查询
+                        result_text = await steam_checker.search_multiple_countries(str(game_id), country_inputs)
+                        message_text = foldable_text_with_markdown_v2(result_text)
+                        parse_mode = "MarkdownV2"
+
+                        # 构建描述：显示查询的国家
+                        countries_str = ", ".join([c.upper() for c in country_inputs[:3]])
+                        if len(country_inputs) > 3:
+                            countries_str += f" +{len(country_inputs) - 3}"
+                        description = f"多国价格: {countries_str}"
+                    else:
+                        # 单国价格查询
+                        game_details = await steam_checker.get_game_details(str(game_id), search_country)
+                        if game_details and game_details.get('success'):
+                            result_text = await steam_checker.format_game_info(game_details, search_country)
+                            message_text = foldable_text_with_markdown_v2(result_text)
+                            parse_mode = "MarkdownV2"
+
+                            # 构建描述
+                            data = game_details.get('data', {})
+                            price_info = data.get('price_overview', {})
+                            if price_info:
+                                if price_info.get('is_free'):
+                                    description = "免费游戏"
+                                else:
+                                    final_price = price_info.get('final_formatted', '未知')
+                                    discount = price_info.get('discount_percent', 0)
+                                    if discount > 0:
+                                        description = f"{final_price} (-{discount}%)"
+                                    else:
+                                        description = final_price
+                            else:
+                                description = "点击查看详情"
+                        else:
+                            message_text = f"{type_icon} *{game_name}*\n\n❌ 获取游戏信息失败\n\n💡 请使用 `/steam {game_id}` 重试"
+                            parse_mode = "Markdown"
+                            description = "点击查看详情"
+
+            except Exception as e:
+                logger.warning(f"获取游戏 {game_id} 详情失败: {e}")
+                message_text = f"{type_icon} *{game_name}*\n\n❌ 获取详细信息失败\n\n💡 请使用 `/steam {game_name}` 重试"
+                parse_mode = "Markdown"
+                description = "点击查看详情"
+
+            results.append(
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title=f"{type_icon} {game_name}",
+                    description=description,
+                    input_message_content=InputTextMessageContent(
+                        message_text=message_text,
+                        parse_mode=parse_mode,
+                    ),
+                )
+            )
+
+        return results
+
+    except Exception as e:
+        logger.error(f"Inline Steam 搜索失败: {e}", exc_info=True)
+        return [
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title="❌ 搜索失败",
+                description=str(e)[:100],
+                input_message_content=InputTextMessageContent(
+                    message_text=f"❌ 搜索失败: {str(e)}"
+                ),
+            )
+        ]

@@ -2706,3 +2706,134 @@ async def finance_inline_execute(args: str) -> dict:
             "description": "查询失败",
             "error": str(e)
         }
+
+
+# =============================================================================
+# Inline 搜索入口（返回多个结果）
+# =============================================================================
+
+async def handle_inline_finance_search(
+    keyword: str,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> list:
+    """
+    Inline 搜索股票（参考 appstore 的 handle_inline_appstore_search）
+    返回多个搜索结果供用户选择
+
+    Args:
+        keyword: 搜索关键词，如 "apple" 或 "腾讯"
+        context: Telegram context
+
+    Returns:
+        list: InlineQueryResult 列表
+    """
+    from telegram import InlineQueryResultArticle, InputTextMessageContent
+    from uuid import uuid4
+    from utils.formatter import foldable_text_with_markdown_v2
+
+    if not keyword.strip():
+        return [
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title="🔍 请输入搜索关键词",
+                description="例如: finance apple$ 或 finance 腾讯$",
+                input_message_content=InputTextMessageContent(
+                    message_text="🔍 请输入股票名称或代码搜索\n\n"
+                    "支持格式:\n"
+                    "• finance apple$\n"
+                    "• finance 腾讯$\n"
+                    "• finance AAPL$"
+                ),
+            )
+        ]
+
+    try:
+        # 搜索股票
+        logger.info(f"Inline Finance 搜索: '{keyword}'")
+        search_results = await finance_service.search_stocks(keyword, limit=10)
+
+        if not search_results:
+            return [
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title="❌ 未找到结果",
+                    description=f"关键词: {keyword}",
+                    input_message_content=InputTextMessageContent(
+                        message_text=f"❌ 未找到与 \"{keyword}\" 相关的股票"
+                    ),
+                )
+            ]
+
+        # 构建搜索结果列表（最多10个）
+        results = []
+        for stock in search_results[:10]:
+            symbol = stock.get('symbol', '')
+            name = stock.get('name', symbol)
+            exchange = stock.get('exchange', '')
+            stock_type = stock.get('type', '')
+
+            if not symbol:
+                continue
+
+            # 构建描述
+            description_parts = []
+            if exchange:
+                description_parts.append(exchange)
+            if stock_type:
+                description_parts.append(stock_type)
+
+            description = " | ".join(description_parts) if description_parts else "点击查看详情"
+
+            # 获取股票详细信息
+            try:
+                stock_data = await finance_service.get_stock_info(symbol)
+
+                if stock_data and not stock_data.get('error'):
+                    # 格式化股票信息
+                    formatted_result = format_stock_info(stock_data)
+                    message_text = foldable_text_with_markdown_v2(formatted_result)
+                    parse_mode = "MarkdownV2"
+
+                    # 更新描述，包含价格信息
+                    price = stock_data.get('current_price', 0)
+                    change_percent = stock_data.get('change_percent', 0)
+                    currency = stock_data.get('currency', 'USD')
+                    trend = "📈" if change_percent >= 0 else "📉"
+                    description = f"{price:.2f} {currency} {trend} {change_percent:+.2f}%"
+                else:
+                    # 降级：只显示基本信息
+                    message_text = f"📊 *{name}* ({symbol})\n\n❌ 获取详细信息失败\n\n💡 请使用 `/finance {symbol}` 重试"
+                    parse_mode = "Markdown"
+
+            except Exception as e:
+                logger.warning(f"获取股票 {symbol} 详情失败: {e}")
+                # 降级：只显示基本信息
+                message_text = f"📊 *{name}* ({symbol})\n\n❌ 获取详细信息失败\n\n💡 请使用 `/finance {symbol}` 重试"
+                parse_mode = "Markdown"
+
+            results.append(
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title=f"📊 {symbol} - {name}",
+                    description=description,
+                    input_message_content=InputTextMessageContent(
+                        message_text=message_text,
+                        parse_mode=parse_mode,
+                    ),
+                )
+            )
+
+        return results
+
+    except Exception as e:
+        logger.error(f"Inline Finance 搜索失败: {e}", exc_info=True)
+        return [
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title="❌ 搜索失败",
+                description=str(e)[:100],
+                input_message_content=InputTextMessageContent(
+                    message_text=f"❌ 搜索失败: {str(e)}"
+                ),
+            )
+        ]
