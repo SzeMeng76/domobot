@@ -683,7 +683,8 @@ async def generate_ai_weather_report(location_name: str, realtime_data: dict, da
 - 适当使用emoji增加趣味性（每段1-3个）
 - 如果有极端天气（高温、暴雨等）或预警要特别提醒
 - **天气预警是最重要的信息，一定要突出提醒用户注意安全**
-- **重要：只输出纯文本，不要使用任何Markdown格式符号（如*、_、`、[、]等），只使用emoji和普通文字**"""
+- **重要：只输出纯文本，不要使用任何Markdown格式符号（如*、_、`、[、]等），只使用emoji和普通文字**
+- **禁止输出思考过程标签（如<think>、</think>等），直接输出最终的天气播报内容**"""
 
         user_prompt = f"请根据以下天气数据，生成一份可爱活泼的天气日报：\n\n{weather_data_summary}"
 
