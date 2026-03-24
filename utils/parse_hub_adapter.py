@@ -452,10 +452,12 @@ class ParseHubAdapter:
                                 height = video_stream.get("height", 0) or video_meta.get("height", 0)
                                 duration = video_stream.get("duration", 0) // 1000
                                 logger.info(f"✅ [TikHub] XHS video via TikHub: {video_url[:80]}")
-                                return VideoParseResult(
+                                result = VideoParseResult(
                                     title=title, content=desc,
                                     video=VideoRef(url=video_url, width=width, height=height, duration=duration)
                                 )
+                                result.raw_url = url
+                                return result
                         raise ParseError("TikHub video endpoint返回数据中没有视频URL")
 
         if is_video:
@@ -486,10 +488,12 @@ class ParseHubAdapter:
                             height = video_stream.get("height", 0) or video_meta.get("height", 0)
                             duration = video_stream.get("duration", 0) // 1000
                             logger.info(f"✅ [TikHub] XHS video via TikHub: {video_url[:80]}")
-                            return VideoParseResult(
+                            result = VideoParseResult(
                                 title=title, content=desc,
                                 video=VideoRef(url=video_url, width=width, height=height, duration=duration)
                             )
+                            result.raw_url = url
+                            return result
             raise ParseError("TikHub video endpoint返回数据中没有视频URL")
 
         # Image post: call image endpoint with retry, never fall back to video
@@ -521,7 +525,9 @@ class ParseHubAdapter:
                                     photos.append(ImageRef(url=img_url, ext="jpg", width=img.get("width", 0), height=img.get("height", 0)))
                             if photos:
                                 logger.info(f"✅ [TikHub] XHS {len(photos)} images via TikHub")
-                                return ImageParseResult(photo=photos, title=title, content=desc)
+                                result = ImageParseResult(photo=photos, title=title, content=desc)
+                                result.raw_url = url
+                                return result
                 logger.warning(f"⚠️ [TikHub] Image endpoint attempt {attempt + 1}/{max_retries} failed")
             except Exception as e:
                 logger.warning(f"⚠️ [TikHub] Image endpoint attempt {attempt + 1}/{max_retries} error: {e}")
@@ -552,7 +558,9 @@ class ParseHubAdapter:
                     if origin_video_key:
                         video_url = f"https://sns-na-i6.xhscdn.com/{origin_video_key}"
                         logger.info(f"✅ [TikHub] XHS video via app/get_note_info")
-                        return VideoParseResult(title=title, content=desc, video=VideoRef(url=video_url))
+                        result = VideoParseResult(title=title, content=desc, video=VideoRef(url=video_url))
+                        result.raw_url = url
+                        return result
 
                 images_list = note_item.get("images_list", [])
                 if images_list:
@@ -564,7 +572,9 @@ class ParseHubAdapter:
                             photos.append(ImageRef(url=img_url, ext="jpg", width=img.get("width", 0), height=img.get("height", 0)))
                     if photos:
                         logger.info(f"✅ [TikHub] XHS {len(photos)} images via app/get_note_info")
-                        return ImageParseResult(photo=photos, title=title, content=desc)
+                        result = ImageParseResult(photo=photos, title=title, content=desc)
+                        result.raw_url = url
+                        return result
 
         # Fallback 2: web/get_note_info_v7
         logger.info(f"🔄 [TikHub] Trying fallback endpoint: web/get_note_info_v7")
@@ -589,7 +599,9 @@ class ParseHubAdapter:
                     if origin_video_key:
                         video_url = f"https://sns-na-i6.xhscdn.com/{origin_video_key}"
                         logger.info(f"✅ [TikHub] XHS video via web/get_note_info_v7")
-                        return VideoParseResult(title=title, content=desc, video=VideoRef(url=video_url))
+                        result = VideoParseResult(title=title, content=desc, video=VideoRef(url=video_url))
+                        result.raw_url = url
+                        return result
 
                 images_list = note_item.get("images_list", [])
                 if images_list:
@@ -601,7 +613,9 @@ class ParseHubAdapter:
                             photos.append(ImageRef(url=img_url, ext="jpg", width=img.get("width", 0), height=img.get("height", 0)))
                     if photos:
                         logger.info(f"✅ [TikHub] XHS {len(photos)} images via web/get_note_info_v7")
-                        return ImageParseResult(photo=photos, title=title, content=desc)
+                        result = ImageParseResult(photo=photos, title=title, content=desc)
+                        result.raw_url = url
+                        return result
 
         raise ParseError("TikHub XHS解析失败：所有endpoint均无法获取媒体URL")
 
