@@ -460,12 +460,18 @@ class InlineQueryHandler:
             adapter = InlineCommandAdapter(context)
             result_text, parse_mode, reply_markup = await adapter.execute_command(command, args)
 
+            # 特殊处理：weather 命令显示生成提示
+            if command in ("weather", "tq"):
+                desc = f"⏳ 生成中，请等待绿色✔出现后再点击 - {args}" if args else "⏳ 生成中，请等待绿色✔出现后再点击"
+            else:
+                desc = f"{info['desc']} - {args[:50]}..." if len(args) > 50 else (f"{info['desc']} - {args}" if args else info['desc'])
+
             # 创建结果
             results = [
                 InlineQueryResultArticle(
                     id=str(uuid4()),
                     title=f"{info['icon']} {info['title']}",
-                    description=f"{info['desc']} - {args[:50]}..." if len(args) > 50 else (f"{info['desc']} - {args}" if args else info['desc']),
+                    description=desc,
                     thumbnail_url=f"https://img.icons8.com/color/96/000000/checkmark.png",
                     input_message_content=InputTextMessageContent(
                         message_text=result_text,

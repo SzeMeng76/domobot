@@ -706,10 +706,10 @@ class AdminPanelHandler:
             chat_id = context.user_data.get("chat_id")
             if initial_msg_id and chat_id:
                 await _schedule_deletion(
-                    chat_id,
-                    initial_msg_id,
-                    delay=3,  # 也延迟3秒
                     context=context,
+                    chat_id=chat_id,
+                    message_id=initial_msg_id,
+                    delay=3
                 )
 
         # 不要直接结束对话，让用户可以继续使用admin命令
