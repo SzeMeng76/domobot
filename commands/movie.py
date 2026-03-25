@@ -8730,3 +8730,279 @@ command_factory.register_callback(r"^movie_", movie_callback_handler, permission
 command_factory.register_callback(r"^tv_", tv_callback_handler, permission=Permission.USER, description="电视剧搜索结果选择")
 command_factory.register_callback(r"^person_", person_callback_handler, permission=Permission.USER, description="人物功能回调处理 - 搜索、详情、热门等")
 command_factory.register_callback(r"^chart_", chart_callback_handler, permission=Permission.USER, description="统一排行榜功能回调处理")
+
+
+# ============================================================
+# Inline 搜索功能（参考 finance.py 的实现）
+# ============================================================
+
+async def handle_inline_movie_search(
+    keyword: str,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> list:
+    """
+    Inline 搜索电影（参考 finance 的 handle_inline_finance_search）
+    返回多个搜索结果供用户选择
+
+    Args:
+        keyword: 搜索关键词，如 "Inception" 或 "盗梦空间"
+        context: Telegram context
+
+    Returns:
+        list: InlineQueryResult 列表
+    """
+    from telegram import InlineQueryResultArticle, InputTextMessageContent
+    from uuid import uuid4
+    from utils.formatter import foldable_text_with_markdown_v2
+
+    if not keyword.strip():
+        return [
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title="🔍 请输入搜索关键词",
+                description="例如: movie Inception$ 或 movie 盗梦空间$",
+                input_message_content=InputTextMessageContent(
+                    message_text="🔍 请输入电影名称搜索\n\n"
+                    "支持格式:\n"
+                    "• movie Inception$\n"
+                    "• movie 盗梦空间$\n"
+                    "• movie Avengers$"
+                ),
+            )
+        ]
+
+    if not movie_service:
+        return [
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title="❌ 服务未初始化",
+                description="电影查询服务未初始化",
+                input_message_content=InputTextMessageContent(
+                    message_text="❌ 电影查询服务未初始化"
+                ),
+            )
+        ]
+
+    try:
+        # 搜索电影
+        logger.info(f"Inline Movie 搜索: '{keyword}'")
+        search_data = await movie_service.search_movies(keyword, page=1)
+
+        if not search_data or not search_data.get("results"):
+            return [
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title="❌ 未找到结果",
+                    description=f"关键词: {keyword}",
+                    input_message_content=InputTextMessageContent(
+                        message_text=f"❌ 未找到与 \"{keyword}\" 相关的电影"
+                    ),
+                )
+            ]
+
+        # 构建搜索结果列表（最多10个）
+        results = []
+        for movie in search_data["results"][:10]:
+            movie_id = movie.get("id")
+            title = movie.get("title", "未知电影")
+            original_title = movie.get("original_title", "")
+            release_date = movie.get("release_date", "")
+            vote_average = movie.get("vote_average", 0)
+
+            if not movie_id:
+                continue
+
+            # 构建描述
+            description_parts = []
+            if release_date:
+                year = release_date.split("-")[0] if "-" in release_date else release_date
+                description_parts.append(f"📅 {year}")
+            if vote_average:
+                description_parts.append(f"⭐ {vote_average:.1f}")
+            if original_title and original_title != title:
+                description_parts.append(f"({original_title})")
+
+            description = " | ".join(description_parts) if description_parts else "点击查看详情"
+
+            # 获取电影详细信息
+            try:
+                movie_details = await movie_service.get_movie_details(movie_id)
+
+                if movie_details and not movie_details.get("error"):
+                    # 格式化电影信息
+                    formatted_result = format_movie_details(movie_details)
+                    message_text = foldable_text_with_markdown_v2(formatted_result)
+                    parse_mode = "MarkdownV2"
+                else:
+                    # 降级：只显示基本信息
+                    message_text = f"🎬 *{title}*\n\n❌ 获取详细信息失败\n\n💡 请使用 `/movie {title}` 重试"
+                    parse_mode = "Markdown"
+
+            except Exception as e:
+                logger.warning(f"获取电影 {movie_id} 详情失败: {e}")
+                # 降级：只显示基本信息
+                message_text = f"🎬 *{title}*\n\n❌ 获取详细信息失败\n\n💡 请使用 `/movie {title}` 重试"
+                parse_mode = "Markdown"
+
+            results.append(
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title=f"🎬 {title}",
+                    description=description,
+                    input_message_content=InputTextMessageContent(
+                        message_text=message_text,
+                        parse_mode=parse_mode,
+                    ),
+                )
+            )
+
+        return results
+
+    except Exception as e:
+        logger.error(f"Inline Movie 搜索失败: {e}", exc_info=True)
+        return [
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title="❌ 搜索失败",
+                description=str(e)[:100],
+                input_message_content=InputTextMessageContent(
+                    message_text=f"❌ 搜索失败: {str(e)}"
+                ),
+            )
+        ]
+
+
+async def handle_inline_tv_search(
+    keyword: str,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> list:
+    """
+    Inline 搜索电视剧（参考 finance 的 handle_inline_finance_search）
+    返回多个搜索结果供用户选择
+
+    Args:
+        keyword: 搜索关键词，如 "Breaking Bad" 或 "绝命毒师"
+        context: Telegram context
+
+    Returns:
+        list: InlineQueryResult 列表
+    """
+    from telegram import InlineQueryResultArticle, InputTextMessageContent
+    from uuid import uuid4
+    from utils.formatter import foldable_text_with_markdown_v2
+
+    if not keyword.strip():
+        return [
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title="🔍 请输入搜索关键词",
+                description="例如: tv Breaking Bad$ 或 tv 绝命毒师$",
+                input_message_content=InputTextMessageContent(
+                    message_text="🔍 请输入电视剧名称搜索\n\n"
+                    "支持格式:\n"
+                    "• tv Breaking Bad$\n"
+                    "• tv 绝命毒师$\n"
+                    "• tv Game of Thrones$"
+                ),
+            )
+        ]
+
+    if not movie_service:
+        return [
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title="❌ 服务未初始化",
+                description="电视剧查询服务未初始化",
+                input_message_content=InputTextMessageContent(
+                    message_text="❌ 电视剧查询服务未初始化"
+                ),
+            )
+        ]
+
+    try:
+        # 搜索电视剧
+        logger.info(f"Inline TV 搜索: '{keyword}'")
+        search_data = await movie_service.search_tv_shows(keyword, page=1)
+
+        if not search_data or not search_data.get("results"):
+            return [
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title="❌ 未找到结果",
+                    description=f"关键词: {keyword}",
+                    input_message_content=InputTextMessageContent(
+                        message_text=f"❌ 未找到与 \"{keyword}\" 相关的电视剧"
+                    ),
+                )
+            ]
+
+        # 构建搜索结果列表（最多10个）
+        results = []
+        for tv in search_data["results"][:10]:
+            tv_id = tv.get("id")
+            name = tv.get("name", "未知电视剧")
+            original_name = tv.get("original_name", "")
+            first_air_date = tv.get("first_air_date", "")
+            vote_average = tv.get("vote_average", 0)
+
+            if not tv_id:
+                continue
+
+            # 构建描述
+            description_parts = []
+            if first_air_date:
+                year = first_air_date.split("-")[0] if "-" in first_air_date else first_air_date
+                description_parts.append(f"📅 {year}")
+            if vote_average:
+                description_parts.append(f"⭐ {vote_average:.1f}")
+            if original_name and original_name != name:
+                description_parts.append(f"({original_name})")
+
+            description = " | ".join(description_parts) if description_parts else "点击查看详情"
+
+            # 获取电视剧详细信息
+            try:
+                tv_details = await movie_service.get_tv_details(tv_id)
+
+                if tv_details and not tv_details.get("error"):
+                    # 格式化电视剧信息
+                    formatted_result = format_tv_details(tv_details)
+                    message_text = foldable_text_with_markdown_v2(formatted_result)
+                    parse_mode = "MarkdownV2"
+                else:
+                    # 降级：只显示基本信息
+                    message_text = f"📺 *{name}*\n\n❌ 获取详细信息失败\n\n💡 请使用 `/tv {name}` 重试"
+                    parse_mode = "Markdown"
+
+            except Exception as e:
+                logger.warning(f"获取电视剧 {tv_id} 详情失败: {e}")
+                # 降级：只显示基本信息
+                message_text = f"📺 *{name}*\n\n❌ 获取详细信息失败\n\n💡 请使用 `/tv {name}` 重试"
+                parse_mode = "Markdown"
+
+            results.append(
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title=f"📺 {name}",
+                    description=description,
+                    input_message_content=InputTextMessageContent(
+                        message_text=message_text,
+                        parse_mode=parse_mode,
+                    ),
+                )
+            )
+
+        return results
+
+    except Exception as e:
+        logger.error(f"Inline TV 搜索失败: {e}", exc_info=True)
+        return [
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title="❌ 搜索失败",
+                description=str(e)[:100],
+                input_message_content=InputTextMessageContent(
+                    message_text=f"❌ 搜索失败: {str(e)}"
+                ),
+            )
+        ]

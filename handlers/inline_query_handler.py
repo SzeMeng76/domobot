@@ -241,6 +241,22 @@ class InlineQueryHandler:
             await update.inline_query.answer(results, cache_time=60)
             return
 
+        # Movie 搜索单独处理：返回多条结果
+        if parts and parts[0].lower() in ("movie",):
+            keyword = parts[1].strip() if len(parts) > 1 else ""
+            from commands.movie import handle_inline_movie_search
+            results = await handle_inline_movie_search(keyword, context)
+            await update.inline_query.answer(results, cache_time=60)
+            return
+
+        # TV 搜索单独处理：返回多条结果
+        if parts and parts[0].lower() in ("tv",):
+            keyword = parts[1].strip() if len(parts) > 1 else ""
+            from commands.movie import handle_inline_tv_search
+            results = await handle_inline_tv_search(keyword, context)
+            await update.inline_query.answer(results, cache_time=60)
+            return
+
         # Steam 搜索单独处理：返回多条结果
         if parts and parts[0].lower() in ("steam",):
             keyword = parts[1].strip() if len(parts) > 1 else ""
@@ -330,6 +346,13 @@ class InlineQueryHandler:
 • `max$` - HBO Max全球价格排名
 • `appleservices icloud$` - Apple服务价格
 
+**🎬 影视查询:**
+• `movie Inception$` - 电影搜索（模糊搜索，返回10个结果）
+• `movie 盗梦空间$` - 中文电影搜索
+• `tv Breaking Bad$` - 电视剧搜索（模糊搜索，返回10个结果）
+• `tv 绝命毒师$` - 中文电视剧搜索
+• `chart movie$` - 影视排行榜
+
 **🌐 实用工具:**
 • `weather 北京$` - 天气查询(含AI日报)
 • `time tokyo$` - 时区查询
@@ -401,6 +424,8 @@ class InlineQueryHandler:
             "netease": "🎵 网易云音乐 - 添加 $ 搜索歌曲",
             "yt": "🎵 YouTube Music - 添加 $ 搜索歌曲",
             "chart": "📊 排行榜 - 添加 $ 执行查询",
+            "movie": "🎬 电影搜索 - 添加 $ 执行查询（支持中英文）",
+            "tv": "📺 电视剧搜索 - 添加 $ 执行查询（支持中英文）",
         }
 
         hint = command_hints.get(command, f"💡 添加 '{self.trigger_suffix}' 执行命令")
