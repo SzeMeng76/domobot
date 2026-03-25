@@ -8830,7 +8830,7 @@ async def handle_inline_movie_search(
 
                 if movie_details and not movie_details.get("error"):
                     # 格式化电影信息
-                    formatted_result = format_movie_details(movie_details)
+                    formatted_result, _ = movie_service.format_movie_details(movie_details)
                     message_text = foldable_text_with_markdown_v2(formatted_result)
                     parse_mode = "MarkdownV2"
                 else:
@@ -8966,7 +8966,7 @@ async def handle_inline_tv_search(
 
                 if tv_details and not tv_details.get("error"):
                     # 格式化电视剧信息
-                    formatted_result = format_tv_details(tv_details)
+                    formatted_result, _ = movie_service.format_tv_details(tv_details)
                     message_text = foldable_text_with_markdown_v2(formatted_result)
                     parse_mode = "MarkdownV2"
                 else:
