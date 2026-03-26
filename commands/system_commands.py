@@ -1117,7 +1117,15 @@ async def handle_inline_when_query(query: str, context: ContextTypes.DEFAULT_TYP
     response_lines.append(f"**账号年龄:** {user_level}")
 
     if dc_id:
-        dc_location = get_dc_location(dc_id)
+        # DC 位置映射
+        dc_locations = {
+            1: "美国迈阿密 🇺🇸",
+            2: "荷兰阿姆斯特丹 🇳🇱",
+            3: "美国迈阿密 🇺🇸",
+            4: "荷兰阿姆斯特丹 🇳🇱",
+            5: "新加坡 🇸🇬"
+        }
+        dc_location = dc_locations.get(dc_id, "未知")
         response_lines.append(f"**数据中心:** DC{dc_id} ({dc_location})")
 
     if is_premium:
