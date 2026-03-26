@@ -1091,7 +1091,7 @@ async def handle_inline_when_query(query: str, context: ContextTypes.DEFAULT_TYP
             pass
 
     # 估算注册日期
-    creation_date = estimate_creation_date(target_user_id)
+    creation_date = estimate_account_creation_date(target_user_id)
     user_level = get_user_level(target_user_id)
 
     # 构建响应文本
