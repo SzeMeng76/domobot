@@ -277,8 +277,8 @@ def patch_parsehub_yt_dlp():
         logger.info("✅ YtParser._parse patched: safe .get() for missing fields (bangumi support)")
 
         # Note: YtParser._parse doesn't need patching anymore - using original implementation
-        # YouTube downloads will be handled by pytubefix in the download method
-        logger.info("ℹ️ YtParser._parse: using original implementation (YouTube download via pytubefix)")
+        # YouTube downloads: Primary = yt-dlp, Fallback = pytubefix
+        logger.info("ℹ️ YtParser._parse: using original implementation (YouTube download: yt-dlp → pytubefix)")
 
         # Patch YtVideoParseResult.download to use pytubefix for YouTube
         from parsehub.parsers.base.ytdlp import YtVideoParseResult
@@ -291,7 +291,7 @@ def patch_parsehub_yt_dlp():
         original_yt_video_download = YtVideoParseResult._do_download
 
         async def patched_yt_video_download(self, *, output_dir, callback=None, callback_args=(), callback_kwargs=None, proxy=None, headers=None):
-            """Patched _do_download that uses pytubefix for YouTube"""
+            """Patched _do_download that uses yt-dlp for YouTube (with pytubefix fallback)"""
             # 2.0.1: YtVideoParseResult.video (VideoRef) 存储在 self.media 中
             # 优先使用 self.dl.url (原始YouTube URL)，fallback 到 self.media.url 或 self.raw_url
             video_url = (self.dl.url if self.dl else None) or (self.media.url if self.media else None) or self.raw_url or ""
@@ -302,98 +302,108 @@ def patch_parsehub_yt_dlp():
             is_youtube = any(domain in url_lower for domain in ['youtube.com', 'youtu.be'])
 
             if is_youtube:
-                logger.info(f"📥 [Patch] Detected YouTube URL, using pytubefix: {video_url[:80]}...")
+                logger.info(f"📥 [Patch] Detected YouTube URL, using yt-dlp (primary): {video_url[:80]}...")
 
-                # Download directory
-                dir_ = Path(output_dir)
-                dir_.mkdir(parents=True, exist_ok=True)
-
-                if callback:
-                    if callback_kwargs is None:
-                        callback_kwargs = {}
-                    await callback(0, 0, "正在下载...", *callback_args, **callback_kwargs)
-
+                # Try yt-dlp first (primary method)
                 try:
-                    # Use pytubefix to download
-                    from pytubefix import YouTube
-
-                    def download_with_pytubefix():
-                        """Synchronous function to download with pytubefix"""
-                        # Check if YouTube proxy is configured
-                        youtube_proxy = os.getenv("YOUTUBE_PROXY")
-                        proxies = None
-                        if youtube_proxy:
-                            # Parse proxy URL to dict format for pytubefix
-                            # pytubefix expects: {'http': 'proxy_url', 'https': 'proxy_url'}
-                            proxies = {
-                                'http': youtube_proxy,
-                                'https': youtube_proxy
-                            }
-                            logger.info(f"🌐 [pytubefix] Using YouTube proxy: {youtube_proxy[:30]}...")
-
-                        # Check if OAuth token is configured
-                        youtube_oauth_token = os.getenv("YOUTUBE_OAUTH_TOKEN")
-                        use_oauth = False
-                        token_file = None
-
-                        if youtube_oauth_token and os.path.exists(youtube_oauth_token):
-                            use_oauth = True
-                            token_file = youtube_oauth_token
-                            logger.info(f"🔐 [pytubefix] Using YouTube OAuth token: {youtube_oauth_token}")
-
-                        # Use 'WEB' client to enable automatic po_token generation
-                        # This bypasses YouTube's bot detection without manual token extraction
-                        # nodejs dependency is automatically installed via nodejs-wheel-binaries
-                        # OAuth can be used as alternative to proxy (but requires Google account)
-                        yt = YouTube(
-                            video_url,
-                            client='WEB',
-                            proxies=proxies,
-                            use_oauth=use_oauth,
-                            allow_oauth_cache=True,
-                            token_file=token_file
-                        )
-
-                        # Get highest resolution progressive stream (video + audio)
-                        stream = yt.streams.filter(progressive=True, file_extension='mp4').order_by('resolution').desc().first()
-
-                        if not stream:
-                            # Fallback to highest resolution stream
-                            stream = yt.streams.get_highest_resolution()
-
-                        if not stream:
-                            raise DownloadError("No suitable stream found")
-
-                        # Download to directory
-                        logger.info(f"🎬 [pytubefix] Downloading: {yt.title} ({stream.resolution})")
-                        output_path = stream.download(output_path=str(dir_), filename=f"video_{time.time_ns()}.mp4")
-
-                        return output_path, yt
-
-                    # Run in thread to avoid blocking
-                    output_path, yt = await asyncio.to_thread(download_with_pytubefix)
-
-                    logger.info(f"✅ [Patch] pytubefix download completed: {output_path}")
-
-                    return DownloadResult(
-                        VideoFile(
-                            path=str(output_path),
-                            height=0,  # pytubefix doesn't provide these easily
-                            width=0,
-                            duration=yt.length if hasattr(yt, 'length') else 0,
-                        ),
-                        dir_,
-                    )
+                    logger.info(f"🎬 [yt-dlp] Attempting download with yt-dlp...")
+                    result = await original_yt_video_download(self, output_dir=output_dir, callback=callback, callback_args=callback_args, callback_kwargs=callback_kwargs, proxy=proxy, headers=headers)
+                    logger.info(f"✅ [Patch] yt-dlp download completed successfully")
+                    return result
                 except Exception as e:
-                    logger.error(f"❌ [Patch] pytubefix download failed: {e}, falling back to yt-dlp")
-                    # Fallback to original yt-dlp download
-                    return await original_yt_video_download(self, output_dir=output_dir, callback=callback, callback_args=callback_args, callback_kwargs=callback_kwargs, proxy=proxy, headers=headers)
+                    logger.warning(f"⚠️ [Patch] yt-dlp download failed: {e}, falling back to pytubefix")
+
+                    # Fallback to pytubefix (secondary method)
+                    try:
+                        # Download directory
+                        dir_ = Path(output_dir)
+                        dir_.mkdir(parents=True, exist_ok=True)
+
+                        if callback:
+                            if callback_kwargs is None:
+                                callback_kwargs = {}
+                            await callback(0, 0, "正在下载 (pytubefix)...", *callback_args, **callback_kwargs)
+
+                        # Use pytubefix to download
+                        from pytubefix import YouTube
+
+                        def download_with_pytubefix():
+                            """Synchronous function to download with pytubefix"""
+                            # Check if YouTube proxy is configured
+                            youtube_proxy = os.getenv("YOUTUBE_PROXY")
+                            proxies = None
+                            if youtube_proxy:
+                                # Parse proxy URL to dict format for pytubefix
+                                # pytubefix expects: {'http': 'proxy_url', 'https': 'proxy_url'}
+                                proxies = {
+                                    'http': youtube_proxy,
+                                    'https': youtube_proxy
+                                }
+                                logger.info(f"🌐 [pytubefix] Using YouTube proxy: {youtube_proxy[:30]}...")
+
+                            # Check if OAuth token is configured
+                            youtube_oauth_token = os.getenv("YOUTUBE_OAUTH_TOKEN")
+                            use_oauth = False
+                            token_file = None
+
+                            if youtube_oauth_token and os.path.exists(youtube_oauth_token):
+                                use_oauth = True
+                                token_file = youtube_oauth_token
+                                logger.info(f"🔐 [pytubefix] Using YouTube OAuth token: {youtube_oauth_token}")
+
+                            # Use 'WEB' client to enable automatic po_token generation
+                            # This bypasses YouTube's bot detection without manual token extraction
+                            # nodejs dependency is automatically installed via nodejs-wheel-binaries
+                            # OAuth can be used as alternative to proxy (but requires Google account)
+                            yt = YouTube(
+                                video_url,
+                                client='WEB',
+                                proxies=proxies,
+                                use_oauth=use_oauth,
+                                allow_oauth_cache=True,
+                                token_file=token_file
+                            )
+
+                            # Get highest resolution progressive stream (video + audio)
+                            stream = yt.streams.filter(progressive=True, file_extension='mp4').order_by('resolution').desc().first()
+
+                            if not stream:
+                                # Fallback to highest resolution stream
+                                stream = yt.streams.get_highest_resolution()
+
+                            if not stream:
+                                raise DownloadError("No suitable stream found")
+
+                            # Download to directory
+                            logger.info(f"🎬 [pytubefix] Downloading: {yt.title} ({stream.resolution})")
+                            output_path = stream.download(output_path=str(dir_), filename=f"video_{time.time_ns()}.mp4")
+
+                            return output_path, yt
+
+                        # Run in thread to avoid blocking
+                        output_path, yt = await asyncio.to_thread(download_with_pytubefix)
+
+                        logger.info(f"✅ [Patch] pytubefix fallback download completed: {output_path}")
+
+                        return DownloadResult(
+                            VideoFile(
+                                path=str(output_path),
+                                height=0,  # pytubefix doesn't provide these easily
+                                width=0,
+                                duration=yt.length if hasattr(yt, 'length') else 0,
+                            ),
+                            dir_,
+                        )
+                    except Exception as pytubefix_error:
+                        logger.error(f"❌ [Patch] pytubefix fallback also failed: {pytubefix_error}")
+                        # Both methods failed, raise the original yt-dlp error
+                        raise DownloadError(f"YouTube download failed: yt-dlp error: {e}, pytubefix error: {pytubefix_error}")
             else:
                 # Not a YouTube URL, use original yt-dlp download
                 return await original_yt_video_download(self, output_dir=output_dir, callback=callback, callback_args=callback_args, callback_kwargs=callback_kwargs, proxy=proxy, headers=headers)
 
         YtVideoParseResult._do_download = patched_yt_video_download
-        logger.info("✅ YtVideoParseResult._do_download patched: use pytubefix for YouTube")
+        logger.info("✅ YtVideoParseResult._do_download patched: use yt-dlp for YouTube (pytubefix fallback)")
 
         # Patch BiliAPI to support cookies and add Referer headers
         # Problem: BiliAPI.__init__ doesn't accept cookie parameter
