@@ -16,9 +16,9 @@ logger = logging.getLogger(__name__)
 
 # YouTube Music 链接正则
 _REG_YTM_VIDEO_ID = re.compile(
-    r"(?:youtube\.com/watch\?(?:.*&)?v=|youtu\.be/|music\.youtube\.com/watch\?(?:.*&)?v=)([\w-]{11})"
+    r"(?:music\.youtube\.com/watch\?(?:.*&)?v=)([\w-]{11})"
 )
-_REG_YTM_DOMAIN = re.compile(r"music\.youtube\.com|youtu\.be|youtube\.com")
+_REG_YTM_DOMAIN = re.compile(r"music\.youtube\.com")
 
 # 各国/全球榜单配置
 # 注意：get_charts() API 只返回 Music Videos，Top Songs 需要硬编码 playlist ID

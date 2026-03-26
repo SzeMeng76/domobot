@@ -952,6 +952,202 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await _schedule_deletion(context, chat.id, sent_message.message_id, 5)  # 5秒后删除错误
 
 
+async def handle_inline_when_query(query: str, context: ContextTypes.DEFAULT_TYPE):
+    """
+    处理 inline when 查询
+    用法: @botname when 123456789$ 或 @botname when @username$
+    """
+    from telegram import InlineQueryResultArticle, InputTextMessageContent
+    from uuid import uuid4
+
+    parts = query.split(None, 1)
+    if len(parts) < 2:
+        return [
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title="❌ 缺少参数",
+                description="用法: when 123456789 或 when @username",
+                input_message_content=InputTextMessageContent(
+                    message_text="❌ 请提供用户ID或用户名\n\n用法:\n• when 123456789\n• when @username"
+                ),
+            )
+        ]
+
+    param = parts[1].strip()
+    target_user_id = None
+    target_user = None
+
+    # 获取用户缓存管理器
+    user_cache_manager = context.bot_data.get("user_cache_manager")
+
+    # 处理数字ID
+    if param.isdigit():
+        target_user_id = int(param)
+    # 处理@用户名或纯用户名
+    elif param.startswith("@"):
+        username = param[1:]
+        # 尝试从缓存获取
+        if user_cache_manager:
+            cached_user = await user_cache_manager.get_user_by_username(username)
+            if cached_user:
+                target_user_id = cached_user.get("user_id")
+                target_user = CachedUser(cached_user)
+
+        # 如果缓存中没有，尝试使用 Pyrogram
+        if not target_user_id:
+            pyrogram_helper = context.bot_data.get("pyrogram_helper")
+            if pyrogram_helper:
+                try:
+                    user_info = await pyrogram_helper.get_user_info_by_username(username)
+                    if user_info:
+                        target_user_id = user_info.get("user_id")
+                        target_user = CachedUser(user_info)
+                except Exception:
+                    pass
+
+        if not target_user_id:
+            return [
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title=f"❌ 未找到用户 @{username}",
+                    description="用户名不存在或隐私设置限制查询",
+                    input_message_content=InputTextMessageContent(
+                        message_text=f"❌ 未找到用户 @{username}\n\n可能原因:\n• 用户名拼写错误\n• 用户隐私设置限制\n\n建议使用数字ID查询"
+                    ),
+                )
+            ]
+    elif re.match(r'^[a-zA-Z0-9_]+$', param):
+        # 纯用户名（不带@）
+        if user_cache_manager:
+            cached_user = await user_cache_manager.get_user_by_username(param)
+            if cached_user:
+                target_user_id = cached_user.get("user_id")
+                target_user = CachedUser(cached_user)
+
+        if not target_user_id:
+            pyrogram_helper = context.bot_data.get("pyrogram_helper")
+            if pyrogram_helper:
+                try:
+                    user_info = await pyrogram_helper.get_user_info_by_username(param)
+                    if user_info:
+                        target_user_id = user_info.get("user_id")
+                        target_user = CachedUser(user_info)
+                except Exception:
+                    pass
+
+        if not target_user_id:
+            return [
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title=f"❌ 未找到用户 {param}",
+                    description="用户名不存在或隐私设置限制查询",
+                    input_message_content=InputTextMessageContent(
+                        message_text=f"❌ 未找到用户 {param}\n\n建议使用数字ID查询"
+                    ),
+                )
+            ]
+    else:
+        return [
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title="❌ 无效的参数",
+                description="请提供有效的用户ID或用户名",
+                input_message_content=InputTextMessageContent(
+                    message_text="❌ 无效的参数\n\n用法:\n• when 123456789\n• when @username"
+                ),
+            )
+        ]
+
+    if not target_user_id:
+        return [
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title="❌ 无法获取用户信息",
+                description="请检查参数是否正确",
+                input_message_content=InputTextMessageContent(
+                    message_text="❌ 无法获取用户信息"
+                ),
+            )
+        ]
+
+    # 获取用户详细信息
+    dc_id = None
+    is_premium = None
+    is_verified = None
+    bio = None
+    pyrogram_helper = context.bot_data.get("pyrogram_helper")
+
+    if pyrogram_helper:
+        try:
+            user_info = await pyrogram_helper.get_user_info(target_user_id)
+            if user_info:
+                dc_id = user_info.get('dc_id')
+                is_premium = user_info.get('is_premium', False)
+                is_verified = user_info.get('is_verified', False)
+                bio = user_info.get('bio')
+                if not target_user:
+                    target_user = CachedUser(user_info)
+        except Exception:
+            pass
+
+    # 估算注册日期
+    creation_date = estimate_creation_date(target_user_id)
+    user_level = get_user_level(target_user_id)
+
+    # 构建响应文本
+    username = target_user.username if target_user and hasattr(target_user, 'username') else None
+    first_name = target_user.first_name if target_user and hasattr(target_user, 'first_name') else None
+    last_name = target_user.last_name if target_user and hasattr(target_user, 'last_name') else None
+
+    full_name = ""
+    if first_name:
+        full_name = first_name
+        if last_name:
+            full_name += f" {last_name}"
+
+    response_lines = ["👤 **用户信息**\n"]
+
+    if full_name:
+        response_lines.append(f"**姓名:** {full_name}")
+    if username:
+        response_lines.append(f"**用户名:** @{username}")
+
+    response_lines.append(f"**ID:** `{target_user_id}`")
+    response_lines.append(f"**注册日期:** {creation_date.strftime('%Y-%m-%d')}")
+    response_lines.append(f"**账号年龄:** {user_level}")
+
+    if dc_id:
+        dc_location = get_dc_location(dc_id)
+        response_lines.append(f"**数据中心:** DC{dc_id} ({dc_location})")
+
+    if is_premium:
+        response_lines.append("**会员:** ⭐ Premium")
+    if is_verified:
+        response_lines.append("**认证:** ✅ 已认证")
+
+    if bio:
+        bio_preview = bio[:100] + "..." if len(bio) > 100 else bio
+        response_lines.append(f"\n**简介:** {bio_preview}")
+
+    response_text = "\n".join(response_lines)
+
+    # 构建标题和描述
+    title = f"👤 {full_name or username or str(target_user_id)}"
+    description = f"注册于 {creation_date.strftime('%Y-%m-%d')} · {user_level}"
+
+    return [
+        InlineQueryResultArticle(
+            id=str(uuid4()),
+            title=title,
+            description=description,
+            input_message_content=InputTextMessageContent(
+                message_text=response_text,
+                parse_mode="Markdown"
+            ),
+        )
+    ]
+
+
 async def cache_debug_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     查看用户缓存状态和内容（调试用）

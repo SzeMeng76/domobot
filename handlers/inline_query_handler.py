@@ -273,6 +273,13 @@ class InlineQueryHandler:
             await update.inline_query.answer(results, cache_time=60)
             return
 
+        # When 用户查询单独处理
+        if parts and parts[0].lower() in ("when",):
+            from commands.system_commands import handle_inline_when_query
+            results = await handle_inline_when_query(command_text, context)
+            await update.inline_query.answer(results, cache_time=60)
+            return
+
         # 直接执行命令并返回结果
         results = await self._execute_and_create_results(command_text, user_id, context)
 
@@ -360,6 +367,8 @@ class InlineQueryHandler:
 • `whois google.com$` - WHOIS/DNS查询
 • `cooking$` - 随机菜谱推荐
 • `chart movie$` - 影视排行榜
+• `when 123456789$` - 查询用户信息
+• `when @username$` - 查询用户信息
 
 **🎵 音乐:**
 • `netease 晴天$` - 搜索网易云音乐
