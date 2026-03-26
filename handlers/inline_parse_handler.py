@@ -17,6 +17,7 @@ from telegram.constants import ParseMode
 
 from utils.config_manager import ConfigManager
 from utils.media_helpers import get_media_dimensions
+from commands.social_parser import get_url_hash
 
 logger = logging.getLogger(__name__)
 
@@ -72,10 +73,18 @@ def _clean_expired_cache():
     pass
 
 
-def _build_cached_inline_results(cached_data: dict, url: str) -> list:
+def _build_cached_inline_results(cached_data: dict, url: str, parse_adapter=None) -> list:
 
     """使用file_id缓存构建inline结果（直接使用Telegram服务器上的文件）"""
-    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔗 原链接", url=url)]])
+    # 构建按钮：原链接 + AI总结（如果启用）
+    buttons = [[InlineKeyboardButton("🔗 原链接", url=url)]]
+
+    # 添加 AI 总结按钮（如果启用）
+    if parse_adapter and parse_adapter.config and parse_adapter.config.enable_ai_summary:
+        url_hash = get_url_hash(url)
+        buttons[0].append(InlineKeyboardButton("📝 AI总结", callback_data=f"summary_{url_hash}"))
+
+    keyboard = InlineKeyboardMarkup(buttons)
 
     file_id = cached_data.get("file_id")
     file_type = cached_data.get("file_type", "video")
@@ -177,7 +186,7 @@ async def handle_inline_parse_query(
             cached_data = await cache_manager.get(url, subdirectory="inline_parse")
             if cached_data:
                 logger.info(f"[Inline Parse] file_id缓存命中: {url[:50]}...")
-                return _build_cached_inline_results(cached_data, url)
+                return _build_cached_inline_results(cached_data, url, parse_adapter)
         except Exception as e:
             logger.warning(f"[Inline Parse] 读取file_id缓存失败: {e}")
 
@@ -264,8 +273,26 @@ async def handle_inline_parse_query(
             }
             _cache_timestamps[result_id] = time.time()
 
-            # 添加原链接按钮
-            keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔗 原链接", url=url)]])
+            # 添加原链接按钮 + AI总结按钮（如果启用）
+            buttons = [[InlineKeyboardButton("🔗 原链接", url=url)]]
+            if parse_adapter.config and parse_adapter.config.enable_ai_summary:
+                url_hash = get_url_hash(url)
+                buttons[0].append(InlineKeyboardButton("📝 AI总结", callback_data=f"summary_{url_hash}"))
+                # 缓存解析数据到Redis（用于AI总结回调）
+                if parse_adapter.cache_manager:
+                    cache_data = {
+                        'url': url,
+                        'title': parse_result.title or '',
+                        'content': parse_result.content or '',
+                        'platform': parse_result.platform.id if hasattr(parse_result, 'platform') else 'unknown'
+                    }
+                    await parse_adapter.cache_manager.set(
+                        f"summary:{url_hash}",
+                        cache_data,
+                        ttl=86400,
+                        subdirectory="social_parser"
+                    )
+            keyboard = InlineKeyboardMarkup(buttons)
 
             return [
                 InlineQueryResultArticle(
@@ -290,8 +317,26 @@ async def handle_inline_parse_query(
                 caption_parts.append(parse_result.content[:100])
             caption_text = "\n\n".join(caption_parts) if caption_parts else "⏳ 下载中..."
 
-            # 添加原链接按钮
-            keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔗 原链接", url=url)]])
+            # 添加原链接按钮 + AI总结按钮（如果启用）
+            buttons = [[InlineKeyboardButton("🔗 原链接", url=url)]]
+            if parse_adapter.config and parse_adapter.config.enable_ai_summary:
+                url_hash = get_url_hash(url)
+                buttons[0].append(InlineKeyboardButton("📝 AI总结", callback_data=f"summary_{url_hash}"))
+                # 缓存解析数据到Redis（用于AI总结回调）
+                if parse_adapter.cache_manager:
+                    cache_data = {
+                        'url': url,
+                        'title': parse_result.title or '',
+                        'content': parse_result.content or '',
+                        'platform': parse_result.platform.id if hasattr(parse_result, 'platform') else 'unknown'
+                    }
+                    await parse_adapter.cache_manager.set(
+                        f"summary:{url_hash}",
+                        cache_data,
+                        ttl=86400,
+                        subdirectory="social_parser"
+                    )
+            keyboard = InlineKeyboardMarkup(buttons)
 
             # 判断是否有有效缩略图
             is_article = not thumb_url
@@ -348,8 +393,26 @@ async def handle_inline_parse_query(
                 caption_parts.append(parse_result.content[:100])
             caption_text = "\n\n".join(caption_parts) if caption_parts else ""
 
-            # 添加原链接按钮
-            keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔗 原链接", url=url)]])
+            # 添加原链接按钮 + AI总结按钮（如果启用）
+            buttons = [[InlineKeyboardButton("🔗 原链接", url=url)]]
+            if parse_adapter.config and parse_adapter.config.enable_ai_summary:
+                url_hash = get_url_hash(url)
+                buttons[0].append(InlineKeyboardButton("📝 AI总结", callback_data=f"summary_{url_hash}"))
+                # 缓存解析数据到Redis（用于AI总结回调）
+                if parse_adapter.cache_manager:
+                    cache_data = {
+                        'url': url,
+                        'title': parse_result.title or '',
+                        'content': parse_result.content or '',
+                        'platform': parse_result.platform.id if hasattr(parse_result, 'platform') else 'unknown'
+                    }
+                    await parse_adapter.cache_manager.set(
+                        f"summary:{url_hash}",
+                        cache_data,
+                        ttl=86400,
+                        subdirectory="social_parser"
+                    )
+            keyboard = InlineKeyboardMarkup(buttons)
 
             for index, media_item in enumerate(media_list):
                 # 获取该媒体项的 URL 和缩略图

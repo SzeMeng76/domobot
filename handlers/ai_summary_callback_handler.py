@@ -41,18 +41,33 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         action, url_hash = query.data.split("_", 1)
 
-        message_id = query.message.message_id
-        current_caption = query.message.caption or query.message.text
+        # 判断是否为 inline 消息
+        is_inline = query.inline_message_id is not None
+        inline_message_id = query.inline_message_id if is_inline else None
+        message_id = None if is_inline else query.message.message_id
+        current_caption = None if is_inline else (query.message.caption or query.message.text)
 
         if action == "summary":
             # 立即answer移除加载圈
             await query.answer()
 
             # 立即编辑消息显示"生成中..."状态
-            # 判断消息类型并立即显示加载状态
             loading_text = "📝 AI总结生成中，请稍候..."
             try:
-                if query.message.caption:
+                if is_inline:
+                    # Inline 消息：尝试 edit_message_text（可能是 Article）或 edit_message_caption（可能是 Photo）
+                    try:
+                        await context.bot.edit_message_text(
+                            inline_message_id=inline_message_id,
+                            text=loading_text
+                        )
+                    except Exception:
+                        # 如果是 Photo 类型，需要用 edit_message_caption
+                        await context.bot.edit_message_caption(
+                            inline_message_id=inline_message_id,
+                            caption=loading_text
+                        )
+                elif query.message.caption:
                     await query.edit_message_caption(
                         caption=loading_text,
                         reply_markup=query.message.reply_markup
@@ -70,6 +85,11 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
             # URL哈希已从callback_data提取
             logger.info(f"🔑 URL哈希: {url_hash}")
+
+            # 检查 adapter 是否可用
+            if not _adapter:
+                await query.answer("❌ 解析功能未初始化", show_alert=True)
+                return
 
             # 从Redis缓存读取解析数据
             cache_data = await _adapter.cache_manager.get(
@@ -117,7 +137,19 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                 if not ai_summary:
                     # 恢复原始内容
                     try:
-                        if query.message.caption:
+                        if is_inline:
+                            # Inline 消息无法恢复原始内容（没有缓存），只能显示错误
+                            try:
+                                await context.bot.edit_message_text(
+                                    inline_message_id=inline_message_id,
+                                    text="❌ AI总结生成失败"
+                                )
+                            except Exception:
+                                await context.bot.edit_message_caption(
+                                    inline_message_id=inline_message_id,
+                                    caption="❌ AI总结生成失败"
+                                )
+                        elif query.message.caption:
                             await query.edit_message_caption(
                                 caption=current_caption,
                                 parse_mode="Markdown",
@@ -145,15 +177,16 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                 )
                 logger.info(f"✅ AI总结已缓存: cache:social_parser:ai_summary:{url_hash}")
 
-            # 缓存原始caption到内存（用于恢复）
-            if message_id not in _message_cache:
+            # 缓存原始caption到内存（用于恢复）- inline 消息不缓存
+            if not is_inline and message_id not in _message_cache:
                 _message_cache[message_id] = {
                     "original": current_caption,
                     "url_hash": url_hash
                 }
 
-            # 缓存AI总结到内存
-            _message_cache[message_id]["summary"] = ai_summary
+            # 缓存AI总结到内存 - inline 消息不缓存
+            if not is_inline:
+                _message_cache[message_id]["summary"] = ai_summary
 
             # 替换模式：只显示AI总结（类似parse_hub_bot）
             # 构建新caption：只包含AI总结和原链接
@@ -166,10 +199,35 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                 summary_caption += f"\n\n🔗 原链接: {cache_data['url']}"
 
             # 更新按钮为"已显示"状态（✅表示已显示，点击可恢复原内容）
-            new_markup = _get_buttons_with_hide(query.message.reply_markup, url_hash)
+            # Inline 消息需要特殊处理按钮
+            if is_inline:
+                # Inline 消息：构建新按钮（原链接 + AI总结✅）
+                buttons = [[InlineKeyboardButton("🔗 原链接", url=cache_data.get('url', ''))]]
+                buttons[0].append(InlineKeyboardButton("📝 AI总结✅", callback_data=f"unsummary_{url_hash}"))
+                new_markup = InlineKeyboardMarkup(buttons)
+            else:
+                new_markup = _get_buttons_with_hide(query.message.reply_markup, url_hash)
 
             # 判断消息类型：有caption用edit_caption，无caption用edit_text
-            if query.message.caption:
+            if is_inline:
+                # Inline 消息：尝试两种方式
+                try:
+                    await context.bot.edit_message_text(
+                        inline_message_id=inline_message_id,
+                        text=summary_caption,
+                        parse_mode="HTML",
+                        reply_markup=new_markup,
+                        link_preview_options=LinkPreviewOptions(is_disabled=True)
+                    )
+                except Exception:
+                    # 如果是 Photo 类型，需要用 edit_message_caption
+                    await context.bot.edit_message_caption(
+                        inline_message_id=inline_message_id,
+                        caption=summary_caption,
+                        parse_mode="HTML",
+                        reply_markup=new_markup
+                    )
+            elif query.message.caption:
                 # 图片/视频消息（有caption）
                 await query.edit_message_caption(
                     caption=summary_caption,
@@ -192,7 +250,52 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             # 隐藏AI总结，恢复原始caption
             await query.answer("隐藏中...")  # 立即answer避免超时
 
-            if message_id in _message_cache and _message_cache[message_id].get("original"):
+            # Inline 消息无法恢复原始内容（没有缓存），显示提示
+            if is_inline:
+                # 检查 adapter 是否可用
+                if not _adapter:
+                    await query.answer("❌ 解析功能未初始化", show_alert=True)
+                    return
+
+                # 从 Redis 缓存读取原始数据
+                cache_data = await _adapter.cache_manager.get(
+                    f"summary:{url_hash}",
+                    subdirectory="social_parser"
+                )
+                if cache_data:
+                    # 构建原始 caption
+                    caption_parts = []
+                    if cache_data.get('title'):
+                        caption_parts.append(f"<b>{cache_data['title']}</b>")
+                    if cache_data.get('content'):
+                        caption_parts.append(cache_data['content'][:500])
+                    original_caption = "\n\n".join(caption_parts) if caption_parts else "无标题"
+                    if cache_data.get('url'):
+                        original_caption += f"\n\n🔗 <a href=\"{cache_data['url']}\">原链接</a>"
+
+                    # 恢复按钮为"显示"状态
+                    buttons = [[InlineKeyboardButton("🔗 原链接", url=cache_data.get('url', ''))]]
+                    buttons[0].append(InlineKeyboardButton("📝 AI总结", callback_data=f"summary_{url_hash}"))
+                    new_markup = InlineKeyboardMarkup(buttons)
+
+                    try:
+                        await context.bot.edit_message_text(
+                            inline_message_id=inline_message_id,
+                            text=original_caption,
+                            parse_mode="HTML",
+                            reply_markup=new_markup,
+                            link_preview_options=LinkPreviewOptions(is_disabled=True)
+                        )
+                    except Exception:
+                        await context.bot.edit_message_caption(
+                            inline_message_id=inline_message_id,
+                            caption=original_caption,
+                            parse_mode="HTML",
+                            reply_markup=new_markup
+                        )
+                else:
+                    await query.answer("❌ 无法恢复原始内容", show_alert=True)
+            elif message_id in _message_cache and _message_cache[message_id].get("original"):
                 original_caption = _message_cache[message_id]["original"]
 
                 # 恢复按钮为"显示"状态
