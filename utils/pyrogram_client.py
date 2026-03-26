@@ -197,6 +197,18 @@ class PyrogramHelper:
 
             logger.debug(f"  - FINAL is_deleted = {is_deleted}")
 
+            # 获取验证状态（使用新的 API）
+            verification_status = getattr(user, "verification_status", None)
+            if verification_status:
+                is_verified = getattr(verification_status, "is_verified", False)
+                is_scam = getattr(verification_status, "is_scam", False)
+                is_fake = getattr(verification_status, "is_fake", False)
+            else:
+                # Fallback 到旧的属性（兼容旧版本）
+                is_verified = getattr(user, "is_verified", None) or getattr(user, "verified", False)
+                is_scam = getattr(user, "is_scam", None) or getattr(user, "scam", False)
+                is_fake = getattr(user, "is_fake", None) or getattr(user, "fake", False)
+
             user_info = {
                 "user_id": user.id,
                 "dc_id": getattr(user, "dc_id", None),
@@ -204,9 +216,9 @@ class PyrogramHelper:
                 "first_name": first_name,
                 "last_name": last_name,
                 "is_premium": getattr(user, "is_premium", None) or getattr(user, "premium", False),
-                "is_verified": getattr(user, "is_verified", None) or getattr(user, "verified", False),
-                "is_scam": getattr(user, "is_scam", None) or getattr(user, "scam", False),
-                "is_fake": getattr(user, "is_fake", None) or getattr(user, "fake", False),
+                "is_verified": is_verified,
+                "is_scam": is_scam,
+                "is_fake": is_fake,
                 "is_restricted": getattr(user, "is_restricted", None) or getattr(user, "restricted", False),
                 "is_deleted": is_deleted,
                 "bio": bio,
@@ -307,6 +319,18 @@ class PyrogramHelper:
                 (is_lastname_empty or has_no_username)
             )
 
+            # 获取验证状态（使用新的 API）
+            verification_status = getattr(user, "verification_status", None)
+            if verification_status:
+                is_verified = getattr(verification_status, "is_verified", False)
+                is_scam = getattr(verification_status, "is_scam", False)
+                is_fake = getattr(verification_status, "is_fake", False)
+            else:
+                # Fallback 到旧的属性（兼容旧版本）
+                is_verified = getattr(user, "is_verified", False)
+                is_scam = getattr(user, "is_scam", False)
+                is_fake = getattr(user, "is_fake", False)
+
             user_info = {
                 "user_id": user.id,
                 "dc_id": getattr(user, "dc_id", None),
@@ -314,9 +338,9 @@ class PyrogramHelper:
                 "first_name": first_name,
                 "last_name": last_name,
                 "is_premium": getattr(user, "is_premium", False),
-                "is_verified": getattr(user, "is_verified", False),
-                "is_scam": getattr(user, "is_scam", False),
-                "is_fake": getattr(user, "is_fake", False),
+                "is_verified": is_verified,
+                "is_scam": is_scam,
+                "is_fake": is_fake,
                 "is_restricted": getattr(user, "is_restricted", False),
                 "is_deleted": is_deleted,
                 "bio": bio,
@@ -383,6 +407,18 @@ class PyrogramHelper:
                     # 如果无法获取邀请链接，返回 None
                     join_link = None
 
+            # 获取验证状态（使用新的 API）
+            verification_status = getattr(chat, "verification_status", None)
+            if verification_status:
+                is_verified = getattr(verification_status, "is_verified", False)
+                is_scam = getattr(verification_status, "is_scam", False)
+                is_fake = getattr(verification_status, "is_fake", False)
+            else:
+                # Fallback 到旧的属性（兼容旧版本）
+                is_verified = getattr(chat, 'is_verified', None) or getattr(chat, 'verified', False)
+                is_scam = getattr(chat, 'is_scam', None) or getattr(chat, 'scam', False)
+                is_fake = getattr(chat, 'is_fake', None) or getattr(chat, 'fake', False)
+
             chat_info = {
                 "chat_id": chat.id,
                 "type": chat_type,
@@ -391,9 +427,9 @@ class PyrogramHelper:
                 "description": getattr(chat, 'description', None),
                 "dc_id": getattr(chat, 'dc_id', None),
                 "members_count": getattr(chat, 'members_count', None),
-                "is_verified": getattr(chat, 'is_verified', None) or getattr(chat, 'verified', False),
-                "is_scam": getattr(chat, 'is_scam', None) or getattr(chat, 'scam', False),
-                "is_fake": getattr(chat, 'is_fake', None) or getattr(chat, 'fake', False),
+                "is_verified": is_verified,
+                "is_scam": is_scam,
+                "is_fake": is_fake,
                 "is_restricted": getattr(chat, 'is_restricted', None) or getattr(chat, 'restricted', False),
                 "join_link": join_link,
             }

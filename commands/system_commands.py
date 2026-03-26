@@ -1092,7 +1092,7 @@ async def handle_inline_when_query(query: str, context: ContextTypes.DEFAULT_TYP
 
     # 估算注册日期
     creation_date = estimate_account_creation_date(target_user_id)
-    user_level = get_user_level(target_user_id)
+    user_level = get_user_level_by_date(creation_date)
 
     # 构建响应文本
     username = target_user.username if target_user and hasattr(target_user, 'username') else None
