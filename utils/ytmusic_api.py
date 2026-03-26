@@ -21,14 +21,15 @@ _REG_YTM_VIDEO_ID = re.compile(
 _REG_YTM_DOMAIN = re.compile(r"music\.youtube\.com|youtu\.be|youtube\.com")
 
 # 各国/全球榜单配置
+# 注意：get_charts() API 只返回 Music Videos，Top Songs 需要硬编码 playlist ID
 YTMUSIC_CHARTS = {
-    "global": {"country": "ZZ", "name": "全球榜", "icon": "🌍"},
-    "us":     {"country": "US", "name": "美国榜", "icon": "🇺🇸"},
-    "jp":     {"country": "JP", "name": "日本榜", "icon": "🇯🇵"},
-    "kr":     {"country": "KR", "name": "韩国榜", "icon": "🇰🇷"},
-    "gb":     {"country": "GB", "name": "英国榜", "icon": "🇬🇧"},
-    "hk":     {"country": "HK", "name": "香港榜", "icon": "🇭🇰"},
-    "tw":     {"country": "TW", "name": "台湾榜", "icon": "🇹🇼"},
+    "global": {"country": "ZZ", "name": "全球榜", "icon": "🌍", "songs_playlist": "PL4fGSI1pDJn6puJdseH2Rt9sMvt9E2M4i"},
+    "us":     {"country": "US", "name": "美国榜", "icon": "🇺🇸", "songs_playlist": "PL4fGSI1pDJn6O1LS0XSdF3RyO0Rq_LDeI"},
+    "jp":     {"country": "JP", "name": "日本榜", "icon": "🇯🇵", "songs_playlist": "PL4fGSI1pDJn4-UIb6RKHdxam-oAUULIGB"},
+    "kr":     {"country": "KR", "name": "韩国榜", "icon": "🇰🇷", "songs_playlist": "PL4fGSI1pDJn6jXS_Tv_N9B8Z0HTRVJE0m"},
+    "gb":     {"country": "GB", "name": "英国榜", "icon": "🇬🇧", "songs_playlist": "PL4fGSI1pDJn6_f5P3MnzXg9l3GDfnSlXa"},
+    "hk":     {"country": "HK", "name": "香港榜", "icon": "🇭🇰", "songs_playlist": None},
+    "tw":     {"country": "TW", "name": "台湾榜", "icon": "🇹🇼", "songs_playlist": None},
 }
 
 
@@ -135,14 +136,13 @@ class YTMusicAPI:
 
     async def get_charts(self, country: str = "ZZ") -> list[dict]:
         """
-        获取排行榜
+        获取排行榜（优先返回 Top Songs，而非 Music Videos）
 
-        get_charts() 实际返回结构：
-          - "videos"  → 播放列表条目（Top Music Videos playlist）
-          - "artists" → 艺人排行
-          - "daily"/"weekly" → Premium 账号才有
+        YouTube Music 有两种榜单：
+          - "Top Songs" → 纯音频播放量排行（官网默认显示）
+          - "Top Music Videos" → MV 播放量排行
 
-        这里取 "videos" 播放列表的第一个，再用 get_playlist 拿实际歌曲列表。
+        get_charts() API 只返回 Music Videos，所以我们优先使用硬编码的 Top Songs playlist ID。
 
         Returns:
             [{rank, trend, videoId, playlistId, name, artists, album, thumbnails}, ...]
@@ -150,15 +150,28 @@ class YTMusicAPI:
         if not self._ytmusic:
             return []
         try:
-            data = await asyncio.to_thread(self._ytmusic.get_charts, country=country)
+            # 优先使用硬编码的 Top Songs playlist（如果有）
+            chart_config = None
+            for config in YTMUSIC_CHARTS.values():
+                if config["country"] == country:
+                    chart_config = config
+                    break
 
-            # 跳过 OLAK 专辑列表，优先取 "Top 100 Music Videos" PL，其次取第一个 PL
-            videos_list = data.get("videos") or data.get("daily") or data.get("weekly") or []
-            pl_list = [v for v in videos_list if (v.get("playlistId") or "").startswith("PL")]
-            playlist_id = next(
-                (v.get("playlistId") for v in pl_list if "Top 100" in (v.get("title") or "")),
-                next((v.get("playlistId") for v in pl_list), None),
-            )
+            playlist_id = None
+            if chart_config and chart_config.get("songs_playlist"):
+                # 使用 Top Songs playlist
+                playlist_id = chart_config["songs_playlist"]
+                logger.info(f"使用 Top Songs playlist: {playlist_id}")
+            else:
+                # Fallback: 使用 get_charts() API 返回的 Music Videos
+                data = await asyncio.to_thread(self._ytmusic.get_charts, country=country)
+                videos_list = data.get("videos") or data.get("daily") or data.get("weekly") or []
+                pl_list = [v for v in videos_list if (v.get("playlistId") or "").startswith("PL")]
+                playlist_id = next(
+                    (v.get("playlistId") for v in pl_list if "Top 100" in (v.get("title") or "")),
+                    next((v.get("playlistId") for v in pl_list), None),
+                )
+
             if not playlist_id:
                 return []
 
