@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 _reddit_client = None
 _cache_manager = None
 _ai_summarizer = None
+_pyrogram_helper = None
 
 
 def set_reddit_client(client):
@@ -41,6 +42,12 @@ def set_ai_summarizer(summarizer):
     """设置 AI 总结器"""
     global _ai_summarizer
     _ai_summarizer = summarizer
+
+
+def set_pyrogram_helper(helper):
+    """设置 Pyrogram 助手"""
+    global _pyrogram_helper
+    _pyrogram_helper = helper
 
 
 def _escape_markdown(text: str) -> str:
@@ -76,6 +83,22 @@ async def _download_image(url: str, temp_dir: Path) -> Path:
 
     # 下载
     await asyncio.to_thread(urllib.request.urlretrieve, url, str(file_path))
+    return file_path
+
+
+async def _download_video(url: str, temp_dir: Path) -> Path:
+    """下载视频到临时目录"""
+    import urllib.request
+    import hashlib
+
+    # 生成文件名
+    url_hash = hashlib.md5(url.encode()).hexdigest()[:8]
+    file_path = temp_dir / f"reddit_{url_hash}.mp4"
+
+    # 下载
+    logger.info(f"开始下载视频: {url}")
+    await asyncio.to_thread(urllib.request.urlretrieve, url, str(file_path))
+    logger.info(f"视频下载完成: {file_path}")
     return file_path
 
 
@@ -291,24 +314,108 @@ async def _send_reddit_media(context, chat_id, post, caption, reply_markup):
             msg = await _send_photo()
             return [msg]
 
-        # 视频（暂不支持下载，只发送链接）
+        # 视频
         elif post.is_video and post.video_url:
-            logger.info(f"发送视频链接: {post.video_url}")
+            logger.info(f"下载并发送视频: {post.video_url}")
 
-            video_caption = f"{caption}\n\n🎥 [视频链接]({_escape_markdown(post.video_url)})"
+            try:
+                # 下载视频
+                video_path = await _download_video(post.video_url, temp_dir)
+                video_size_mb = video_path.stat().st_size / 1024 / 1024
 
-            @with_telegram_retry(max_retries=5)
-            async def _send_video_link():
-                return await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=video_caption,
-                    parse_mode="MarkdownV2",
-                    disable_web_page_preview=False,
-                    reply_markup=reply_markup
-                )
+                logger.info(f"视频下载完成: {video_size_mb:.2f}MB")
 
-            msg = await _send_video_link()
-            return [msg]
+                # >2GB: 只发送链接
+                if video_size_mb > 2048:
+                    logger.warning(f"视频过大 ({video_size_mb:.1f}MB)，只发送链接")
+                    video_caption = f"{caption}\n\n🎥 视频过大 \\({video_size_mb:.1f}MB\\)，请点击链接观看：\n[视频链接]({_escape_markdown(post.video_url)})"
+
+                    @with_telegram_retry(max_retries=5)
+                    async def _send_video_link():
+                        return await context.bot.send_message(
+                            chat_id=chat_id,
+                            text=video_caption,
+                            parse_mode="MarkdownV2",
+                            disable_web_page_preview=False,
+                            reply_markup=reply_markup
+                        )
+
+                    msg = await _send_video_link()
+                    return [msg]
+
+                # <=2GB: 优先 Pyrogram，失败 fallback python-telegram-bot
+                if _pyrogram_helper and _pyrogram_helper.is_started:
+                    try:
+                        logger.info(f"🚀 使用 Pyrogram 上传 {video_size_mb:.1f}MB 视频")
+
+                        video_msg = await _pyrogram_helper.send_large_video(
+                            chat_id=chat_id,
+                            video_path=str(video_path),
+                            caption=caption,
+                            reply_markup=reply_markup,
+                            parse_mode="MarkdownV2"
+                        )
+
+                        logger.info(f"✅ Pyrogram 上传成功: {video_size_mb:.1f}MB")
+                        return [video_msg]
+                    except Exception as e:
+                        logger.warning(f"⚠️ Pyrogram 上传失败，降级到 python-telegram-bot: {e}")
+
+                # Fallback: python-telegram-bot (<=50MB)
+                if video_size_mb <= 50:
+                    logger.info(f"使用 python-telegram-bot 上传 {video_size_mb:.1f}MB 视频")
+
+                    @with_telegram_retry(max_retries=5)
+                    async def _send_video():
+                        with open(video_path, 'rb') as f:
+                            return await context.bot.send_video(
+                                chat_id=chat_id,
+                                video=f,
+                                caption=caption,
+                                parse_mode="MarkdownV2",
+                                reply_markup=reply_markup,
+                                supports_streaming=True,
+                                read_timeout=300,
+                                write_timeout=300
+                            )
+
+                    msg = await _send_video()
+                    return [msg]
+                else:
+                    # Pyrogram失败且>50MB，发送链接
+                    logger.warning(f"Pyrogram 不可用且视频 >50MB ({video_size_mb:.1f}MB)，发送链接")
+                    video_caption = f"{caption}\n\n🎥 视频过大 \\({video_size_mb:.1f}MB\\)，请点击链接观看：\n[视频链接]({_escape_markdown(post.video_url)})"
+
+                    @with_telegram_retry(max_retries=5)
+                    async def _send_video_link():
+                        return await context.bot.send_message(
+                            chat_id=chat_id,
+                            text=video_caption,
+                            parse_mode="MarkdownV2",
+                            disable_web_page_preview=False,
+                            reply_markup=reply_markup
+                        )
+
+                    msg = await _send_video_link()
+                    return [msg]
+
+            except Exception as e:
+                logger.error(f"视频处理失败: {e}", exc_info=True)
+                # 降级：发送链接
+                video_caption = f"{caption}\n\n🎥 视频处理失败，请点击链接观看：\n[视频链接]({_escape_markdown(post.video_url)})"
+
+                @with_telegram_retry(max_retries=5)
+                async def _send_video_link():
+                    return await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=video_caption,
+                        parse_mode="MarkdownV2",
+                        disable_web_page_preview=False,
+                        reply_markup=reply_markup
+                    )
+
+                msg = await _send_video_link()
+                return [msg]
 
         # 纯文本
         else:

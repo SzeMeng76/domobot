@@ -390,6 +390,7 @@ async def setup_application(application: Application, config) -> None:
         from commands import reddit_command
         reddit_command.set_reddit_client(reddit_client)
         reddit_command.set_cache_manager(cache_manager)
+        reddit_command.set_pyrogram_helper(pyrogram_helper)
 
         # 如果启用了 AI 总结，设置 AI 总结器
         if config.enable_ai_summary and config.openai_api_key:
