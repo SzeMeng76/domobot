@@ -424,6 +424,8 @@ class InlineQueryHandler:
 • `reddit hot python$` - r/python热门帖子
 • `reddit top week$` - 全站本周Top
 • `reddit top python week$` - r/python本周Top
+• `reddit new$` - 全站最新帖子
+• `reddit new python$` - r/python最新帖子
 
 **注意:**
 • 命令末尾必须加 `$` 符号才会执行
@@ -479,7 +481,7 @@ class InlineQueryHandler:
             "chart": "📊 排行榜 - 添加 $ 执行查询",
             "movie": "🎬 电影搜索 - 添加 $ 执行查询（支持中英文）",
             "tv": "📺 电视剧搜索 - 添加 $ 执行查询（支持中英文）",
-            "reddit": "🔴 Reddit - 添加 $ 执行查询（hot/top列表）",
+            "reddit": "🔴 Reddit - 添加 $ 执行查询（hot/top/new列表）",
         }
 
         hint = command_hints.get(command, f"💡 添加 '{self.trigger_suffix}' 执行命令")
