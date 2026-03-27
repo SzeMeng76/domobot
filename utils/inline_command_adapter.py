@@ -104,20 +104,23 @@ class InlineCommandAdapter:
     # 🌤️ 天气查询
     # ============================================================================
 
-    async def _handle_weather(self, args: str) -> Tuple[str, ParseMode, None]:
-        """处理天气查询命令 - 调用完整的 weather 功能（含 AI 日报）"""
+    async def _handle_weather(self, args: str) -> Tuple[str, ParseMode, Any]:
+        """处理天气查询命令 - 先返回天气资讯，不含AI总结（避免超时）"""
         from commands.weather import weather_inline_execute
         from utils.formatter import foldable_text_with_markdown_v2
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-        result = await weather_inline_execute(args)
+        # 不生成AI总结，避免超时
+        result = await weather_inline_execute(args, use_ai_report=False)
 
         if result["success"]:
-            # AI 日报是纯文本，不需要 MarkdownV2 转义
-            if "🤖" in result.get("title", "") or "敏敏" in result.get("message", ""):
-                # AI 日报使用普通 Markdown
-                return (result["message"], ParseMode.MARKDOWN, None)
-            else:
-                return (foldable_text_with_markdown_v2(result["message"]), ParseMode.MARKDOWN_V2, None)
+            # 添加"生成AI总结"按钮
+            keyboard = [[
+                InlineKeyboardButton("🤖 生成AI日报", callback_data=f"weather_ai_{args}")
+            ]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            return (foldable_text_with_markdown_v2(result["message"]), ParseMode.MARKDOWN_V2, reply_markup)
         else:
             error_message = f"❌ *{result['title']}*\n\n{result['message']}"
             return (foldable_text_with_markdown_v2(error_message), ParseMode.MARKDOWN_V2, None)

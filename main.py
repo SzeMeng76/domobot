@@ -210,6 +210,11 @@ def setup_handlers(application: Application):
     application.add_handler(get_ai_summary_handler())
     logger.info("✅ AI总结callback处理器已注册")
 
+    # 注册Weather AI日报callback handler
+    from handlers.weather_ai_callback_handler import get_handler as get_weather_ai_handler
+    application.add_handler(get_weather_ai_handler())
+    logger.info("✅ Weather AI日报callback处理器已注册")
+
     # 使用命令工厂设置处理器（包括 UnifiedTextHandler）
     command_factory.setup_handlers(application)
 

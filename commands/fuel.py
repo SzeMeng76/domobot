@@ -948,12 +948,33 @@ async def _format_rankings_text(data: dict, fuel_type: str) -> str:
                   if info.get(fuel_key) and info[fuel_key].get('price_cny', 0) > 0]
     sorted_data = sorted(valid_data, key=lambda x: x[1][fuel_key]['price_cny'])
     cheapest_10 = sorted_data[:10]
+    expensive_10 = sorted_data[-10:][::-1]
 
     # Format message
     raw_parts = [f"*🛢️ 全球{fuel_name}价格排行榜*", ""]
 
     raw_parts.append("💚 *最便宜 Top 10:*")
     for i, (code, info) in enumerate(cheapest_10, 1):
+        country = info['country']
+        fuel_info = info[fuel_key]
+        price_cny = fuel_info['price_cny']
+
+        # Map to ISO code
+        iso_code = COUNTRY_CODE_MAPPING.get(code, code)
+        country_info = SUPPORTED_COUNTRIES.get(iso_code.upper(), {})
+        country_name_cn = country_info.get('name', '')
+        country_flag = get_country_flag(iso_code)
+
+        if country_name_cn:
+            country_display = f"{country} ({country_name_cn}) {country_flag}"
+        else:
+            country_display = country
+
+        raw_parts.append(f"{i}. {country_display}: ¥{price_cny:.2f}/L")
+
+    raw_parts.append("")
+    raw_parts.append("💸 *最贵 Top 10:*")
+    for i, (code, info) in enumerate(expensive_10, 1):
         country = info['country']
         fuel_info = info[fuel_key]
         price_cny = fuel_info['price_cny']
@@ -991,12 +1012,20 @@ async def _format_china_rankings_text(data: dict, fuel_type: str) -> str:
     # Sort
     sorted_provinces = sorted(data.items(), key=lambda x: x[1].get(fuel_key, 0))
     cheapest_10 = sorted_provinces[:10]
+    expensive_10 = sorted_provinces[-10:][::-1]
 
     # Format message
     raw_parts = [f"*🇨🇳 中国油价排行榜 ({fuel_name})*", ""]
 
     raw_parts.append("💚 *最便宜 Top 10:*")
     for i, (code, info) in enumerate(cheapest_10, 1):
+        province = info.get('province', 'Unknown')
+        price = info.get(fuel_key, 0)
+        raw_parts.append(f"{i}. {province}: ¥{price:.2f}/升")
+
+    raw_parts.append("")
+    raw_parts.append("💸 *最贵 Top 10:*")
+    for i, (code, info) in enumerate(expensive_10, 1):
         province = info.get('province', 'Unknown')
         price = info.get(fuel_key, 0)
         raw_parts.append(f"{i}. {province}: ¥{price:.2f}/升")
@@ -1015,10 +1044,11 @@ async def _search_country_text(query: str) -> str | None:
         for code, info in china_data.items():
             province = info.get('province', '').lower()
             if query in province or query in code.lower():
-                # Format China province
+                # Format China province with full details
                 province_name = info.get('province', 'Unknown')
                 gasoline_92 = info.get('92_gasoline', 0)
                 gasoline_95 = info.get('95_gasoline', 0)
+                gasoline_98 = info.get('98_gasoline', 0)
                 diesel_0 = info.get('0_diesel', 0)
 
                 raw_parts = [
@@ -1026,8 +1056,42 @@ async def _search_country_text(query: str) -> str | None:
                     "",
                     f"92# 汽油: ¥{gasoline_92:.2f}/升",
                     f"95# 汽油: ¥{gasoline_95:.2f}/升",
+                    f"98# 汽油: ¥{gasoline_98:.2f}/升",
                     f"0# 柴油: ¥{diesel_0:.2f}/升"
                 ]
+
+                # Add ranking if available
+                if gasoline_92 > 0:
+                    sorted_provinces = sorted(
+                        china_data.items(),
+                        key=lambda x: x[1].get('92_gasoline', 0)
+                    )
+                    prices = [info_item.get('92_gasoline', 0) for _, info_item in sorted_provinces]
+                    avg_price = sum(prices) / len(prices) if prices else 0
+
+                    rank = next((i + 1 for i, (c, info_item) in enumerate(sorted_provinces)
+                                if info_item.get('province') == province_name), None)
+
+                    if rank:
+                        raw_parts.append("")
+                        raw_parts.append(f"📊 *全国排名:* 第 {rank}/{len(sorted_provinces)} 位")
+                        raw_parts.append(f"📈 *全国平均:* ¥{avg_price:.2f}/升")
+                        diff = gasoline_92 - avg_price
+                        if diff > 0:
+                            raw_parts.append(f"💸 比平均高 ¥{diff:.2f}/升")
+                        elif diff < 0:
+                            raw_parts.append(f"💚 比平均低 ¥{abs(diff):.2f}/升")
+
+                # Add adjustment info if available
+                adjustment = info.get('adjustment')
+                if adjustment:
+                    next_date = adjustment.get('next_adjustment_date', '')
+                    trend = adjustment.get('expected_trend', '')
+                    amount = adjustment.get('expected_amount_liter', '')
+                    if next_date and trend:
+                        raw_parts.append("")
+                        raw_parts.append(f"📅 *下次调价:* {next_date}")
+                        raw_parts.append(f"*预计:* {trend}" + (f" {amount}" if amount else ""))
 
                 raw_message = "\n".join(raw_parts)
                 return foldable_text_with_markdown_v2(raw_message)
@@ -1042,18 +1106,18 @@ async def _search_country_text(query: str) -> str | None:
                 for json_code, fuel_info in global_data.items():
                     iso_code = COUNTRY_CODE_MAPPING.get(json_code, json_code)
                     if iso_code.upper() == country_code:
-                        return _format_country_inline(fuel_info, json_code)
+                        return _format_country_inline(fuel_info, json_code, global_data)
 
         # Fallback: direct search
         for code, info in global_data.items():
             country = info.get('country', '').lower()
             if query in country or query in code.lower():
-                return _format_country_inline(info, code)
+                return _format_country_inline(info, code, global_data)
 
     return None
 
 
-def _format_country_inline(country_data: dict, country_code: str) -> str:
+def _format_country_inline(country_data: dict, country_code: str, all_data: dict = None) -> str:
     """Format single country data for inline mode"""
     from utils.formatter import foldable_text_with_markdown_v2
 
@@ -1090,6 +1154,25 @@ def _format_country_inline(country_data: dict, country_code: str) -> str:
         raw_parts.append(f"  USD: ${price:.2f}/L")
         raw_parts.append(f"  CNY: ¥{price_cny:.2f}/L")
 
+        # Add ranking for gasoline
+        if all_data and price_cny > 0:
+            gasoline_data = [(code, info) for code, info in all_data.items()
+                           if info.get('gasoline') and info['gasoline'].get('price_cny', 0) > 0]
+            sorted_countries = sorted(gasoline_data, key=lambda x: x[1]['gasoline']['price_cny'])
+            prices = [info['gasoline']['price_cny'] for _, info in sorted_countries]
+            avg_price = sum(prices) / len(prices) if prices else 0
+
+            rank = next((i + 1 for i, (code, info) in enumerate(sorted_countries)
+                        if info.get('country') == country), None)
+
+            if rank:
+                raw_parts.append(f"  📊 全球排名: 第 {rank}/{len(sorted_countries)} 位")
+                diff = price_cny - avg_price
+                if diff > 0:
+                    raw_parts.append(f"  💸 比平均高 ¥{diff:.2f}/L")
+                elif diff < 0:
+                    raw_parts.append(f"  💚 比平均低 ¥{abs(diff):.2f}/L")
+
     # Diesel
     if diesel:
         local_price = diesel.get('local_price')
@@ -1104,6 +1187,25 @@ def _format_country_inline(country_data: dict, country_code: str) -> str:
         raw_parts.append(f"  USD: ${price:.2f}/L")
         raw_parts.append(f"  CNY: ¥{price_cny:.2f}/L")
 
+        # Add ranking for diesel
+        if all_data and price_cny > 0:
+            diesel_data = [(code, info) for code, info in all_data.items()
+                         if info.get('diesel') and info['diesel'].get('price_cny', 0) > 0]
+            sorted_countries = sorted(diesel_data, key=lambda x: x[1]['diesel']['price_cny'])
+            prices = [info['diesel']['price_cny'] for _, info in sorted_countries]
+            avg_price = sum(prices) / len(prices) if prices else 0
+
+            rank = next((i + 1 for i, (code, info) in enumerate(sorted_countries)
+                        if info.get('country') == country), None)
+
+            if rank:
+                raw_parts.append(f"  📊 全球排名: 第 {rank}/{len(sorted_countries)} 位")
+                diff = price_cny - avg_price
+                if diff > 0:
+                    raw_parts.append(f"  💸 比平均高 ¥{diff:.2f}/L")
+                elif diff < 0:
+                    raw_parts.append(f"  💚 比平均低 ¥{abs(diff):.2f}/L")
+
     # Price date
     price_date = None
     if gasoline and gasoline.get('price_date'):
@@ -1114,6 +1216,8 @@ def _format_country_inline(country_data: dict, country_code: str) -> str:
     if price_date:
         raw_parts.append("")
         raw_parts.append(f"📅 数据日期: {price_date}")
+
+    raw_parts.append("🔗 数据来源: GlobalPetrolPrices.com")
 
     raw_message = "\n".join(raw_parts)
     return foldable_text_with_markdown_v2(raw_message)

@@ -367,7 +367,7 @@ class InlineQueryHandler:
 • `chart movie$` - 影视排行榜
 
 **🌐 实用工具:**
-• `weather 北京$` - 天气查询(含AI日报)
+• `weather 北京$` - 天气查询（点按钮生成AI日报）
 • `time tokyo$` - 时区查询
 • `news$` - 热门新闻汇总
 • `whois google.com$` - WHOIS/DNS查询
@@ -431,8 +431,8 @@ class InlineQueryHandler:
             "appstore": "📱 App Store - 添加 $ 执行查询",
             "app": "📱 App Store - 添加 $ 执行查询",
             "fuel": "🛢️ 油价查询 - 添加 $ 执行查询",
-            "weather": "🌤️ 天气查询(AI日报) - 添加 $ 后等待✔出现再点击",
-            "tq": "🌤️ 天气查询(AI日报) - 添加 $ 后等待✔出现再点击",
+            "weather": "🌤️ 天气查询 - 添加 $ 执行查询（点按钮生成AI日报）",
+            "tq": "🌤️ 天气查询 - 添加 $ 执行查询（点按钮生成AI日报）",
             "time": "🕐 时区查询 - 添加 $ 执行查询",
             "news": "📰 新闻 - 添加 $ 执行查询",
             "whois": "🌐 域名查询 - 添加 $ 执行查询",
@@ -503,9 +503,9 @@ class InlineQueryHandler:
             adapter = InlineCommandAdapter(context)
             result_text, parse_mode, reply_markup = await adapter.execute_command(command, args)
 
-            # 特殊处理：weather 命令显示已完成提示
+            # 特殊处理：weather 命令显示提示
             if command in ("weather", "tq"):
-                desc = f"✅ AI 日报已生成，点击查看 - {args}" if args else "✅ AI 日报已生成，点击查看"
+                desc = f"✅ 天气资讯已生成，点按钮生成AI日报 - {args}" if args else "✅ 天气资讯已生成，点按钮生成AI日报"
             else:
                 desc = f"{info['desc']} - {args[:50]}..." if len(args) > 50 else (f"{info['desc']} - {args}" if args else info['desc'])
 
