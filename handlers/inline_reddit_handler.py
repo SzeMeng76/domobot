@@ -134,8 +134,25 @@ async def handle_inline_reddit_query(
         # 返回结果 - 根据内容类型返回不同的结果
         from telegram import InlineQueryResultPhoto
 
+        # Gallery：返回多张图片
+        if post.gallery_items and len(post.gallery_items) > 1:
+            results = []
+            for index, img_url in enumerate(post.gallery_items[:10], 1):  # 最多10张
+                results.append(
+                    InlineQueryResultPhoto(
+                        id=str(uuid4()),
+                        photo_url=img_url,
+                        thumbnail_url=img_url,
+                        title=f"🖼️ 图片 {index}/{len(post.gallery_items)} - {post.title[:40]}",
+                        description=f"r/{post.subreddit} | ⬆️ {post.score} | 💬 {post.num_comments}",
+                        caption=caption,
+                        parse_mode="MarkdownV2",
+                        reply_markup=reply_markup
+                    )
+                )
+            return results
         # 视频：返回缩略图照片，用户选择后自动下载并上传
-        if post.is_video and post.video_url and post.preview_image_url:
+        elif post.is_video and post.video_url and post.preview_image_url:
             result_id = f"reddit_video_{uuid4()}"
             # 缓存视频信息（用于 chosen handler）
             _reddit_video_cache[result_id] = {

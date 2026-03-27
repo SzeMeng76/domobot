@@ -63,15 +63,13 @@ def _escape_markdown(text: str) -> str:
 def _escape_markdown_link_text(text: str) -> str:
     """转义 MarkdownV2 链接文本中的特殊字符
 
-    在 [text](url) 中，text 部分只需要转义这些字符：
-    _ * [ ] ( ) ~ `
-
-    其他字符如 . - ! 不需要转义
+    在 [text](url) 中，text 部分需要转义的字符：
+    _ * [ ] ( ) ~ ` . - ! + = | { } #
     """
     if not text:
         return text
-    # 只转义链接文本中必须转义的字符
-    special_chars = ['_', '*', '[', ']', '(', ')', '~', '`']
+    # 转义链接文本中的特殊字符
+    special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '.', '-', '!', '+', '=', '|', '{', '}', '#']
     for char in special_chars:
         text = text.replace(char, f'\\{char}')
     return text
@@ -127,7 +125,11 @@ async def _show_hot_posts(context: ContextTypes.DEFAULT_TYPE, chat_id: int, subr
         posts = await _reddit_client.get_hot_posts(subreddit=subreddit, limit=10)
 
         if not posts:
-            await status_msg.edit_text("❌ 未找到帖子")
+            await status_msg.delete()
+            await send_error(context, chat_id, "❌ 未找到帖子")
+            # 删除用户命令
+            if message:
+                await delete_user_command(context, chat_id, message.message_id)
             return
 
         # 构建消息
@@ -189,7 +191,11 @@ async def _show_hot_posts(context: ContextTypes.DEFAULT_TYPE, chat_id: int, subr
 
     except Exception as e:
         logger.error(f"获取热门帖子失败: {e}", exc_info=True)
-        await status_msg.edit_text(f"❌ 获取失败: {str(e)}")
+        await status_msg.delete()
+        await send_error(context, chat_id, f"❌ 获取失败: {str(e)}")
+        # 删除用户命令
+        if message:
+            await delete_user_command(context, chat_id, message.message_id)
 
 
 async def _show_top_posts(context: ContextTypes.DEFAULT_TYPE, chat_id: int, subreddit: str = None, time_filter: str = 'day', message=None):
@@ -200,7 +206,11 @@ async def _show_top_posts(context: ContextTypes.DEFAULT_TYPE, chat_id: int, subr
         posts = await _reddit_client.get_top_posts(subreddit=subreddit, time_filter=time_filter, limit=10)
 
         if not posts:
-            await status_msg.edit_text("❌ 未找到帖子")
+            await status_msg.delete()
+            await send_error(context, chat_id, "❌ 未找到帖子")
+            # 删除用户命令
+            if message:
+                await delete_user_command(context, chat_id, message.message_id)
             return
 
         # 时间范围映射
@@ -273,7 +283,11 @@ async def _show_top_posts(context: ContextTypes.DEFAULT_TYPE, chat_id: int, subr
 
     except Exception as e:
         logger.error(f"获取Top帖子失败: {e}", exc_info=True)
-        await status_msg.edit_text(f"❌ 获取失败: {str(e)}")
+        await status_msg.delete()
+        await send_error(context, chat_id, f"❌ 获取失败: {str(e)}")
+        # 删除用户命令
+        if message:
+            await delete_user_command(context, chat_id, message.message_id)
 
 
 @with_error_handling
@@ -368,7 +382,11 @@ async def reddit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         post = await _reddit_client.get_post_by_url(url)
 
         if not post:
-            await status_msg.edit_text("❌ 获取帖子失败，请检查链接是否正确")
+            await status_msg.delete()
+            error_msg = await send_error(context, chat_id, "❌ 获取帖子失败，请检查链接是否正确")
+            # 删除用户命令
+            if update.message:
+                await delete_user_command(context, chat_id, update.message.message_id)
             return
 
         # 更新状态
@@ -455,7 +473,11 @@ async def reddit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     except Exception as e:
         logger.error(f"Reddit 解析失败: {e}", exc_info=True)
-        await status_msg.edit_text(f"❌ 处理失败: {str(e)}")
+        await status_msg.delete()
+        error_msg = await send_error(context, chat_id, f"❌ 处理失败: {str(e)}")
+        # 删除用户命令
+        if update.message:
+            await delete_user_command(context, chat_id, update.message.message_id)
 
 
 async def _send_reddit_media(context, chat_id, post, caption, reply_markup):

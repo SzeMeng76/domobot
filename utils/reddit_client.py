@@ -290,6 +290,10 @@ class RedditClient:
                         if 's' in media and 'u' in media['s']:
                             img_url = media['s']['u'].replace('&amp;', '&')
                             post.gallery_items.append(img_url)
+
+                # 如果没有 preview_image_url，使用 gallery 的第一张图片
+                if not post.preview_image_url and post.gallery_items:
+                    post.preview_image_url = post.gallery_items[0]
             except (KeyError, TypeError):
                 pass
 
