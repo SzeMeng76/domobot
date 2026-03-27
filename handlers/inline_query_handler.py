@@ -607,7 +607,7 @@ async def setup_inline_query_handler(application) -> None:
             await handle_inline_ytmusic_chosen(update, context)
         elif result_id.startswith("parse_"):
             await handle_inline_parse_chosen(update, context)
-        elif result_id.startswith("reddit_video_"):
+        elif result_id.startswith("reddit_video_") or result_id.startswith("reddit_image_"):
             await handle_inline_reddit_chosen(update, context)
 
     application.add_handler(
