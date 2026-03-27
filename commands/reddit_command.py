@@ -617,19 +617,11 @@ async def _send_reddit_media(context, chat_id, post, caption, reply_markup):
                     logger.warning(f"下载图片失败: {e}")
 
             if image_paths:
-                # 构建 media group
+                # 构建 media group（不附加 caption）
                 media_group = []
-                for idx, img_path in enumerate(image_paths):
+                for img_path in image_paths:
                     with open(img_path, 'rb') as f:
-                        # 将 caption 附加到最后一张图片
-                        if idx == len(image_paths) - 1:
-                            media_group.append(InputMediaPhoto(
-                                media=f.read(),
-                                caption=caption,
-                                parse_mode="MarkdownV2"
-                            ))
-                        else:
-                            media_group.append(InputMediaPhoto(media=f.read()))
+                        media_group.append(InputMediaPhoto(media=f.read()))
 
                 @with_telegram_retry(max_retries=5)
                 async def _send_media_group():
@@ -640,20 +632,19 @@ async def _send_reddit_media(context, chat_id, post, caption, reply_markup):
 
                 messages = await _send_media_group()
 
-                # 如果有按钮，单独发送
-                if reply_markup:
-                    @with_telegram_retry(max_retries=5)
-                    async def _send_button_msg():
-                        return await context.bot.send_message(
-                            chat_id=chat_id,
-                            text="🔗 更多操作",
-                            reply_parameters=ReplyParameters(message_id=messages[-1].message_id),
-                            reply_markup=reply_markup
-                        )
-                    button_msg = await _send_button_msg()
-                    return list(messages) + [button_msg]
+                # 单独发送 caption + 按钮
+                @with_telegram_retry(max_retries=5)
+                async def _send_caption():
+                    return await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=caption,
+                        parse_mode="MarkdownV2",
+                        reply_parameters=ReplyParameters(message_id=messages[-1].message_id),
+                        reply_markup=reply_markup
+                    )
 
-                return list(messages)
+                caption_msg = await _send_caption()
+                return list(messages) + [caption_msg]
 
         # 单张图片
         elif post.preview_image_url:
