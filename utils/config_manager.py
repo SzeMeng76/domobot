@@ -75,6 +75,7 @@ class BotConfig:
         self.google_play_search_cache_duration = 43200  # 12小时
         self.steam_cache_duration = 259200  # 3天
         self.netflix_cache_duration = 86400  # 24小时
+        self.fuel_cache_duration = 3600  # 1小时
         self.crypto_cache_duration = 60  # 1分钟 (CMC单币查询)
         self.coingecko_markets_cache_duration = 60  # 1分钟 (CoinGecko市场数据/排行榜)
         self.coingecko_trending_cache_duration = 60  # 1分钟 (CoinGecko热门币种)

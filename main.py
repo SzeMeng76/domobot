@@ -358,6 +358,7 @@ async def setup_application(application: Application, config) -> None:
     map.set_dependencies(cache_manager, httpx_client)
     flight.set_dependencies(cache_manager, httpx_client)
     hotel.set_dependencies(cache_manager, httpx_client)
+    fuel.set_dependencies(cache_manager, httpx_client)
 
     # 注入社交媒体解析依赖
     from commands import social_parser

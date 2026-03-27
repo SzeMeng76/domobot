@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 CACHE_SERVICES = {
     'all': '清理所有缓存',
     'memes': '表情包缓存',
-    'news': '新闻缓存', 
+    'news': '新闻缓存',
     'crypto': '加密货币缓存',
     'movie': '电影电视缓存',
     'steam': 'Steam游戏缓存',
@@ -30,6 +30,7 @@ CACHE_SERVICES = {
     'whois': 'WHOIS查询缓存',
     'app_store': 'App Store缓存',
     'netflix': 'Netflix缓存',
+    'fuel': '燃油价格缓存',
     'spotify': 'Spotify缓存',
     'disney_plus': 'Disney+缓存',
     'max': 'HBO Max缓存',

@@ -2,13 +2,11 @@
 # This module provides /fuel command to check fuel prices globally and in China
 
 import logging
-import requests
-from datetime import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
 
 from utils.command_factory import command_factory
-from utils.country_data import SUPPORTED_COUNTRIES
+from utils.country_data import SUPPORTED_COUNTRIES, get_country_flag
 from utils.formatter import foldable_text_v2, foldable_text_with_markdown_v2
 from utils.message_manager import (
     delete_user_command,
@@ -20,17 +18,47 @@ from utils.permissions import Permission
 
 logger = logging.getLogger(__name__)
 
+# Dependencies
+cache_manager = None
+httpx_client = None
+
+
+def set_dependencies(c_manager, h_client):
+    """Set cache manager and httpx client dependencies"""
+    global cache_manager, httpx_client
+    cache_manager = c_manager
+    httpx_client = h_client
+
 # GitHub raw URLs for fuel price data
 CHINA_DATA_URL = "https://raw.githubusercontent.com/SzeMeng76/fuel-price-tracker/refs/heads/master/china_fuel_prices.json"
 GLOBAL_DATA_URL = "https://raw.githubusercontent.com/SzeMeng76/fuel-price-tracker/refs/heads/master/global_fuel_prices_processed.json"
 
 
-def fetch_fuel_data(url: str) -> dict | None:
-    """Fetch fuel price data from GitHub"""
+async def fetch_fuel_data(url: str) -> dict | None:
+    """Fetch fuel price data from GitHub with cache"""
     try:
-        response = requests.get(url, timeout=10)
+        # Try cache first
+        cache_key = f"fuel_data_{url.split('/')[-1]}"
+        if cache_manager:
+            cached_data = await cache_manager.load_cache(cache_key, subdirectory="fuel")
+            if cached_data:
+                logger.info(f"Using cached fuel data for {cache_key}")
+                return cached_data
+
+        # Fetch from GitHub using httpx
+        if not httpx_client:
+            logger.error("httpx_client not initialized")
+            return None
+
+        response = await httpx_client.get(url, timeout=10)
         if response.status_code == 200:
-            return response.json()
+            data = response.json()
+
+            # Save to cache
+            if cache_manager:
+                await cache_manager.save_cache(cache_key, data, subdirectory="fuel")
+
+            return data
         else:
             logger.error(f"Failed to fetch data: HTTP {response.status_code}")
             return None
@@ -48,10 +76,10 @@ def format_china_province(province_data: dict, all_data: dict = None) -> str:
     diesel_0 = province_data.get('0_diesel', 0)
 
     text = f"📍 *{province}*\n\n"
-    text += f"92\\# 汽油: `{gasoline_92:.2f}` 元/升\n"
-    text += f"95\\# 汽油: `{gasoline_95:.2f}` 元/升\n"
-    text += f"98\\# 汽油: `{gasoline_98:.2f}` 元/升\n"
-    text += f"0\\# 柴油: `{diesel_0:.2f}` 元/升\n"
+    text += f"92\\# 汽油: `{gasoline_92:.2f}` 元\\/升\n"
+    text += f"95\\# 汽油: `{gasoline_95:.2f}` 元\\/升\n"
+    text += f"98\\# 汽油: `{gasoline_98:.2f}` 元\\/升\n"
+    text += f"0\\# 柴油: `{diesel_0:.2f}` 元\\/升\n"
 
     # Add ranking if all_data is provided
     if all_data and gasoline_92 > 0:
@@ -67,13 +95,13 @@ def format_china_province(province_data: dict, all_data: dict = None) -> str:
                     if info.get('province') == province), None)
 
         if rank:
-            text += f"\n📊 *全国排名:* 第 {rank}/{len(sorted_provinces)} 位\n"
-            text += f"📈 *全国平均:* `{avg_price:.2f}` 元/升\n"
+            text += f"\n📊 *全国排名:* 第 {rank}\\/{len(sorted_provinces)} 位\n"
+            text += f"📈 *全国平均:* `{avg_price:.2f}` 元\\/升\n"
             diff = gasoline_92 - avg_price
             if diff > 0:
-                text += f"💸 比平均高 `{diff:.2f}` 元/升\n"
+                text += f"💸 比平均高 `{diff:.2f}` 元\\/升\n"
             elif diff < 0:
-                text += f"💚 比平均低 `{abs(diff):.2f}` 元/升\n"
+                text += f"💚 比平均低 `{abs(diff):.2f}` 元\\/升\n"
 
     # Add adjustment info if available
     adjustment = province_data.get('adjustment')
@@ -91,13 +119,25 @@ def format_china_province(province_data: dict, all_data: dict = None) -> str:
     return text
 
 
-def format_global_country(country_data: dict, all_data: dict = None) -> str:
+def format_global_country(country_data: dict, all_data: dict = None, country_code: str = None) -> str:
     """Format global country fuel price with ranking (gasoline and diesel)"""
     country = country_data.get('country', 'Unknown')
     gasoline = country_data.get('gasoline')
     diesel = country_data.get('diesel')
 
-    text = f"🌍 *{country}*\n\n"
+    # Get Chinese name and flag
+    country_name_cn = None
+    country_flag = ""
+    if country_code:
+        country_info = SUPPORTED_COUNTRIES.get(country_code.upper(), {})
+        country_name_cn = country_info.get('name', '')
+        country_flag = get_country_flag(country_code)
+
+    # Format title with Chinese name and flag
+    if country_name_cn:
+        text = f"🌍 *{country}* \\({country_name_cn}\\) {country_flag}\n\n"
+    else:
+        text = f"🌍 *{country}*\n\n"
 
     # Gasoline
     if gasoline:
@@ -105,8 +145,8 @@ def format_global_country(country_data: dict, all_data: dict = None) -> str:
         currency = gasoline.get('currency', 'USD')
         price_cny = gasoline.get('price_cny', 0)
         text += f"🚗 *汽油:*\n"
-        text += f"  价格: `{price:.2f}` {currency}/L\n"
-        text += f"  折合: `{price_cny:.2f}` CNY/L\n"
+        text += f"  价格: `{price:.2f}` {currency}\\/L\n"
+        text += f"  折合: `{price_cny:.2f}` CNY\\/L\n"
 
         # Add ranking for gasoline
         if all_data and price_cny > 0:
@@ -120,12 +160,12 @@ def format_global_country(country_data: dict, all_data: dict = None) -> str:
                         if info.get('country') == country), None)
 
             if rank:
-                text += f"  📊 全球排名: 第 {rank}/{len(sorted_countries)} 位\n"
+                text += f"  📊 全球排名: 第 {rank}\\/{len(sorted_countries)} 位\n"
                 diff = price_cny - avg_price
                 if diff > 0:
-                    text += f"  💸 比平均高 `{diff:.2f}` CNY/L\n"
+                    text += f"  💸 比平均高 `{diff:.2f}` CNY\\/L\n"
                 elif diff < 0:
-                    text += f"  💚 比平均低 `{abs(diff):.2f}` CNY/L\n"
+                    text += f"  💚 比平均低 `{abs(diff):.2f}` CNY\\/L\n"
 
     # Diesel
     if diesel:
@@ -133,8 +173,8 @@ def format_global_country(country_data: dict, all_data: dict = None) -> str:
         currency = diesel.get('currency', 'USD')
         price_cny = diesel.get('price_cny', 0)
         text += f"\n🚛 *柴油:*\n"
-        text += f"  价格: `{price:.2f}` {currency}/L\n"
-        text += f"  折合: `{price_cny:.2f}` CNY/L\n"
+        text += f"  价格: `{price:.2f}` {currency}\\/L\n"
+        text += f"  折合: `{price_cny:.2f}` CNY\\/L\n"
 
         # Add ranking for diesel
         if all_data and price_cny > 0:
@@ -148,12 +188,12 @@ def format_global_country(country_data: dict, all_data: dict = None) -> str:
                         if info.get('country') == country), None)
 
             if rank:
-                text += f"  📊 全球排名: 第 {rank}/{len(sorted_countries)} 位\n"
+                text += f"  📊 全球排名: 第 {rank}\\/{len(sorted_countries)} 位\n"
                 diff = price_cny - avg_price
                 if diff > 0:
-                    text += f"  💸 比平均高 `{diff:.2f}` CNY/L\n"
+                    text += f"  💸 比平均高 `{diff:.2f}` CNY\\/L\n"
                 elif diff < 0:
-                    text += f"  💚 比平均低 `{abs(diff):.2f}` CNY/L\n"
+                    text += f"  💚 比平均低 `{abs(diff):.2f}` CNY\\/L\n"
 
     if not gasoline and not diesel:
         text += "暂无数据\n"
@@ -220,7 +260,7 @@ async def show_rankings(update: Update, context: ContextTypes.DEFAULT_TYPE, fuel
     if not update.message:
         return
 
-    data = fetch_fuel_data(GLOBAL_DATA_URL)
+    data = await fetch_fuel_data(GLOBAL_DATA_URL)
 
     if not data:
         await send_error(context, update.message.chat_id, "无法获取数据，请稍后重试", parse_mode="MarkdownV2")
@@ -268,7 +308,7 @@ async def show_rankings(update: Update, context: ContextTypes.DEFAULT_TYPE, fuel
         price_cny = fuel_info['price_cny']
         price_orig = fuel_info['price']
         currency = fuel_info['currency']
-        text += f"{i}\\. {country}: `{price_cny:.2f}` CNY/L \\(`{price_orig:.2f}` {currency}/L\\)\n"
+        text += f"{i}\\. {country}: `{price_cny:.2f}` CNY\\/L \\(`{price_orig:.2f}` {currency}\\/L\\)\n"
 
     text += "\n💸 *最贵 Top 10:*\n"
     for i, (code, info) in enumerate(expensive_10, 1):
@@ -277,10 +317,10 @@ async def show_rankings(update: Update, context: ContextTypes.DEFAULT_TYPE, fuel
         price_cny = fuel_info['price_cny']
         price_orig = fuel_info['price']
         currency = fuel_info['currency']
-        text += f"{i}\\. {country}: `{price_cny:.2f}` CNY/L \\(`{price_orig:.2f}` {currency}/L\\)\n"
+        text += f"{i}\\. {country}: `{price_cny:.2f}` CNY\\/L \\(`{price_orig:.2f}` {currency}\\/L\\)\n"
 
-    text += f"\n📊 *全球平均价格:* `{avg_price:.2f}` CNY/L\n"
-    text += f"📈 *价格范围:* `{min(prices):.2f}` \\- `{max(prices):.2f}` CNY/L\n"
+    text += f"\n📊 *全球平均价格:* `{avg_price:.2f}` CNY\\/L\n"
+    text += f"📈 *价格范围:* `{min(prices):.2f}` \\- `{max(prices):.2f}` CNY\\/L\n"
     text += f"🌍 *覆盖国家:* {len(valid_data)} 个\n"
 
     # Add usage hint
@@ -297,7 +337,7 @@ async def show_china_all(update: Update, context: ContextTypes.DEFAULT_TYPE, fue
     if not update.message:
         return
 
-    data = fetch_fuel_data(CHINA_DATA_URL)
+    data = await fetch_fuel_data(CHINA_DATA_URL)
 
     if not data:
         await send_error(context, update.message.chat_id, "无法获取数据，请稍后重试", parse_mode="MarkdownV2")
@@ -338,18 +378,18 @@ async def show_china_all(update: Update, context: ContextTypes.DEFAULT_TYPE, fue
     for i, (code, info) in enumerate(cheapest_10, 1):
         province = info.get('province', 'Unknown')
         price = info.get(fuel_key, 0)
-        text += f"{i}\\. {province}: `{price:.2f}` 元/升\n"
+        text += f"{i}\\. {province}: `{price:.2f}` 元\\/升\n"
 
     # Most expensive 10
     text += "\n💸 *最贵 Top 10:*\n"
     for i, (code, info) in enumerate(expensive_10, 1):
         province = info.get('province', 'Unknown')
         price = info.get(fuel_key, 0)
-        text += f"{i}\\. {province}: `{price:.2f}` 元/升\n"
+        text += f"{i}\\. {province}: `{price:.2f}` 元\\/升\n"
 
     # Statistics
-    text += f"\n📊 *全国平均:* `{avg_price:.2f}` 元/升\n"
-    text += f"📈 *价格范围:* `{min(prices):.2f}` \\- `{max(prices):.2f}` 元/升\n"
+    text += f"\n📊 *全国平均:* `{avg_price:.2f}` 元\\/升\n"
+    text += f"📈 *价格范围:* `{min(prices):.2f}` \\- `{max(prices):.2f}` 元\\/升\n"
     text += f"🏙️ *覆盖省市:* {len(sorted_provinces)} 个\n"
 
     # Add adjustment info from first province
@@ -379,7 +419,7 @@ async def search_fuel_price(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         return
 
     # Try China first
-    china_data = fetch_fuel_data(CHINA_DATA_URL)
+    china_data = await fetch_fuel_data(CHINA_DATA_URL)
     if china_data:
         for code, info in china_data.items():
             province = info.get('province', '').lower()
@@ -390,12 +430,12 @@ async def search_fuel_price(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                 return
 
     # Try global - use SUPPORTED_COUNTRIES for better matching
-    global_data = fetch_fuel_data(GLOBAL_DATA_URL)
+    global_data = await fetch_fuel_data(GLOBAL_DATA_URL)
     if global_data:
         # First try exact code match
         query_upper = query.upper()
         if query_upper in global_data:
-            text = format_global_country(global_data[query_upper], global_data)  # Pass all_data
+            text = format_global_country(global_data[query_upper], global_data, query_upper)
             await send_search_result(context, update.message.chat_id, text, parse_mode="MarkdownV2")
             await delete_user_command(context, update.message.chat_id, update.message.message_id)
             return
@@ -408,10 +448,7 @@ async def search_fuel_price(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                 # Find in global data
                 for code, fuel_info in global_data.items():
                     if code.upper() == country_code or country_code in code.upper():
-                        text = format_global_country(fuel_info, global_data)  # Pass all_data
-                        # Add Chinese name
-                        text = text.replace(f"🌍 *{fuel_info.get('country')}*",
-                                          f"🌍 *{fuel_info.get('country')}* \\({country_name_cn}\\)")
+                        text = format_global_country(fuel_info, global_data, country_code)
                         await send_search_result(context, update.message.chat_id, text, parse_mode="MarkdownV2")
                         await delete_user_command(context, update.message.chat_id, update.message.message_id)
                         return
@@ -420,7 +457,7 @@ async def search_fuel_price(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         for code, info in global_data.items():
             country = info.get('country', '').lower()
             if query in country or query in code.lower():
-                text = format_global_country(info, global_data)  # Pass all_data
+                text = format_global_country(info, global_data, code)
                 await send_search_result(context, update.message.chat_id, text, parse_mode="MarkdownV2")
                 await delete_user_command(context, update.message.chat_id, update.message.message_id)
                 return
