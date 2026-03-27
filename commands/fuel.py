@@ -161,28 +161,6 @@ def format_global_country(country_data: dict, all_data: dict = None) -> str:
     return text
 
 
-@command_factory(
-    command_name="fuel",
-    description="🛢️ 查询全球和中国油价（汽油+柴油）",
-    usage="/fuel [地区/国家名称]\n"
-          "/fuel rankings [燃油] - 全球价格排行榜\n"
-          "/fuel rankings gasoline - 汽油排行\n"
-          "/fuel rankings diesel - 柴油排行\n"
-          "/fuel china [油品] - 中国省份排行榜\n"
-          "/fuel china 92 - 92#汽油排行\n"
-          "/fuel china 95 - 95#汽油排行\n"
-          "/fuel china 98 - 98#汽油排行\n"
-          "/fuel china diesel - 0#柴油排行\n"
-          "/fuel 北京 - 查看北京油价\n"
-          "/fuel usa - 查看美国油价（汽油+柴油）",
-    examples=[
-        "/fuel 北京",
-        "/fuel usa",
-        "/fuel rankings diesel",
-        "/fuel china 95"
-    ],
-    permission=Permission.USER,
-)
 async def fuel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /fuel command"""
     await delete_user_command(update, context)
@@ -434,3 +412,7 @@ async def search_fuel_price(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         f"未找到 '{query}' 的油价数据\n\n"
         "提示: 使用 /fuel rankings 查看所有国家"
     )
+
+
+# Register command
+command_factory.register_command("fuel", fuel_command, permission=Permission.NONE, description="🛢️ 查询全球和中国油价（汽油+柴油）")
