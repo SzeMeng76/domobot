@@ -465,8 +465,11 @@ async def handle_inline_reddit_chosen(
     inline_message_id = chosen_result.inline_message_id
     result_id = chosen_result.result_id
 
+    logger.info(f"[Inline Reddit Chosen] result_id={result_id}, inline_message_id={inline_message_id}")
+
     # 处理视频和图片
     if not (result_id.startswith("reddit_video_") or result_id.startswith("reddit_image_")):
+        logger.info(f"[Inline Reddit Chosen] 跳过非 Reddit 媒体: {result_id}")
         return
 
     # 从缓存中获取视频信息
@@ -474,6 +477,7 @@ async def handle_inline_reddit_chosen(
 
     if not cached_data:
         # 缓存过期
+        logger.warning(f"[Inline Reddit Chosen] 缓存未找到: {result_id}")
         try:
             await context.bot.edit_message_text(
                 inline_message_id=inline_message_id,
@@ -482,6 +486,8 @@ async def handle_inline_reddit_chosen(
         except Exception:
             pass
         return
+
+    logger.info(f"[Inline Reddit Chosen] 找到缓存，开始处理媒体")
 
     post = cached_data["post"]
     caption = cached_data["caption"]

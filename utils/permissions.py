@@ -38,6 +38,16 @@ def require_permission(permission: Permission):
     def decorator(func):
         @functools.wraps(func)
         async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            # Inline 消息没有 effective_chat，直接执行（inline 消息已经发送，无法撤回）
+            if update.callback_query and update.callback_query.inline_message_id:
+                try:
+                    return await func(update, context)
+                except Exception as e:
+                    logger.error(f"Error in {func.__name__} (inline): {e}", exc_info=True)
+                    if update.callback_query:
+                        await update.callback_query.answer("❌ 处理失败", show_alert=True)
+                return
+
             # 如果权限要求是 NONE，直接执行函数，不进行权限检查
             if permission == Permission.NONE:
                 try:
@@ -49,7 +59,7 @@ def require_permission(permission: Permission):
                         text="❌ 处理请求时发生错误，请稍后重试。\n如果问题持续存在，请联系管理员。",
                     )
                 return
-                            
+
             user_id = update.effective_user.id
             chat_type = update.effective_chat.type
 
@@ -155,6 +165,16 @@ def permission_required(require_admin=False):
     def decorator(func):
         @functools.wraps(func)
         async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
+            # Inline 消息没有 effective_chat，直接执行（inline 消息已经发送，无法撤回）
+            if update.callback_query and update.callback_query.inline_message_id:
+                try:
+                    return await func(update, context)
+                except Exception as e:
+                    logger.error(f"Error in {func.__name__} (inline): {e}", exc_info=True)
+                    if update.callback_query:
+                        await update.callback_query.answer("❌ 处理失败", show_alert=True)
+                return
+
             from utils.message_manager import send_error, delete_user_command
 
             user_id = update.effective_user.id
