@@ -22,8 +22,9 @@
 - 🍳 **烹饪助手:** 菜谱搜索、分类浏览、智能膳食规划和每日菜单推荐
 - 🎭 **表情包娱乐:** 随机表情包获取，AI生成描述增强理解，支持自定义数量（1-20），智能重试确保优质内容，自动删除和智能缓存
 - 📊 **股票金融:** 实时股票价格查询、15类排行榜（涨跌幅、科技股、基金）、分析师评级、财务报表、多市场支持（美/港/沪/马），智能搜索支持股票代码和公司名称
+- 🛢️ **燃油价格:** 全球163国燃油价格查询（汽油+柴油）、中国31省油价排行（92/95/98/柴油）、支持多国查询、自动CNY转换、数据来源GlobalPetrolPrices.com并显示实际价格日期
 - 📱 **社交媒体解析:** 支持20+平台（抖音、快手、B站、YouTube、TikTok、小红书、Twitter/X、Instagram、Facebook、微博等）的视频、图片、图文解析，支持命令模式和群组自动监听模式
-- 🆔 **快速命令:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`, `/dns`, `/recipe`, `/meme`, `/finance`, `/platforms`
+- 🆔 **快速命令:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`, `/dns`, `/recipe`, `/meme`, `/finance`, `/fuel`, `/platforms`
 - 👥 **群组友好:** 在任意 Telegram 群组中都可使用，无需白名单申请
 - 🔧 **自助服务:** 如果新命令不在输入建议中显示，请使用 `/refresh` 刷新
 
@@ -49,6 +50,7 @@
 -   🍳 **公开烹饪助手:** 所有用户可用 - 基于HowToCook数据库的全面菜谱搜索和膳食规划系统，包含1000+中文菜谱。功能包括**智能菜谱搜索**（关键词匹配）、**分类浏览**（荤菜、素菜、主食、汤羹、水产、早餐、甜品等）、**智能膳食规划**（支持过敏原和忌口设置）、**每日菜单推荐**（人数选择）、**随机菜谱发现**和**Telegraph集成**（长菜谱显示完整食材和制作步骤）。所有菜谱包含难度评级、烹饪时间、份量和详细营养指导。
 -   🎭 **公开表情包:** 所有用户可用 - 从memes.bupt.site API获取随机表情包，配备**AI生成描述**增强理解体验。具备**智能重试机制**确保单个表情包请求时获得优质有描述内容，支持自定义数量（1-20），智能缓存系统，自动删除调度（15分钟）和链接后备显示。功能包括参数验证、实时状态更新和全面的错误处理，确保可靠的表情包投递。描述优先级：人工审核 > AI描述 > 无描述。
 -   📊 **公开股票金融:** 所有用户可用 - 由Yahoo Finance API提供的全面金融市场数据，支持**实时股票价格**查询和技术指标。功能包括**15类排行榜**（日涨跌幅、最活跃、成长科技股、低估值股票、共同基金等6类）、**智能股票搜索**支持股票代码和公司名称跨多个市场（美国、香港、中国、马来西亚）、**分析师评级**（买入/卖出/持有评级）、**财务报表**（损益表、资产负债表、现金流量表）、分类按钮界面、智能缓存（不同数据类型采用不同TTL）和全面的错误处理及自动删除。支持灵活搜索查询如"AAPL"、"Apple"、"Tesla"、"6033.KL"、"Maybank"等多语言匹配。
+-   🛢️ **公开燃油价格:** 所有用户可用 - 全球163国和中国31省燃油价格查询。功能包括**汽油和柴油价格**自动CNY转换、**全球排行榜**显示最便宜和最贵Top 10国家（含国旗和中文名称）、**中国省份排行榜**支持92/95/98汽油和柴油详细价格对比、**多国查询**支持格式如`/fuel my sg th`、**本地货币显示**同时显示USD和CNY价格、**实际价格日期**来自源网站、**Inline模式支持**包含完整详情（排行榜和对比）、数据来源GlobalPetrolPrices.com（每周/每月更新）、智能缓存24小时TTL匹配爬虫计划。
 -   📱 **公开社交媒体解析 (仅查看支持平台):** 所有用户可用 - 使用 `/platforms` 查看支持的20+平台列表。
 -   🎵 **网易云音乐:** 需要白名单 - 完整的网易云音乐功能。功能包括**歌曲搜索**（`/netease <关键词>`）带交互式编号结果、**直接下载**（支持歌曲ID和music.163.com链接）、**歌词获取**（`/lyric`，LRC格式）、**自动链接识别**（music.163.com/163cn.tv/163cn.link链接自动下载）、**Inline模式**（后台下载+`edit_inline_media`无缝发送音频）、**Redis缓存**（7天TTL，缓存命中直接发送音频）、**FLAC/MP3音质显示**（含码率和文件大小）、**ID3/Vorbis元数据嵌入**（使用mutagen-rs，Rust驱动）、**大文件上传**（>50MB通过Kurigram MTProto）、**EAPI加密**和**并发下载限制**（信号量=4）。命令：`/netease`、`/lyric`。*(需要白名单)*
 -   🎵 **YouTube Music:** 需要白名单 - 完整的YouTube Music功能。功能包括**歌曲搜索**（`/yt <关键词>`）带交互式编号结果、**直接下载**（支持videoId和YouTube/YouTube Music链接）、**歌词获取**（`/ytlyric`）、**多地区榜单**（全球/美国/日本/韩国/英国/香港/台湾）通过`/yt chart`查看、**自动链接识别**（youtube.com/youtu.be/music.youtube.com链接自动下载）、**Inline模式**（后台下载+`edit_inline_media`无缝发送音频）、**Redis缓存**（缓存命中直接发送音频）、**yt-dlp主下载**（pytubefix自动备用）、**大文件上传**（>50MB通过Kurigram MTProto）和**并发下载限制**（信号量=4）。命令：`/yt`、`/ytmusic`、`/ytlyric`。*(需要白名单)*
@@ -196,6 +198,13 @@ docker-compose down
 /finance Maybank         # 通过部分公司名称搜索
 # 交互功能: 股票排行榜（15类）、分析师评级、财务报表
 
+# 燃油价格（全球和中国）
+/fuel                    # 显示燃油价格帮助和使用说明
+/fuel my                 # 马来西亚燃油价格（汽油+柴油）
+/fuel china              # 中国省份排行榜（92/95/98/柴油）
+/fuel us sg th           # 多国查询（美国、新加坡、泰国）
+# 功能: 全球排行榜、本地货币显示、CNY转换、GlobalPetrolPrices.com实际价格日期
+
 # 社交媒体解析
 /platforms               # 查看支持的20+平台列表（所有用户可用）
 ```
@@ -330,6 +339,7 @@ docker-compose down
 /cleancache google_play   # 清理Google Play缓存
 /cleancache apple_services # 清理Apple服务缓存
 /cleancache finance       # 清理股票金融数据缓存
+/cleancache fuel          # 清理燃油价格缓存
 /cleancache social_parser # 清理社交媒体解析缓存
 
 # 命令列表管理
@@ -663,6 +673,7 @@ docker-compose down
 - **Disney+价格:** [disneyplus-prices](https://github.com/SzeMeng76/disneyplus-prices) - Disney+订阅价格数据
 - **Spotify价格:** [spotify-prices](https://github.com/SzeMeng76/spotify-prices) - Spotify订阅价格信息
 - **HBO Max价格:** [hbo-max-global-prices](https://github.com/SzeMeng76/hbo-max-global-prices) - HBO Max全球价格数据
+- **燃油价格:** [fuel-price-tracker](https://github.com/SzeMeng76/fuel-price-tracker) - 全球163国和中国31省燃油价格
 - **网易云音乐API:** [Music163Api-Go](https://github.com/XiaoMengXinX/Music163Api-Go) - 网易云音乐API参考实现
 - **网易云音乐Bot:** [Music163bot-Go](https://github.com/XiaoMengXinX/Music163bot-Go) - 网易云音乐Telegram Bot参考
 

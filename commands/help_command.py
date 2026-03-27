@@ -41,6 +41,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 🌐 `/whois google.com` - WHOIS查询 | 🔍 `/dns domain.com` - DNS记录
 🍳 `/recipe` - 菜谱助手 | 🎭 `/meme 3` - 表情包
 📊 `/finance AAPL` - 股票查询 | 🗺️ `/map 天安门` - 地图服务
+🛢️ `/fuel my` - 油价查询 | `/fuel china` - 中国油价排行
 ✈️ `/flight 北京 洛杉矶 2024-12-25` - 智能航班搜索
 🏨 `/hotel 东京 2024-12-25 2024-12-28` - 智能酒店搜索
 📱 `/parse <链接>` - 社交媒体解析 | `/platforms` - 支持平台
@@ -69,6 +70,7 @@ Inline: `@bot netease 关键词$` - Inline搜索(有缓存直接发音频)
 🍳 *烹饪助手* `/recipe` - 统一菜谱界面(搜索/分类/推荐/规划)
 📊 *股票金融* `/finance <代号/公司名>` - 实时股价查询 | `/finance` - 15类股票&基金排行榜
 🗺️ *地图服务* `/map <地点/坐标>` - 智能语言检测(中文用高德,英文用谷歌) | 位置搜索 | 附近推荐 | 路线规划
+🛢️ *燃油价格* `/fuel <国家>` - 全球163国油价查询(汽油+柴油) | `/fuel china` - 中国31省油价排行(92/95/98/柴油) | 支持多国查询 | 数据来源GlobalPetrolPrices.com
 ✈️ *智能航班* `/flight <出发地> <到达地> <日期> [返程]` - 多语言机场识别 | 实时价格 | 预订信息 | 支持中英混合输入
 🏨 *智能酒店* `/hotel <位置> [入住日期] [退房日期]` - 多语言位置识别 | 实时价格 | 详细信息 | 支持中英混合输入
 
@@ -89,7 +91,7 @@ Inline: `@bot netease 关键词$` - Inline搜索(有缓存直接发音频)
 🌍 *支持地区* US CN TR IN MY JP GB DE 等40+国家
 💡 *特色* 支持中文地名 | 自动CNY转换 | 智能缓存 | 表达式计算
 
-⚡ 快速试用: `/nf` `/crypto btc` `/tq 北京` `/movie 复仇者` `/tv 权力的游戏` `/chart` `/news` `/time 北京` `/whois google.com` `/dns github.com` `/recipe` `/meme 3` `/finance AAPL` `/map 天安门` `/flight 北京 洛杉矶 2024-12-25` `/hotel 东京 2024-12-25 2024-12-28` `/netease 晴天` `/yt chart`"""
+⚡ 快速试用: `/nf` `/crypto btc` `/tq 北京` `/movie 复仇者` `/tv 权力的游戏` `/chart` `/news` `/time 北京` `/whois google.com` `/dns github.com` `/recipe` `/meme 3` `/finance AAPL` `/map 天安门` `/fuel my` `/flight 北京 洛杉矶 2024-12-25` `/hotel 东京 2024-12-25 2024-12-28` `/netease 晴天` `/yt chart`"""
 
     admin_help_text = """
 
@@ -117,6 +119,7 @@ Inline: `@bot netease 关键词$` - Inline搜索(有缓存直接发音频)
 📰 *新闻聚合* `/news` `/newslist` `/hotnews` - 40+源实时资讯
 🌐 *WHOIS&DNS查询* `/whois <查询>` - 域名/IP/ASN/TLD信息(含DNS) | `/dns <域名>` - 仅DNS记录
 📊 *股票金融* `/finance <代号/公司名>` - 实时股价 | `/finance` - 15类排行榜
+🛢️ *燃油价格* `/fuel <国家>` - 全球163国油价(汽油+柴油) | `/fuel china` - 中国31省油价排行(92/95/98/柴油) | 支持多国查询 | 数据来源GlobalPetrolPrices.com
 
 🍳 *烹饪助手*
 统一入口: `/recipe` - 交互式菜单，包含所有烹饪功能
@@ -126,10 +129,15 @@ Inline: `@bot netease 关键词$` - Inline搜索(有缓存直接发音频)
 🎭 *表情包娱乐*
 随机: `/meme <数量>` - 获取1-20个随机表情包 | 自动删除 | 智能缓存
 
-🌍 *支持地区* US CN TR IN MY JP GB DE 等40+国家
-💡 *特色* 支持中文地名 | 自动CNY转换 | 时区智能识别 | 新闻分类 | 1000+中文菜谱 | 多市场股票
+🛢️ *燃油价格*
+全球查询: `/fuel <国家>` - 163国油价(汽油+柴油) | 支持多国查询 | 自动CNY转换
+中国排行: `/fuel china` - 31省油价排行(92/95/98/柴油) | 最便宜/最贵Top 10
+数据源: GlobalPetrolPrices.com | 每周更新 | 显示实际价格日期
 
-⚡ *快速试用* `/nf` `/ds` `/sp` `/max` `/when` `/id` `/time 北京` `/news` `/recipe` `/meme 3` `/finance AAPL`
+🌍 *支持地区* US CN TR IN MY JP GB DE 等40+国家 | 163国燃油价格
+💡 *特色* 支持中文地名 | 自动CNY转换 | 时区智能识别 | 新闻分类 | 1000+中文菜谱 | 多市场股票 | 全球油价
+
+⚡ *快速试用* `/nf` `/ds` `/sp` `/max` `/when` `/id` `/time 北京` `/news` `/recipe` `/meme 3` `/finance AAPL` `/fuel my`
 
 🔧 *命令问题?* 如果新功能不显示，请使用 `/refresh` 刷新命令列表
 
@@ -189,6 +197,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 🍳 烹饪助手 `/recipe` - 统一菜谱界面
 🎭 表情包娱乐 `/meme` - 随机表情包获取
 📊 股票金融 `/finance` - 实时股价&15类排行榜
+🛢️ 燃油价格 `/fuel` - 全球163国&中国31省油价查询
 
 🚀 *试试看*
 `/nf` - Netflix全球价格
@@ -206,14 +215,16 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 `/recipe 红烧肉` - 直接搜索菜谱
 `/finance AAPL` - 苹果股票查询
 `/finance Tesla` - 特斯拉股票搜索
+`/fuel my` - 马来西亚油价查询
+`/fuel china` - 中国油价排行榜
 `/help` - 查看详细功能
 
-🌟 支持40+国家 | 自动CNY转换 | 中文地名 | 时区智能识别 | 新闻分类 | 1000+中文菜谱 | 随机表情包 | 多市场股票
+🌟 支持40+国家 | 自动CNY转换 | 中文地名 | 时区智能识别 | 新闻分类 | 1000+中文菜谱 | 随机表情包 | 多市场股票 | 163国燃油价格
 
 🔧 命令不显示? 试试 `/refresh` 刷新命令列表
 
 🔒 *白名单专享功能*
-💱 汇率换算 | 🪙 加密货币 | 💳 BIN查询 | 🌦️ 天气预报 | 🎬 影视信息 | 🎮 Steam游戏 | 📱 应用&内购价格 | 🗺️ 地图服务 | ✈️ 航班服务 | 🏨 酒店服务
+💱 汇率换算 | 🪙 加密货币 | 💳 BIN查询 | 🌦️ 天气预报 | 🎬 影视信息 | 🎮 Steam游戏 | 📱 应用&内购价格 | 🗺️ 地图服务 | ✈️ 航班服务 | 🏨 酒店服务 | 🎵 网易云音乐
 
 📞 白名单功能暂不开放申请，敬请期待付费服务"""
     else:
@@ -227,7 +238,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 `/rate USD 100` `/crypto btc` `/tq 北京` `/movie 复仇者` `/tv 权力的游戏` `/chart`
 `/steam 赛博朋克` `/nf` `/time 北京` `/whois google.com` `/dns github.com` `/news` `/recipe` `/meme 3` `/finance AAPL` `/map 天安门` `/flight 北京 洛杉矶 2024-12-25` `/hotel 东京 2024-12-25 2024-12-28` `/netease 晴天` `/yt chart` `/help`
 
-🌟 40+国家 | CNY转换 | 智能缓存 | 表达式计算 | 时区转换 | 新闻聚合 | 1000+中文菜谱 | 股市数据"""
+🌟 40+国家 | CNY转换 | 智能缓存 | 表达式计算 | 时区转换 | 新闻聚合 | 1000+中文菜谱 | 股市数据 | 163国燃油价格"""
 
     await send_help(context, update.message.chat_id, foldable_text_with_markdown_v2(welcome_text), parse_mode="MarkdownV2")
 

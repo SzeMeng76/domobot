@@ -22,8 +22,9 @@ Read this in other languages: [简体中文](./README.zh-CN.md)
 - 🍳 **Cooking Assistant:** Recipe search, categorized browsing, intelligent meal planning, and daily menu recommendations
 - 🎭 **Memes & Entertainment:** Random meme fetching with AI-generated descriptions, custom quantities (1-20), smart retry for quality content, auto-deletion, and intelligent caching
 - 📊 **Finance & Stocks:** Real-time stock prices, 15 ranking categories (gainers/losers, tech stocks, funds), analyst recommendations, financial statements, multi-market support (US/HK/CN/MY), intelligent search by symbol or company name
+- 🛢️ **Fuel Prices:** Global fuel prices for 163 countries (gasoline + diesel), China provincial rankings (92/95/98/diesel), multi-country queries, automatic CNY conversion, data from GlobalPetrolPrices.com with actual price dates
 - 📱 **Social Media Platforms:** View supported platforms list with `/platforms` command
-- 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`, `/dns`, `/recipe`, `/meme`, `/finance`, `/platforms`
+- 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`, `/dns`, `/recipe`, `/meme`, `/finance`, `/fuel`, `/platforms`
 - 👥 **Group Friendly:** Works in any Telegram group without requiring whitelist approval
 - 🔧 **Self-Service:** Use `/refresh` if new commands don't appear in your input suggestions
 
@@ -49,6 +50,7 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 -   🍳 **Public Cooking Assistant:** Available to all users - comprehensive recipe search and meal planning system with 1000+ recipes from HowToCook database. Features include **smart recipe search** with keyword matching, **categorized browsing** (荤菜, 素菜, 主食, 汤羹, 水产, 早餐, 甜品, etc.), **intelligent meal planning** with dietary restrictions and allergy considerations, **daily menu recommendations** with people count selection, **random recipe discovery**, and **Telegraph integration** for long recipes with complete ingredients and step-by-step instructions. All recipes include difficulty ratings, cooking time, serving sizes, and detailed nutritional guidance.
 -   🎭 **Public Memes:** Available to all users - fetch random memes from memes.bupt.site API with **AI-generated descriptions** for enhanced understanding. Features **smart retry mechanism** to ensure quality content when requesting single memes, custom quantities (1-20), intelligent caching system, auto-deletion scheduling (15 minutes), and fallback link display. Includes parameter validation, real-time status updates, and comprehensive error handling for reliable meme delivery. Description priority: manual review > AI description > none.
 -   📊 **Public Finance & Stocks:** Available to all users - comprehensive financial market data powered by Yahoo Finance. Features **real-time stock prices** with market data and technical indicators, **15 ranking categories** including day gainers/losers, most actives, growth tech stocks, undervalued stocks, and mutual fund rankings, **intelligent stock search** supporting ticker symbols and company names across multiple markets (US, HK, CN, MY), **analyst recommendations** with buy/sell/hold ratings, **financial statements** (income, balance sheet, cash flow), categorized inline button interface, intelligent caching with different TTL for various data types, and comprehensive error handling with auto-deletion. Supports flexible search queries like "AAPL", "Apple", "Tesla", "6033.KL", "Maybank" with multilingual matching.
+-   🛢️ **Public Fuel Prices:** Available to all users - global fuel price lookup for 163 countries and China provincial rankings. Features **gasoline and diesel prices** with automatic CNY conversion, **global rankings** showing top 10 cheapest and most expensive countries with flags and Chinese names, **China provincial rankings** for 92/95/98 gasoline and diesel with detailed price comparisons, **multi-country queries** supporting formats like `/fuel my sg th`, **local currency display** alongside USD and CNY prices, **actual price dates** from source website, **inline mode support** with full details including rankings and comparisons, data sourced from GlobalPetrolPrices.com with weekly/monthly updates, and intelligent caching with 24-hour TTL matching scraper schedule.
 -   📱 **Public Social Media Parser (Platform List Only):** Available to all users - use `/platforms` command to view the list of 20+ supported platforms.
 -   🎵 **NetEase Cloud Music:** Whitelist required - full-featured NetEase Cloud Music (网易云音乐) integration. Features **song search** (`/netease <keyword>`) with interactive numbered results, **direct download** by song ID or music.163.com links, **lyrics retrieval** (`/lyric`) in LRC format, **auto link detection** for music.163.com/163cn.tv/163cn.link URLs in chat, **inline mode** with background download and `edit_inline_media` for seamless audio delivery, **cached audio** via Redis with 7-day TTL for instant replay, **FLAC/MP3 quality** with bitrate and file size display, **ID3/Vorbis metadata embedding** via mutagen-rs (Rust-powered), **large file upload** (>50MB) via Kurigram MTProto, **EAPI encryption**, and **concurrent download limiting** (semaphore=4). Commands: `/netease`, `/lyric`. *(Whitelist required)*
 -   🎵 **YouTube Music:** Whitelist required - full-featured YouTube Music integration. Features **song search** (`/yt <keyword>`) with interactive numbered results, **direct download** by videoId or YouTube/YouTube Music links, **lyrics retrieval** (`/ytlyric`), **multi-region charts** (Global, US, JP, KR, GB, HK, TW) via `/yt chart`, **auto link detection** for youtube.com/youtu.be/music.youtube.com URLs in chat, **inline mode** with background download and `edit_inline_media` for seamless audio delivery, **cached audio** via Redis for instant replay, **yt-dlp primary download** with pytubefix fallback, **large file upload** (>50MB) via Kurigram MTProto, and **concurrent download limiting** (semaphore=4). Commands: `/yt`, `/ytmusic`, `/ytlyric`. *(Whitelist required)*
@@ -196,6 +198,13 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /finance Maybank         # Search by partial company name
 # Interactive features: Stock rankings (15 categories), analyst recommendations, financial statements
 
+# Fuel Prices (Global & China)
+/fuel                    # Show fuel price help and usage
+/fuel my                 # Malaysia fuel prices (gasoline + diesel)
+/fuel china              # China provincial rankings (92/95/98/diesel)
+/fuel us sg th           # Multi-country query (US, Singapore, Thailand)
+# Features: Global rankings, local currency display, CNY conversion, actual price dates from GlobalPetrolPrices.com
+
 # Social Media Parser
 /platforms               # View list of 20+ supported platforms (all users)
 ```
@@ -330,6 +339,7 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /cleancache google_play   # Clear Google Play cache
 /cleancache apple_services # Clear Apple services cache
 /cleancache finance       # Clear finance & stock data cache
+/cleancache fuel          # Clear fuel price cache
 /cleancache social_parser # Clear social media parser cache
 
 # Command List Management
@@ -668,6 +678,7 @@ This project leverages several open source projects for data collection and proc
 - **Disney+ Pricing:** [disneyplus-prices](https://github.com/SzeMeng76/disneyplus-prices) - Disney+ subscription pricing data
 - **Spotify Pricing:** [spotify-prices](https://github.com/SzeMeng76/spotify-prices) - Spotify subscription pricing information
 - **HBO Max Pricing:** [hbo-max-global-prices](https://github.com/SzeMeng76/hbo-max-global-prices) - HBO Max global pricing data
+- **Fuel Prices:** [fuel-price-tracker](https://github.com/SzeMeng76/fuel-price-tracker) - Global fuel prices for 163 countries and China provinces
 - **NetEase Music API:** [Music163Api-Go](https://github.com/XiaoMengXinX/Music163Api-Go) - NetEase Cloud Music API reference implementation
 - **NetEase Music Bot:** [Music163bot-Go](https://github.com/XiaoMengXinX/Music163bot-Go) - NetEase Cloud Music Telegram bot reference
 
