@@ -308,6 +308,9 @@ async def handle_inline_reddit_list(
 
     # 获取帖子列表
     try:
+        subreddit = None
+        time_filter = 'day'  # 默认值
+
         if list_type == "hot":
             # 检查第二个参数是否是时间关键词（如果是，说明没有指定subreddit）
             subreddit = None
@@ -341,7 +344,8 @@ async def handle_inline_reddit_list(
             posts = await reddit_client.get_top_posts(subreddit=subreddit, time_filter=time_filter, limit=10)
             time_map = {'hour': '本小时', 'day': '今日', 'week': '本周', 'month': '本月', 'year': '今年', 'all': '全部时间'}
             time_text = time_map.get(time_filter, time_filter)
-            title_prefix = f"🏆 r/{subreddit} Top ({time_text})" if subreddit else f"🏆 Reddit 全站 Top ({time_text})"
+            # 转义括号
+            title_prefix = f"🏆 r/{subreddit} Top \\({time_text}\\)" if subreddit else f"🏆 Reddit 全站 Top \\({time_text}\\)"
         else:
             return [
                 InlineQueryResultArticle(
@@ -392,10 +396,18 @@ async def handle_inline_reddit_list(
         if ai_summarizer and cache_manager:
             # 缓存帖子列表数据用于AI翻译
             import hashlib
-            list_hash = hashlib.md5(f"{list_type}_{subreddit}_{time_filter}_{len(posts)}".encode()).hexdigest()[:16]
+            # hot 命令没有 time_filter，使用空字符串
+            hash_time = time_filter if list_type == "top" else ""
+            list_hash = hashlib.md5(f"{list_type}_{subreddit}_{hash_time}_{len(posts)}".encode()).hexdigest()[:16]
 
-            # 保存帖子标题列表到缓存
-            titles_data = [{"title": p.title, "permalink": p.permalink} for p in posts]
+            # 保存帖子完整信息到缓存
+            titles_data = [{
+                "title": p.title,
+                "permalink": p.permalink,
+                "author": p.author,
+                "score": p.score,
+                "num_comments": p.num_comments
+            } for p in posts]
             await cache_manager.set(
                 f"reddit_list:{list_hash}",
                 titles_data,
@@ -463,9 +475,9 @@ async def handle_inline_reddit_chosen(
     if not cached_data:
         # 缓存过期
         try:
-            await context.bot.edit_message_caption(
+            await context.bot.edit_message_text(
                 inline_message_id=inline_message_id,
-                caption="❌ 视频信息已过期，请重新查询"
+                text="❌ 信息已过期，请重新查询"
             )
         except Exception:
             pass
