@@ -138,25 +138,42 @@ async def handle_inline_reddit_query(
         if post.gallery_items and len(post.gallery_items) > 1:
             results = []
             for index, img_url in enumerate(post.gallery_items[:10], 1):  # 最多10张
-                # 验证缩略图有效性
-                valid_thumb = img_url
-                if valid_thumb and valid_thumb.endswith('.webp'):
-                    valid_thumb = None
-                if valid_thumb and ('cdninstagram.com' in valid_thumb or 'fbcdn.net' in valid_thumb or 'xhscdn.com' in valid_thumb or 'redd.it' in valid_thumb):
-                    valid_thumb = None
+                # 验证图片 URL 有效性（检查 WebP 和 Reddit CDN）
+                is_valid_photo = True
+                if img_url and (img_url.endswith('.webp') or 'auto=webp' in img_url):
+                    is_valid_photo = False
+                if img_url and ('preview.redd.it' in img_url or 'i.redd.it' in img_url):
+                    is_valid_photo = False
 
-                results.append(
-                    InlineQueryResultPhoto(
-                        id=str(uuid4()),
-                        photo_url=img_url,
-                        thumbnail_url=valid_thumb or "https://img.icons8.com/color/96/000000/image.png",
-                        title=f"🖼️ 图片 {index}/{len(post.gallery_items)} - {post.title[:40]}",
-                        description=f"r/{post.subreddit} | ⬆️ {post.score} | 💬 {post.num_comments}",
-                        caption=caption,
-                        parse_mode="MarkdownV2",
-                        reply_markup=reply_markup
+                if is_valid_photo:
+                    results.append(
+                        InlineQueryResultPhoto(
+                            id=str(uuid4()),
+                            photo_url=img_url,
+                            thumbnail_url=img_url,
+                            title=f"🖼️ 图片 {index}/{len(post.gallery_items)} - {post.title[:40]}",
+                            description=f"r/{post.subreddit} | ⬆️ {post.score} | 💬 {post.num_comments}",
+                            caption=caption,
+                            parse_mode="MarkdownV2",
+                            reply_markup=reply_markup
+                        )
                     )
-                )
+                else:
+                    # 无效图片 URL → 使用 Article 类型
+                    results.append(
+                        InlineQueryResultArticle(
+                            id=str(uuid4()),
+                            title=f"🖼️ 图片 {index}/{len(post.gallery_items)} - {post.title[:40]}",
+                            description=f"r/{post.subreddit} | ⬆️ {post.score} | 💬 {post.num_comments}",
+                            thumbnail_url="https://img.icons8.com/color/96/000000/image.png",
+                            input_message_content=InputTextMessageContent(
+                                message_text=caption,
+                                parse_mode="MarkdownV2",
+                                link_preview_options={"is_disabled": True}
+                            ),
+                            reply_markup=reply_markup
+                        )
+                    )
             return results
         # 视频：返回缩略图照片，用户选择后自动下载并上传
         elif post.is_video and post.video_url and post.preview_image_url:
@@ -170,46 +187,80 @@ async def handle_inline_reddit_query(
             }
             _cache_timestamps[result_id] = time.time()
 
-            # 验证缩略图有效性
-            valid_thumb = post.preview_image_url
-            if valid_thumb and valid_thumb.endswith('.webp'):
-                valid_thumb = None
-            if valid_thumb and ('cdninstagram.com' in valid_thumb or 'fbcdn.net' in valid_thumb or 'xhscdn.com' in valid_thumb or 'redd.it' in valid_thumb):
-                valid_thumb = None
+            # 验证缩略图有效性（检查 WebP 和 Reddit CDN）
+            is_valid_photo = True
+            if post.preview_image_url and (post.preview_image_url.endswith('.webp') or 'auto=webp' in post.preview_image_url):
+                is_valid_photo = False
+            if post.preview_image_url and ('preview.redd.it' in post.preview_image_url or 'i.redd.it' in post.preview_image_url):
+                is_valid_photo = False
 
-            return [
-                InlineQueryResultPhoto(
-                    id=result_id,
-                    photo_url=post.preview_image_url,
-                    thumbnail_url=valid_thumb or "https://img.icons8.com/color/96/000000/video.png",
-                    title=f"🎬 {post.title[:60]}",
-                    description=f"r/{post.subreddit} | ⬆️ {post.score} | 💬 {post.num_comments}",
-                    caption=caption,
-                    parse_mode="MarkdownV2",
-                    reply_markup=reply_markup
-                )
-            ]
+            if is_valid_photo:
+                return [
+                    InlineQueryResultPhoto(
+                        id=result_id,
+                        photo_url=post.preview_image_url,
+                        thumbnail_url=post.preview_image_url,
+                        title=f"🎬 {post.title[:60]}",
+                        description=f"r/{post.subreddit} | ⬆️ {post.score} | 💬 {post.num_comments}",
+                        caption=caption,
+                        parse_mode="MarkdownV2",
+                        reply_markup=reply_markup
+                    )
+                ]
+            else:
+                # 无效缩略图 → 使用 Article 类型
+                return [
+                    InlineQueryResultArticle(
+                        id=result_id,
+                        title=f"🎬 {post.title[:60]}",
+                        description=f"r/{post.subreddit} | ⬆️ {post.score} | 💬 {post.num_comments}",
+                        thumbnail_url="https://img.icons8.com/color/96/000000/video.png",
+                        input_message_content=InputTextMessageContent(
+                            message_text=caption,
+                            parse_mode="MarkdownV2",
+                            link_preview_options={"is_disabled": True}
+                        ),
+                        reply_markup=reply_markup
+                    )
+                ]
         # 图片：返回图片（直接显示，不需要下载）
         elif post.preview_image_url:
-            # 验证缩略图有效性
-            valid_thumb = post.preview_image_url
-            if valid_thumb and valid_thumb.endswith('.webp'):
-                valid_thumb = None
-            if valid_thumb and ('cdninstagram.com' in valid_thumb or 'fbcdn.net' in valid_thumb or 'xhscdn.com' in valid_thumb or 'redd.it' in valid_thumb):
-                valid_thumb = None
+            # 验证图片 URL 有效性（检查 WebP 和 Reddit CDN）
+            is_valid_photo = True
+            if post.preview_image_url and (post.preview_image_url.endswith('.webp') or 'auto=webp' in post.preview_image_url):
+                is_valid_photo = False
+            if post.preview_image_url and ('preview.redd.it' in post.preview_image_url or 'i.redd.it' in post.preview_image_url):
+                is_valid_photo = False
 
-            return [
-                InlineQueryResultPhoto(
-                    id=str(uuid4()),
-                    photo_url=post.preview_image_url,
-                    thumbnail_url=valid_thumb or "https://img.icons8.com/color/96/000000/image.png",
-                    title=f"📝 {post.title[:60]}",
-                    description=f"r/{post.subreddit} | ⬆️ {post.score} | 💬 {post.num_comments}",
-                    caption=caption,
-                    parse_mode="MarkdownV2",
-                    reply_markup=reply_markup
-                )
-            ]
+            if is_valid_photo:
+                return [
+                    InlineQueryResultPhoto(
+                        id=str(uuid4()),
+                        photo_url=post.preview_image_url,
+                        thumbnail_url=post.preview_image_url,
+                        title=f"📝 {post.title[:60]}",
+                        description=f"r/{post.subreddit} | ⬆️ {post.score} | 💬 {post.num_comments}",
+                        caption=caption,
+                        parse_mode="MarkdownV2",
+                        reply_markup=reply_markup
+                    )
+                ]
+            else:
+                # 无效图片 URL → 使用 Article 类型
+                return [
+                    InlineQueryResultArticle(
+                        id=str(uuid4()),
+                        title=f"📝 {post.title[:60]}",
+                        description=f"r/{post.subreddit} | ⬆️ {post.score} | 💬 {post.num_comments}",
+                        thumbnail_url="https://img.icons8.com/color/96/000000/image.png",
+                        input_message_content=InputTextMessageContent(
+                            message_text=caption,
+                            parse_mode="MarkdownV2",
+                            link_preview_options={"is_disabled": True}
+                        ),
+                        reply_markup=reply_markup
+                    )
+                ]
         # 无图片/视频：返回纯文本
         else:
             return [
