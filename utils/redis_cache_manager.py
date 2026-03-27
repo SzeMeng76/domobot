@@ -76,7 +76,7 @@ class RedisCacheManager:
             "google_play": self.config.google_play_app_cache_duration,
             "steam": self.config.steam_cache_duration,
             "netflix": self.config.netflix_cache_duration,
-            "fuel": self.config.fuel_cache_duration,  # 1小时
+            "fuel": self.config.fuel_cache_duration,  # 24小时（scraper每天运行一次）
             "crypto": self.config.crypto_cache_duration,
             "spotify": self.config.spotify_cache_duration,  # 8天，配合周日清理
             "disney_plus": self.config.disney_cache_duration,  # 8天，配合周日清理

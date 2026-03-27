@@ -109,14 +109,27 @@ class InlineCommandAdapter:
         from commands.weather import weather_inline_execute
         from utils.formatter import foldable_text_with_markdown_v2
         from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+        import hashlib
 
         # 不生成AI总结，避免超时
         result = await weather_inline_execute(args, use_ai_report=False)
 
         if result["success"]:
+            # 使用hash作为callback_data，避免中文乱码
+            city_hash = hashlib.md5(args.encode()).hexdigest()[:16]
+
+            # 缓存城市名，供callback使用
+            if self.cache_manager:
+                await self.cache_manager.set(
+                    f"weather_city:{city_hash}",
+                    args,
+                    subdirectory="weather",
+                    ttl=3600  # 1小时
+                )
+
             # 添加"生成AI总结"按钮
             keyboard = [[
-                InlineKeyboardButton("🤖 生成AI日报", callback_data=f"weather_ai_{args}")
+                InlineKeyboardButton("🤖 生成AI日报", callback_data=f"weather_ai_{city_hash}")
             ]]
             reply_markup = InlineKeyboardMarkup(keyboard)
 

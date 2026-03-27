@@ -20,8 +20,23 @@ async def weather_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         if not query.data or not query.data.startswith("weather_ai_"):
             return
 
-        # 提取城市名
-        city = query.data.replace("weather_ai_", "")
+        # 提取城市hash
+        city_hash = query.data.replace("weather_ai_", "")
+
+        # 从缓存读取城市名
+        cache_manager = context.bot_data.get("cache_manager")
+        if not cache_manager:
+            await query.answer("❌ 缓存服务未初始化", show_alert=True)
+            return
+
+        city = await cache_manager.get(
+            f"weather_city:{city_hash}",
+            subdirectory="weather"
+        )
+
+        if not city:
+            await query.answer("❌ 查询已过期，请重新查询", show_alert=True)
+            return
 
         # 立即answer移除加载圈
         await query.answer()
