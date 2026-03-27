@@ -102,6 +102,163 @@ async def _download_video(url: str, temp_dir: Path) -> Path:
     return file_path
 
 
+async def _show_hot_posts(context: ContextTypes.DEFAULT_TYPE, chat_id: int, subreddit: str = None, message=None):
+    """显示热门帖子列表"""
+    status_msg = await context.bot.send_message(chat_id=chat_id, text="🔄 获取热门帖子...")
+
+    try:
+        posts = await _reddit_client.get_hot_posts(subreddit=subreddit, limit=10)
+
+        if not posts:
+            await status_msg.edit_text("❌ 未找到帖子")
+            return
+
+        # 构建消息
+        title = f"🔥 r/{subreddit} 热门帖子" if subreddit else "🔥 Reddit 全站热门"
+        lines = [f"**{title}**\n"]
+
+        for i, post in enumerate(posts, 1):
+            # 转义特殊字符
+            post_title = _escape_markdown(post.title[:80])
+            if len(post.title) > 80:
+                post_title += "\\.\\.\\."
+
+            lines.append(
+                f"{i}\\. [{post_title}]({post.permalink})\n"
+                f"   👤 u/{_escape_markdown(post.author)} \\| "
+                f"⬆️ {post.score} \\| 💬 {post.num_comments}"
+            )
+
+        message_text = "\n".join(lines)
+
+        # 创建 inline keyboard
+        keyboard = []
+        # 如果启用了 AI 总结，添加 AI 翻译按钮
+        if _ai_summarizer:
+            # 缓存帖子列表数据用于AI翻译
+            import hashlib
+            list_hash = hashlib.md5(f"hot_{subreddit}_{len(posts)}".encode()).hexdigest()[:16]
+
+            # 保存帖子标题列表到缓存
+            if _cache_manager:
+                titles_data = [{"title": p.title, "permalink": p.permalink} for p in posts]
+                await _cache_manager.set(
+                    f"reddit_list:{list_hash}",
+                    titles_data,
+                    ttl=3600,  # 1小时
+                    subdirectory="reddit"
+                )
+
+            keyboard.append([
+                InlineKeyboardButton("🌐 AI翻译", callback_data=f"reddit_translate_{list_hash}")
+            ])
+
+        reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+
+        await status_msg.edit_text(
+            message_text,
+            parse_mode="MarkdownV2",
+            disable_web_page_preview=True,
+            reply_markup=reply_markup
+        )
+
+        # 删除用户命令
+        if message:
+            await delete_user_command(context, chat_id, message.message_id)
+
+        # 调度删除
+        config = get_config()
+        await _schedule_deletion(context, chat_id, status_msg.message_id, config.auto_delete_delay)
+
+    except Exception as e:
+        logger.error(f"获取热门帖子失败: {e}", exc_info=True)
+        await status_msg.edit_text(f"❌ 获取失败: {str(e)}")
+
+
+async def _show_top_posts(context: ContextTypes.DEFAULT_TYPE, chat_id: int, subreddit: str = None, time_filter: str = 'day', message=None):
+    """显示Top帖子列表"""
+    status_msg = await context.bot.send_message(chat_id=chat_id, text="🔄 获取Top帖子...")
+
+    try:
+        posts = await _reddit_client.get_top_posts(subreddit=subreddit, time_filter=time_filter, limit=10)
+
+        if not posts:
+            await status_msg.edit_text("❌ 未找到帖子")
+            return
+
+        # 时间范围映射
+        time_map = {
+            'hour': '本小时',
+            'day': '今日',
+            'week': '本周',
+            'month': '本月',
+            'year': '今年',
+            'all': '全部时间'
+        }
+        time_text = time_map.get(time_filter, time_filter)
+
+        # 构建消息
+        title = f"🏆 r/{subreddit} Top ({time_text})" if subreddit else f"🏆 Reddit 全站 Top ({time_text})"
+        lines = [f"**{title}**\n"]
+
+        for i, post in enumerate(posts, 1):
+            # 转义特殊字符
+            post_title = _escape_markdown(post.title[:80])
+            if len(post.title) > 80:
+                post_title += "\\.\\.\\."
+
+            lines.append(
+                f"{i}\\. [{post_title}]({post.permalink})\n"
+                f"   👤 u/{_escape_markdown(post.author)} \\| "
+                f"⬆️ {post.score} \\| 💬 {post.num_comments}"
+            )
+
+        message_text = "\n".join(lines)
+
+        # 创建 inline keyboard
+        keyboard = []
+        # 如果启用了 AI 总结，添加 AI 翻译按钮
+        if _ai_summarizer:
+            # 缓存帖子列表数据用于AI翻译
+            import hashlib
+            list_hash = hashlib.md5(f"top_{subreddit}_{time_filter}_{len(posts)}".encode()).hexdigest()[:16]
+
+            # 保存帖子标题列表到缓存
+            if _cache_manager:
+                titles_data = [{"title": p.title, "permalink": p.permalink} for p in posts]
+                await _cache_manager.set(
+                    f"reddit_list:{list_hash}",
+                    titles_data,
+                    ttl=3600,  # 1小时
+                    subdirectory="reddit"
+                )
+
+            keyboard.append([
+                InlineKeyboardButton("🌐 AI翻译", callback_data=f"reddit_translate_{list_hash}")
+            ])
+
+        reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+
+        await status_msg.edit_text(
+            message_text,
+            parse_mode="MarkdownV2",
+            disable_web_page_preview=True,
+            reply_markup=reply_markup
+        )
+
+        # 删除用户命令
+        if message:
+            await delete_user_command(context, chat_id, message.message_id)
+
+        # 调度删除
+        config = get_config()
+        await _schedule_deletion(context, chat_id, status_msg.message_id, config.auto_delete_delay)
+
+    except Exception as e:
+        logger.error(f"获取Top帖子失败: {e}", exc_info=True)
+        await status_msg.edit_text(f"❌ 获取失败: {str(e)}")
+
+
 @with_error_handling
 async def reddit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
@@ -114,13 +271,17 @@ async def reddit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
 
-    # 获取 URL
+    # 获取参数
     if not context.args:
         help_text = (
             "📝 *使用方法：*\n\n"
-            "• `/reddit <Reddit链接>` \\- 解析 Reddit 帖子\n\n"
+            "• `/reddit <Reddit链接>` \\- 解析 Reddit 帖子\n"
+            "• `/reddit hot [subreddit]` \\- 热门帖子\n"
+            "• `/reddit top [subreddit] [day|week|month|year|all]` \\- Top帖子\n\n"
             "🌐 *示例：*\n"
-            "`/reddit https://www.reddit.com/r/python/comments/xxx/`"
+            "`/reddit https://www.reddit.com/r/python/comments/xxx/`\n"
+            "`/reddit hot python` \\- r/python 热门\n"
+            "`/reddit top python week` \\- r/python 本周Top"
         )
         await context.bot.send_message(
             chat_id=chat_id,
@@ -131,6 +292,24 @@ async def reddit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await delete_user_command(context, chat_id, update.message.message_id)
         return
 
+    first_arg = context.args[0].lower()
+
+    # 热门帖子
+    if first_arg == 'hot':
+        subreddit = context.args[1] if len(context.args) > 1 else None
+        await _show_hot_posts(context, chat_id, subreddit, update.message)
+        return
+
+    # Top帖子
+    if first_arg == 'top':
+        subreddit = context.args[1] if len(context.args) > 1 else None
+        time_filter = context.args[2] if len(context.args) > 2 else 'day'
+        if time_filter not in ['hour', 'day', 'week', 'month', 'year', 'all']:
+            time_filter = 'day'
+        await _show_top_posts(context, chat_id, subreddit, time_filter, update.message)
+        return
+
+    # 解析链接
     url = context.args[0]
 
     # 验证 URL
@@ -443,6 +622,151 @@ async def _send_reddit_media(context, chat_id, post, caption, reply_markup):
             logger.debug(f"清理临时文件失败: {e}")
 
 
+@with_error_handling
+async def reddit_translate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """处理 Reddit 列表翻译按钮"""
+    query = update.callback_query
+
+    try:
+        if not query.data or not query.data.startswith("reddit_translate_"):
+            return
+
+        await query.answer()
+
+        list_hash = query.data.replace("reddit_translate_", "")
+
+        # 显示翻译中状态
+        await query.edit_message_text(
+            text="🌐 AI翻译中，请稍候...",
+            reply_markup=query.message.reply_markup
+        )
+
+        # 检查依赖
+        if not _cache_manager or not _ai_summarizer:
+            await query.answer("❌ AI翻译功能未启用", show_alert=True)
+            return
+
+        # 从缓存读取列表数据
+        titles_data = await _cache_manager.get(
+            f"reddit_list:{list_hash}",
+            subdirectory="reddit"
+        )
+
+        if not titles_data:
+            await query.answer("❌ 缓存已失效，请重新获取列表", show_alert=True)
+            return
+
+        # 构建翻译prompt
+        titles_text = "\n".join([f"{i+1}. {item['title']}" for i, item in enumerate(titles_data)])
+        prompt = f"""请将以下Reddit帖子标题翻译成中文，保持编号格式：
+
+{titles_text}
+
+要求：
+- 保持编号格式 (1. 2. 3. ...)
+- 翻译要准确、自然、易懂
+- 保留技术术语的英文（如Python, API等）
+- 每行一个标题"""
+
+        # 调用AI翻译
+        translated = await _ai_summarizer.summarize(prompt)
+
+        # 构建翻译后的消息
+        lines = ["**🌐 AI翻译结果**\n"]
+        translated_lines = translated.strip().split('\n')
+
+        for i, (item, trans_line) in enumerate(zip(titles_data, translated_lines), 1):
+            # 清理翻译结果中的编号
+            trans_title = trans_line.strip()
+            if trans_title.startswith(f"{i}."):
+                trans_title = trans_title[len(f"{i}."):].strip()
+
+            lines.append(
+                f"{i}\\. [{_escape_markdown(trans_title)}]({item['permalink']})"
+            )
+
+        message_text = "\n".join(lines)
+
+        # 添加"显示原文"按钮
+        keyboard = [[
+            InlineKeyboardButton("🔙 显示原文", callback_data=f"reddit_untranslate_{list_hash}")
+        ]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await query.edit_message_text(
+            text=message_text,
+            parse_mode="MarkdownV2",
+            disable_web_page_preview=True,
+            reply_markup=reply_markup
+        )
+
+        logger.info(f"✅ Reddit列表翻译完成: {list_hash}")
+
+    except Exception as e:
+        logger.error(f"Reddit列表翻译失败: {e}", exc_info=True)
+        try:
+            await query.edit_message_text(
+                text=f"❌ 翻译失败: {str(e)}",
+                reply_markup=query.message.reply_markup
+            )
+        except:
+            pass
+
+
+@with_error_handling
+async def reddit_untranslate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """处理显示原文按钮"""
+    query = update.callback_query
+
+    try:
+        if not query.data or not query.data.startswith("reddit_untranslate_"):
+            return
+
+        await query.answer()
+
+        list_hash = query.data.replace("reddit_untranslate_", "")
+
+        # 从缓存读取原始数据
+        if not _cache_manager:
+            await query.answer("❌ 功能未启用", show_alert=True)
+            return
+
+        titles_data = await _cache_manager.get(
+            f"reddit_list:{list_hash}",
+            subdirectory="reddit"
+        )
+
+        if not titles_data:
+            await query.answer("❌ 缓存已失效", show_alert=True)
+            return
+
+        # 重新构建原文消息
+        lines = []
+        for i, item in enumerate(titles_data, 1):
+            post_title = _escape_markdown(item['title'][:80])
+            if len(item['title']) > 80:
+                post_title += "\\.\\.\\."
+            lines.append(f"{i}\\. [{post_title}]({item['permalink']})")
+
+        message_text = "\n".join(lines)
+
+        # 恢复翻译按钮
+        keyboard = [[
+            InlineKeyboardButton("🌐 AI翻译", callback_data=f"reddit_translate_{list_hash}")
+        ]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await query.edit_message_text(
+            text=message_text,
+            parse_mode="MarkdownV2",
+            disable_web_page_preview=True,
+            reply_markup=reply_markup
+        )
+
+    except Exception as e:
+        logger.error(f"显示原文失败: {e}", exc_info=True)
+
+
 # 注册命令
 command_factory.register_command(
     "reddit",
@@ -450,3 +774,20 @@ command_factory.register_command(
     permission=Permission.USER,  # 白名单用户可用
     description="解析 Reddit 帖子"
 )
+
+# 注册callback handlers
+command_factory.register_callback(
+    "^reddit_translate_",
+    reddit_translate_callback,
+    permission=Permission.USER,
+    description="Reddit列表AI翻译"
+)
+
+command_factory.register_callback(
+    "^reddit_untranslate_",
+    reddit_untranslate_callback,
+    permission=Permission.USER,
+    description="Reddit列表显示原文"
+)
+
+logger.info("Reddit 命令模块已加载")

@@ -191,6 +191,58 @@ class RedditClient:
             logger.error(f"获取评论失败: {e}")
             return []
 
+    async def get_hot_posts(self, subreddit: str = None, limit: int = 10) -> List[RedditPost]:
+        """获取热门帖子
+
+        Args:
+            subreddit: subreddit名称，None表示全站
+            limit: 返回数量，默认10
+        """
+        try:
+            endpoint = f"/r/{subreddit}/hot" if subreddit else "/hot"
+            params = {'limit': str(limit)}
+
+            data = await self._api_request(endpoint, params)
+
+            posts = []
+            for child in data['data']['children']:
+                if child['kind'] == 't3':  # t3 = post
+                    posts.append(self._parse_post(child['data']))
+
+            return posts
+
+        except Exception as e:
+            logger.error(f"获取热门帖子失败: {e}")
+            return []
+
+    async def get_top_posts(self, subreddit: str = None, time_filter: str = 'day', limit: int = 10) -> List[RedditPost]:
+        """获取Top帖子
+
+        Args:
+            subreddit: subreddit名称，None表示全站
+            time_filter: 时间范围 (hour/day/week/month/year/all)
+            limit: 返回数量，默认10
+        """
+        try:
+            endpoint = f"/r/{subreddit}/top" if subreddit else "/top"
+            params = {
+                'limit': str(limit),
+                't': time_filter
+            }
+
+            data = await self._api_request(endpoint, params)
+
+            posts = []
+            for child in data['data']['children']:
+                if child['kind'] == 't3':  # t3 = post
+                    posts.append(self._parse_post(child['data']))
+
+            return posts
+
+        except Exception as e:
+            logger.error(f"获取Top帖子失败: {e}")
+            return []
+
     def _parse_post(self, post_data: Dict[str, Any]) -> RedditPost:
         """解析帖子数据"""
         post = RedditPost(
