@@ -134,44 +134,38 @@ async def handle_inline_reddit_query(
         # 返回结果 - 根据内容类型返回不同的结果
         from telegram import InlineQueryResultPhoto
 
-        # Gallery：返回多张图片
+        # Gallery：返回多张图片（缓存后在 chosen handler 中下载上传）
         if post.gallery_items and len(post.gallery_items) > 1:
             results = []
             for index, img_url in enumerate(post.gallery_items[:10], 1):  # 最多10张
-                # 验证图片 URL 有效性（只检查 .webp 扩展名，format=pjpg 是有效的）
-                is_valid_photo = True
-                if img_url and img_url.endswith('.webp'):
-                    is_valid_photo = False
+                result_id = f"reddit_image_{uuid4()}"
 
-                if is_valid_photo:
-                    results.append(
-                        InlineQueryResultPhoto(
-                            id=str(uuid4()),
-                            photo_url=img_url,
-                            thumbnail_url=img_url,
-                            title=f"🖼️ 图片 {index}/{len(post.gallery_items)} - {post.title[:40]}",
-                            description=f"r/{post.subreddit} | ⬆️ {post.score} | 💬 {post.num_comments}",
-                            caption=caption,
+                # 缓存图片信息（用于 chosen handler）
+                _reddit_video_cache[result_id] = {
+                    "post": post,
+                    "caption": caption,
+                    "url_hash": url_hash,
+                    "reply_markup": reply_markup,
+                    "image_url": img_url,
+                    "image_index": index
+                }
+                _cache_timestamps[result_id] = time.time()
+
+                # Reddit CDN 可能无法访问，使用 Article 类型 + fallback 图标
+                results.append(
+                    InlineQueryResultArticle(
+                        id=result_id,
+                        title=f"🖼️ 图片 {index}/{len(post.gallery_items)} - {post.title[:40]}",
+                        description=f"r/{post.subreddit} | ⬆️ {post.score} | 💬 {post.num_comments}",
+                        thumbnail_url="https://img.icons8.com/color/96/000000/image.png",
+                        input_message_content=InputTextMessageContent(
+                            message_text=caption,
                             parse_mode="MarkdownV2",
-                            reply_markup=reply_markup
-                        )
+                            link_preview_options={"is_disabled": True}
+                        ),
+                        reply_markup=reply_markup
                     )
-                else:
-                    # WebP 格式 → 使用 Article 类型
-                    results.append(
-                        InlineQueryResultArticle(
-                            id=str(uuid4()),
-                            title=f"🖼️ 图片 {index}/{len(post.gallery_items)} - {post.title[:40]}",
-                            description=f"r/{post.subreddit} | ⬆️ {post.score} | 💬 {post.num_comments}",
-                            thumbnail_url="https://img.icons8.com/color/96/000000/image.png",
-                            input_message_content=InputTextMessageContent(
-                                message_text=caption,
-                                parse_mode="MarkdownV2",
-                                link_preview_options={"is_disabled": True}
-                            ),
-                            reply_markup=reply_markup
-                        )
-                    )
+                )
             return results
         # 视频：返回缩略图照片，用户选择后自动下载并上传
         elif post.is_video and post.video_url and post.preview_image_url:
@@ -185,76 +179,51 @@ async def handle_inline_reddit_query(
             }
             _cache_timestamps[result_id] = time.time()
 
-            # 验证缩略图有效性（只检查 .webp 扩展名，format=pjpg 是有效的）
-            is_valid_photo = True
-            if post.preview_image_url and post.preview_image_url.endswith('.webp'):
-                is_valid_photo = False
-
-            if is_valid_photo:
-                return [
-                    InlineQueryResultPhoto(
-                        id=result_id,
-                        photo_url=post.preview_image_url,
-                        thumbnail_url=post.preview_image_url,
-                        title=f"🎬 {post.title[:60]}",
-                        description=f"r/{post.subreddit} | ⬆️ {post.score} | 💬 {post.num_comments}",
-                        caption=caption,
+            # Reddit CDN 可能无法访问，使用 Article 类型 + fallback 图标
+            return [
+                InlineQueryResultArticle(
+                    id=result_id,
+                    title=f"🎬 {post.title[:60]}",
+                    description=f"r/{post.subreddit} | ⬆️ {post.score} | 💬 {post.num_comments}",
+                    thumbnail_url="https://img.icons8.com/color/96/000000/video.png",
+                    input_message_content=InputTextMessageContent(
+                        message_text=caption,
                         parse_mode="MarkdownV2",
-                        reply_markup=reply_markup
-                    )
-                ]
-            else:
-                # 无效缩略图 → 使用 Article 类型
-                return [
-                    InlineQueryResultArticle(
-                        id=result_id,
-                        title=f"🎬 {post.title[:60]}",
-                        description=f"r/{post.subreddit} | ⬆️ {post.score} | 💬 {post.num_comments}",
-                        thumbnail_url="https://img.icons8.com/color/96/000000/video.png",
-                        input_message_content=InputTextMessageContent(
-                            message_text=caption,
-                            parse_mode="MarkdownV2",
-                            link_preview_options={"is_disabled": True}
-                        ),
-                        reply_markup=reply_markup
-                    )
-                ]
-        # 图片：返回图片（直接显示，不需要下载）
+                        link_preview_options={"is_disabled": True}
+                    ),
+                    reply_markup=reply_markup
+                )
+            ]
+        # 图片：返回图片（缓存后在 chosen handler 中下载上传）
         elif post.preview_image_url:
-            # 验证图片 URL 有效性（只检查 .webp 扩展名，format=pjpg 是有效的）
-            is_valid_photo = True
-            if post.preview_image_url and post.preview_image_url.endswith('.webp'):
-                is_valid_photo = False
+            result_id = f"reddit_image_{uuid4()}"
 
-            if is_valid_photo:
-                return [
-                    InlineQueryResultPhoto(
-                        id=str(uuid4()),
-                        photo_url=post.preview_image_url,
-                        thumbnail_url=post.preview_image_url,
-                        title=f"📝 {post.title[:60]}",
-                        description=f"r/{post.subreddit} | ⬆️ {post.score} | 💬 {post.num_comments}",
-                        caption=caption,
+            # 缓存图片信息（用于 chosen handler）
+            _reddit_video_cache[result_id] = {
+                "post": post,
+                "caption": caption,
+                "url_hash": url_hash,
+                "reply_markup": reply_markup,
+                "image_url": post.preview_image_url,
+                "image_index": 1
+            }
+            _cache_timestamps[result_id] = time.time()
+
+            # Reddit CDN 可能无法访问，使用 Article 类型 + fallback 图标
+            return [
+                InlineQueryResultArticle(
+                    id=result_id,
+                    title=f"📝 {post.title[:60]}",
+                    description=f"r/{post.subreddit} | ⬆️ {post.score} | 💬 {post.num_comments}",
+                    thumbnail_url="https://img.icons8.com/color/96/000000/image.png",
+                    input_message_content=InputTextMessageContent(
+                        message_text=caption,
                         parse_mode="MarkdownV2",
-                        reply_markup=reply_markup
-                    )
-                ]
-            else:
-                # 无效图片 URL → 使用 Article 类型
-                return [
-                    InlineQueryResultArticle(
-                        id=str(uuid4()),
-                        title=f"📝 {post.title[:60]}",
-                        description=f"r/{post.subreddit} | ⬆️ {post.score} | 💬 {post.num_comments}",
-                        thumbnail_url="https://img.icons8.com/color/96/000000/image.png",
-                        input_message_content=InputTextMessageContent(
-                            message_text=caption,
-                            parse_mode="MarkdownV2",
-                            link_preview_options={"is_disabled": True}
-                        ),
-                        reply_markup=reply_markup
-                    )
-                ]
+                        link_preview_options={"is_disabled": True}
+                    ),
+                    reply_markup=reply_markup
+                )
+            ]
         # 无图片/视频：返回纯文本
         else:
             return [
@@ -484,8 +453,8 @@ async def handle_inline_reddit_chosen(
     inline_message_id = chosen_result.inline_message_id
     result_id = chosen_result.result_id
 
-    # 只处理视频
-    if not result_id.startswith("reddit_video_"):
+    # 处理视频和图片
+    if not (result_id.startswith("reddit_video_") or result_id.startswith("reddit_image_")):
         return
 
     # 从缓存中获取视频信息
@@ -505,35 +474,50 @@ async def handle_inline_reddit_chosen(
     post = cached_data["post"]
     caption = cached_data["caption"]
     reply_markup = cached_data["reply_markup"]
+    is_video = result_id.startswith("reddit_video_")
+    is_image = result_id.startswith("reddit_image_")
 
     try:
         import tempfile
         from pathlib import Path
-        from commands.reddit_command import _download_video
+        from commands.reddit_command import _download_video, _download_image
 
         # 更新状态
-        await context.bot.edit_message_caption(
+        status_text = "📥 下载视频中..." if is_video else "📥 下载图片中..."
+        await context.bot.edit_message_text(
             inline_message_id=inline_message_id,
-            caption="📥 下载视频中..."
+            text=status_text
         )
 
-        # 下载视频
+        # 下载媒体
         temp_dir = Path(tempfile.gettempdir()) / "domobot_reddit"
         temp_dir.mkdir(exist_ok=True)
 
-        video_path = await _download_video(post.video_url, temp_dir)
-        video_size_mb = video_path.stat().st_size / (1024 * 1024)
+        if is_video:
+            # 下载视频
+            video_path = await _download_video(post.video_url, temp_dir)
+            media_size_mb = video_path.stat().st_size / (1024 * 1024)
+            media_path = video_path
+            media_type = "video"
+        else:
+            # 下载图片
+            image_url = cached_data.get("image_url", post.preview_image_url)
+            image_path = await _download_image(image_url, temp_dir)
+            media_size_mb = image_path.stat().st_size / (1024 * 1024)
+            media_path = image_path
+            media_type = "image"
 
-        logger.info(f"[Inline Reddit] 视频下载完成: {video_size_mb:.1f}MB")
+        logger.info(f"[Inline Reddit] {media_type}下载完成: {media_size_mb:.1f}MB")
 
-        # 检查视频大小
-        if video_size_mb > 2048:
+        # 检查文件大小
+        if media_size_mb > 2048:
             # 超过 2GB，无法上传
-            await context.bot.edit_message_caption(
+            await context.bot.edit_message_text(
                 inline_message_id=inline_message_id,
-                caption=f"{caption}\n\n⚠️ 视频过大 ({video_size_mb:.1f}MB)，无法上传",
+                text=f"{caption}\n\n⚠️ {media_type}过大 ({media_size_mb:.1f}MB)，无法上传",
                 parse_mode="MarkdownV2",
-                reply_markup=reply_markup
+                reply_markup=reply_markup,
+                link_preview_options={"is_disabled": True}
             )
             # 清理缓存
             _reddit_video_cache.pop(result_id, None)
@@ -541,71 +525,87 @@ async def handle_inline_reddit_chosen(
             return
 
         # 更新状态
-        await context.bot.edit_message_caption(
+        await context.bot.edit_message_text(
             inline_message_id=inline_message_id,
-            caption=f"📤 上传视频中... ({video_size_mb:.1f}MB)"
+            text=f"📤 上传{media_type}中... ({media_size_mb:.1f}MB)"
         )
 
         # 使用 Pyrogram 上传（支持大文件）
         from commands import reddit_command
         pyrogram_helper = reddit_command._pyrogram_helper
 
-        if pyrogram_helper and pyrogram_helper.is_started and pyrogram_helper.client:
+        if is_video and pyrogram_helper and pyrogram_helper.is_started and pyrogram_helper.client:
             from pyrogram.types import InputMediaVideo as PyrogramInputMediaVideo
             from pyrogram.enums import ParseMode as PyrogramParseMode
-            from html import escape as html_escape
 
             # 将 MarkdownV2 caption 转换为 HTML
-            # 简单处理：移除转义符
             html_caption = caption.replace("\\", "")
 
             await pyrogram_helper.client.edit_inline_media(
                 inline_message_id=inline_message_id,
                 media=PyrogramInputMediaVideo(
-                    media=str(video_path),
+                    media=str(media_path),
                     caption=html_caption,
                     parse_mode=PyrogramParseMode.HTML,
                     supports_streaming=True,
                 )
             )
-            logger.info(f"[Inline Reddit] Pyrogram 上传成功: {video_size_mb:.1f}MB")
-        elif video_size_mb <= 50:
-            # Fallback: python-telegram-bot (<=50MB)
-            from telegram import InputMediaVideo
+            logger.info(f"[Inline Reddit] Pyrogram 上传成功: {media_size_mb:.1f}MB")
+        elif is_image or (is_video and media_size_mb <= 50):
+            # 图片或小视频：使用 python-telegram-bot (<=50MB)
+            from telegram import InputMediaVideo, InputMediaPhoto
             from utils.config_manager import ConfigManager
 
             config_manager = ConfigManager()
             temp_channel_id = config_manager.config.inline_parse_temp_channel
 
             if not temp_channel_id:
-                await context.bot.edit_message_caption(
+                await context.bot.edit_message_text(
                     inline_message_id=inline_message_id,
-                    caption=f"{caption}\n\n❌ 配置错误：未设置临时存储频道",
+                    text=f"{caption}\n\n❌ 配置错误：未设置临时存储频道",
                     parse_mode="MarkdownV2",
-                    reply_markup=reply_markup
+                    reply_markup=reply_markup,
+                    link_preview_options={"is_disabled": True}
                 )
                 return
 
             # 先上传到临时频道
-            with open(video_path, 'rb') as video_file:
-                sent_message = await context.bot.send_video(
-                    chat_id=temp_channel_id,
-                    video=video_file,
-                    supports_streaming=True,
-                    read_timeout=300,
-                    write_timeout=300,
-                    connect_timeout=30
-                )
+            with open(media_path, 'rb') as media_file:
+                if is_image:
+                    sent_message = await context.bot.send_photo(
+                        chat_id=temp_channel_id,
+                        photo=media_file,
+                        read_timeout=300,
+                        write_timeout=300,
+                        connect_timeout=30
+                    )
+                    file_id = sent_message.photo[-1].file_id
+                    input_media = InputMediaPhoto(
+                        media=file_id,
+                        caption=caption,
+                        parse_mode="MarkdownV2"
+                    )
+                else:
+                    sent_message = await context.bot.send_video(
+                        chat_id=temp_channel_id,
+                        video=media_file,
+                        supports_streaming=True,
+                        read_timeout=300,
+                        write_timeout=300,
+                        connect_timeout=30
+                    )
+                    file_id = sent_message.video.file_id
+                    input_media = InputMediaVideo(
+                        media=file_id,
+                        caption=caption,
+                        parse_mode="MarkdownV2",
+                        supports_streaming=True
+                    )
 
             # 使用 file_id 编辑 inline 消息
             await context.bot.edit_message_media(
                 inline_message_id=inline_message_id,
-                media=InputMediaVideo(
-                    media=sent_message.video.file_id,
-                    caption=caption,
-                    parse_mode="MarkdownV2",
-                    supports_streaming=True,
-                ),
+                media=input_media
             )
 
             # 删除临时频道的消息
@@ -614,32 +614,34 @@ async def handle_inline_reddit_chosen(
             except Exception:
                 pass
 
-            logger.info(f"[Inline Reddit] python-telegram-bot 上传成功: {video_size_mb:.1f}MB")
+            logger.info(f"[Inline Reddit] python-telegram-bot 上传成功: {media_size_mb:.1f}MB")
         else:
             # >50MB 且 Pyrogram 不可用
-            await context.bot.edit_message_caption(
+            await context.bot.edit_message_text(
                 inline_message_id=inline_message_id,
-                caption=f"{caption}\n\n⚠️ 视频过大 ({video_size_mb:.1f}MB)，无法上传",
+                text=f"{caption}\n\n⚠️ 视频过大 ({media_size_mb:.1f}MB)，无法上传",
                 parse_mode="MarkdownV2",
-                reply_markup=reply_markup
+                reply_markup=reply_markup,
+                link_preview_options={"is_disabled": True}
             )
 
         # 清理缓存和临时文件
         _reddit_video_cache.pop(result_id, None)
         _cache_timestamps.pop(result_id, None)
         try:
-            video_path.unlink()
+            media_path.unlink()
         except Exception:
             pass
 
     except Exception as e:
-        logger.error(f"[Inline Reddit] 视频处理失败: {e}", exc_info=True)
+        logger.error(f"[Inline Reddit] {media_type if 'media_type' in locals() else '媒体'}处理失败: {e}", exc_info=True)
         try:
-            await context.bot.edit_message_caption(
+            await context.bot.edit_message_text(
                 inline_message_id=inline_message_id,
-                caption=f"{caption}\n\n❌ 视频处理失败: {str(e)}",
+                text=f"{caption}\n\n❌ 处理失败: {str(e)}",
                 parse_mode="MarkdownV2",
-                reply_markup=reply_markup
+                reply_markup=reply_markup,
+                link_preview_options={"is_disabled": True}
             )
         except Exception:
             pass
