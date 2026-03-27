@@ -8,6 +8,7 @@ import hashlib
 import logging
 import os
 import time
+from itertools import batched
 from pathlib import Path
 from telegram import Update, ReplyParameters
 from telegram.ext import ContextTypes
@@ -17,7 +18,7 @@ import pillow_heif
 from parsehub.types import VideoFile, ImageFile, VideoParseResult, ImageParseResult, MultimediaParseResult, RichTextParseResult
 from utils.command_factory import command_factory
 from utils.converter import clean_article_html
-from utils.error_handling import with_error_handling
+from utils.error_handling import with_error_handling, with_telegram_retry
 
 
 def _should_segment_image(image_path: Path, segment_height: int = 1920) -> bool:
@@ -428,6 +429,15 @@ async def _handle_single_parse(
     """解析单条 URL 并发送结果"""
     status_msg = await context.bot.send_message(chat_id=chat_id, text="🔄 解析中...")
 
+    async def _safe_edit_status(text: str):
+        """安全地编辑状态消息，忽略 RetryAfter 异常"""
+        from telegram.error import RetryAfter
+        try:
+            if status_msg.text != text:
+                await status_msg.edit_text(text)
+        except RetryAfter:
+            pass  # 忽略速率限制，不影响主流程
+
     try:
         result, parse_result, platform, parse_time, error_msg = await _adapter.parse_url(url, user_id, group_id)
 
@@ -436,11 +446,11 @@ async def _handle_single_parse(
                 error_text = f"**❌ 解析失败:**\n```\n{error_msg}\n```"
             else:
                 error_text = "❌ 解析失败，请检查链接是否正确"
-            await status_msg.edit_text(error_text)
+            await _safe_edit_status(error_text)
             return
 
         # 更新状态
-        await status_msg.edit_text("📥 下载中...")
+        await _safe_edit_status("📥 下载中...")
 
         # 格式化结果（result 现在是 DownloadResult）
         formatted = await _adapter.format_result(result, platform, parse_result=parse_result)
@@ -476,7 +486,7 @@ async def _handle_single_parse(
         caption += f"\n\n📱 平台: {platform.upper()}"
 
         # 更新状态
-        await status_msg.edit_text("📤 上传中...")
+        await _safe_edit_status("📤 上传中...")
 
         # 生成URL的MD5哈希（用于callback_data和缓存key）
         url_hash = get_url_hash(formatted['url'])
@@ -548,14 +558,18 @@ async def _send_media(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
             return await _send_multimedia(context, chat_id, download_result, caption, reply_parameters, reply_markup, parse_result=pr)
         else:
             # 只发送文本
-            msg = await context.bot.send_message(
-                chat_id=chat_id,
-                text=caption,
-                parse_mode="MarkdownV2",
-                reply_parameters=reply_parameters,
-                disable_web_page_preview=True,
-                reply_markup=reply_markup
-            )
+            @with_telegram_retry(max_retries=5)
+            async def _send_text():
+                return await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=caption,
+                    parse_mode="MarkdownV2",
+                    reply_parameters=reply_parameters,
+                    disable_web_page_preview=True,
+                    reply_markup=reply_markup
+                )
+
+            msg = await _send_text()
             return [msg]
     except Exception as e:
         logger.error(f"发送媒体失败: {e}")
@@ -593,27 +607,35 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
                 if telegraph_url:
                     # Telegraph成功，发送摘要+链接
                     summary = _format_text(raw_text)  # 截断到900字
-                    msg = await context.bot.send_message(
-                        chat_id=chat_id,
-                        text=f"{_escape_markdown(summary)}\n\n📰 [查看完整内容]({telegraph_url})",
-                        parse_mode="MarkdownV2",
-                        reply_parameters=reply_parameters,
-                        disable_web_page_preview=False,
-                        reply_markup=reply_markup
-                    )
+                    @with_telegram_retry(max_retries=5)
+                    async def _send_telegraph():
+                        return await context.bot.send_message(
+                            chat_id=chat_id,
+                            text=f"{_escape_markdown(summary)}\n\n📰 [查看完整内容]({telegraph_url})",
+                            parse_mode="MarkdownV2",
+                            reply_parameters=reply_parameters,
+                            disable_web_page_preview=False,
+                            reply_markup=reply_markup
+                        )
+
+                    msg = await _send_telegraph()
                     return [msg]
             except Exception as e:
                 logger.warning(f"长文本Telegraph发布失败，降级为普通文本: {e}")
 
         # 普通文本或Telegraph失败，直接发送
-        msg = await context.bot.send_message(
-            chat_id=chat_id,
-            text=caption,
-            parse_mode="MarkdownV2",
-            reply_parameters=reply_parameters,
-            disable_web_page_preview=True,
-            reply_markup=reply_markup
-        )
+        @with_telegram_retry(max_retries=5)
+        async def _send_plain_text():
+            return await context.bot.send_message(
+                chat_id=chat_id,
+                text=caption,
+                parse_mode="MarkdownV2",
+                reply_parameters=reply_parameters,
+                disable_web_page_preview=True,
+                reply_markup=reply_markup
+            )
+
+        msg = await _send_plain_text()
         return [msg]
 
     from utils.video_splitter import ensure_h264
@@ -806,22 +828,26 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
             logger.warning(f"⚠️ Pyrogram 上传失败，降级到 python-telegram-bot: {e}")
 
     # Fallback: python-telegram-bot
-    with open(video_path, 'rb') as video_file:
-        msg = await context.bot.send_video(
-            chat_id=chat_id,
-            video=video_file,
-            caption=caption,
-            parse_mode="MarkdownV2",
-            width=media.width or 0,
-            height=media.height or 0,
-            duration=media.duration or 0,
-            reply_parameters=reply_parameters,
-            supports_streaming=True,
-            reply_markup=reply_markup,
-            read_timeout=300,
-            write_timeout=300,
-            connect_timeout=30
-        )
+    @with_telegram_retry(max_retries=5)
+    async def _send_video_fallback():
+        with open(video_path, 'rb') as video_file:
+            return await context.bot.send_video(
+                chat_id=chat_id,
+                video=video_file,
+                caption=caption,
+                parse_mode="MarkdownV2",
+                width=media.width or 0,
+                height=media.height or 0,
+                duration=media.duration or 0,
+                reply_parameters=reply_parameters,
+                supports_streaming=True,
+                reply_markup=reply_markup,
+                read_timeout=300,
+                write_timeout=300,
+                connect_timeout=30
+            )
+
+    msg = await _send_video_fallback()
     return [msg]
 
 
@@ -846,14 +872,18 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                     telegraph_url = await _adapter.publish_to_telegraph(parse_result, html_content)
 
                     if telegraph_url:
-                        msg = await context.bot.send_message(
-                            chat_id=chat_id,
-                            text=f"{caption}\n\n📰 [查看完整文章]({telegraph_url})",
-                            parse_mode="MarkdownV2",
-                            reply_parameters=reply_parameters,
-                            disable_web_page_preview=False,
-                            reply_markup=reply_markup
-                        )
+                        @with_telegram_retry(max_retries=5)
+                        async def _send_article():
+                            return await context.bot.send_message(
+                                chat_id=chat_id,
+                                text=f"{caption}\n\n📰 [查看完整文章]({telegraph_url})",
+                                parse_mode="MarkdownV2",
+                                reply_parameters=reply_parameters,
+                                disable_web_page_preview=False,
+                                reply_markup=reply_markup
+                            )
+
+                        msg = await _send_article()
                         return [msg]
             except Exception as e:
                 logger.error(f"微信文章Telegraph发布失败: {e}")
@@ -871,14 +901,18 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                         telegraph_url = await _adapter.publish_to_telegraph(parse_result, html_content)
 
                         if telegraph_url:
-                            msg = await context.bot.send_message(
-                                chat_id=chat_id,
-                                text=f"{caption}\n\n📰 [查看完整内容]({telegraph_url})",
-                                parse_mode="MarkdownV2",
-                                reply_parameters=reply_parameters,
-                                disable_web_page_preview=False,
-                                reply_markup=reply_markup
-                            )
+                            @with_telegram_retry(max_retries=5)
+                            async def _send_coolapk():
+                                return await context.bot.send_message(
+                                    chat_id=chat_id,
+                                    text=f"{caption}\n\n📰 [查看完整内容]({telegraph_url})",
+                                    parse_mode="MarkdownV2",
+                                    reply_parameters=reply_parameters,
+                                    disable_web_page_preview=False,
+                                    reply_markup=reply_markup
+                                )
+
+                            msg = await _send_coolapk()
                             return [msg]
             except Exception as e:
                 logger.error(f"酷安图文Telegraph发布失败: {e}")
@@ -919,27 +953,35 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                 if telegraph_url:
                     # Telegraph成功，发送摘要+链接
                     summary = _format_text(raw_text)  # 截断到900字
-                    msg = await context.bot.send_message(
-                        chat_id=chat_id,
-                        text=f"{_escape_markdown(summary)}\n\n📰 [查看完整内容]({telegraph_url})",
-                        parse_mode="MarkdownV2",
-                        reply_parameters=reply_parameters,
-                        disable_web_page_preview=False,
-                        reply_markup=reply_markup
-                    )
+                    @with_telegram_retry(max_retries=5)
+                    async def _send_telegraph():
+                        return await context.bot.send_message(
+                            chat_id=chat_id,
+                            text=f"{_escape_markdown(summary)}\n\n📰 [查看完整内容]({telegraph_url})",
+                            parse_mode="MarkdownV2",
+                            reply_parameters=reply_parameters,
+                            disable_web_page_preview=False,
+                            reply_markup=reply_markup
+                        )
+
+                    msg = await _send_telegraph()
                     return [msg]
             except Exception as e:
                 logger.warning(f"长文本Telegraph发布失败，降级为普通文本: {e}")
 
         # 普通文本或Telegraph失败，直接发送
-        msg = await context.bot.send_message(
-            chat_id=chat_id,
-            text=caption,
-            parse_mode="MarkdownV2",
-            reply_parameters=reply_parameters,
-            disable_web_page_preview=True,
-            reply_markup=reply_markup
-        )
+        @with_telegram_retry(max_retries=5)
+        async def _send_plain_text():
+            return await context.bot.send_message(
+                chat_id=chat_id,
+                text=caption,
+                parse_mode="MarkdownV2",
+                reply_parameters=reply_parameters,
+                disable_web_page_preview=True,
+                reply_markup=reply_markup
+            )
+
+        msg = await _send_plain_text()
         return [msg]
     elif len(media_list) == 1:
         # 单张图片
@@ -971,49 +1013,65 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                         seg_data = seg_file.read()
                         media_group.append(InputMediaPhoto(media=seg_data))
 
-                messages = await context.bot.send_media_group(
-                    chat_id=chat_id,
-                    media=media_group,
-                    reply_parameters=reply_parameters
-                )
+                @with_telegram_retry(max_retries=5)
+                async def _send_segments():
+                    return await context.bot.send_media_group(
+                        chat_id=chat_id,
+                        media=media_group,
+                        reply_parameters=reply_parameters
+                    )
+
+                messages = await _send_segments()
 
                 # Send caption separately with buttons
-                text_msg = await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=caption,
-                    parse_mode="MarkdownV2",
-                    reply_parameters=ReplyParameters(message_id=messages[0].message_id),
-                    disable_web_page_preview=True,
-                    reply_markup=reply_markup
-                )
+                @with_telegram_retry(max_retries=5)
+                async def _send_caption():
+                    return await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=caption,
+                        parse_mode="MarkdownV2",
+                        reply_parameters=ReplyParameters(message_id=messages[0].message_id),
+                        disable_web_page_preview=True,
+                        reply_markup=reply_markup
+                    )
+
+                text_msg = await _send_caption()
                 return list(messages) + [text_msg]
 
             image_path = str(final_path)
 
             try:
-                with open(image_path, 'rb') as photo_file:
-                    msg = await context.bot.send_photo(
-                        chat_id=chat_id,
-                        photo=photo_file,
-                        caption=caption,
-                        parse_mode="MarkdownV2",
-                        reply_parameters=reply_parameters,
-                        reply_markup=reply_markup
-                    )
-                return [msg]
-            except Exception as e:
-                # Fallback: send as document if photo upload fails
-                logger.warning(f"⚠️ Photo upload failed: {e}, fallback to document")
-                try:
-                    with open(image_path, 'rb') as doc_file:
-                        msg = await context.bot.send_document(
+                @with_telegram_retry(max_retries=5)
+                async def _send_photo():
+                    with open(image_path, 'rb') as photo_file:
+                        return await context.bot.send_photo(
                             chat_id=chat_id,
-                            document=doc_file,
+                            photo=photo_file,
                             caption=caption,
                             parse_mode="MarkdownV2",
                             reply_parameters=reply_parameters,
                             reply_markup=reply_markup
                         )
+
+                msg = await _send_photo()
+                return [msg]
+            except Exception as e:
+                # Fallback: send as document if photo upload fails
+                logger.warning(f"⚠️ Photo upload failed: {e}, fallback to document")
+                try:
+                    @with_telegram_retry(max_retries=5)
+                    async def _send_document():
+                        with open(image_path, 'rb') as doc_file:
+                            return await context.bot.send_document(
+                                chat_id=chat_id,
+                                document=doc_file,
+                                caption=caption,
+                                parse_mode="MarkdownV2",
+                                reply_parameters=reply_parameters,
+                                reply_markup=reply_markup
+                            )
+
+                    msg = await _send_document()
                     return [msg]
                 except Exception as doc_error:
                     logger.error(f"❌ Document upload also failed: {doc_error}")
@@ -1102,24 +1160,38 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                 logger.error("❌ No valid images to send")
                 raise ValueError("All images failed validation")
 
-            # 发送媒体组（不带caption）
+            # 优化：将 caption 附加到最后一张图片，而不是单独发送消息
+            # 参考 parse_hub_bot 的实现
             try:
-                messages = await context.bot.send_media_group(
-                    chat_id=chat_id,
-                    media=media_group,
-                    reply_parameters=reply_parameters
-                )
+                # 最后一张图片附加 caption
+                media_group[-1].caption = caption
+                media_group[-1].parse_mode = "MarkdownV2"
 
-                # 单独发送文本消息带caption和按钮
-                text_msg = await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=caption,
-                    parse_mode="MarkdownV2",
-                    reply_parameters=ReplyParameters(message_id=messages[0].message_id),  # 回复到第一张图片
-                    disable_web_page_preview=True,
-                    reply_markup=reply_markup
-                )
-                return list(messages) + [text_msg]
+                # 发送媒体组（带 caption 和按钮）
+                @with_telegram_retry(max_retries=5)
+                async def _send_media_group_with_retry():
+                    return await context.bot.send_media_group(
+                        chat_id=chat_id,
+                        media=media_group,
+                        reply_parameters=reply_parameters
+                    )
+
+                messages = await _send_media_group_with_retry()
+
+                # 如果有按钮，单独发送一条消息（因为 media_group 不支持 reply_markup）
+                if reply_markup:
+                    @with_telegram_retry(max_retries=5)
+                    async def _send_button_msg():
+                        return await context.bot.send_message(
+                            chat_id=chat_id,
+                            text="🔗 更多操作",
+                            reply_parameters=ReplyParameters(message_id=messages[-1].message_id),
+                            reply_markup=reply_markup
+                        )
+                    button_msg = await _send_button_msg()
+                    return list(messages) + [button_msg]
+
+                return list(messages)
 
             except Exception as e:
                 # Fallback: send images as documents if media_group fails
@@ -1127,14 +1199,18 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                 sent_messages = []
 
                 # 先发送说明消息
-                info_msg = await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=f"{caption}\n\n⚠️ 图片上传失败，以文档形式发送",
-                    parse_mode="MarkdownV2",
-                    reply_parameters=reply_parameters,
-                    disable_web_page_preview=True,
-                    reply_markup=reply_markup
-                )
+                @with_telegram_retry(max_retries=5)
+                async def _send_info_msg():
+                    return await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=f"{caption}\n\n⚠️ 图片上传失败，以文档形式发送",
+                        parse_mode="MarkdownV2",
+                        reply_parameters=reply_parameters,
+                        disable_web_page_preview=True,
+                        reply_markup=reply_markup
+                    )
+
+                info_msg = await _send_info_msg()
                 sent_messages.append(info_msg)
 
                 # 逐个发送为文档（使用已处理的中间文件）
@@ -1145,12 +1221,16 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                         downscaled_path = _downscale_image(converted_path)
                         image_path = str(downscaled_path)
 
-                        with open(image_path, 'rb') as doc_file:
-                            doc_msg = await context.bot.send_document(
-                                chat_id=chat_id,
-                                document=doc_file
-                            )
-                            sent_messages.append(doc_msg)
+                        @with_telegram_retry(max_retries=5)
+                        async def _send_doc():
+                            with open(image_path, 'rb') as doc_file:
+                                return await context.bot.send_document(
+                                    chat_id=chat_id,
+                                    document=doc_file
+                                )
+
+                        doc_msg = await _send_doc()
+                        sent_messages.append(doc_msg)
                     except Exception as doc_error:
                         logger.error(f"❌ Failed to send document for {img.path}: {doc_error}")
                         continue
@@ -1214,38 +1294,51 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
 
                 if telegraph_url:
                     # Telegraph成功，发送链接（启用preview，缩略图让preview快速渲染完成）
-                    msg = await context.bot.send_message(
-                        chat_id=chat_id,
-                        text=f"{caption}\n\n📷 共 {len(media_list)} 张图片\n🔗 [查看完整图集]({telegraph_url})",
-                        parse_mode="MarkdownV2",
-                        reply_parameters=reply_parameters,
-                        disable_web_page_preview=False,
-                        reply_markup=reply_markup
-                    )
+                    @with_telegram_retry(max_retries=5)
+                    async def _send_telegraph_msg():
+                        return await context.bot.send_message(
+                            chat_id=chat_id,
+                            text=f"{caption}\n\n📷 共 {len(media_list)} 张图片\n🔗 [查看完整图集]({telegraph_url})",
+                            parse_mode="MarkdownV2",
+                            reply_parameters=reply_parameters,
+                            disable_web_page_preview=False,
+                            reply_markup=reply_markup
+                        )
+
+                    msg = await _send_telegraph_msg()
                     return [msg]
         except Exception as e:
             logger.warning(f"图床+Telegraph失败，降级为分批发送: {e}")
 
-        # 图床失败或未启用，降级为分批发送
-        info_msg = await context.bot.send_message(
-            chat_id=chat_id,
-            text=f"{caption}\n\n📷 共{len(media_list)}张图片，分批发送中...",
-            parse_mode="MarkdownV2",
-            reply_parameters=reply_parameters,
-            disable_web_page_preview=True,
-            reply_markup=reply_markup
-        )
+        # 图床失败或未启用，降级为分批发送（使用 itertools.batched）
+        @with_telegram_retry(max_retries=5)
+        async def _send_batch_info():
+            return await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"{caption}\n\n📷 共{len(media_list)}张图片，分批发送中...",
+                parse_mode="MarkdownV2",
+                reply_parameters=reply_parameters,
+                disable_web_page_preview=True,
+                reply_markup=reply_markup
+            )
 
+        info_msg = await _send_batch_info()
         sent_messages = [info_msg]
+
         from telegram import InputMediaPhoto
-        for batch_start in range(0, len(media_list), 10):
-            batch = media_list[batch_start:batch_start + 10]
+        # 使用 itertools.batched() 替代手动切片
+        for batch in batched(media_list, 10):
             media_group = []
             for img in batch:
                 image_path = str(img.path)
                 with open(image_path, 'rb') as photo_file:
                     media_group.append(InputMediaPhoto(media=photo_file.read()))
-            batch_messages = await context.bot.send_media_group(chat_id=chat_id, media=media_group)
+
+            @with_telegram_retry(max_retries=5)
+            async def _send_batch():
+                return await context.bot.send_media_group(chat_id=chat_id, media=media_group)
+
+            batch_messages = await _send_batch()
             sent_messages.extend(batch_messages)
 
         return sent_messages
@@ -1286,27 +1379,35 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
                 if telegraph_url:
                     # Telegraph成功，发送摘要+链接
                     summary = _format_text(raw_text)  # 截断到900字
-                    msg = await context.bot.send_message(
-                        chat_id=chat_id,
-                        text=f"{_escape_markdown(summary)}\n\n📰 [查看完整内容]({telegraph_url})",
-                        parse_mode="MarkdownV2",
-                        reply_parameters=reply_parameters,
-                        disable_web_page_preview=False,
-                        reply_markup=reply_markup
-                    )
+                    @with_telegram_retry(max_retries=5)
+                    async def _send_telegraph():
+                        return await context.bot.send_message(
+                            chat_id=chat_id,
+                            text=f"{_escape_markdown(summary)}\n\n📰 [查看完整内容]({telegraph_url})",
+                            parse_mode="MarkdownV2",
+                            reply_parameters=reply_parameters,
+                            disable_web_page_preview=False,
+                            reply_markup=reply_markup
+                        )
+
+                    msg = await _send_telegraph()
                     return [msg]
             except Exception as e:
                 logger.warning(f"长文本Telegraph发布失败，降级为普通文本: {e}")
 
         # 普通文本或Telegraph失败，直接发送
-        msg = await context.bot.send_message(
-            chat_id=chat_id,
-            text=caption,
-            parse_mode="MarkdownV2",
-            reply_parameters=reply_parameters,
-            disable_web_page_preview=True,
-            reply_markup=reply_markup
-        )
+        @with_telegram_retry(max_retries=5)
+        async def _send_plain_text():
+            return await context.bot.send_message(
+                chat_id=chat_id,
+                text=caption,
+                parse_mode="MarkdownV2",
+                reply_parameters=reply_parameters,
+                disable_web_page_preview=True,
+                reply_markup=reply_markup
+            )
+
+        msg = await _send_plain_text()
         return [msg]
     elif count == 1:
         # 单个媒体文件，直接发送
@@ -1319,29 +1420,37 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
 
             if video_size_mb > 50:
                 # 视频太大，只发送文本提示
-                msg = await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=f"{caption}\n\n⚠️ 视频文件过大 \\({video_size_mb:.1f}MB\\)，无法直接发送",
-                    parse_mode="MarkdownV2",
-                    reply_parameters=reply_parameters,
-                    disable_web_page_preview=True,
-                    reply_markup=reply_markup
-                )
+                @with_telegram_retry(max_retries=5)
+                async def _send_video_too_large():
+                    return await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=f"{caption}\n\n⚠️ 视频文件过大 \\({video_size_mb:.1f}MB\\)，无法直接发送",
+                        parse_mode="MarkdownV2",
+                        reply_parameters=reply_parameters,
+                        disable_web_page_preview=True,
+                        reply_markup=reply_markup
+                    )
+
+                msg = await _send_video_too_large()
                 return [msg]
 
-            with open(str(video_path), 'rb') as video_file:
-                msg = await context.bot.send_video(
-                    chat_id=chat_id,
-                    video=video_file,
-                    caption=caption,
-                    parse_mode="MarkdownV2",
-                    reply_parameters=reply_parameters,
-                    supports_streaming=True,
-                    reply_markup=reply_markup,
-                    read_timeout=300,
-                    write_timeout=300,
-                    connect_timeout=30
-                )
+            @with_telegram_retry(max_retries=5)
+            async def _send_video():
+                with open(str(video_path), 'rb') as video_file:
+                    return await context.bot.send_video(
+                        chat_id=chat_id,
+                        video=video_file,
+                        caption=caption,
+                        parse_mode="MarkdownV2",
+                        reply_parameters=reply_parameters,
+                        supports_streaming=True,
+                        reply_markup=reply_markup,
+                        read_timeout=300,
+                        write_timeout=300,
+                        connect_timeout=30
+                    )
+
+            msg = await _send_video()
             return [msg]
         elif isinstance(media, ImageFile):
             intermediates: list[Path] = []  # 收集生成的中间文件
@@ -1360,29 +1469,37 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
                 image_path = str(downscaled_path)
 
                 try:
-                    with open(image_path, 'rb') as photo_file:
-                        msg = await context.bot.send_photo(
-                            chat_id=chat_id,
-                            photo=photo_file,
-                            caption=caption,
-                            parse_mode="MarkdownV2",
-                            reply_parameters=reply_parameters,
-                            reply_markup=reply_markup
-                        )
-                    return [msg]
-                except Exception as e:
-                    # Fallback: send as document if photo upload fails
-                    logger.warning(f"⚠️ Photo upload failed in multimedia: {e}, fallback to document")
-                    try:
-                        with open(image_path, 'rb') as doc_file:
-                            msg = await context.bot.send_document(
+                    @with_telegram_retry(max_retries=5)
+                    async def _send_photo_multimedia():
+                        with open(image_path, 'rb') as photo_file:
+                            return await context.bot.send_photo(
                                 chat_id=chat_id,
-                                document=doc_file,
+                                photo=photo_file,
                                 caption=caption,
                                 parse_mode="MarkdownV2",
                                 reply_parameters=reply_parameters,
                                 reply_markup=reply_markup
                             )
+
+                    msg = await _send_photo_multimedia()
+                    return [msg]
+                except Exception as e:
+                    # Fallback: send as document if photo upload fails
+                    logger.warning(f"⚠️ Photo upload failed in multimedia: {e}, fallback to document")
+                    try:
+                        @with_telegram_retry(max_retries=5)
+                        async def _send_doc_multimedia():
+                            with open(image_path, 'rb') as doc_file:
+                                return await context.bot.send_document(
+                                    chat_id=chat_id,
+                                    document=doc_file,
+                                    caption=caption,
+                                    parse_mode="MarkdownV2",
+                                    reply_parameters=reply_parameters,
+                                    reply_markup=reply_markup
+                                )
+
+                        msg = await _send_doc_multimedia()
                         return [msg]
                     except Exception as doc_error:
                         logger.error(f"❌ Document upload also failed: {doc_error}")
@@ -1397,10 +1514,9 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
                         logger.debug(f"Failed to clean intermediate file: {e}")
     else:
         # 多个媒体文件，使用media_group分批发送（每批最多10个）
-        # 参考: parse_hub_bot/methods/tg_parse_hub.py:809
+        # 使用 itertools.batched() 替代手动切片
         media_groups = []
-        for i in range(0, count, 10):
-            batch = media_list[i:i + 10]
+        for batch in batched(media_list, 10):
             media_group = []
             for media in batch:
                 try:
@@ -1422,33 +1538,45 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
 
             if media_group:
                 try:
-                    messages = await context.bot.send_media_group(
-                        chat_id=chat_id,
-                        media=media_group,
-                        reply_parameters=reply_parameters
-                    )
+                    # 优化：将 caption 附加到最后一个媒体项
+                    is_last_batch = batch == list(batched(media_list, 10))[-1]
+                    if is_last_batch:
+                        media_group[-1].caption = caption
+                        media_group[-1].parse_mode = "MarkdownV2"
+
+                    @with_telegram_retry(max_retries=5)
+                    async def _send_media_group():
+                        return await context.bot.send_media_group(
+                            chat_id=chat_id,
+                            media=media_group,
+                            reply_parameters=reply_parameters
+                        )
+
+                    messages = await _send_media_group()
                     media_groups.append(messages)
                 except Exception as e:
                     logger.error(f"发送media_group失败: {e}")
 
-        # 在第一个media_group下发送文本消息（带caption和按钮）
+        # 收集所有发送的媒体消息
         sent_messages = []
-        if media_groups:
-            # 收集所有发送的媒体消息
-            for group in media_groups:
-                sent_messages.extend(group)
+        for group in media_groups:
+            sent_messages.extend(group)
 
-            first_message = media_groups[0][0] if media_groups[0] else None
-            if first_message:
-                text_msg = await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=caption,
-                    parse_mode="MarkdownV2",
-                    reply_parameters=ReplyParameters(message_id=first_message.message_id),
-                    disable_web_page_preview=True,
-                    reply_markup=reply_markup
-                )
-                sent_messages.append(text_msg)
+        # 如果有按钮，单独发送一条消息（因为 media_group 不支持 reply_markup）
+        if reply_markup and media_groups:
+            last_message = media_groups[-1][-1] if media_groups[-1] else None
+            if last_message:
+                @with_telegram_retry(max_retries=5)
+                async def _send_button_msg():
+                    return await context.bot.send_message(
+                        chat_id=chat_id,
+                        text="🔗 更多操作",
+                        reply_parameters=ReplyParameters(message_id=last_message.message_id),
+                        reply_markup=reply_markup
+                    )
+
+                button_msg = await _send_button_msg()
+                sent_messages.append(button_msg)
 
         return sent_messages
 

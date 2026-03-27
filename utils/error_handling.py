@@ -17,6 +17,52 @@ from utils.message_manager import delete_user_command, send_error
 logger = logging.getLogger(__name__)
 
 
+def with_telegram_retry(max_retries: int = 5):
+    """
+    Telegram API 重试装饰器，专门处理 RetryAfter 异常
+
+    Args:
+        max_retries: 最大重试次数（默认5次）
+    """
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            from telegram.error import RetryAfter, TimedOut, NetworkError
+
+            last_exception = None
+            for attempt in range(max_retries + 1):
+                try:
+                    return await func(*args, **kwargs)
+                except RetryAfter as e:
+                    last_exception = e
+                    if attempt < max_retries:
+                        wait_time = e.retry_after + 1  # 额外等待1秒
+                        logger.warning(
+                            f"Telegram RetryAfter in {func.__name__}: wait {wait_time}s "
+                            f"(attempt {attempt + 1}/{max_retries + 1})"
+                        )
+                        await asyncio.sleep(wait_time)
+                    else:
+                        logger.error(f"All retry attempts failed for {func.__name__}: {e}")
+                except (TimedOut, NetworkError) as e:
+                    last_exception = e
+                    if attempt < max_retries:
+                        wait_time = 2 ** attempt  # 指数退避：1s, 2s, 4s, 8s, 16s
+                        logger.warning(
+                            f"Telegram {type(e).__name__} in {func.__name__}: wait {wait_time}s "
+                            f"(attempt {attempt + 1}/{max_retries + 1})"
+                        )
+                        await asyncio.sleep(wait_time)
+                    else:
+                        logger.error(f"All retry attempts failed for {func.__name__}: {e}")
+
+            raise last_exception
+
+        return wrapper
+
+    return decorator
+
+
 def with_error_handling(func):
     """
     通用错误处理装饰器
