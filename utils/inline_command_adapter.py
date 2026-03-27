@@ -60,6 +60,7 @@ class InlineCommandAdapter:
             "hotel": self._handle_hotel,
             "chart": self._handle_chart,
             "netease": self._handle_music,
+            "fuel": self._handle_fuel,
         }
 
         handler = command_handlers.get(command)
@@ -515,6 +516,19 @@ class InlineCommandAdapter:
     # ============================================================================
     # 默认处理器
     # ============================================================================
+
+    async def _handle_fuel(self, args: str) -> Tuple[str, ParseMode, None]:
+        """处理 fuel 油价查询 - 调用完整的 fuel 功能"""
+        from commands.fuel import fuel_inline_execute
+        from utils.formatter import foldable_text_with_markdown_v2
+
+        result = await fuel_inline_execute(args)
+
+        if result["success"]:
+            return (result["message"], ParseMode.MARKDOWN_V2, None)
+        else:
+            error_message = f"❌ *{result['title']}*\n\n{result['message']}"
+            return (foldable_text_with_markdown_v2(error_message), ParseMode.MARKDOWN_V2, None)
 
     def _default_handler(self, command: str, args: str) -> Tuple[str, ParseMode, None]:
         """默认处理器 - 命令未实现"""

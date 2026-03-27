@@ -495,7 +495,7 @@ async def fuel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Search for specific location
-    await search_fuel_price(update, context, query)
+    await search_fuel_price(update, context, args)
 
 
 async def show_rankings(update: Update, context: ContextTypes.DEFAULT_TYPE, fuel_type: str = "gasoline"):
@@ -676,16 +676,336 @@ async def show_china_all(update: Update, context: ContextTypes.DEFAULT_TYPE, fue
             text += "\n"
 
     # Add usage hint
-    text += f"\n💡 *提示:* 使用 `/fuel china 95` 查看95\\#汽油排行\n"
+    text += f"\n💡 *提示:* 使用 `/fuel china 95` 或 `/fuel china 98` 或 `/fuel china diesel` 查看其他油品排行\n"
 
     await send_search_result(context, update.message.chat_id, text, parse_mode="MarkdownV2")
     await delete_user_command(context, update.message.chat_id, update.message.message_id)
 
 
-async def search_fuel_price(update: Update, context: ContextTypes.DEFAULT_TYPE, query: str):
-    """Search for specific location fuel price"""
+async def search_fuel_price(update: Update, context: ContextTypes.DEFAULT_TYPE, args: list):
+    """Search for specific location fuel price - supports multiple countries"""
     if not update.message:
         return
+
+    # Parse queries
+    queries = [q.lower() for q in args]
+
+    # Collect results
+    results = []
+    not_found = []
+
+    for query in queries:
+        found = False
+
+        # Try China first
+        china_data = await fetch_fuel_data(CHINA_DATA_URL)
+        if china_data:
+            for code, info in china_data.items():
+                province = info.get('province', '').lower()
+                if query in province or query in code.lower():
+                    results.append({
+                        'type': 'china',
+                        'data': info,
+                        'all_data': china_data
+                    })
+                    found = True
+                    break
+
+        if found:
+            continue
+
+        # Try global - use SUPPORTED_COUNTRIES for matching
+        global_data = await fetch_fuel_data(GLOBAL_DATA_URL)
+        if global_data:
+            # Try matching with SUPPORTED_COUNTRIES first
+            for country_code, country_info in SUPPORTED_COUNTRIES.items():
+                country_name_cn = country_info.get('name', '').lower()
+
+                if query == country_code.lower() or query in country_name_cn:
+                    # Find matching country in global data
+                    for json_code, fuel_info in global_data.items():
+                        iso_code = COUNTRY_CODE_MAPPING.get(json_code, json_code)
+                        if iso_code.upper() == country_code:
+                            results.append({
+                                'type': 'global',
+                                'data': fuel_info,
+                                'code': json_code,
+                                'all_data': global_data
+                            })
+                            found = True
+                            break
+                    if found:
+                        break
+
+            # Fallback: direct search
+            if not found:
+                for code, info in global_data.items():
+                    country = info.get('country', '').lower()
+                    if query in country or query in code.lower() or code.lower() == query:
+                        results.append({
+                            'type': 'global',
+                            'data': info,
+                            'code': code,
+                            'all_data': global_data
+                        })
+                        found = True
+                        break
+
+        if not found:
+            not_found.append(query)
+
+    # Format results
+    if not results:
+        await send_error(
+            context,
+            update.message.chat_id,
+            f"未找到 '{', '.join(queries)}' 的油价数据\n\n"
+            "提示: 使用 /fuel 查看全球排行榜",
+            parse_mode="MarkdownV2"
+        )
+        await delete_user_command(context, update.message.chat_id, update.message.message_id)
+        return
+
+    # Build message
+    message_parts = []
+
+    for result in results:
+        if result['type'] == 'china':
+            text = format_china_province(result['data'], result['all_data'])
+        else:
+            text = format_global_country(result['data'], result['all_data'], result['code'])
+        message_parts.append(text)
+
+    # Add not found notice
+    if not_found:
+        message_parts.append(f"\n❌ 未找到: {', '.join(not_found)}")
+
+    final_message = "\n\n".join(message_parts)
+    await send_search_result(context, update.message.chat_id, final_message, parse_mode="MarkdownV2")
+    await delete_user_command(context, update.message.chat_id, update.message.message_id)
+
+
+# Register command
+command_factory.register_command("fuel", fuel_command, permission=Permission.NONE, description="🛢️ 查询全球和中国油价（汽油+柴油）")
+
+
+# =============================================================================
+# Inline 执行入口
+# =============================================================================
+
+async def fuel_inline_execute(args: str) -> dict:
+    """
+    Inline Query 执行入口 - 提供完整的 fuel 价格查询功能
+
+    Args:
+        args: 用户输入的参数字符串，如 "my" 或 "马来西亚" 或 "china"，为空则返回全球汽油排行榜
+
+    Returns:
+        dict: {
+            "success": bool,
+            "title": str,
+            "message": str,
+            "description": str,
+            "error": str | None
+        }
+    """
+    try:
+        if not args or not args.strip():
+            # 无参数：返回全球汽油排行榜
+            data = await fetch_fuel_data(GLOBAL_DATA_URL)
+            if not data:
+                return {
+                    "success": False,
+                    "title": "❌ 查询失败",
+                    "message": "无法获取数据，请稍后重试",
+                    "description": "数据获取失败",
+                    "error": "Failed to fetch data"
+                }
+
+            result = await _format_rankings_text(data, "gasoline")
+            return {
+                "success": True,
+                "title": "🛢️ 全球汽油价格排行榜",
+                "message": result,
+                "description": "全球汽油价格 Top 10",
+                "error": None
+            }
+        else:
+            # 有参数：查询指定国家或地区
+            query_list = args.strip().split()
+
+            # Handle china rankings
+            if query_list[0] in ["china", "中国"]:
+                fuel_type = query_list[1] if len(query_list) > 1 else "92"
+                data = await fetch_fuel_data(CHINA_DATA_URL)
+                if not data:
+                    return {
+                        "success": False,
+                        "title": "❌ 查询失败",
+                        "message": "无法获取中国数据，请稍后重试",
+                        "description": "数据获取失败",
+                        "error": "Failed to fetch China data"
+                    }
+
+                result = await _format_china_rankings_text(data, fuel_type)
+                return {
+                    "success": True,
+                    "title": f"🇨🇳 中国油价排行榜",
+                    "message": result,
+                    "description": f"中国油价排行榜",
+                    "error": None
+                }
+
+            # Handle global rankings
+            if query_list[0] in ["diesel", "柴油", "rankings"]:
+                fuel_type = "diesel" if query_list[0] in ["diesel", "柴油"] else (query_list[1] if len(query_list) > 1 else "gasoline")
+                data = await fetch_fuel_data(GLOBAL_DATA_URL)
+                if not data:
+                    return {
+                        "success": False,
+                        "title": "❌ 查询失败",
+                        "message": "无法获取数据，请稍后重试",
+                        "description": "数据获取失败",
+                        "error": "Failed to fetch data"
+                    }
+
+                result = await _format_rankings_text(data, fuel_type)
+                fuel_name = "柴油" if fuel_type == "diesel" else "汽油"
+                return {
+                    "success": True,
+                    "title": f"🛢️ 全球{fuel_name}价格排行榜",
+                    "message": result,
+                    "description": f"全球{fuel_name}价格 Top 10",
+                    "error": None
+                }
+
+            # Search for specific countries (support multiple)
+            results = []
+            not_found = []
+
+            for query in query_list:
+                result_text = await _search_country_text(query.lower())
+                if result_text:
+                    results.append(result_text)
+                else:
+                    not_found.append(query)
+
+            if results:
+                final_message = "\n\n".join(results)
+                if not_found:
+                    from utils.formatter import foldable_text_with_markdown_v2
+                    final_message += f"\n\n❌ 未找到: {', '.join(not_found)}"
+                    final_message = foldable_text_with_markdown_v2(final_message)
+
+                # Build description
+                if len(query_list) == 1:
+                    desc = f"{query_list[0]} 油价"
+                else:
+                    desc = f"{', '.join(query_list[:3])} 等地区油价"
+
+                return {
+                    "success": True,
+                    "title": f"🛢️ 油价查询",
+                    "message": final_message,
+                    "description": desc,
+                    "error": None
+                }
+            else:
+                return {
+                    "success": False,
+                    "title": "❌ 未找到",
+                    "message": f"未找到 '{', '.join(query_list)}' 的油价数据",
+                    "description": "未找到数据",
+                    "error": "Countries not found"
+                }
+
+    except Exception as e:
+        logger.error(f"Inline fuel query failed: {e}")
+        return {
+            "success": False,
+            "title": "❌ 查询失败",
+            "message": f"查询油价失败: {str(e)}",
+            "description": "查询失败",
+            "error": str(e)
+        }
+
+
+async def _format_rankings_text(data: dict, fuel_type: str) -> str:
+    """Format rankings text for inline mode"""
+    from utils.formatter import foldable_text_with_markdown_v2
+
+    fuel_map = {
+        "gasoline": ("gasoline", "🚗 汽油"),
+        "diesel": ("diesel", "🚛 柴油"),
+    }
+
+    fuel_key, fuel_name = fuel_map.get(fuel_type, ("gasoline", "🚗 汽油"))
+
+    # Filter and sort
+    valid_data = [(code, info) for code, info in data.items()
+                  if info.get(fuel_key) and info[fuel_key].get('price_cny', 0) > 0]
+    sorted_data = sorted(valid_data, key=lambda x: x[1][fuel_key]['price_cny'])
+    cheapest_10 = sorted_data[:10]
+
+    # Format message
+    raw_parts = [f"*🛢️ 全球{fuel_name}价格排行榜*", ""]
+
+    raw_parts.append("💚 *最便宜 Top 10:*")
+    for i, (code, info) in enumerate(cheapest_10, 1):
+        country = info['country']
+        fuel_info = info[fuel_key]
+        price_cny = fuel_info['price_cny']
+
+        # Map to ISO code
+        iso_code = COUNTRY_CODE_MAPPING.get(code, code)
+        country_info = SUPPORTED_COUNTRIES.get(iso_code.upper(), {})
+        country_name_cn = country_info.get('name', '')
+        country_flag = get_country_flag(iso_code)
+
+        if country_name_cn:
+            country_display = f"{country} ({country_name_cn}) {country_flag}"
+        else:
+            country_display = country
+
+        raw_parts.append(f"{i}. {country_display}: ¥{price_cny:.2f}/L")
+
+    raw_message = "\n".join(raw_parts)
+    return foldable_text_with_markdown_v2(raw_message)
+
+
+async def _format_china_rankings_text(data: dict, fuel_type: str) -> str:
+    """Format China rankings text for inline mode"""
+    from utils.formatter import foldable_text_with_markdown_v2
+
+    fuel_map = {
+        "92": ("92_gasoline", "92# 汽油"),
+        "95": ("95_gasoline", "95# 汽油"),
+        "98": ("98_gasoline", "98# 汽油"),
+        "diesel": ("0_diesel", "0# 柴油"),
+    }
+
+    fuel_key, fuel_name = fuel_map.get(fuel_type, ("92_gasoline", "92# 汽油"))
+
+    # Sort
+    sorted_provinces = sorted(data.items(), key=lambda x: x[1].get(fuel_key, 0))
+    cheapest_10 = sorted_provinces[:10]
+
+    # Format message
+    raw_parts = [f"*🇨🇳 中国油价排行榜 ({fuel_name})*", ""]
+
+    raw_parts.append("💚 *最便宜 Top 10:*")
+    for i, (code, info) in enumerate(cheapest_10, 1):
+        province = info.get('province', 'Unknown')
+        price = info.get(fuel_key, 0)
+        raw_parts.append(f"{i}. {province}: ¥{price:.2f}/升")
+
+    raw_message = "\n".join(raw_parts)
+    return foldable_text_with_markdown_v2(raw_message)
+
+
+async def _search_country_text(query: str) -> str | None:
+    """Search for country and return formatted text for inline mode"""
+    from utils.formatter import foldable_text_with_markdown_v2
 
     # Try China first
     china_data = await fetch_fuel_data(CHINA_DATA_URL)
@@ -693,48 +1013,105 @@ async def search_fuel_price(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         for code, info in china_data.items():
             province = info.get('province', '').lower()
             if query in province or query in code.lower():
-                text = format_china_province(info, china_data)
-                await send_search_result(context, update.message.chat_id, text, parse_mode="MarkdownV2")
-                await delete_user_command(context, update.message.chat_id, update.message.message_id)
-                return
+                # Format China province
+                province_name = info.get('province', 'Unknown')
+                gasoline_92 = info.get('92_gasoline', 0)
+                gasoline_95 = info.get('95_gasoline', 0)
+                diesel_0 = info.get('0_diesel', 0)
 
-    # Try global - use SUPPORTED_COUNTRIES for matching
+                raw_parts = [
+                    f"*📍 {province_name}*",
+                    "",
+                    f"92# 汽油: ¥{gasoline_92:.2f}/升",
+                    f"95# 汽油: ¥{gasoline_95:.2f}/升",
+                    f"0# 柴油: ¥{diesel_0:.2f}/升"
+                ]
+
+                raw_message = "\n".join(raw_parts)
+                return foldable_text_with_markdown_v2(raw_message)
+
+    # Try global
     global_data = await fetch_fuel_data(GLOBAL_DATA_URL)
     if global_data:
-        # Try matching with SUPPORTED_COUNTRIES first (for Chinese names and shortcuts)
+        # Try SUPPORTED_COUNTRIES matching
         for country_code, country_info in SUPPORTED_COUNTRIES.items():
             country_name_cn = country_info.get('name', '').lower()
-
-            # Check if query matches country code or Chinese name
             if query == country_code.lower() or query in country_name_cn:
-                # Find matching country in global data using reverse mapping
                 for json_code, fuel_info in global_data.items():
                     iso_code = COUNTRY_CODE_MAPPING.get(json_code, json_code)
                     if iso_code.upper() == country_code:
-                        text = format_global_country(fuel_info, global_data, json_code)
-                        await send_search_result(context, update.message.chat_id, text, parse_mode="MarkdownV2")
-                        await delete_user_command(context, update.message.chat_id, update.message.message_id)
-                        return
+                        return _format_country_inline(fuel_info, json_code)
 
-        # Fallback: direct search in global data by code or country name
+        # Fallback: direct search
         for code, info in global_data.items():
             country = info.get('country', '').lower()
-            if query in country or query in code.lower() or code.lower() == query:
-                text = format_global_country(info, global_data, code)
-                await send_search_result(context, update.message.chat_id, text, parse_mode="MarkdownV2")
-                await delete_user_command(context, update.message.chat_id, update.message.message_id)
-                return
+            if query in country or query in code.lower():
+                return _format_country_inline(info, code)
 
-    # Not found
-    await send_error(
-        context,
-        update.message.chat_id,
-        f"未找到 '{query}' 的油价数据\n\n"
-        "提示: 使用 /fuel 查看全球排行榜",
-        parse_mode="MarkdownV2"
-    )
-    await delete_user_command(context, update.message.chat_id, update.message.message_id)
+    return None
 
 
-# Register command
-command_factory.register_command("fuel", fuel_command, permission=Permission.NONE, description="🛢️ 查询全球和中国油价（汽油+柴油）")
+def _format_country_inline(country_data: dict, country_code: str) -> str:
+    """Format single country data for inline mode"""
+    from utils.formatter import foldable_text_with_markdown_v2
+
+    country = country_data.get('country', 'Unknown')
+    gasoline = country_data.get('gasoline')
+    diesel = country_data.get('diesel')
+
+    # Map to ISO code
+    iso_code = COUNTRY_CODE_MAPPING.get(country_code, country_code)
+    country_info = SUPPORTED_COUNTRIES.get(iso_code.upper(), {})
+    country_name_cn = country_info.get('name', '')
+    country_flag = get_country_flag(iso_code)
+
+    raw_parts = []
+
+    # Title
+    if country_name_cn:
+        raw_parts.append(f"*🌍 {country} ({country_name_cn}) {country_flag}*")
+    else:
+        raw_parts.append(f"*🌍 {country}*")
+
+    raw_parts.append("")
+
+    # Gasoline
+    if gasoline:
+        local_price = gasoline.get('local_price')
+        local_currency = gasoline.get('local_currency')
+        price = gasoline.get('price', 0)
+        price_cny = gasoline.get('price_cny', 0)
+
+        raw_parts.append("🚗 *汽油:*")
+        if local_price and local_currency:
+            raw_parts.append(f"  本地: {local_currency} {local_price:.2f}/L")
+        raw_parts.append(f"  USD: ${price:.2f}/L")
+        raw_parts.append(f"  CNY: ¥{price_cny:.2f}/L")
+
+    # Diesel
+    if diesel:
+        local_price = diesel.get('local_price')
+        local_currency = diesel.get('local_currency')
+        price = diesel.get('price', 0)
+        price_cny = diesel.get('price_cny', 0)
+
+        raw_parts.append("")
+        raw_parts.append("🚛 *柴油:*")
+        if local_price and local_currency:
+            raw_parts.append(f"  本地: {local_currency} {local_price:.2f}/L")
+        raw_parts.append(f"  USD: ${price:.2f}/L")
+        raw_parts.append(f"  CNY: ¥{price_cny:.2f}/L")
+
+    # Price date
+    price_date = None
+    if gasoline and gasoline.get('price_date'):
+        price_date = gasoline.get('price_date')
+    elif diesel and diesel.get('price_date'):
+        price_date = diesel.get('price_date')
+
+    if price_date:
+        raw_parts.append("")
+        raw_parts.append(f"📅 数据日期: {price_date}")
+
+    raw_message = "\n".join(raw_parts)
+    return foldable_text_with_markdown_v2(raw_message)
