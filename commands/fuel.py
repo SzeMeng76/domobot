@@ -163,7 +163,8 @@ def format_global_country(country_data: dict, all_data: dict = None) -> str:
 
 async def fuel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /fuel command"""
-    await delete_user_command(update, context)
+    if not update.message:
+        return
 
     # Parse arguments
     args = context.args
@@ -189,7 +190,8 @@ async def fuel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "`/fuel usa` \\- 查美国油价\n"
             "`/fuel 日本` \\- 查日本油价\n"
         )
-        await send_help(update, context, help_text)
+        await send_help(context, update.message.chat_id, help_text, parse_mode="MarkdownV2")
+        await delete_user_command(context, update.message.chat_id, update.message.message_id)
         return
 
     query = " ".join(args).lower()
@@ -215,10 +217,14 @@ async def fuel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def show_rankings(update: Update, context: ContextTypes.DEFAULT_TYPE, fuel_type: str = "gasoline"):
     """Show global fuel price rankings for specified fuel type"""
+    if not update.message:
+        return
+
     data = fetch_fuel_data(GLOBAL_DATA_URL)
 
     if not data:
-        await send_error(update, context, "无法获取数据，请稍后重试")
+        await send_error(context, update.message.chat_id, "无法获取数据，请稍后重试", parse_mode="MarkdownV2")
+        await delete_user_command(context, update.message.chat_id, update.message.message_id)
         return
 
     # Map fuel type
@@ -237,7 +243,8 @@ async def show_rankings(update: Update, context: ContextTypes.DEFAULT_TYPE, fuel
                   if info.get(fuel_key) and info[fuel_key].get('price_cny', 0) > 0]
 
     if not valid_data:
-        await send_error(update, context, f"暂无{fuel_name}数据")
+        await send_error(context, update.message.chat_id, f"暂无{fuel_name}数据", parse_mode="MarkdownV2")
+        await delete_user_command(context, update.message.chat_id, update.message.message_id)
         return
 
     # Sort by price
@@ -281,15 +288,20 @@ async def show_rankings(update: Update, context: ContextTypes.DEFAULT_TYPE, fuel
     other_name = "柴油" if fuel_key == "gasoline" else "汽油"
     text += f"\n💡 *提示:* 使用 `/fuel rankings {other_fuel}` 查看{other_name}排行\n"
 
-    await send_search_result(update, context, text)
+    await send_search_result(context, update.message.chat_id, text, parse_mode="MarkdownV2")
+    await delete_user_command(context, update.message.chat_id, update.message.message_id)
 
 
 async def show_china_all(update: Update, context: ContextTypes.DEFAULT_TYPE, fuel_type: str = "92"):
     """Show all China provinces fuel prices with rankings for specified fuel type"""
+    if not update.message:
+        return
+
     data = fetch_fuel_data(CHINA_DATA_URL)
 
     if not data:
-        await send_error(update, context, "无法获取数据，请稍后重试")
+        await send_error(context, update.message.chat_id, "无法获取数据，请稍后重试", parse_mode="MarkdownV2")
+        await delete_user_command(context, update.message.chat_id, update.message.message_id)
         return
 
     # Map fuel type to data key
@@ -357,11 +369,15 @@ async def show_china_all(update: Update, context: ContextTypes.DEFAULT_TYPE, fue
     # Add usage hint
     text += f"\n💡 *提示:* 使用 `/fuel china 95` 查看95\\#汽油排行\n"
 
-    await send_search_result(update, context, text)
+    await send_search_result(context, update.message.chat_id, text, parse_mode="MarkdownV2")
+    await delete_user_command(context, update.message.chat_id, update.message.message_id)
 
 
 async def search_fuel_price(update: Update, context: ContextTypes.DEFAULT_TYPE, query: str):
     """Search for specific location fuel price"""
+    if not update.message:
+        return
+
     # Try China first
     china_data = fetch_fuel_data(CHINA_DATA_URL)
     if china_data:
@@ -369,7 +385,8 @@ async def search_fuel_price(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             province = info.get('province', '').lower()
             if query in province or query in code:
                 text = format_china_province(info, china_data)  # Pass all_data for ranking
-                await send_search_result(update, context, text)
+                await send_search_result(context, update.message.chat_id, text, parse_mode="MarkdownV2")
+                await delete_user_command(context, update.message.chat_id, update.message.message_id)
                 return
 
     # Try global - use SUPPORTED_COUNTRIES for better matching
@@ -379,7 +396,8 @@ async def search_fuel_price(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         query_upper = query.upper()
         if query_upper in global_data:
             text = format_global_country(global_data[query_upper], global_data)  # Pass all_data
-            await send_search_result(update, context, text)
+            await send_search_result(context, update.message.chat_id, text, parse_mode="MarkdownV2")
+            await delete_user_command(context, update.message.chat_id, update.message.message_id)
             return
 
         # Try matching with SUPPORTED_COUNTRIES
@@ -394,7 +412,8 @@ async def search_fuel_price(update: Update, context: ContextTypes.DEFAULT_TYPE, 
                         # Add Chinese name
                         text = text.replace(f"🌍 *{fuel_info.get('country')}*",
                                           f"🌍 *{fuel_info.get('country')}* \\({country_name_cn}\\)")
-                        await send_search_result(update, context, text)
+                        await send_search_result(context, update.message.chat_id, text, parse_mode="MarkdownV2")
+                        await delete_user_command(context, update.message.chat_id, update.message.message_id)
                         return
 
         # Fallback: search by country name in global data
@@ -402,16 +421,19 @@ async def search_fuel_price(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             country = info.get('country', '').lower()
             if query in country or query in code.lower():
                 text = format_global_country(info, global_data)  # Pass all_data
-                await send_search_result(update, context, text)
+                await send_search_result(context, update.message.chat_id, text, parse_mode="MarkdownV2")
+                await delete_user_command(context, update.message.chat_id, update.message.message_id)
                 return
 
     # Not found
     await send_error(
-        update,
         context,
+        update.message.chat_id,
         f"未找到 '{query}' 的油价数据\n\n"
-        "提示: 使用 /fuel rankings 查看所有国家"
+        "提示: 使用 /fuel rankings 查看所有国家",
+        parse_mode="MarkdownV2"
     )
+    await delete_user_command(context, update.message.chat_id, update.message.message_id)
 
 
 # Register command
