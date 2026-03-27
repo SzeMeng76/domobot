@@ -336,15 +336,39 @@ async def handle_inline_reddit_list(
         ]
 
     list_type = parts[1].lower()  # hot 或 top
-    subreddit = parts[2] if len(parts) > 2 else None
-    time_filter = parts[3] if len(parts) > 3 else "day"
 
     # 获取帖子列表
     try:
         if list_type == "hot":
+            # 检查第二个参数是否是时间关键词（如果是，说明没有指定subreddit）
+            subreddit = None
+            if len(parts) > 2:
+                second_arg = parts[2].lower()
+                # 如果不是时间关键词，才当作subreddit
+                if second_arg not in ['hour', 'day', 'week', 'month', 'year', 'all']:
+                    subreddit = parts[2]
+
             posts = await reddit_client.get_hot_posts(subreddit=subreddit, limit=10)
             title_prefix = f"🔥 r/{subreddit} 热门" if subreddit else "🔥 Reddit 全站热门"
         elif list_type == "top":
+            subreddit = None
+            time_filter = 'day'
+
+            # 解析参数：可能是 "top week" 或 "top python week"
+            if len(parts) > 2:
+                second_arg = parts[2].lower()
+                if second_arg in ['hour', 'day', 'week', 'month', 'year', 'all']:
+                    # 第二个参数是时间，没有subreddit
+                    time_filter = second_arg
+                else:
+                    # 第二个参数是subreddit
+                    subreddit = parts[2]
+                    # 检查第三个参数是否是时间
+                    if len(parts) > 3:
+                        third_arg = parts[3].lower()
+                        if third_arg in ['hour', 'day', 'week', 'month', 'year', 'all']:
+                            time_filter = third_arg
+
             posts = await reddit_client.get_top_posts(subreddit=subreddit, time_filter=time_filter, limit=10)
             time_map = {'hour': '本小时', 'day': '今日', 'week': '本周', 'month': '本月', 'year': '今年', 'all': '全部时间'}
             time_text = time_map.get(time_filter, time_filter)

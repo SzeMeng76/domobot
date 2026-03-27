@@ -696,6 +696,8 @@ async def _send_reddit_media(context, chat_id, post, caption, reply_markup):
 async def reddit_translate_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """处理 Reddit 列表翻译按钮"""
     query = update.callback_query
+    is_inline = False
+    inline_message_id = None
 
     try:
         if not query.data or not query.data.startswith("reddit_translate_"):
@@ -705,11 +707,24 @@ async def reddit_translate_callback(update: Update, context: ContextTypes.DEFAUL
 
         list_hash = query.data.replace("reddit_translate_", "")
 
+        # 判断是否为 inline 消息
+        is_inline = query.inline_message_id is not None
+        inline_message_id = query.inline_message_id if is_inline else None
+
         # 显示翻译中状态
-        await query.edit_message_text(
-            text="🌐 AI翻译中，请稍候...",
-            reply_markup=query.message.reply_markup
-        )
+        if is_inline:
+            try:
+                await context.bot.edit_message_text(
+                    inline_message_id=inline_message_id,
+                    text="🌐 AI翻译中，请稍候..."
+                )
+            except Exception:
+                pass
+        else:
+            await query.edit_message_text(
+                text="🌐 AI翻译中，请稍候...",
+                reply_markup=query.message.reply_markup
+            )
 
         # 检查依赖
         if not _cache_manager or not _ai_summarizer:
@@ -783,22 +798,38 @@ async def reddit_translate_callback(update: Update, context: ContextTypes.DEFAUL
         ]]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        await query.edit_message_text(
-            text=message_text,
-            parse_mode="MarkdownV2",
-            disable_web_page_preview=True,
-            reply_markup=reply_markup
-        )
+        # 编辑消息
+        if is_inline:
+            await context.bot.edit_message_text(
+                inline_message_id=inline_message_id,
+                text=message_text,
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup,
+                link_preview_options={"is_disabled": True}
+            )
+        else:
+            await query.edit_message_text(
+                text=message_text,
+                parse_mode="MarkdownV2",
+                disable_web_page_preview=True,
+                reply_markup=reply_markup
+            )
 
         logger.info(f"✅ Reddit列表翻译完成: {list_hash}")
 
     except Exception as e:
         logger.error(f"Reddit列表翻译失败: {e}", exc_info=True)
         try:
-            await query.edit_message_text(
-                text=f"❌ 翻译失败: {str(e)}",
-                reply_markup=query.message.reply_markup
-            )
+            if is_inline:
+                await context.bot.edit_message_text(
+                    inline_message_id=inline_message_id,
+                    text=f"❌ 翻译失败: {str(e)}"
+                )
+            else:
+                await query.edit_message_text(
+                    text=f"❌ 翻译失败: {str(e)}",
+                    reply_markup=query.message.reply_markup
+                )
         except:
             pass
 
@@ -815,6 +846,10 @@ async def reddit_untranslate_callback(update: Update, context: ContextTypes.DEFA
         await query.answer()
 
         list_hash = query.data.replace("reddit_untranslate_", "")
+
+        # 判断是否为 inline 消息
+        is_inline = query.inline_message_id is not None
+        inline_message_id = query.inline_message_id if is_inline else None
 
         # 从缓存读取原始数据
         if not _cache_manager:
@@ -850,12 +885,22 @@ async def reddit_untranslate_callback(update: Update, context: ContextTypes.DEFA
         ]]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        await query.edit_message_text(
-            text=message_text,
-            parse_mode="MarkdownV2",
-            disable_web_page_preview=True,
-            reply_markup=reply_markup
-        )
+        # 编辑消息
+        if is_inline:
+            await context.bot.edit_message_text(
+                inline_message_id=inline_message_id,
+                text=message_text,
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup,
+                link_preview_options={"is_disabled": True}
+            )
+        else:
+            await query.edit_message_text(
+                text=message_text,
+                parse_mode="MarkdownV2",
+                disable_web_page_preview=True,
+                reply_markup=reply_markup
+            )
 
     except Exception as e:
         logger.error(f"显示原文失败: {e}", exc_info=True)
