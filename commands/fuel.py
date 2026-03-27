@@ -210,38 +210,27 @@ async def fuel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args
 
     if not args:
-        # Show help
-        help_text = (
-            "🛢️ *燃油价格查询*\n\n"
-            "*使用方法:*\n"
-            "`/fuel [地区/国家]` \\- 查询指定地区油价\n"
-            "`/fuel rankings [燃油]` \\- 全球价格排行榜\n"
-            "`/fuel china [油品]` \\- 中国省份排行榜\n\n"
-            "*全球燃油选项:*\n"
-            "`/fuel rankings` \\- 汽油排行 \\(默认\\)\n"
-            "`/fuel rankings diesel` \\- 柴油排行\n\n"
-            "*中国油品选项:*\n"
-            "`/fuel china` \\- 92\\#汽油排行 \\(默认\\)\n"
-            "`/fuel china 95` \\- 95\\#汽油排行\n"
-            "`/fuel china 98` \\- 98\\#汽油排行\n"
-            "`/fuel china diesel` \\- 0\\#柴油排行\n\n"
-            "*示例:*\n"
-            "`/fuel 北京` \\- 查北京油价\n"
-            "`/fuel usa` \\- 查美国油价\n"
-            "`/fuel 日本` \\- 查日本油价\n"
-        )
-        await send_help(context, update.message.chat_id, help_text, parse_mode="MarkdownV2")
-        await delete_user_command(context, update.message.chat_id, update.message.message_id)
+        # No args - show global gasoline rankings (like netflix shows top 10)
+        await show_rankings(update, context, "gasoline")
         return
 
     query = " ".join(args).lower()
 
     # Handle special commands
-    if query.startswith("rankings") or query.startswith("rank") or query.startswith("排行") or query.startswith("top10"):
+    if query.startswith("rankings") or query.startswith("rank") or query.startswith("排行") or query.startswith("top"):
         # Extract fuel type if specified
         parts = query.split()
         fuel_type = parts[1] if len(parts) > 1 else "gasoline"
         await show_rankings(update, context, fuel_type)
+        return
+
+    # Handle direct fuel type queries (diesel, gasoline, 柴油, 汽油)
+    if query in ["diesel", "柴油"]:
+        await show_rankings(update, context, "diesel")
+        return
+
+    if query in ["gasoline", "gas", "汽油"]:
+        await show_rankings(update, context, "gasoline")
         return
 
     if query.startswith("china") or query.startswith("中国") or query == "cn":
@@ -308,7 +297,19 @@ async def show_rankings(update: Update, context: ContextTypes.DEFAULT_TYPE, fuel
         price_cny = fuel_info['price_cny']
         price_orig = fuel_info['price']
         currency = fuel_info['currency']
-        text += f"{i}\\. {country}: `{price_cny:.2f}` CNY\\/L \\(`{price_orig:.2f}` {currency}\\/L\\)\n"
+
+        # Get Chinese name and flag
+        country_info = SUPPORTED_COUNTRIES.get(code.upper(), {})
+        country_name_cn = country_info.get('name', '')
+        country_flag = get_country_flag(code)
+
+        # Format with Chinese name if available
+        if country_name_cn:
+            country_display = f"{country} \\({country_name_cn}\\) {country_flag}"
+        else:
+            country_display = country
+
+        text += f"{i}\\. {country_display}: `{price_cny:.2f}` CNY\\/L \\(`{price_orig:.2f}` {currency}\\/L\\)\n"
 
     text += "\n💸 *最贵 Top 10:*\n"
     for i, (code, info) in enumerate(expensive_10, 1):
@@ -317,7 +318,19 @@ async def show_rankings(update: Update, context: ContextTypes.DEFAULT_TYPE, fuel
         price_cny = fuel_info['price_cny']
         price_orig = fuel_info['price']
         currency = fuel_info['currency']
-        text += f"{i}\\. {country}: `{price_cny:.2f}` CNY\\/L \\(`{price_orig:.2f}` {currency}\\/L\\)\n"
+
+        # Get Chinese name and flag
+        country_info = SUPPORTED_COUNTRIES.get(code.upper(), {})
+        country_name_cn = country_info.get('name', '')
+        country_flag = get_country_flag(code)
+
+        # Format with Chinese name if available
+        if country_name_cn:
+            country_display = f"{country} \\({country_name_cn}\\) {country_flag}"
+        else:
+            country_display = country
+
+        text += f"{i}\\. {country_display}: `{price_cny:.2f}` CNY\\/L \\(`{price_orig:.2f}` {currency}\\/L\\)\n"
 
     text += f"\n📊 *全球平均价格:* `{avg_price:.2f}` CNY\\/L\n"
     text += f"📈 *价格范围:* `{min(prices):.2f}` \\- `{max(prices):.2f}` CNY\\/L\n"
@@ -346,12 +359,12 @@ async def show_china_all(update: Update, context: ContextTypes.DEFAULT_TYPE, fue
 
     # Map fuel type to data key
     fuel_map = {
-        "92": ("92_gasoline", "92# 汽油"),
-        "95": ("95_gasoline", "95# 汽油"),
-        "98": ("98_gasoline", "98# 汽油"),
-        "0": ("0_diesel", "0# 柴油"),
-        "diesel": ("0_diesel", "0# 柴油"),
-        "柴油": ("0_diesel", "0# 柴油"),
+        "92": ("92_gasoline", "92\\# 汽油"),
+        "95": ("95_gasoline", "95\\# 汽油"),
+        "98": ("98_gasoline", "98\\# 汽油"),
+        "0": ("0_diesel", "0\\# 柴油"),
+        "diesel": ("0_diesel", "0\\# 柴油"),
+        "柴油": ("0_diesel", "0\\# 柴油"),
     }
 
     # Get fuel key and name
@@ -423,41 +436,47 @@ async def search_fuel_price(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     if china_data:
         for code, info in china_data.items():
             province = info.get('province', '').lower()
-            if query in province or query in code:
-                text = format_china_province(info, china_data)  # Pass all_data for ranking
+            if query in province or query in code.lower():
+                text = format_china_province(info, china_data)
                 await send_search_result(context, update.message.chat_id, text, parse_mode="MarkdownV2")
                 await delete_user_command(context, update.message.chat_id, update.message.message_id)
                 return
 
-    # Try global - use SUPPORTED_COUNTRIES for better matching
+    # Try global - use SUPPORTED_COUNTRIES for matching
     global_data = await fetch_fuel_data(GLOBAL_DATA_URL)
     if global_data:
-        # First try exact code match
-        query_upper = query.upper()
-        if query_upper in global_data:
-            text = format_global_country(global_data[query_upper], global_data, query_upper)
-            await send_search_result(context, update.message.chat_id, text, parse_mode="MarkdownV2")
-            await delete_user_command(context, update.message.chat_id, update.message.message_id)
-            return
-
-        # Try matching with SUPPORTED_COUNTRIES
+        # Try matching with SUPPORTED_COUNTRIES first (for Chinese names and shortcuts)
         for country_code, country_info in SUPPORTED_COUNTRIES.items():
             country_name_cn = country_info.get('name', '').lower()
+
             # Check if query matches country code or Chinese name
-            if query in country_code.lower() or query in country_name_cn:
-                # Find in global data
+            if query == country_code.lower() or query in country_name_cn:
+                # Find matching country in global data
                 for code, fuel_info in global_data.items():
-                    if code.upper() == country_code or country_code in code.upper():
+                    country_name_en = fuel_info.get('country', '').lower()
+
+                    # Match by code or country name
+                    if (code.upper() == country_code or
+                        code.lower() == country_code.lower() or
+                        country_code.lower() in code.lower() or
+                        code.lower() in country_code.lower()):
                         text = format_global_country(fuel_info, global_data, country_code)
                         await send_search_result(context, update.message.chat_id, text, parse_mode="MarkdownV2")
                         await delete_user_command(context, update.message.chat_id, update.message.message_id)
                         return
 
-        # Fallback: search by country name in global data
+        # Fallback: direct search in global data by code or country name
         for code, info in global_data.items():
             country = info.get('country', '').lower()
-            if query in country or query in code.lower():
-                text = format_global_country(info, global_data, code)
+            if query in country or query in code.lower() or code.lower() == query:
+                # Try to find country_code from SUPPORTED_COUNTRIES for flag display
+                matched_code = None
+                for cc, cc_info in SUPPORTED_COUNTRIES.items():
+                    if cc.lower() == code.lower() or cc.lower() in code.lower():
+                        matched_code = cc
+                        break
+
+                text = format_global_country(info, global_data, matched_code or code)
                 await send_search_result(context, update.message.chat_id, text, parse_mode="MarkdownV2")
                 await delete_user_command(context, update.message.chat_id, update.message.message_id)
                 return
@@ -467,7 +486,7 @@ async def search_fuel_price(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         context,
         update.message.chat_id,
         f"未找到 '{query}' 的油价数据\n\n"
-        "提示: 使用 /fuel rankings 查看所有国家",
+        "提示: 使用 /fuel 查看全球排行榜",
         parse_mode="MarkdownV2"
     )
     await delete_user_command(context, update.message.chat_id, update.message.message_id)
