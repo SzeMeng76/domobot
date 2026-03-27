@@ -639,17 +639,23 @@ async def handle_inline_parse_chosen(
 
         caption = content_text + link_part
 
+        # 构建按钮（原链接 + AI总结）
+        url_hash = get_url_hash(url)
+        buttons = [[InlineKeyboardButton("🔗 原链接", url=url)]]
+        if parse_adapter and parse_adapter.config and parse_adapter.config.enable_ai_summary:
+            buttons[0].append(InlineKeyboardButton("📝 AI总结", callback_data=f"summary_{url_hash}"))
+        reply_markup = InlineKeyboardMarkup(buttons)
 
         # 根据类型处理
         if isinstance(parse_result, RichTextParseResult):
             # 富文本 → 发布到 Telegraph
             await _handle_richtext_inline(
-                context, inline_message_id, parse_result, parse_adapter, caption, url, result_id
+                context, inline_message_id, parse_result, parse_adapter, caption, url, result_id, reply_markup
             )
         elif isinstance(parse_result, (VideoParseResult, ImageParseResult, MultimediaParseResult)):
             # 视频/混合媒体中的视频
             await _handle_video_inline(
-                context, inline_message_id, parse_result, parse_adapter, caption, url, media_index, is_article, result_id
+                context, inline_message_id, parse_result, parse_adapter, caption, url, media_index, is_article, result_id, reply_markup
             )
         else:
             # 其他类型（不应该到这里，因为前面已经过滤了）
@@ -690,7 +696,8 @@ async def _handle_richtext_inline(
     parse_adapter,
     caption: str,
     url: str,
-    result_id: str
+    result_id: str,
+    reply_markup = None
 ) -> None:
     """处理富文本 inline 结果（发布到 Telegraph）"""
     try:
@@ -720,14 +727,16 @@ async def _handle_richtext_inline(
             await context.bot.edit_message_text(
                 inline_message_id=inline_message_id,
                 text=f"{caption}\n\n📰 <a href=\"{telegraph_url}\">查看完整文章</a>",
-                parse_mode=ParseMode.HTML
+                parse_mode=ParseMode.HTML,
+                reply_markup=reply_markup
             )
         else:
             # 失败 → 保留缓存以便重试
             await context.bot.edit_message_text(
                 inline_message_id=inline_message_id,
                 text=f"{caption}\n\n❌ Telegraph 发布失败",
-                parse_mode=ParseMode.HTML
+                parse_mode=ParseMode.HTML,
+                reply_markup=reply_markup
             )
     except Exception as e:
         logger.error(f"富文本 inline 处理失败: {e}", exc_info=True)
@@ -747,7 +756,8 @@ async def _handle_video_inline(
     url: str,
     media_index: int = 0,
     is_article: bool = False,
-    result_id: str = None
+    result_id: str = None,
+    reply_markup = None
 ) -> None:
     """处理视频 inline 结果"""
     try:
@@ -868,6 +878,7 @@ async def _handle_video_inline(
                             duration=media.duration or 0,
                             supports_streaming=True,
                         ),
+                        reply_markup=reply_markup
                     )
 
                     # 上传成功 → 清理缓存
@@ -973,6 +984,7 @@ async def _handle_image_inline(
                         caption=caption,
                         parse_mode=ParseMode.MARKDOWN_V2,
                     ),
+                    reply_markup=reply_markup
                 )
         else:
             # 多张图片 → Telegraph

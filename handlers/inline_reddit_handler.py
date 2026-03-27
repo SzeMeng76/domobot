@@ -623,7 +623,8 @@ async def handle_inline_reddit_chosen(
             # 使用 file_id 编辑 inline 消息
             await context.bot.edit_message_media(
                 inline_message_id=inline_message_id,
-                media=input_media
+                media=input_media,
+                reply_markup=reply_markup
             )
 
             # 删除临时频道的消息
