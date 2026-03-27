@@ -210,6 +210,12 @@ def setup_handlers(application: Application):
     application.add_handler(get_ai_summary_handler())
     logger.info("✅ AI总结callback处理器已注册")
 
+    # 注册 Reddit AI 总结 callback handler（如果已配置）
+    if config.reddit_client_id and config.reddit_client_secret and config.enable_ai_summary:
+        from handlers.reddit_ai_summary_callback_handler import get_reddit_ai_summary_handler
+        application.add_handler(get_reddit_ai_summary_handler())
+        logger.info("✅ Reddit AI总结callback处理器已注册")
+
     # 注册Weather AI日报callback handler
     from handlers.weather_ai_callback_handler import get_handler as get_weather_ai_handler
     application.add_handler(get_weather_ai_handler())
@@ -371,6 +377,40 @@ async def setup_application(application: Application, config) -> None:
     social_parser.set_adapter(parse_adapter)
     auto_parse_handler.set_adapter(parse_adapter)
 
+    # 初始化 Reddit 客户端（如果配置了）
+    if config.reddit_client_id and config.reddit_client_secret:
+        from utils.reddit_client import RedditClient
+        reddit_client = RedditClient(
+            client_id=config.reddit_client_id,
+            client_secret=config.reddit_client_secret
+        )
+        logger.info("✅ Reddit 客户端已初始化")
+
+        # 注入 Reddit 依赖
+        from commands import reddit_command
+        reddit_command.set_reddit_client(reddit_client)
+        reddit_command.set_cache_manager(cache_manager)
+
+        # 如果启用了 AI 总结，设置 AI 总结器
+        if config.enable_ai_summary and config.openai_api_key:
+            from utils.ai_summary import AISummarizer
+            ai_summarizer = AISummarizer(
+                api_key=config.openai_api_key,
+                base_url=config.openai_base_url or None,
+                model=config.ai_summary_model or "gpt-5-mini"
+            )
+            reddit_command.set_ai_summarizer(ai_summarizer)
+            logger.info("✅ Reddit AI 总结已启用")
+
+            # 注册 Reddit AI 总结 callback handler
+            from handlers import reddit_ai_summary_callback_handler
+            reddit_ai_summary_callback_handler.set_reddit_client(reddit_client)
+            reddit_ai_summary_callback_handler.set_cache_manager(cache_manager)
+            reddit_ai_summary_callback_handler.set_ai_summarizer(ai_summarizer)
+            logger.info("✅ Reddit AI 总结 callback handler 已配置")
+    else:
+        logger.info("⚠️ Reddit 功能未配置（缺少 REDDIT_CLIENT_ID 或 REDDIT_CLIENT_SECRET）")
+
     # 注入网易云音乐依赖
     music.set_dependencies(cache_manager, httpx_client, pyrogram_helper)
     from handlers import auto_music_handler
@@ -466,6 +506,11 @@ async def setup_application(application: Application, config) -> None:
     if config.hotel_weekly_cleanup:
         await task_scheduler.add_weekly_cache_cleanup("hotels", "hotels", weekday=6, hour=5, minute=0)
         logger.info(" 已配置 酒店服务缓存 每周日UTC 5:00 定时清理")
+        cleanup_tasks_added += 1
+
+    if config.reddit_weekly_cleanup:
+        await task_scheduler.add_weekly_cache_cleanup("reddit", "reddit", weekday=6, hour=5, minute=0)
+        logger.info(" 已配置 Reddit 缓存 每周日UTC 5:00 定时清理")
         cleanup_tasks_added += 1
 
     # 注册 AI 反垃圾数据库清理任务

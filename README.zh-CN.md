@@ -341,6 +341,7 @@ docker-compose down
 /cleancache finance       # 清理股票金融数据缓存
 /cleancache fuel          # 清理燃油价格缓存
 /cleancache social_parser # 清理社交媒体解析缓存
+/cleancache reddit        # 清理Reddit缓存
 
 # 命令列表管理
 /refresh_all             # 管理员：刷新所有用户和群组的命令列表

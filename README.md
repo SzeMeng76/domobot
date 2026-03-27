@@ -341,6 +341,7 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /cleancache finance       # Clear finance & stock data cache
 /cleancache fuel          # Clear fuel price cache
 /cleancache social_parser # Clear social media parser cache
+/cleancache reddit        # Clear Reddit cache
 
 # Command List Management
 /refresh_all             # Admin: Refresh command lists for all users and groups

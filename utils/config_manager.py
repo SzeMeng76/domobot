@@ -247,6 +247,12 @@ class BotConfig:
         self.youtube_cookie = None
         self.tieba_cookie = None  # 贴吧完整Cookie字符串（绕过安全验证）
 
+        # Reddit API 配置
+        self.reddit_client_id = ""
+        self.reddit_client_secret = ""
+        self.reddit_cache_duration = 86400  # Reddit 缓存时间（默认24小时）
+        self.reddit_weekly_cleanup = True  # 默认启用 Reddit 缓存清理
+
 
 class ConfigManager:
     """配置管理器"""
@@ -514,6 +520,12 @@ class ConfigManager:
         self.config.enable_telegraph = get_bool_env("ENABLE_TELEGRAPH", "False")
         self.config.telegraph_token = os.getenv("TELEGRAPH_TOKEN", None)
         self.config.telegraph_author = os.getenv("TELEGRAPH_AUTHOR", "DomoBot")
+
+        # Reddit API 配置
+        self.config.reddit_client_id = os.getenv("REDDIT_CLIENT_ID", "")
+        self.config.reddit_client_secret = os.getenv("REDDIT_CLIENT_SECRET", "")
+        self.config.reddit_cache_duration = get_int_env("REDDIT_CACHE_DURATION", "86400")
+        self.config.reddit_weekly_cleanup = get_bool_env("REDDIT_WEEKLY_CLEANUP", "True")
 
         # 视频分割配置
         self.config.enable_video_split = get_bool_env("ENABLE_VIDEO_SPLIT", "False")
