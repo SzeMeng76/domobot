@@ -90,8 +90,11 @@ async def reddit_ai_summary_callback(update: Update, context: ContextTypes.DEFAU
         action = parts[1]  # summary 或 unsummary
         url_hash = parts[2]
 
-        message_id = query.message.message_id if query.message else None
-        current_caption = query.message.caption or query.message.text if query.message else None
+        # 判断是否为 inline 消息
+        is_inline = query.inline_message_id is not None
+        inline_message_id = query.inline_message_id if is_inline else None
+        message_id = None if is_inline else (query.message.message_id if query.message else None)
+        current_caption = None if is_inline else (query.message.caption or query.message.text if query.message else None)
 
         if action == "summary":
             # 立即 answer 移除加载圈
@@ -100,7 +103,20 @@ async def reddit_ai_summary_callback(update: Update, context: ContextTypes.DEFAU
             # 显示"生成中..."状态
             loading_text = "📝 AI总结生成中，请稍候..."
             try:
-                if query.message.caption:
+                if is_inline:
+                    # Inline 消息：尝试 edit_message_text（可能是 Article）或 edit_message_caption（可能是 Photo）
+                    try:
+                        await context.bot.edit_message_text(
+                            inline_message_id=inline_message_id,
+                            text=loading_text
+                        )
+                    except Exception:
+                        # 如果是 Photo 类型，需要用 edit_message_caption
+                        await context.bot.edit_message_caption(
+                            inline_message_id=inline_message_id,
+                            caption=loading_text
+                        )
+                elif query.message.caption:
                     await query.edit_message_caption(
                         caption=loading_text,
                         reply_markup=query.message.reply_markup
@@ -214,14 +230,16 @@ async def reddit_ai_summary_callback(update: Update, context: ContextTypes.DEFAU
                 )
                 logger.info(f"✅ AI总结已缓存: cache:reddit:reddit_ai_summary:{url_hash}")
 
-            # 缓存原始 caption 到内存
-            if message_id not in _message_cache:
+            # 缓存原始 caption 到内存（用于恢复）- inline 消息不缓存
+            if not is_inline and message_id and message_id not in _message_cache:
                 _message_cache[message_id] = {
                     "original": current_caption,
                     "url_hash": url_hash
                 }
 
-            _message_cache[message_id]["summary"] = ai_summary
+            # 缓存 AI 总结到内存 - inline 消息不缓存
+            if not is_inline and message_id:
+                _message_cache[message_id]["summary"] = ai_summary
 
             # 构建总结 caption
             cleaned_summary = _clean_html_tags(ai_summary)
@@ -231,10 +249,35 @@ async def reddit_ai_summary_callback(update: Update, context: ContextTypes.DEFAU
                 summary_caption += f"\n\n🔗 原帖链接: {cache_data['url']}"
 
             # 更新按钮为"已显示"状态
-            new_markup = _get_buttons_with_hide(query.message.reply_markup, url_hash)
+            # Inline 消息需要特殊处理按钮
+            if is_inline:
+                # Inline 消息：构建新按钮（原链接 + AI总结✅）
+                buttons = [[InlineKeyboardButton("🔗 原帖链接", url=cache_data.get('url', ''))]]
+                buttons[0].append(InlineKeyboardButton("📝 AI总结✅", callback_data=f"reddit_unsummary_{url_hash}"))
+                new_markup = InlineKeyboardMarkup(buttons)
+            else:
+                new_markup = _get_buttons_with_hide(query.message.reply_markup, url_hash)
 
             # 编辑消息
-            if query.message.caption:
+            if is_inline:
+                # Inline 消息：尝试两种方式
+                try:
+                    await context.bot.edit_message_text(
+                        inline_message_id=inline_message_id,
+                        text=summary_caption,
+                        parse_mode="HTML",
+                        reply_markup=new_markup,
+                        link_preview_options=LinkPreviewOptions(is_disabled=True)
+                    )
+                except Exception:
+                    # 如果是 Photo 类型，需要用 edit_message_caption
+                    await context.bot.edit_message_caption(
+                        inline_message_id=inline_message_id,
+                        caption=summary_caption,
+                        parse_mode="HTML",
+                        reply_markup=new_markup
+                    )
+            elif query.message.caption:
                 await query.edit_message_caption(
                     caption=summary_caption,
                     parse_mode="HTML",
@@ -252,7 +295,57 @@ async def reddit_ai_summary_callback(update: Update, context: ContextTypes.DEFAU
             # 隐藏 AI 总结，恢复原始 caption
             await query.answer("隐藏中...")
 
-            if message_id in _message_cache and _message_cache[message_id].get("original"):
+            # Inline 消息无法恢复原始内容（没有缓存），显示提示
+            if is_inline:
+                # 从缓存读取原始数据重新构建
+                if not _cache_manager:
+                    await query.answer("❌ 缓存功能未初始化", show_alert=True)
+                    return
+
+                cache_data = await _cache_manager.get(
+                    f"reddit_summary:{url_hash}",
+                    subdirectory="reddit"
+                )
+                if cache_data:
+                    # 重新构建原始 caption
+                    from commands.reddit_command import _escape_markdown, _format_timestamp
+                    caption_parts = []
+                    caption_parts.append(f"**{_escape_markdown(cache_data['title'])}**")
+                    caption_parts.append(f"👤 u/{_escape_markdown(cache_data['author'])} \\| 📊 {cache_data['score']} ⬆️ \\| 💬 {cache_data['num_comments']}")
+                    caption_parts.append(f"📍 r/{_escape_markdown(cache_data['subreddit'])} \\| 🕐 {_escape_markdown(_format_timestamp(cache_data['created_utc']))}")
+
+                    if cache_data.get('content'):
+                        text_preview = cache_data['content'][:200]
+                        if len(cache_data['content']) > 200:
+                            text_preview += "\\.\\.\\."
+                        caption_parts.append(f"\n{_escape_markdown(text_preview)}")
+
+                    caption_parts.append(f"\n🔗 [原帖链接]({cache_data['url']})")
+                    original_caption = "\n\n".join(caption_parts)
+
+                    # 恢复按钮为"显示"状态
+                    buttons = [[InlineKeyboardButton("🔗 原帖链接", url=cache_data.get('url', ''))]]
+                    buttons[0].append(InlineKeyboardButton("📝 AI总结", callback_data=f"reddit_summary_{url_hash}"))
+                    new_markup = InlineKeyboardMarkup(buttons)
+
+                    try:
+                        await context.bot.edit_message_text(
+                            inline_message_id=inline_message_id,
+                            text=original_caption,
+                            parse_mode="MarkdownV2",
+                            reply_markup=new_markup,
+                            link_preview_options=LinkPreviewOptions(is_disabled=True)
+                        )
+                    except Exception:
+                        await context.bot.edit_message_caption(
+                            inline_message_id=inline_message_id,
+                            caption=original_caption,
+                            parse_mode="MarkdownV2",
+                            reply_markup=new_markup
+                        )
+                else:
+                    await query.answer("❌ 无法恢复原始内容", show_alert=True)
+            elif message_id and message_id in _message_cache and _message_cache[message_id].get("original"):
                 original_caption = _message_cache[message_id]["original"]
 
                 # 恢复按钮为"显示"状态

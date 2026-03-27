@@ -592,10 +592,11 @@ async def setup_inline_query_handler(application) -> None:
         TelegramInlineQueryHandler(handler.handle_inline_query)
     )
 
-    # 注册 chosen inline result 处理器（parse + music）
+    # 注册 chosen inline result 处理器（parse + music + reddit）
     from handlers.inline_parse_handler import handle_inline_parse_chosen
     from handlers.inline_music_handler import handle_inline_music_chosen
     from handlers.inline_ytmusic_handler import handle_inline_ytmusic_chosen
+    from handlers.inline_reddit_handler import handle_inline_reddit_chosen
 
     async def _chosen_inline_dispatcher(update, context):
         """分发 chosen inline result 到对应处理器"""
@@ -606,9 +607,11 @@ async def setup_inline_query_handler(application) -> None:
             await handle_inline_ytmusic_chosen(update, context)
         elif result_id.startswith("parse_"):
             await handle_inline_parse_chosen(update, context)
+        elif result_id.startswith("reddit_video_"):
+            await handle_inline_reddit_chosen(update, context)
 
     application.add_handler(
         ChosenInlineResultHandler(_chosen_inline_dispatcher)
     )
 
-    logger.info("✅ Inline Query 处理器已注册（含 Parse + Music + YTMusic 支持）")
+    logger.info("✅ Inline Query 处理器已注册（含 Parse + Music + YTMusic + Reddit 支持）")

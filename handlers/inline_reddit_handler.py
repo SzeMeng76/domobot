@@ -5,12 +5,19 @@ Inline Reddit 处理器
 """
 
 import logging
+import time
 from uuid import uuid4
+from typing import Dict, Any
 
 from telegram import Update, InlineQueryResultArticle, InputTextMessageContent, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 
 logger = logging.getLogger(__name__)
+
+# 全局缓存：存储视频解析结果（5分钟TTL）
+_reddit_video_cache: Dict[str, Dict[str, Any]] = {}
+_cache_timestamps: Dict[str, float] = {}
+CACHE_TTL = 300  # 5分钟
 
 
 async def handle_inline_reddit_query(
@@ -101,7 +108,7 @@ async def handle_inline_reddit_query(
 
         # 如果启用了 AI 总结，添加 AI 总结按钮
         if ai_summarizer:
-            buttons.append([InlineKeyboardButton("📝 AI总结", callback_data=f"reddit_summary_{url_hash}")])
+            buttons[0].append(InlineKeyboardButton("📝 AI总结", callback_data=f"reddit_summary_{url_hash}"))
 
         reply_markup = InlineKeyboardMarkup(buttons)
 
@@ -124,20 +131,62 @@ async def handle_inline_reddit_query(
                 subdirectory="reddit"
             )
 
-        # 返回结果
-        return [
-            InlineQueryResultArticle(
-                id=str(uuid4()),
-                title=f"📝 {post.title[:60]}",
-                description=f"r/{post.subreddit} | ⬆️ {post.score} | 💬 {post.num_comments}",
-                input_message_content=InputTextMessageContent(
-                    message_text=caption,
+        # 返回结果 - 根据内容类型返回不同的结果
+        from telegram import InlineQueryResultPhoto
+
+        # 视频：返回缩略图照片，用户选择后自动下载并上传
+        if post.is_video and post.video_url and post.preview_image_url:
+            result_id = f"reddit_video_{uuid4()}"
+            # 缓存视频信息（用于 chosen handler）
+            _reddit_video_cache[result_id] = {
+                "post": post,
+                "caption": caption,
+                "url_hash": url_hash,
+                "reply_markup": reply_markup
+            }
+            _cache_timestamps[result_id] = time.time()
+
+            return [
+                InlineQueryResultPhoto(
+                    id=result_id,
+                    photo_url=post.preview_image_url,
+                    thumbnail_url=post.preview_image_url,
+                    title=f"🎬 {post.title[:60]}",
+                    description=f"r/{post.subreddit} | ⬆️ {post.score} | 💬 {post.num_comments}",
+                    caption=caption,
                     parse_mode="MarkdownV2",
-                    link_preview_options={"is_disabled": True}
-                ),
-                reply_markup=reply_markup
-            )
-        ]
+                    reply_markup=reply_markup
+                )
+            ]
+        # 图片：返回图片（直接显示，不需要下载）
+        elif post.preview_image_url:
+            return [
+                InlineQueryResultPhoto(
+                    id=str(uuid4()),
+                    photo_url=post.preview_image_url,
+                    thumbnail_url=post.preview_image_url,
+                    title=f"📝 {post.title[:60]}",
+                    description=f"r/{post.subreddit} | ⬆️ {post.score} | 💬 {post.num_comments}",
+                    caption=caption,
+                    parse_mode="MarkdownV2",
+                    reply_markup=reply_markup
+                )
+            ]
+        # 无图片/视频：返回纯文本
+        else:
+            return [
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title=f"📝 {post.title[:60]}",
+                    description=f"r/{post.subreddit} | ⬆️ {post.score} | 💬 {post.num_comments}",
+                    input_message_content=InputTextMessageContent(
+                        message_text=caption,
+                        parse_mode="MarkdownV2",
+                        link_preview_options={"is_disabled": True}
+                    ),
+                    reply_markup=reply_markup
+                )
+            ]
 
     except Exception as e:
         logger.error(f"Reddit inline 解析失败: {e}", exc_info=True)
@@ -259,6 +308,31 @@ async def handle_inline_reddit_list(
 
         message_text = "\n".join(lines)
 
+        # 创建 inline keyboard（添加 AI 翻译按钮）
+        keyboard = []
+        cache_manager = reddit_command._cache_manager
+        ai_summarizer = reddit_command._ai_summarizer
+
+        if ai_summarizer and cache_manager:
+            # 缓存帖子列表数据用于AI翻译
+            import hashlib
+            list_hash = hashlib.md5(f"{list_type}_{subreddit}_{time_filter}_{len(posts)}".encode()).hexdigest()[:16]
+
+            # 保存帖子标题列表到缓存
+            titles_data = [{"title": p.title, "permalink": p.permalink} for p in posts]
+            await cache_manager.set(
+                f"reddit_list:{list_hash}",
+                titles_data,
+                ttl=3600,  # 1小时
+                subdirectory="reddit"
+            )
+
+            keyboard.append([
+                InlineKeyboardButton("🌐 AI翻译", callback_data=f"reddit_translate_{list_hash}")
+            ])
+
+        reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+
         # 返回单个结果
         return [
             InlineQueryResultArticle(
@@ -270,6 +344,7 @@ async def handle_inline_reddit_list(
                     parse_mode="MarkdownV2",
                     link_preview_options={"is_disabled": True}
                 ),
+                reply_markup=reply_markup
             )
         ]
 
@@ -285,3 +360,179 @@ async def handle_inline_reddit_list(
                 ),
             )
         ]
+
+
+async def handle_inline_reddit_chosen(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """
+    处理用户选择 inline Reddit 视频结果后的下载和上传
+
+    Args:
+        update: Telegram Update
+        context: Context
+    """
+    chosen_result = update.chosen_inline_result
+    inline_message_id = chosen_result.inline_message_id
+    result_id = chosen_result.result_id
+
+    # 只处理视频
+    if not result_id.startswith("reddit_video_"):
+        return
+
+    # 从缓存中获取视频信息
+    cached_data = _reddit_video_cache.get(result_id, None)
+
+    if not cached_data:
+        # 缓存过期
+        try:
+            await context.bot.edit_message_caption(
+                inline_message_id=inline_message_id,
+                caption="❌ 视频信息已过期，请重新查询"
+            )
+        except Exception:
+            pass
+        return
+
+    post = cached_data["post"]
+    caption = cached_data["caption"]
+    reply_markup = cached_data["reply_markup"]
+
+    try:
+        import tempfile
+        from pathlib import Path
+        from commands.reddit_command import _download_video
+
+        # 更新状态
+        await context.bot.edit_message_caption(
+            inline_message_id=inline_message_id,
+            caption="📥 下载视频中..."
+        )
+
+        # 下载视频
+        temp_dir = Path(tempfile.gettempdir()) / "domobot_reddit"
+        temp_dir.mkdir(exist_ok=True)
+
+        video_path = await _download_video(post.video_url, temp_dir)
+        video_size_mb = video_path.stat().st_size / (1024 * 1024)
+
+        logger.info(f"[Inline Reddit] 视频下载完成: {video_size_mb:.1f}MB")
+
+        # 检查视频大小
+        if video_size_mb > 2048:
+            # 超过 2GB，无法上传
+            await context.bot.edit_message_caption(
+                inline_message_id=inline_message_id,
+                caption=f"{caption}\n\n⚠️ 视频过大 ({video_size_mb:.1f}MB)，无法上传",
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup
+            )
+            # 清理缓存
+            _reddit_video_cache.pop(result_id, None)
+            _cache_timestamps.pop(result_id, None)
+            return
+
+        # 更新状态
+        await context.bot.edit_message_caption(
+            inline_message_id=inline_message_id,
+            caption=f"📤 上传视频中... ({video_size_mb:.1f}MB)"
+        )
+
+        # 使用 Pyrogram 上传（支持大文件）
+        from commands import reddit_command
+        pyrogram_helper = reddit_command._pyrogram_helper
+
+        if pyrogram_helper and pyrogram_helper.is_started and pyrogram_helper.client:
+            from pyrogram.types import InputMediaVideo as PyrogramInputMediaVideo
+            from pyrogram.enums import ParseMode as PyrogramParseMode
+            from html import escape as html_escape
+
+            # 将 MarkdownV2 caption 转换为 HTML
+            # 简单处理：移除转义符
+            html_caption = caption.replace("\\", "")
+
+            await pyrogram_helper.client.edit_inline_media(
+                inline_message_id=inline_message_id,
+                media=PyrogramInputMediaVideo(
+                    media=str(video_path),
+                    caption=html_caption,
+                    parse_mode=PyrogramParseMode.HTML,
+                    supports_streaming=True,
+                )
+            )
+            logger.info(f"[Inline Reddit] Pyrogram 上传成功: {video_size_mb:.1f}MB")
+        elif video_size_mb <= 50:
+            # Fallback: python-telegram-bot (<=50MB)
+            from telegram import InputMediaVideo
+            from utils.config_manager import ConfigManager
+
+            config_manager = ConfigManager()
+            temp_channel_id = config_manager.config.inline_parse_temp_channel
+
+            if not temp_channel_id:
+                await context.bot.edit_message_caption(
+                    inline_message_id=inline_message_id,
+                    caption=f"{caption}\n\n❌ 配置错误：未设置临时存储频道",
+                    parse_mode="MarkdownV2",
+                    reply_markup=reply_markup
+                )
+                return
+
+            # 先上传到临时频道
+            with open(video_path, 'rb') as video_file:
+                sent_message = await context.bot.send_video(
+                    chat_id=temp_channel_id,
+                    video=video_file,
+                    supports_streaming=True,
+                    read_timeout=300,
+                    write_timeout=300,
+                    connect_timeout=30
+                )
+
+            # 使用 file_id 编辑 inline 消息
+            await context.bot.edit_message_media(
+                inline_message_id=inline_message_id,
+                media=InputMediaVideo(
+                    media=sent_message.video.file_id,
+                    caption=caption,
+                    parse_mode="MarkdownV2",
+                    supports_streaming=True,
+                ),
+            )
+
+            # 删除临时频道的消息
+            try:
+                await context.bot.delete_message(chat_id=temp_channel_id, message_id=sent_message.message_id)
+            except Exception:
+                pass
+
+            logger.info(f"[Inline Reddit] python-telegram-bot 上传成功: {video_size_mb:.1f}MB")
+        else:
+            # >50MB 且 Pyrogram 不可用
+            await context.bot.edit_message_caption(
+                inline_message_id=inline_message_id,
+                caption=f"{caption}\n\n⚠️ 视频过大 ({video_size_mb:.1f}MB)，无法上传",
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup
+            )
+
+        # 清理缓存和临时文件
+        _reddit_video_cache.pop(result_id, None)
+        _cache_timestamps.pop(result_id, None)
+        try:
+            video_path.unlink()
+        except Exception:
+            pass
+
+    except Exception as e:
+        logger.error(f"[Inline Reddit] 视频处理失败: {e}", exc_info=True)
+        try:
+            await context.bot.edit_message_caption(
+                inline_message_id=inline_message_id,
+                caption=f"{caption}\n\n❌ 视频处理失败: {str(e)}",
+                parse_mode="MarkdownV2",
+                reply_markup=reply_markup
+            )
+        except Exception:
+            pass

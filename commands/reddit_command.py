@@ -138,7 +138,7 @@ async def _show_hot_posts(context: ContextTypes.DEFAULT_TYPE, chat_id: int, subr
             # 转义链接文本中的特殊字符
             post_title = _escape_markdown_link_text(post.title[:80])
             if len(post.title) > 80:
-                post_title += "..."
+                post_title += "\\.\\.\\."
 
             lines.append(
                 f"{i}\\. [{post_title}]({post.permalink})\n"
@@ -222,7 +222,7 @@ async def _show_top_posts(context: ContextTypes.DEFAULT_TYPE, chat_id: int, subr
             # 转义链接文本中的特殊字符
             post_title = _escape_markdown_link_text(post.title[:80])
             if len(post.title) > 80:
-                post_title += "..."
+                post_title += "\\.\\.\\."
 
             lines.append(
                 f"{i}\\. [{post_title}]({post.permalink})\n"
@@ -466,76 +466,8 @@ async def _send_reddit_media(context, chat_id, post, caption, reply_markup):
     temp_dir.mkdir(exist_ok=True)
 
     try:
-        # 图集
-        if post.gallery_items:
-            logger.info(f"发送图集: {len(post.gallery_items)} 张图片")
-
-            # 下载所有图片
-            image_paths = []
-            for img_url in post.gallery_items[:10]:  # 最多10张
-                try:
-                    img_path = await _download_image(img_url, temp_dir)
-                    image_paths.append(img_path)
-                except Exception as e:
-                    logger.warning(f"下载图片失败: {e}")
-
-            if image_paths:
-                # 构建 media group
-                media_group = []
-                for img_path in image_paths:
-                    with open(img_path, 'rb') as f:
-                        media_group.append(InputMediaPhoto(media=f.read()))
-
-                # 将 caption 附加到最后一张图片
-                media_group[-1].caption = caption
-                media_group[-1].parse_mode = "MarkdownV2"
-
-                @with_telegram_retry(max_retries=5)
-                async def _send_media_group():
-                    return await context.bot.send_media_group(
-                        chat_id=chat_id,
-                        media=media_group
-                    )
-
-                messages = await _send_media_group()
-
-                # 如果有按钮，单独发送
-                if reply_markup:
-                    @with_telegram_retry(max_retries=5)
-                    async def _send_button_msg():
-                        return await context.bot.send_message(
-                            chat_id=chat_id,
-                            text="🔗 更多操作",
-                            reply_parameters=ReplyParameters(message_id=messages[-1].message_id),
-                            reply_markup=reply_markup
-                        )
-                    button_msg = await _send_button_msg()
-                    return list(messages) + [button_msg]
-
-                return list(messages)
-
-        # 单张图片
-        elif post.preview_image_url:
-            logger.info(f"发送单张图片: {post.preview_image_url}")
-
-            img_path = await _download_image(post.preview_image_url, temp_dir)
-
-            @with_telegram_retry(max_retries=5)
-            async def _send_photo():
-                with open(img_path, 'rb') as f:
-                    return await context.bot.send_photo(
-                        chat_id=chat_id,
-                        photo=f,
-                        caption=caption,
-                        parse_mode="MarkdownV2",
-                        reply_markup=reply_markup
-                    )
-
-            msg = await _send_photo()
-            return [msg]
-
-        # 视频
-        elif post.is_video and post.video_url:
+        # 视频（优先检查，因为视频也可能有 preview_image_url）
+        if post.is_video and post.video_url:
             logger.info(f"下载并发送视频: {post.video_url}")
 
             try:
@@ -636,6 +568,74 @@ async def _send_reddit_media(context, chat_id, post, caption, reply_markup):
 
                 msg = await _send_video_link()
                 return [msg]
+
+        # 图集
+        elif post.gallery_items:
+            logger.info(f"发送图集: {len(post.gallery_items)} 张图片")
+
+            # 下载所有图片
+            image_paths = []
+            for img_url in post.gallery_items[:10]:  # 最多10张
+                try:
+                    img_path = await _download_image(img_url, temp_dir)
+                    image_paths.append(img_path)
+                except Exception as e:
+                    logger.warning(f"下载图片失败: {e}")
+
+            if image_paths:
+                # 构建 media group
+                media_group = []
+                for img_path in image_paths:
+                    with open(img_path, 'rb') as f:
+                        media_group.append(InputMediaPhoto(media=f.read()))
+
+                # 将 caption 附加到最后一张图片
+                media_group[-1].caption = caption
+                media_group[-1].parse_mode = "MarkdownV2"
+
+                @with_telegram_retry(max_retries=5)
+                async def _send_media_group():
+                    return await context.bot.send_media_group(
+                        chat_id=chat_id,
+                        media=media_group
+                    )
+
+                messages = await _send_media_group()
+
+                # 如果有按钮，单独发送
+                if reply_markup:
+                    @with_telegram_retry(max_retries=5)
+                    async def _send_button_msg():
+                        return await context.bot.send_message(
+                            chat_id=chat_id,
+                            text="🔗 更多操作",
+                            reply_parameters=ReplyParameters(message_id=messages[-1].message_id),
+                            reply_markup=reply_markup
+                        )
+                    button_msg = await _send_button_msg()
+                    return list(messages) + [button_msg]
+
+                return list(messages)
+
+        # 单张图片
+        elif post.preview_image_url:
+            logger.info(f"发送单张图片: {post.preview_image_url}")
+
+            img_path = await _download_image(post.preview_image_url, temp_dir)
+
+            @with_telegram_retry(max_retries=5)
+            async def _send_photo():
+                with open(img_path, 'rb') as f:
+                    return await context.bot.send_photo(
+                        chat_id=chat_id,
+                        photo=f,
+                        caption=caption,
+                        parse_mode="MarkdownV2",
+                        reply_markup=reply_markup
+                    )
+
+            msg = await _send_photo()
+            return [msg]
 
         # 纯文本
         else:
@@ -804,7 +804,7 @@ async def reddit_untranslate_callback(update: Update, context: ContextTypes.DEFA
         for i, item in enumerate(titles_data, 1):
             post_title = _escape_markdown_link_text(item['title'][:80])
             if len(item['title']) > 80:
-                post_title += "..."
+                post_title += "\\.\\.\\."
             lines.append(f"{i}\\. [{post_title}]({item['permalink']})")
 
         message_text = "\n".join(lines)
