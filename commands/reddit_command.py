@@ -619,13 +619,17 @@ async def _send_reddit_media(context, chat_id, post, caption, reply_markup):
             if image_paths:
                 # 构建 media group
                 media_group = []
-                for img_path in image_paths:
+                for idx, img_path in enumerate(image_paths):
                     with open(img_path, 'rb') as f:
-                        media_group.append(InputMediaPhoto(media=f.read()))
-
-                # 将 caption 附加到最后一张图片
-                media_group[-1].caption = caption
-                media_group[-1].parse_mode = "MarkdownV2"
+                        # 将 caption 附加到最后一张图片
+                        if idx == len(image_paths) - 1:
+                            media_group.append(InputMediaPhoto(
+                                media=f.read(),
+                                caption=caption,
+                                parse_mode="MarkdownV2"
+                            ))
+                        else:
+                            media_group.append(InputMediaPhoto(media=f.read()))
 
                 @with_telegram_retry(max_retries=5)
                 async def _send_media_group():

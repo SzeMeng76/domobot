@@ -138,11 +138,9 @@ async def handle_inline_reddit_query(
         if post.gallery_items and len(post.gallery_items) > 1:
             results = []
             for index, img_url in enumerate(post.gallery_items[:10], 1):  # 最多10张
-                # 验证图片 URL 有效性（检查 WebP 和 Reddit CDN）
+                # 验证图片 URL 有效性（只检查 WebP 格式，Reddit CDN 可能可以访问）
                 is_valid_photo = True
                 if img_url and (img_url.endswith('.webp') or 'auto=webp' in img_url):
-                    is_valid_photo = False
-                if img_url and ('preview.redd.it' in img_url or 'i.redd.it' in img_url):
                     is_valid_photo = False
 
                 if is_valid_photo:
@@ -159,7 +157,7 @@ async def handle_inline_reddit_query(
                         )
                     )
                 else:
-                    # 无效图片 URL → 使用 Article 类型
+                    # WebP 格式 → 使用 Article 类型
                     results.append(
                         InlineQueryResultArticle(
                             id=str(uuid4()),
@@ -187,11 +185,9 @@ async def handle_inline_reddit_query(
             }
             _cache_timestamps[result_id] = time.time()
 
-            # 验证缩略图有效性（检查 WebP 和 Reddit CDN）
+            # 验证缩略图有效性（只检查 WebP 格式，Reddit CDN 可能可以访问）
             is_valid_photo = True
             if post.preview_image_url and (post.preview_image_url.endswith('.webp') or 'auto=webp' in post.preview_image_url):
-                is_valid_photo = False
-            if post.preview_image_url and ('preview.redd.it' in post.preview_image_url or 'i.redd.it' in post.preview_image_url):
                 is_valid_photo = False
 
             if is_valid_photo:
@@ -225,11 +221,9 @@ async def handle_inline_reddit_query(
                 ]
         # 图片：返回图片（直接显示，不需要下载）
         elif post.preview_image_url:
-            # 验证图片 URL 有效性（检查 WebP 和 Reddit CDN）
+            # 验证图片 URL 有效性（只检查 WebP 格式，Reddit CDN 可能可以访问）
             is_valid_photo = True
             if post.preview_image_url and (post.preview_image_url.endswith('.webp') or 'auto=webp' in post.preview_image_url):
-                is_valid_photo = False
-            if post.preview_image_url and ('preview.redd.it' in post.preview_image_url or 'i.redd.it' in post.preview_image_url):
                 is_valid_photo = False
 
             if is_valid_photo:
