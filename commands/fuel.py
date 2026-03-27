@@ -33,6 +33,223 @@ def set_dependencies(c_manager, h_client):
 CHINA_DATA_URL = "https://raw.githubusercontent.com/SzeMeng76/fuel-price-tracker/refs/heads/master/china_fuel_prices.json"
 GLOBAL_DATA_URL = "https://raw.githubusercontent.com/SzeMeng76/fuel-price-tracker/refs/heads/master/global_fuel_prices_processed.json"
 
+# Mapping from GlobalPetrolPrices country codes to ISO 2-letter codes
+COUNTRY_CODE_MAPPING = {
+    "USA": "US",
+    "Canada": "CA",
+    "Mexico": "MX",
+    "United-Kingdom": "GB",
+    "United Kingdom": "GB",
+    "Germany": "DE",
+    "France": "FR",
+    "Italy": "IT",
+    "Spain": "ES",
+    "Netherlands": "NL",
+    "Belgium": "BE",
+    "Switzerland": "CH",
+    "Austria": "AT",
+    "Sweden": "SE",
+    "Norway": "NO",
+    "Denmark": "DK",
+    "Finland": "FI",
+    "Poland": "PL",
+    "Czech-Republic": "CZ",
+    "Czech Republic": "CZ",
+    "Hungary": "HU",
+    "Romania": "RO",
+    "Bulgaria": "BG",
+    "Greece": "GR",
+    "Portugal": "PT",
+    "Ireland": "IE",
+    "Croatia": "HR",
+    "Slovenia": "SI",
+    "Slovakia": "SK",
+    "Estonia": "EE",
+    "Latvia": "LV",
+    "Lithuania": "LT",
+    "Russia": "RU",
+    "Ukraine": "UA",
+    "Belarus": "BY",
+    "Turkey": "TR",
+    "China": "CN",
+    "Japan": "JP",
+    "South-Korea": "KR",
+    "South Korea": "KR",
+    "India": "IN",
+    "Indonesia": "ID",
+    "Thailand": "TH",
+    "Vietnam": "VN",
+    "Philippines": "PH",
+    "Malaysia": "MY",
+    "Singapore": "SG",
+    "Hong-Kong": "HK",
+    "Hong Kong": "HK",
+    "Taiwan": "TW",
+    "Australia": "AU",
+    "New-Zealand": "NZ",
+    "New Zealand": "NZ",
+    "Brazil": "BR",
+    "Argentina": "AR",
+    "Chile": "CL",
+    "Colombia": "CO",
+    "Peru": "PE",
+    "Venezuela": "VE",
+    "Ecuador": "EC",
+    "South-Africa": "ZA",
+    "South Africa": "ZA",
+    "Egypt": "EG",
+    "Nigeria": "NG",
+    "Kenya": "KE",
+    "Saudi-Arabia": "SA",
+    "Saudi Arabia": "SA",
+    "United-Arab-Emirates": "AE",
+    "United Arab Emirates": "AE",
+    "Qatar": "QA",
+    "Kuwait": "KW",
+    "Bahrain": "BH",
+    "Oman": "OM",
+    "Israel": "IL",
+    "Pakistan": "PK",
+    "Bangladesh": "BD",
+    "Sri-Lanka": "LK",
+    "Sri Lanka": "LK",
+    "Algeria": "DZ",
+    "Morocco": "MA",
+    "Tunisia": "TN",
+    "Libya": "LY",
+    "Ghana": "GH",
+    "Ethiopia": "ET",
+    "Tanzania": "TZ",
+    "Uganda": "UG",
+    "Zambia": "ZM",
+    "Zimbabwe": "ZW",
+    "Botswana": "BW",
+    "Namibia": "NA",
+    "Angola": "AO",
+    "Mozambique": "MZ",
+    "Madagascar": "MG",
+    "Mauritius": "MU",
+    "Seychelles": "SC",
+    "Iceland": "IS",
+    "Luxembourg": "LU",
+    "Malta": "MT",
+    "Cyprus": "CY",
+    "Albania": "AL",
+    "Serbia": "RS",
+    "Bosnia-and-Herzegovina": "BA",
+    "Bosnia and Herzegovina": "BA",
+    "North-Macedonia": "MK",
+    "North Macedonia": "MK",
+    "Montenegro": "ME",
+    "Moldova": "MD",
+    "Georgia": "GE",
+    "Armenia": "AM",
+    "Azerbaijan": "AZ",
+    "Kazakhstan": "KZ",
+    "Uzbekistan": "UZ",
+    "Turkmenistan": "TM",
+    "Kyrgyzstan": "KG",
+    "Tajikistan": "TJ",
+    "Mongolia": "MN",
+    "Nepal": "NP",
+    "Bhutan": "BT",
+    "Myanmar": "MM",
+    "Cambodia": "KH",
+    "Laos": "LA",
+    "Brunei": "BN",
+    "Maldives": "MV",
+    "Afghanistan": "AF",
+    "Iraq": "IQ",
+    "Iran": "IR",
+    "Syria": "SY",
+    "Lebanon": "LB",
+    "Jordan": "JO",
+    "Yemen": "YE",
+    "Palestine": "PS",
+    "Cuba": "CU",
+    "Jamaica": "JM",
+    "Dominican-Republic": "DO",
+    "Dominican Republic": "DO",
+    "Trinidad-and-Tobago": "TT",
+    "Trinidad and Tobago": "TT",
+    "Bahamas": "BS",
+    "Barbados": "BB",
+    "Guatemala": "GT",
+    "Honduras": "HN",
+    "El-Salvador": "SV",
+    "El Salvador": "SV",
+    "Nicaragua": "NI",
+    "Costa-Rica": "CR",
+    "Costa Rica": "CR",
+    "Panama": "PA",
+    "Bolivia": "BO",
+    "Paraguay": "PY",
+    "Uruguay": "UY",
+    "Guyana": "GY",
+    "Suriname": "SR",
+    "Senegal": "SN",
+    "Mali": "ML",
+    "Burkina-Faso": "BF",
+    "Burkina Faso": "BF",
+    "Niger": "NE",
+    "Chad": "TD",
+    "Sudan": "SD",
+    "South-Sudan": "SS",
+    "South Sudan": "SS",
+    "Eritrea": "ER",
+    "Djibouti": "DJ",
+    "Somalia": "SO",
+    "Rwanda": "RW",
+    "Burundi": "BI",
+    "Malawi": "MW",
+    "Cameroon": "CM",
+    "Central-African-Republic": "CF",
+    "Central African Republic": "CF",
+    "Congo": "CG",
+    "Democratic-Republic-of-the-Congo": "CD",
+    "Democratic Republic of the Congo": "CD",
+    "Gabon": "GA",
+    "Equatorial-Guinea": "GQ",
+    "Equatorial Guinea": "GQ",
+    "Sao-Tome-and-Principe": "ST",
+    "Sao Tome and Principe": "ST",
+    "Guinea": "GN",
+    "Guinea-Bissau": "GW",
+    "Guinea Bissau": "GW",
+    "Sierra-Leone": "SL",
+    "Sierra Leone": "SL",
+    "Liberia": "LR",
+    "Ivory-Coast": "CI",
+    "Ivory Coast": "CI",
+    "Togo": "TG",
+    "Benin": "BJ",
+    "Mauritania": "MR",
+    "Gambia": "GM",
+    "Cape-Verde": "CV",
+    "Cape Verde": "CV",
+    "Comoros": "KM",
+    "Lesotho": "LS",
+    "Eswatini": "SZ",
+    "Papua-New-Guinea": "PG",
+    "Papua New Guinea": "PG",
+    "Fiji": "FJ",
+    "Solomon-Islands": "SB",
+    "Solomon Islands": "SB",
+    "Vanuatu": "VU",
+    "Samoa": "WS",
+    "Tonga": "TO",
+    "Kiribati": "KI",
+    "Micronesia": "FM",
+    "Palau": "PW",
+    "Marshall-Islands": "MH",
+    "Marshall Islands": "MH",
+    "Tuvalu": "TV",
+    "Nauru": "NR",
+    "North-Korea": "KP",
+    "North Korea": "KP",
+    "Macau": "MO",
+}
+
 
 async def fetch_fuel_data(url: str) -> dict | None:
     """Fetch fuel price data from GitHub with cache"""
@@ -125,13 +342,19 @@ def format_global_country(country_data: dict, all_data: dict = None, country_cod
     gasoline = country_data.get('gasoline')
     diesel = country_data.get('diesel')
 
+    # Map to ISO code if needed
+    if country_code:
+        iso_code = COUNTRY_CODE_MAPPING.get(country_code, country_code)
+    else:
+        iso_code = None
+
     # Get Chinese name and flag
     country_name_cn = None
     country_flag = ""
-    if country_code:
-        country_info = SUPPORTED_COUNTRIES.get(country_code.upper(), {})
+    if iso_code:
+        country_info = SUPPORTED_COUNTRIES.get(iso_code.upper(), {})
         country_name_cn = country_info.get('name', '')
-        country_flag = get_country_flag(country_code)
+        country_flag = get_country_flag(iso_code)
 
     # Format title with Chinese name and flag
     if country_name_cn:
@@ -144,9 +367,17 @@ def format_global_country(country_data: dict, all_data: dict = None, country_cod
         price = gasoline.get('price', 0)
         currency = gasoline.get('currency', 'USD')
         price_cny = gasoline.get('price_cny', 0)
+        local_price = gasoline.get('local_price')
+        local_currency = gasoline.get('local_currency')
+
         text += f"🚗 *汽油:*\n"
-        text += f"  价格: `{price:.2f}` {currency}\\/L\n"
-        text += f"  折合: `{price_cny:.2f}` CNY\\/L\n"
+
+        # Show local price if available
+        if local_price and local_currency:
+            text += f"  本地价格: `{local_price:.2f}` {local_currency}\\/L\n"
+
+        text += f"  USD价格: `{price:.2f}` {currency}\\/L\n"
+        text += f"  折合CNY: `{price_cny:.2f}` CNY\\/L\n"
 
         # Add ranking for gasoline
         if all_data and price_cny > 0:
@@ -172,9 +403,17 @@ def format_global_country(country_data: dict, all_data: dict = None, country_cod
         price = diesel.get('price', 0)
         currency = diesel.get('currency', 'USD')
         price_cny = diesel.get('price_cny', 0)
+        local_price = diesel.get('local_price')
+        local_currency = diesel.get('local_currency')
+
         text += f"\n🚛 *柴油:*\n"
-        text += f"  价格: `{price:.2f}` {currency}\\/L\n"
-        text += f"  折合: `{price_cny:.2f}` CNY\\/L\n"
+
+        # Show local price if available
+        if local_price and local_currency:
+            text += f"  本地价格: `{local_price:.2f}` {local_currency}\\/L\n"
+
+        text += f"  USD价格: `{price:.2f}` {currency}\\/L\n"
+        text += f"  折合CNY: `{price_cny:.2f}` CNY\\/L\n"
 
         # Add ranking for diesel
         if all_data and price_cny > 0:
@@ -197,6 +436,21 @@ def format_global_country(country_data: dict, all_data: dict = None, country_cod
 
     if not gasoline and not diesel:
         text += "暂无数据\n"
+
+    # Add data source and price date
+    text += f"\n📅 *数据日期:* "
+    price_date = None
+    if gasoline and gasoline.get('price_date'):
+        price_date = gasoline.get('price_date')
+    elif diesel and diesel.get('price_date'):
+        price_date = diesel.get('price_date')
+
+    if price_date:
+        text += f"{price_date}\n"
+    else:
+        text += "未知\n"
+
+    text += f"🔗 *数据来源:* [GlobalPetrolPrices\\.com](https://www\\.globalpetrolprices\\.com/)\n"
 
     return text
 
@@ -298,10 +552,11 @@ async def show_rankings(update: Update, context: ContextTypes.DEFAULT_TYPE, fuel
         price_orig = fuel_info['price']
         currency = fuel_info['currency']
 
-        # Get Chinese name and flag
-        country_info = SUPPORTED_COUNTRIES.get(code.upper(), {})
+        # Map to ISO code and get Chinese name and flag
+        iso_code = COUNTRY_CODE_MAPPING.get(code, code)
+        country_info = SUPPORTED_COUNTRIES.get(iso_code.upper(), {})
         country_name_cn = country_info.get('name', '')
-        country_flag = get_country_flag(code)
+        country_flag = get_country_flag(iso_code)
 
         # Format with Chinese name if available
         if country_name_cn:
@@ -319,10 +574,11 @@ async def show_rankings(update: Update, context: ContextTypes.DEFAULT_TYPE, fuel
         price_orig = fuel_info['price']
         currency = fuel_info['currency']
 
-        # Get Chinese name and flag
-        country_info = SUPPORTED_COUNTRIES.get(code.upper(), {})
+        # Map to ISO code and get Chinese name and flag
+        iso_code = COUNTRY_CODE_MAPPING.get(code, code)
+        country_info = SUPPORTED_COUNTRIES.get(iso_code.upper(), {})
         country_name_cn = country_info.get('name', '')
-        country_flag = get_country_flag(code)
+        country_flag = get_country_flag(iso_code)
 
         # Format with Chinese name if available
         if country_name_cn:
@@ -451,16 +707,11 @@ async def search_fuel_price(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 
             # Check if query matches country code or Chinese name
             if query == country_code.lower() or query in country_name_cn:
-                # Find matching country in global data
-                for code, fuel_info in global_data.items():
-                    country_name_en = fuel_info.get('country', '').lower()
-
-                    # Match by code or country name
-                    if (code.upper() == country_code or
-                        code.lower() == country_code.lower() or
-                        country_code.lower() in code.lower() or
-                        code.lower() in country_code.lower()):
-                        text = format_global_country(fuel_info, global_data, country_code)
+                # Find matching country in global data using reverse mapping
+                for json_code, fuel_info in global_data.items():
+                    iso_code = COUNTRY_CODE_MAPPING.get(json_code, json_code)
+                    if iso_code.upper() == country_code:
+                        text = format_global_country(fuel_info, global_data, json_code)
                         await send_search_result(context, update.message.chat_id, text, parse_mode="MarkdownV2")
                         await delete_user_command(context, update.message.chat_id, update.message.message_id)
                         return
@@ -469,14 +720,7 @@ async def search_fuel_price(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         for code, info in global_data.items():
             country = info.get('country', '').lower()
             if query in country or query in code.lower() or code.lower() == query:
-                # Try to find country_code from SUPPORTED_COUNTRIES for flag display
-                matched_code = None
-                for cc, cc_info in SUPPORTED_COUNTRIES.items():
-                    if cc.lower() == code.lower() or cc.lower() in code.lower():
-                        matched_code = cc
-                        break
-
-                text = format_global_country(info, global_data, matched_code or code)
+                text = format_global_country(info, global_data, code)
                 await send_search_result(context, update.message.chat_id, text, parse_mode="MarkdownV2")
                 await delete_user_command(context, update.message.chat_id, update.message.message_id)
                 return
