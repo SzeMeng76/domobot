@@ -91,6 +91,7 @@ from commands import (
     disney_plus,
     finance,
     flight,
+    fuel,
     google_play,
     help_command,
     hotel,
