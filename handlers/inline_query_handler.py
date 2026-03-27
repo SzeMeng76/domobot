@@ -271,9 +271,9 @@ class InlineQueryHandler:
             await update.inline_query.answer(results, cache_time=60)
             return
 
-        # Reddit hot/top 列表单独处理：返回多条结果
-        if parts and parts[0].lower() in ("reddit", "reddit_hot", "reddit_top"):
-            # 格式: reddit hot [subreddit] 或 reddit top [subreddit] [time]
+        # Reddit hot/top/new 列表单独处理：返回多条结果
+        if parts and parts[0].lower() in ("reddit", "reddit_hot", "reddit_top", "reddit_new"):
+            # 格式: reddit hot/top/new [subreddit] [time]
             from handlers.inline_reddit_handler import handle_inline_reddit_list
             results = await handle_inline_reddit_list(command_text, context)
             await update.inline_query.answer(results, cache_time=60)

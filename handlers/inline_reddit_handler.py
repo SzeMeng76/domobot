@@ -291,20 +291,22 @@ async def handle_inline_reddit_list(
             InlineQueryResultArticle(
                 id=str(uuid4()),
                 title="📝 使用方法",
-                description="reddit hot [subreddit] 或 reddit top [subreddit] [time]",
+                description="reddit hot/top/new [subreddit] [time]",
                 input_message_content=InputTextMessageContent(
                     message_text="**📝 Reddit Inline 使用方法：**\n\n"
                                 "• `reddit hot [subreddit]` - 热门帖子\n"
-                                "• `reddit top [subreddit] [time]` - Top帖子\n\n"
+                                "• `reddit top [subreddit] [time]` - Top帖子\n"
+                                "• `reddit new [subreddit]` - 最新帖子\n\n"
                                 "**示例：**\n"
                                 "• `reddit hot python`\n"
-                                "• `reddit top python week`",
+                                "• `reddit top python week`\n"
+                                "• `reddit new python`",
                     parse_mode="Markdown"
                 ),
             )
         ]
 
-    list_type = parts[1].lower()  # hot 或 top
+    list_type = parts[1].lower()  # hot, top 或 new
 
     # 获取帖子列表
     try:
@@ -346,14 +348,21 @@ async def handle_inline_reddit_list(
             time_text = time_map.get(time_filter, time_filter)
             # 转义括号
             title_prefix = f"🏆 r/{subreddit} Top \\({time_text}\\)" if subreddit else f"🏆 Reddit 全站 Top \\({time_text}\\)"
+        elif list_type == "new":
+            subreddit = None
+            if len(parts) > 2:
+                subreddit = parts[2]
+
+            posts = await reddit_client.get_new_posts(subreddit=subreddit, limit=10)
+            title_prefix = f"🆕 r/{subreddit} 最新" if subreddit else "🆕 Reddit 全站最新"
         else:
             return [
                 InlineQueryResultArticle(
                     id=str(uuid4()),
                     title="❌ 无效的命令",
-                    description="请使用 hot 或 top",
+                    description="请使用 hot, top 或 new",
                     input_message_content=InputTextMessageContent(
-                        message_text="❌ 无效的命令，请使用 `reddit hot` 或 `reddit top`",
+                        message_text="❌ 无效的命令，请使用 `reddit hot`, `reddit top` 或 `reddit new`",
                         parse_mode="Markdown"
                     ),
                 )

@@ -243,6 +243,30 @@ class RedditClient:
             logger.error(f"获取Top帖子失败: {e}")
             return []
 
+    async def get_new_posts(self, subreddit: str = None, limit: int = 10) -> List[RedditPost]:
+        """获取最新帖子
+
+        Args:
+            subreddit: subreddit名称，None表示全站
+            limit: 返回数量，默认10
+        """
+        try:
+            endpoint = f"/r/{subreddit}/new" if subreddit else "/new"
+            params = {'limit': str(limit)}
+
+            data = await self._api_request(endpoint, params)
+
+            posts = []
+            for child in data['data']['children']:
+                if child['kind'] == 't3':  # t3 = post
+                    posts.append(self._parse_post(child['data']))
+
+            return posts
+
+        except Exception as e:
+            logger.error(f"获取最新帖子失败: {e}")
+            return []
+
     def _parse_post(self, post_data: Dict[str, Any]) -> RedditPost:
         """解析帖子数据"""
         post = RedditPost(

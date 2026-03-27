@@ -302,6 +302,93 @@ async def _show_top_posts(context: ContextTypes.DEFAULT_TYPE, chat_id: int, subr
             await delete_user_command(context, chat_id, message.message_id)
 
 
+async def _show_new_posts(context: ContextTypes.DEFAULT_TYPE, chat_id: int, subreddit: str = None, message=None):
+    """显示最新帖子列表"""
+    status_msg = await context.bot.send_message(chat_id=chat_id, text="🔄 获取最新帖子...")
+
+    try:
+        posts = await _reddit_client.get_new_posts(subreddit=subreddit, limit=10)
+
+        if not posts:
+            await status_msg.delete()
+            await send_error(context, chat_id, "❌ 未找到帖子")
+            # 删除用户命令
+            if message:
+                await delete_user_command(context, chat_id, message.message_id)
+            return
+
+        # 构建消息
+        title = f"🆕 r/{subreddit} 最新帖子" if subreddit else "🆕 Reddit 全站最新"
+        lines = [f"**{title}**\n"]
+
+        for i, post in enumerate(posts, 1):
+            # 转义链接文本中的特殊字符
+            post_title = _escape_markdown_link_text(post.title[:80])
+            if len(post.title) > 80:
+                post_title += "\\.\\.\\."
+
+            lines.append(
+                f"{i}\\. [{post_title}]({post.permalink})\n"
+                f"   👤 u/{_escape_markdown(post.author)} \\| "
+                f"⬆️ {post.score} \\| 💬 {post.num_comments}"
+            )
+
+        message_text = "\n".join(lines)
+
+        # 创建 inline keyboard
+        keyboard = []
+        # 如果启用了 AI 总结，添加 AI 翻译按钮
+        if _ai_summarizer:
+            # 缓存帖子列表数据用于AI翻译
+            import hashlib
+            list_hash = hashlib.md5(f"new_{subreddit}_{len(posts)}".encode()).hexdigest()[:16]
+
+            # 保存帖子完整信息到缓存
+            if _cache_manager:
+                titles_data = [{
+                    "title": p.title,
+                    "permalink": p.permalink,
+                    "author": p.author,
+                    "score": p.score,
+                    "num_comments": p.num_comments
+                } for p in posts]
+                await _cache_manager.set(
+                    f"reddit_list:{list_hash}",
+                    titles_data,
+                    ttl=3600,  # 1小时
+                    subdirectory="reddit"
+                )
+
+            keyboard.append([
+                InlineKeyboardButton("🌐 AI翻译", callback_data=f"reddit_translate_{list_hash}")
+            ])
+
+        reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+
+        await status_msg.edit_text(
+            message_text,
+            parse_mode="MarkdownV2",
+            disable_web_page_preview=True,
+            reply_markup=reply_markup
+        )
+
+        # 删除用户命令
+        if message:
+            await delete_user_command(context, chat_id, message.message_id)
+
+        # 调度删除
+        config = get_config()
+        await _schedule_deletion(context, chat_id, status_msg.message_id, config.auto_delete_delay)
+
+    except Exception as e:
+        logger.error(f"获取最新帖子失败: {e}", exc_info=True)
+        await status_msg.delete()
+        await send_error(context, chat_id, f"❌ 获取失败: {str(e)}")
+        # 删除用户命令
+        if message:
+            await delete_user_command(context, chat_id, message.message_id)
+
+
 @with_error_handling
 async def reddit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
@@ -374,6 +461,14 @@ async def reddit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                         time_filter = third_arg
 
         await _show_top_posts(context, chat_id, subreddit, time_filter, update.message)
+        return
+
+    # 最新帖子
+    if first_arg == 'new':
+        subreddit = None
+        if len(context.args) > 1:
+            subreddit = context.args[1]
+        await _show_new_posts(context, chat_id, subreddit, update.message)
         return
 
     # 解析链接

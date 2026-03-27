@@ -84,7 +84,7 @@ Inline: `@bot netease 关键词$` - Inline搜索(有缓存直接发音频)
 🎮 *Steam* `/steam <游戏> [国家]` | `/steamb <包名>`
 📺 *流媒体* `/nf` `/ds` `/sp` `/max` - Netflix/Disney+/Spotify/HBO
 📱 *应用商店* `/app <名称>` - 详细内购项目 | `/gp <名称>` - 内购价格范围 | `/aps <服务>`
-🔴 *Reddit* `/reddit <链接>` - 解析帖子 | `/reddit hot [subreddit]` - 热门 | `/reddit top [subreddit] [时间]` - Top
+🔴 *Reddit* `/reddit <链接>` - 解析帖子 | `/reddit hot/top/new [subreddit] [时间]` - 列表
 👤 *用户* `/when <ID/@用户>` `/id` - 注册时间&ID信息
 ⏰ *时区* `/time <时区>` `/timezone` - 时间查询&时区列表
 📰 *新闻* `/news` `/newslist` `/hotnews` - 40+源实时资讯
