@@ -92,9 +92,31 @@ class InlineQueryHandler:
             return
 
         # ========================================
-        # 检查是否是 URL（社交媒体解析）
+        # 检查是否是 URL（社交媒体解析 或 Reddit）
         # ========================================
         if query.startswith('http://') or query.startswith('https://'):
+            # 检查是否是 Reddit URL
+            if 'reddit.com' in query:
+                # Reddit inline handler
+                from handlers.inline_reddit_handler import handle_inline_reddit_query
+                try:
+                    results = await handle_inline_reddit_query(update, context, query)
+                    logger.info(f"[Inline Reddit] 返回 {len(results)} 个结果, query={query[:50]}")
+                    await update.inline_query.answer(results, cache_time=10)
+                except Exception as e:
+                    logger.error(f"[Inline Reddit] answer_inline_query 失败: {e}", exc_info=True)
+                    await update.inline_query.answer([
+                        InlineQueryResultArticle(
+                            id=str(uuid4()),
+                            title="❌ Reddit 解析失败",
+                            description=str(e)[:100],
+                            input_message_content=InputTextMessageContent(
+                                message_text=f"**❌ Reddit 解析失败:**\n```\n{str(e)}\n```"
+                            ),
+                        )
+                    ])
+                return
+
             # 检查权限后，调用 parse handler
             user_manager = context.bot_data.get("user_cache_manager")
             if user_manager:
@@ -249,6 +271,14 @@ class InlineQueryHandler:
             await update.inline_query.answer(results, cache_time=60)
             return
 
+        # Reddit hot/top 列表单独处理：返回多条结果
+        if parts and parts[0].lower() in ("reddit", "reddit_hot", "reddit_top"):
+            # 格式: reddit hot [subreddit] 或 reddit top [subreddit] [time]
+            from handlers.inline_reddit_handler import handle_inline_reddit_list
+            results = await handle_inline_reddit_list(command_text, context)
+            await update.inline_query.answer(results, cache_time=60)
+            return
+
         # TV 搜索单独处理：返回多条结果
         if parts and parts[0].lower() in ("tv",):
             keyword = parts[1].strip() if len(parts) > 1 else ""
@@ -388,6 +418,13 @@ class InlineQueryHandler:
 • 支持抖音、B站、YouTube、TikTok、小红书、Twitter等20+平台
 • 视频/图片会直接显示在聊天中
 
+**🔴 Reddit:**
+• 直接输入Reddit链接(无需$) - 解析帖子（支持图片/视频/图集）
+• `reddit hot$` - 全站热门帖子
+• `reddit hot python$` - r/python热门帖子
+• `reddit top week$` - 全站本周Top
+• `reddit top python week$` - r/python本周Top
+
 **注意:**
 • 命令末尾必须加 `$` 符号才会执行
 • 社交媒体链接无需 `$` 符号
@@ -442,6 +479,7 @@ class InlineQueryHandler:
             "chart": "📊 排行榜 - 添加 $ 执行查询",
             "movie": "🎬 电影搜索 - 添加 $ 执行查询（支持中英文）",
             "tv": "📺 电视剧搜索 - 添加 $ 执行查询（支持中英文）",
+            "reddit": "🔴 Reddit - 添加 $ 执行查询（hot/top列表）",
         }
 
         hint = command_hints.get(command, f"💡 添加 '{self.trigger_suffix}' 执行命令")

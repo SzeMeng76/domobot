@@ -60,6 +60,23 @@ def _escape_markdown(text: str) -> str:
     return text
 
 
+def _escape_markdown_link_text(text: str) -> str:
+    """转义 MarkdownV2 链接文本中的特殊字符
+
+    在 [text](url) 中，text 部分只需要转义这些字符：
+    _ * [ ] ( ) ~ `
+
+    其他字符如 . - ! 不需要转义
+    """
+    if not text:
+        return text
+    # 只转义链接文本中必须转义的字符
+    special_chars = ['_', '*', '[', ']', '(', ')', '~', '`']
+    for char in special_chars:
+        text = text.replace(char, f'\\{char}')
+    return text
+
+
 def _format_timestamp(timestamp: float) -> str:
     """格式化时间戳"""
     dt = datetime.fromtimestamp(timestamp)
@@ -118,10 +135,10 @@ async def _show_hot_posts(context: ContextTypes.DEFAULT_TYPE, chat_id: int, subr
         lines = [f"**{title}**\n"]
 
         for i, post in enumerate(posts, 1):
-            # 转义特殊字符
-            post_title = _escape_markdown(post.title[:80])
+            # 转义链接文本中的特殊字符
+            post_title = _escape_markdown_link_text(post.title[:80])
             if len(post.title) > 80:
-                post_title += "\\.\\.\\."
+                post_title += "..."
 
             lines.append(
                 f"{i}\\. [{post_title}]({post.permalink})\n"
@@ -197,15 +214,15 @@ async def _show_top_posts(context: ContextTypes.DEFAULT_TYPE, chat_id: int, subr
         }
         time_text = time_map.get(time_filter, time_filter)
 
-        # 构建消息
-        title = f"🏆 r/{subreddit} Top ({time_text})" if subreddit else f"🏆 Reddit 全站 Top ({time_text})"
+        # 构建消息（转义括号）
+        title = f"🏆 r/{subreddit} Top \\({time_text}\\)" if subreddit else f"🏆 Reddit 全站 Top \\({time_text}\\)"
         lines = [f"**{title}**\n"]
 
         for i, post in enumerate(posts, 1):
-            # 转义特殊字符
-            post_title = _escape_markdown(post.title[:80])
+            # 转义链接文本中的特殊字符
+            post_title = _escape_markdown_link_text(post.title[:80])
             if len(post.title) > 80:
-                post_title += "\\.\\.\\."
+                post_title += "..."
 
             lines.append(
                 f"{i}\\. [{post_title}]({post.permalink})\n"
@@ -283,29 +300,53 @@ async def reddit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             "`/reddit hot python` \\- r/python 热门\n"
             "`/reddit top python week` \\- r/python 本周Top"
         )
-        await context.bot.send_message(
+        help_msg = await context.bot.send_message(
             chat_id=chat_id,
             text=help_text,
             parse_mode="MarkdownV2"
         )
         if update.message:
             await delete_user_command(context, chat_id, update.message.message_id)
+
+        # 调度删除帮助消息
+        config = get_config()
+        await _schedule_deletion(context, chat_id, help_msg.message_id, config.auto_delete_delay)
         return
 
     first_arg = context.args[0].lower()
 
     # 热门帖子
     if first_arg == 'hot':
-        subreddit = context.args[1] if len(context.args) > 1 else None
+        # 检查第二个参数是否是时间关键词（如果是，说明没有指定subreddit）
+        subreddit = None
+        if len(context.args) > 1:
+            second_arg = context.args[1].lower()
+            # 如果不是时间关键词，才当作subreddit
+            if second_arg not in ['hour', 'day', 'week', 'month', 'year', 'all']:
+                subreddit = context.args[1]
         await _show_hot_posts(context, chat_id, subreddit, update.message)
         return
 
     # Top帖子
     if first_arg == 'top':
-        subreddit = context.args[1] if len(context.args) > 1 else None
-        time_filter = context.args[2] if len(context.args) > 2 else 'day'
-        if time_filter not in ['hour', 'day', 'week', 'month', 'year', 'all']:
-            time_filter = 'day'
+        subreddit = None
+        time_filter = 'day'
+
+        # 解析参数：可能是 "top week" 或 "top python week"
+        if len(context.args) > 1:
+            second_arg = context.args[1].lower()
+            if second_arg in ['hour', 'day', 'week', 'month', 'year', 'all']:
+                # 第二个参数是时间，没有subreddit
+                time_filter = second_arg
+            else:
+                # 第二个参数是subreddit
+                subreddit = context.args[1]
+                # 检查第三个参数是否是时间
+                if len(context.args) > 2:
+                    third_arg = context.args[2].lower()
+                    if third_arg in ['hour', 'day', 'week', 'month', 'year', 'all']:
+                        time_filter = third_arg
+
         await _show_top_posts(context, chat_id, subreddit, time_filter, update.message)
         return
 
@@ -668,8 +709,26 @@ async def reddit_translate_callback(update: Update, context: ContextTypes.DEFAUL
 - 保留技术术语的英文（如Python, API等）
 - 每行一个标题"""
 
-        # 调用AI翻译
-        translated = await _ai_summarizer.summarize(prompt)
+        # 调用AI翻译（直接调用OpenAI API）
+        from openai import AsyncOpenAI
+        client = AsyncOpenAI(
+            api_key=_ai_summarizer.api_key,
+            base_url=_ai_summarizer.base_url
+        )
+
+        response = await client.chat.completions.create(
+            model=_ai_summarizer.model,
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.3
+        )
+
+        translated = response.choices[0].message.content
+
+        if not translated:
+            await query.answer("❌ AI翻译失败", show_alert=True)
+            return
 
         # 构建翻译后的消息
         lines = ["**🌐 AI翻译结果**\n"]
@@ -743,9 +802,9 @@ async def reddit_untranslate_callback(update: Update, context: ContextTypes.DEFA
         # 重新构建原文消息
         lines = []
         for i, item in enumerate(titles_data, 1):
-            post_title = _escape_markdown(item['title'][:80])
+            post_title = _escape_markdown_link_text(item['title'][:80])
             if len(item['title']) > 80:
-                post_title += "\\.\\.\\."
+                post_title += "..."
             lines.append(f"{i}\\. [{post_title}]({item['permalink']})")
 
         message_text = "\n".join(lines)

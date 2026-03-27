@@ -52,6 +52,7 @@
 -   📊 **公开股票金融:** 所有用户可用 - 由Yahoo Finance API提供的全面金融市场数据，支持**实时股票价格**查询和技术指标。功能包括**15类排行榜**（日涨跌幅、最活跃、成长科技股、低估值股票、共同基金等6类）、**智能股票搜索**支持股票代码和公司名称跨多个市场（美国、香港、中国、马来西亚）、**分析师评级**（买入/卖出/持有评级）、**财务报表**（损益表、资产负债表、现金流量表）、分类按钮界面、智能缓存（不同数据类型采用不同TTL）和全面的错误处理及自动删除。支持灵活搜索查询如"AAPL"、"Apple"、"Tesla"、"6033.KL"、"Maybank"等多语言匹配。
 -   🛢️ **公开燃油价格:** 所有用户可用 - 全球163国和中国31省燃油价格查询。功能包括**汽油和柴油价格**自动CNY转换、**全球排行榜**显示最便宜和最贵Top 10国家（含国旗和中文名称）、**中国省份排行榜**支持92/95/98汽油和柴油详细价格对比、**多国查询**支持格式如`/fuel my sg th`、**本地货币显示**同时显示USD和CNY价格、**实际价格日期**来自源网站、**Inline模式支持**包含完整详情（排行榜和对比）、数据来源GlobalPetrolPrices.com（每周/每月更新）、智能缓存24小时TTL匹配爬虫计划。
 -   📱 **公开社交媒体解析 (仅查看支持平台):** 所有用户可用 - 使用 `/platforms` 查看支持的20+平台列表。
+-   🔴 **Reddit帖子解析:** 需要白名单 - 完整的Reddit帖子解析和列表查询功能。具备**OAuth 2.0认证**（客户端凭证流）、**单帖解析**（支持图片、视频、图集上传）、**热门帖子列表**（`/reddit hot [subreddit]`）、**Top帖子列表**（`/reddit top [subreddit] [时间]`，支持hour/day/week/month/year/all）、**AI中文翻译**（OpenAI API驱动的内容总结和列表翻译）、**大文件视频上传**（Pyrogram优先，支持最大2GB）、**Inline模式**（直接输入Reddit链接或使用`reddit hot/top`命令）、**交互式按钮**（原帖链接、AI总结/翻译）、**Redis缓存**（24小时TTL）、**每周自动清理**和**MarkdownV2格式化**。命令：`/reddit <链接>`、`/reddit hot [subreddit]`、`/reddit top [subreddit] [时间]`。*(需要白名单)*
 -   🎵 **网易云音乐:** 需要白名单 - 完整的网易云音乐功能。功能包括**歌曲搜索**（`/netease <关键词>`）带交互式编号结果、**直接下载**（支持歌曲ID和music.163.com链接）、**歌词获取**（`/lyric`，LRC格式）、**自动链接识别**（music.163.com/163cn.tv/163cn.link链接自动下载）、**Inline模式**（后台下载+`edit_inline_media`无缝发送音频）、**Redis缓存**（7天TTL，缓存命中直接发送音频）、**FLAC/MP3音质显示**（含码率和文件大小）、**ID3/Vorbis元数据嵌入**（使用mutagen-rs，Rust驱动）、**大文件上传**（>50MB通过Kurigram MTProto）、**EAPI加密**和**并发下载限制**（信号量=4）。命令：`/netease`、`/lyric`。*(需要白名单)*
 -   🎵 **YouTube Music:** 需要白名单 - 完整的YouTube Music功能。功能包括**歌曲搜索**（`/yt <关键词>`）带交互式编号结果、**直接下载**（支持videoId和YouTube/YouTube Music链接）、**歌词获取**（`/ytlyric`）、**多地区榜单**（全球/美国/日本/韩国/英国/香港/台湾）通过`/yt chart`查看、**自动链接识别**（youtube.com/youtu.be/music.youtube.com链接自动下载）、**Inline模式**（后台下载+`edit_inline_media`无缝发送音频）、**Redis缓存**（缓存命中直接发送音频）、**yt-dlp主下载**（pytubefix自动备用）、**大文件上传**（>50MB通过Kurigram MTProto）和**并发下载限制**（信号量=4）。命令：`/yt`、`/ytmusic`、`/ytlyric`。*(需要白名单)*
 -   🗺️ **地图服务:** 智能位置搜索和导航系统，支持**自动语言检测** - 中文用户使用高德地图API，英文用户使用Google Maps API。功能包括**全面位置搜索**（详细地点信息、评分和类型）、**附近服务推荐**（餐厅、医院、银行、加油站、超市、学校、酒店）、**路线规划**（逐步导航指示和预计时间）、**地理编码**（地址转坐标）、**逆地理编码**（坐标转地址）、**交互式按钮界面**（单一`/map`命令）、**会话管理**（多步骤操作）、**Redis缓存**（不同数据类型采用适当TTL）和**自动删除**所有消息。支持文本输入、位置分享和坐标查询，配备全面的错误处理。*(需要白名单)*
@@ -127,6 +128,8 @@ docker-compose down
 | `LOG_LEVEL`                 | 设置日志级别 (`DEBUG`, `INFO`, `WARNING`, `ERROR`)。                        | `INFO`                  |
 | `LOAD_CUSTOM_SCRIPTS`       | 设为 `true` 以启用从 `custom_scripts/` 目录加载脚本的功能。                 | `false`                 |
 | `OPENAI_API_KEY`            | **（可选）** OpenAI的API Key，用于AI反垃圾检测功能。设置后功能自动启用。需要在 `/admin` 面板中为特定群组手动开启检测。 |                         |
+| `REDDIT_CLIENT_ID`          | **（可选）** Reddit的Client ID，用于启用 `/reddit` 命令。从Reddit App创建页面获取。 |                         |
+| `REDDIT_CLIENT_SECRET`      | **（可选）** Reddit的Client Secret，用于启用 `/reddit` 命令。从Reddit App创建页面获取。 |                         |
 
 配置由 `utils/config_manager.py` 中的 `BotConfig` 类管理，该类支持设置缓存时长、自动删除开关、功能开关和性能参数。
 
@@ -187,6 +190,16 @@ docker-compose down
 
 # 表情包娱乐
 /meme 3                  # 获取3个随机表情包
+
+# Reddit 帖子解析
+/reddit https://reddit.com/r/python/comments/xxx/  # 解析单个帖子（支持图片、视频、图集）
+/reddit hot                                        # 全站热门帖子
+/reddit hot python                                 # r/python 热门帖子
+/reddit top                                        # 全站今日Top
+/reddit top week                                   # 全站本周Top
+/reddit top python week                            # r/python 本周Top
+# 支持时间范围: hour, day, week, month, year, all
+# 支持AI总结（中文翻译）和列表AI翻译功能
 /meme 5                  # 获取5个随机表情包（1-20范围）
 /meme                    # 显示帮助和使用指南
 
