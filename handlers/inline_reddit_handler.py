@@ -138,11 +138,18 @@ async def handle_inline_reddit_query(
         if post.gallery_items and len(post.gallery_items) > 1:
             results = []
             for index, img_url in enumerate(post.gallery_items[:10], 1):  # 最多10张
+                # 验证缩略图有效性
+                valid_thumb = img_url
+                if valid_thumb and valid_thumb.endswith('.webp'):
+                    valid_thumb = None
+                if valid_thumb and ('cdninstagram.com' in valid_thumb or 'fbcdn.net' in valid_thumb or 'xhscdn.com' in valid_thumb or 'redd.it' in valid_thumb):
+                    valid_thumb = None
+
                 results.append(
                     InlineQueryResultPhoto(
                         id=str(uuid4()),
                         photo_url=img_url,
-                        thumbnail_url=img_url,
+                        thumbnail_url=valid_thumb or "https://img.icons8.com/color/96/000000/image.png",
                         title=f"🖼️ 图片 {index}/{len(post.gallery_items)} - {post.title[:40]}",
                         description=f"r/{post.subreddit} | ⬆️ {post.score} | 💬 {post.num_comments}",
                         caption=caption,
@@ -163,11 +170,18 @@ async def handle_inline_reddit_query(
             }
             _cache_timestamps[result_id] = time.time()
 
+            # 验证缩略图有效性
+            valid_thumb = post.preview_image_url
+            if valid_thumb and valid_thumb.endswith('.webp'):
+                valid_thumb = None
+            if valid_thumb and ('cdninstagram.com' in valid_thumb or 'fbcdn.net' in valid_thumb or 'xhscdn.com' in valid_thumb or 'redd.it' in valid_thumb):
+                valid_thumb = None
+
             return [
                 InlineQueryResultPhoto(
                     id=result_id,
                     photo_url=post.preview_image_url,
-                    thumbnail_url=post.preview_image_url,
+                    thumbnail_url=valid_thumb or "https://img.icons8.com/color/96/000000/video.png",
                     title=f"🎬 {post.title[:60]}",
                     description=f"r/{post.subreddit} | ⬆️ {post.score} | 💬 {post.num_comments}",
                     caption=caption,
@@ -177,11 +191,18 @@ async def handle_inline_reddit_query(
             ]
         # 图片：返回图片（直接显示，不需要下载）
         elif post.preview_image_url:
+            # 验证缩略图有效性
+            valid_thumb = post.preview_image_url
+            if valid_thumb and valid_thumb.endswith('.webp'):
+                valid_thumb = None
+            if valid_thumb and ('cdninstagram.com' in valid_thumb or 'fbcdn.net' in valid_thumb or 'xhscdn.com' in valid_thumb or 'redd.it' in valid_thumb):
+                valid_thumb = None
+
             return [
                 InlineQueryResultPhoto(
                     id=str(uuid4()),
                     photo_url=post.preview_image_url,
-                    thumbnail_url=post.preview_image_url,
+                    thumbnail_url=valid_thumb or "https://img.icons8.com/color/96/000000/image.png",
                     title=f"📝 {post.title[:60]}",
                     description=f"r/{post.subreddit} | ⬆️ {post.score} | 💬 {post.num_comments}",
                     caption=caption,

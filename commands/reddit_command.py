@@ -158,9 +158,15 @@ async def _show_hot_posts(context: ContextTypes.DEFAULT_TYPE, chat_id: int, subr
             import hashlib
             list_hash = hashlib.md5(f"hot_{subreddit}_{len(posts)}".encode()).hexdigest()[:16]
 
-            # 保存帖子标题列表到缓存
+            # 保存帖子完整信息到缓存
             if _cache_manager:
-                titles_data = [{"title": p.title, "permalink": p.permalink} for p in posts]
+                titles_data = [{
+                    "title": p.title,
+                    "permalink": p.permalink,
+                    "author": p.author,
+                    "score": p.score,
+                    "num_comments": p.num_comments
+                } for p in posts]
                 await _cache_manager.set(
                     f"reddit_list:{list_hash}",
                     titles_data,
@@ -250,9 +256,15 @@ async def _show_top_posts(context: ContextTypes.DEFAULT_TYPE, chat_id: int, subr
             import hashlib
             list_hash = hashlib.md5(f"top_{subreddit}_{time_filter}_{len(posts)}".encode()).hexdigest()[:16]
 
-            # 保存帖子标题列表到缓存
+            # 保存帖子完整信息到缓存
             if _cache_manager:
-                titles_data = [{"title": p.title, "permalink": p.permalink} for p in posts]
+                titles_data = [{
+                    "title": p.title,
+                    "permalink": p.permalink,
+                    "author": p.author,
+                    "score": p.score,
+                    "num_comments": p.num_comments
+                } for p in posts]
                 await _cache_manager.set(
                     f"reddit_list:{list_hash}",
                     titles_data,
@@ -763,7 +775,9 @@ async def reddit_translate_callback(update: Update, context: ContextTypes.DEFAUL
                 trans_title = trans_title[len(f"{i}."):].strip()
 
             lines.append(
-                f"{i}\\. [{_escape_markdown(trans_title)}]({item['permalink']})"
+                f"{i}\\. [{_escape_markdown(trans_title)}]({item['permalink']})\n"
+                f"   👤 u/{_escape_markdown(item['author'])} \\| "
+                f"⬆️ {item['score']} \\| 💬 {item['num_comments']}"
             )
 
         message_text = "\n".join(lines)
@@ -827,7 +841,11 @@ async def reddit_untranslate_callback(update: Update, context: ContextTypes.DEFA
             post_title = _escape_markdown_link_text(item['title'][:80])
             if len(item['title']) > 80:
                 post_title += "\\.\\.\\."
-            lines.append(f"{i}\\. [{post_title}]({item['permalink']})")
+            lines.append(
+                f"{i}\\. [{post_title}]({item['permalink']})\n"
+                f"   👤 u/{_escape_markdown(item['author'])} \\| "
+                f"⬆️ {item['score']} \\| 💬 {item['num_comments']}"
+            )
 
         message_text = "\n".join(lines)
 

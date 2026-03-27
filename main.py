@@ -388,9 +388,11 @@ async def setup_application(application: Application, config) -> None:
 
         # 注入 Reddit 依赖
         from commands import reddit_command
+        from handlers import auto_parse_handler
         reddit_command.set_reddit_client(reddit_client)
         reddit_command.set_cache_manager(cache_manager)
         reddit_command.set_pyrogram_helper(pyrogram_helper)
+        auto_parse_handler.set_reddit_client(reddit_client)  # 设置到 auto parse handler
 
         # 如果启用了 AI 总结，设置 AI 总结器
         if config.enable_ai_summary and config.openai_api_key:
