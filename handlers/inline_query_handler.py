@@ -353,6 +353,12 @@ class InlineQueryHandler:
 • `max$` - HBO Max全球价格排名
 • `appleservices icloud$` - Apple服务价格
 
+**🛢️ 油价查询:**
+• `fuel$` - 全球汽油价格排名
+• `fuel my$` - 马来西亚油价
+• `fuel china$` - 中国油价排名
+• `fuel diesel$` - 全球柴油价格排名
+
 **🎬 影视查询:**
 • `movie Inception$` - 电影搜索（模糊搜索，返回10个结果）
 • `movie 盗梦空间$` - 中文电影搜索
@@ -424,6 +430,7 @@ class InlineQueryHandler:
             "appleservices": "🍎 Apple服务 - 添加 $ 执行查询",
             "appstore": "📱 App Store - 添加 $ 执行查询",
             "app": "📱 App Store - 添加 $ 执行查询",
+            "fuel": "🛢️ 油价查询 - 添加 $ 执行查询",
             "weather": "🌤️ 天气查询(AI日报) - 添加 $ 后等待✔出现再点击",
             "tq": "🌤️ 天气查询(AI日报) - 添加 $ 后等待✔出现再点击",
             "time": "🕐 时区查询 - 添加 $ 执行查询",
@@ -475,6 +482,7 @@ class InlineQueryHandler:
             "max": {"icon": "📺", "title": "HBO Max", "desc": "订阅价格"},
             "appleservices": {"icon": "🍎", "title": "Apple服务", "desc": "订阅价格"},
             "appstore": {"icon": "📱", "title": "App Store", "desc": "应用价格"},
+            "fuel": {"icon": "🛢️", "title": "油价查询", "desc": "全球油价"},
             "weather": {"icon": "🌤️", "title": "天气查询", "desc": "天气预报和预警"},
             "time": {"icon": "🕐", "title": "时区查询", "desc": "世界时间"},
             "news": {"icon": "📰", "title": "新闻", "desc": "最新资讯"},

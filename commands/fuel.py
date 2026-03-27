@@ -446,7 +446,9 @@ def format_global_country(country_data: dict, all_data: dict = None, country_cod
         price_date = diesel.get('price_date')
 
     if price_date:
-        text += f"{price_date}\n"
+        # Escape hyphens in date
+        price_date_escaped = price_date.replace('-', '\\-')
+        text += f"{price_date_escaped}\n"
     else:
         text += "未知\n"
 
