@@ -691,41 +691,31 @@ async def handle_warp_query(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 except Exception:
                     pass  # ipapi.is 失败不影响主要功能
 
-        # 构建结果
-        result_text = "🌐 *WARP 出口 IP 信息*\n\n"
-        result_text += f"📍 *IP 地址*: `{data.get('query', 'N/A')}`\n"
-        result_text += f"🏙️ *城市*: {data.get('city', 'N/A')}\n"
-        result_text += f"🌍 *国家*: {data.get('country', 'N/A')} ({data.get('countryCode', 'N/A')})\n"
-        result_text += f"📌 *地区*: {data.get('regionName', 'N/A')}\n"
-        result_text += f"🏢 *ISP*: {data.get('isp', 'N/A')}\n"
-        result_text += f"🏢 *组织*: {data.get('org', 'N/A')}\n"
-
-        # AS 字段可能包含特殊字符，需要转义
-        as_info = data.get('as', 'N/A')
-        # Markdown 中需要转义的字符: _ * [ ] ( ) ~ ` > # + - = | { } . !
-        as_escaped = as_info.replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace(']', '\\]')
-        result_text += f"🔢 *AS*: {as_escaped}\n"
+        # 构建结果 (使用 HTML 格式，避免 Markdown 转义问题)
+        from html import escape as html_escape
+        result_text = "🌐 <b>WARP 出口 IP 信息</b>\n\n"
+        result_text += f"📍 <b>IP 地址</b>: <code>{html_escape(data.get('query', 'N/A'))}</code>\n"
+        result_text += f"🏙️ <b>城市</b>: {html_escape(data.get('city', 'N/A'))}\n"
+        result_text += f"🌍 <b>国家</b>: {html_escape(data.get('country', 'N/A'))} ({html_escape(data.get('countryCode', 'N/A'))})\n"
+        result_text += f"📌 <b>地区</b>: {html_escape(data.get('regionName', 'N/A'))}\n"
+        result_text += f"🏢 <b>ISP</b>: {html_escape(data.get('isp', 'N/A'))}\n"
+        result_text += f"🏢 <b>组织</b>: {html_escape(data.get('org', 'N/A'))}\n"
+        result_text += f"🔢 <b>AS</b>: {html_escape(data.get('as', 'N/A'))}\n"
 
         if data.get('lat') and data.get('lon'):
-            result_text += f"🗺️ *坐标*: {data.get('lat')}, {data.get('lon')}\n"
+            result_text += f"🗺️ <b>坐标</b>: {data.get('lat')}, {data.get('lon')}\n"
 
         if data.get('timezone'):
-            result_text += f"🕐 *时区*: {data.get('timezone')}\n"
+            result_text += f"🕐 <b>时区</b>: {html_escape(data.get('timezone', 'N/A'))}\n"
 
         # 添加 ipapi.is 的详细信息
         if ipapi_data:
             company = ipapi_data.get('company', {})
             asn = ipapi_data.get('asn', {})
 
-            result_text += f"\n*详细信息*:\n"
-
-            company_name = company.get('name', 'N/A')
-            company_escaped = company_name.replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace(']', '\\]')
-            result_text += f"🏢 *公司*: {company_escaped}\n"
-
-            asn_org = asn.get('org', 'N/A')
-            asn_org_escaped = asn_org.replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace(']', '\\]')
-            result_text += f"🔢 *ASN*: AS{asn.get('asn', 'N/A')} ({asn_org_escaped})\n"
+            result_text += f"\n<b>详细信息</b>:\n"
+            result_text += f"🏢 <b>公司</b>: {html_escape(company.get('name', 'N/A'))}\n"
+            result_text += f"🔢 <b>ASN</b>: AS{asn.get('asn', 'N/A')} ({html_escape(asn.get('org', 'N/A'))})\n"
 
             # IP 类型
             ip_type = []
@@ -741,13 +731,13 @@ async def handle_warp_query(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 ip_type.append("移动网络")
 
             if ip_type:
-                result_text += f"🏷️ *类型*: {', '.join(ip_type)}\n"
+                result_text += f"🏷️ <b>类型</b>: {', '.join(ip_type)}\n"
             else:
-                result_text += f"🏷️ *类型*: 住宅/普通 IP\n"
+                result_text += f"🏷️ <b>类型</b>: 住宅/普通 IP\n"
 
-        result_text += f"\n💡 *提示*: 这是你的程序通过 WARP 访问外部网站时使用的 IP"
+        result_text += f"\n💡 <b>提示</b>: 这是你的程序通过 WARP 访问外部网站时使用的 IP"
 
-        await status_msg.edit_text(result_text, parse_mode="Markdown")
+        await status_msg.edit_text(result_text, parse_mode="HTML")
         await _schedule_deletion(context, chat_id, status_msg.message_id, config.auto_delete_delay)
         logger.info(f"✅ WARP IP 查询完成: {warp_data.get('ip')}")
 
