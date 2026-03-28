@@ -103,6 +103,7 @@ from commands import (
     netflix,
     ytmusic,
     news,
+    ping_command,
     spotify,
     steam,
     system_commands,
