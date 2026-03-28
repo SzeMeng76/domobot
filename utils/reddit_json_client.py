@@ -23,9 +23,8 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-# 可用的浏览器指纹列表（优先使用最新版本）
+# 可用的浏览器指纹列表（兼容 curl-cffi 0.13.x，优先使用最新版本）
 BROWSER_POOL = [
-    'chrome142',
     'chrome136',
     'chrome133a',
     'chrome131',
@@ -33,10 +32,9 @@ BROWSER_POOL = [
     'chrome123',
     'chrome120',
     'safari260',
-    'safari2601',
     'safari184',
-    'firefox144',
     'firefox135',
+    'firefox133',
     'edge101',
 ]
 
