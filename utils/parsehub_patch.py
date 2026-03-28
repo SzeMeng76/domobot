@@ -641,47 +641,51 @@ def patch_parsehub_yt_dlp():
 
                 # Fallback: app/get_note_info (handles both video and image, returns international CDN URLs)
                 logger.info(f"🔄 [TikHub] Trying fallback endpoint: app/get_note_info")
-                api_url = f"https://api.tikhub.io/api/v1/xiaohongshu/app/get_note_info?note_id={note_id}"
-                async with httpx.AsyncClient(timeout=30.0, proxy=self.proxy) as client:
-                    response = await client.get(api_url, headers=headers)
+                try:
+                    api_url = f"https://api.tikhub.io/api/v1/xiaohongshu/app/get_note_info?note_id={note_id}"
+                    async with httpx.AsyncClient(timeout=30.0, proxy=self.proxy) as client:
+                        response = await client.get(api_url, headers=headers)
 
-                if response.status_code == 200:
-                    data = response.json()
-                    if data.get("code") == 200 and data.get("data", {}).get("data"):
-                        note_data = data["data"]["data"][0]
-                        note_list = note_data.get("note_list", [])
-                        note_item = note_list[0] if note_list else note_data
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data.get("code") == 200 and data.get("data", {}).get("data"):
+                            note_data = data["data"]["data"][0]
+                            note_list = note_data.get("note_list", [])
+                            note_item = note_list[0] if note_list else note_data
 
-                        title = note_item.get("title", "")
-                        desc = note_item.get("desc", "")
-                        k_th = {"title": title, "content": desc}
-                        note_type = note_item.get("type", "")
+                            title = note_item.get("title", "")
+                            desc = note_item.get("desc", "")
+                            k_th = {"title": title, "content": desc}
+                            note_type = note_item.get("type", "")
 
-                        if note_type == "video":
-                            video = note_item.get("video", {})
-                            consumer = video.get("consumer", {})
-                            origin_video_key = consumer.get("origin_video_key", "")
-                            if origin_video_key:
-                                video_url = f"https://sns-na-i6.xhscdn.com/{origin_video_key}"
-                                logger.info(f"✅ [TikHub] Got XHS video via app/get_note_info")
-                                return VideoParseResult(video=VideoRef(url=video_url), **k_th)
+                            if note_type == "video":
+                                video = note_item.get("video", {})
+                                consumer = video.get("consumer", {})
+                                origin_video_key = consumer.get("origin_video_key", "")
+                                if origin_video_key:
+                                    video_url = f"https://sns-na-i6.xhscdn.com/{origin_video_key}"
+                                    logger.info(f"✅ [TikHub] Got XHS video via app/get_note_info")
+                                    return VideoParseResult(video=VideoRef(url=video_url), **k_th)
 
-                        images_list = note_item.get("images_list", [])
-                        if images_list:
-                            photos = []
-                            for img in images_list:
-                                img_url = img.get("url", "")
-                                if not img_url:
-                                    # Try url_multi_level.high
-                                    img_url = img.get("url_multi_level", {}).get("high", "")
-                                if img_url:
-                                    img_url = re.sub(r'format/(heif|heic|webp|avif)', 'format/jpg', img_url)
-                                    width = img.get("width", 0)
-                                    height = img.get("height", 0)
-                                    photos.append(ImageRef(url=img_url, ext="jpg", width=width, height=height))
-                            if photos:
-                                logger.info(f"✅ [TikHub] Got XHS {len(photos)} images via app/get_note_info")
-                                return ImageParseResult(photo=photos, **k_th)
+                            images_list = note_item.get("images_list", [])
+                            if images_list:
+                                photos = []
+                                for img in images_list:
+                                    img_url = img.get("url", "")
+                                    if not img_url:
+                                        # Try url_multi_level.high
+                                        img_url = img.get("url_multi_level", {}).get("high", "")
+                                    if img_url:
+                                        img_url = re.sub(r'format/(heif|heic|webp|avif)', 'format/jpg', img_url)
+                                        width = img.get("width", 0)
+                                        height = img.get("height", 0)
+                                        photos.append(ImageRef(url=img_url, ext="jpg", width=width, height=height))
+                                if photos:
+                                    logger.info(f"✅ [TikHub] Got XHS {len(photos)} images via app/get_note_info")
+                                    return ImageParseResult(photo=photos, **k_th)
+                except Exception as app_error:
+                    logger.warning(f"⚠️ [TikHub] app/get_note_info failed: {app_error}")
+
 
                 # Fallback 2: web/get_note_info_v7
                 logger.info(f"🔄 [TikHub] Trying fallback endpoint: web/get_note_info_v7")
