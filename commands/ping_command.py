@@ -3,6 +3,7 @@ IP 风控检测命令
 通过 FlareSolverr 访问 ping0.cc 查询 IP 风控指数
 """
 
+import asyncio
 import logging
 import re
 from telegram import Update
@@ -71,7 +72,8 @@ async def ping_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         logger.info(f"查询 IP 风控: {ip_address}")
 
         # FlareSolverr 的 get 方法是同步的，需要在 executor 中运行
-        result = await context.bot.loop.run_in_executor(
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
             None,
             lambda: client.get(url, max_timeout=90000, disableMedia=True)
         )
