@@ -70,13 +70,17 @@ async def ping_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         url = f"https://ping0.cc/ip/{ip_address}"
         logger.info(f"查询 IP 风控: {ip_address}")
 
-        result = await client.solve(url, max_timeout=90000)
+        # FlareSolverr 的 get 方法是同步的，需要在 executor 中运行
+        result = await context.bot.loop.run_in_executor(
+            None,
+            lambda: client.get(url, max_timeout=90000, disableMedia=True)
+        )
 
-        if not result or not result.get('solution'):
+        if not result or not result.get('html'):
             await status_msg.edit_text("❌ 查询失败：无法获取响应")
             return
 
-        html = result['solution'].get('response', '')
+        html = result.get('html', '')
         if not html:
             await status_msg.edit_text("❌ 查询失败：响应为空")
             return
