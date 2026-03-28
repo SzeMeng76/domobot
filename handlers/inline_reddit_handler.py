@@ -421,9 +421,15 @@ async def handle_inline_reddit_list(
                 "score": p.score,
                 "num_comments": p.num_comments
             } for p in posts]
+            cache_data = {
+                "list_type": list_type,
+                "subreddit": subreddit,
+                "time_filter": time_filter if list_type == "top" else None,
+                "posts": titles_data
+            }
             await cache_manager.set(
                 f"reddit_list:{list_hash}",
-                titles_data,
+                cache_data,
                 ttl=3600,  # 1小时
                 subdirectory="reddit"
             )

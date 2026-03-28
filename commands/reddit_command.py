@@ -167,9 +167,14 @@ async def _show_hot_posts(context: ContextTypes.DEFAULT_TYPE, chat_id: int, subr
                     "score": p.score,
                     "num_comments": p.num_comments
                 } for p in posts]
+                cache_data = {
+                    "list_type": "hot",
+                    "subreddit": subreddit,
+                    "posts": titles_data
+                }
                 await _cache_manager.set(
                     f"reddit_list:{list_hash}",
-                    titles_data,
+                    cache_data,
                     ttl=3600,  # 1小时
                     subdirectory="reddit"
                 )
@@ -265,9 +270,15 @@ async def _show_top_posts(context: ContextTypes.DEFAULT_TYPE, chat_id: int, subr
                     "score": p.score,
                     "num_comments": p.num_comments
                 } for p in posts]
+                cache_data = {
+                    "list_type": "top",
+                    "subreddit": subreddit,
+                    "time_filter": time_filter,
+                    "posts": titles_data
+                }
                 await _cache_manager.set(
                     f"reddit_list:{list_hash}",
-                    titles_data,
+                    cache_data,
                     ttl=3600,  # 1小时
                     subdirectory="reddit"
                 )
@@ -352,9 +363,14 @@ async def _show_new_posts(context: ContextTypes.DEFAULT_TYPE, chat_id: int, subr
                     "score": p.score,
                     "num_comments": p.num_comments
                 } for p in posts]
+                cache_data = {
+                    "list_type": "new",
+                    "subreddit": subreddit,
+                    "posts": titles_data
+                }
                 await _cache_manager.set(
                     f"reddit_list:{list_hash}",
-                    titles_data,
+                    cache_data,
                     ttl=3600,  # 1小时
                     subdirectory="reddit"
                 )
@@ -827,14 +843,36 @@ async def reddit_translate_callback(update: Update, context: ContextTypes.DEFAUL
             return
 
         # 从缓存读取列表数据
-        titles_data = await _cache_manager.get(
+        cache_data = await _cache_manager.get(
             f"reddit_list:{list_hash}",
             subdirectory="reddit"
         )
 
-        if not titles_data:
+        if not cache_data:
             await query.answer("❌ 缓存已失效，请重新获取列表", show_alert=True)
             return
+
+        # 提取数据
+        list_type = cache_data.get("list_type", "")
+        subreddit = cache_data.get("subreddit")
+        time_filter = cache_data.get("time_filter", "day")
+        titles_data = cache_data.get("posts", [])
+
+        if not titles_data:
+            await query.answer("❌ 缓存数据无效", show_alert=True)
+            return
+
+        # 构建原始标题
+        if list_type == "hot":
+            original_title = f"🔥 r/{subreddit} 热门" if subreddit else "🔥 Reddit 全站热门"
+        elif list_type == "top":
+            time_map = {'hour': '本小时', 'day': '今日', 'week': '本周', 'month': '本月', 'year': '今年', 'all': '全部时间'}
+            time_text = time_map.get(time_filter, time_filter)
+            original_title = f"🏆 r/{subreddit} Top ({time_text})" if subreddit else f"🏆 Reddit 全站 Top ({time_text})"
+        elif list_type == "new":
+            original_title = f"🆕 r/{subreddit} 最新" if subreddit else "🆕 Reddit 全站最新"
+        else:
+            original_title = "Reddit 列表"
 
         # 构建翻译prompt
         titles_text = "\n".join([f"{i+1}. {item['title']}" for i, item in enumerate(titles_data)])
@@ -870,7 +908,7 @@ async def reddit_translate_callback(update: Update, context: ContextTypes.DEFAUL
             return
 
         # 构建翻译后的消息
-        lines = ["**🌐 AI翻译结果**\n"]
+        lines = [f"**{_escape_markdown(original_title)} \\- 🌐 AI翻译**\n"]
         translated_lines = translated.strip().split('\n')
 
         for i, (item, trans_line) in enumerate(zip(titles_data, translated_lines), 1):
@@ -951,17 +989,39 @@ async def reddit_untranslate_callback(update: Update, context: ContextTypes.DEFA
             await query.answer("❌ 功能未启用", show_alert=True)
             return
 
-        titles_data = await _cache_manager.get(
+        cache_data = await _cache_manager.get(
             f"reddit_list:{list_hash}",
             subdirectory="reddit"
         )
 
-        if not titles_data:
+        if not cache_data:
             await query.answer("❌ 缓存已失效", show_alert=True)
             return
 
+        # 提取数据
+        list_type = cache_data.get("list_type", "")
+        subreddit = cache_data.get("subreddit")
+        time_filter = cache_data.get("time_filter", "day")
+        titles_data = cache_data.get("posts", [])
+
+        if not titles_data:
+            await query.answer("❌ 缓存数据无效", show_alert=True)
+            return
+
+        # 构建原始标题
+        if list_type == "hot":
+            original_title = f"🔥 r/{subreddit} 热门" if subreddit else "🔥 Reddit 全站热门"
+        elif list_type == "top":
+            time_map = {'hour': '本小时', 'day': '今日', 'week': '本周', 'month': '本月', 'year': '今年', 'all': '全部时间'}
+            time_text = time_map.get(time_filter, time_filter)
+            original_title = f"🏆 r/{subreddit} Top ({time_text})" if subreddit else f"🏆 Reddit 全站 Top ({time_text})"
+        elif list_type == "new":
+            original_title = f"🆕 r/{subreddit} 最新" if subreddit else "🆕 Reddit 全站最新"
+        else:
+            original_title = "Reddit 列表"
+
         # 重新构建原文消息
-        lines = []
+        lines = [f"**{_escape_markdown(original_title)}**\n"]
         for i, item in enumerate(titles_data, 1):
             post_title = _escape_markdown_link_text(item['title'][:80])
             if len(item['title']) > 80:
