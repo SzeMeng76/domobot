@@ -54,12 +54,36 @@ class RedditComment:
 class RedditClient:
     """Reddit API 客户端"""
 
-    def __init__(self, client_id: str, client_secret: str, user_agent: str = "domobot:v1.0.0"):
+    def __init__(self, client_id: str, client_secret: str, user_agent: str = "domobot:v1.0.0", proxy: Optional[str] = None):
         self.client_id = client_id
         self.client_secret = client_secret
         self.user_agent = user_agent
+        self.proxy = proxy  # SOCKS5 代理，如 "socks5://warp:40000"
         self.access_token: Optional[str] = None
         self.token_expiry: float = 0
+
+        # 设置代理
+        if self.proxy:
+            import socks
+            import socket
+            # 解析代理 URL
+            if self.proxy.startswith("socks5://"):
+                proxy_host_port = self.proxy.replace("socks5://", "")
+                if ":" in proxy_host_port:
+                    proxy_host, proxy_port = proxy_host_port.split(":")
+                    proxy_port = int(proxy_port)
+                else:
+                    proxy_host = proxy_host_port
+                    proxy_port = 1080
+
+                # 设置全局 SOCKS5 代理
+                socks.set_default_proxy(socks.SOCKS5, proxy_host, proxy_port)
+                socket.socket = socks.socksocket
+                logger.info(f"Reddit OAuth 客户端使用 SOCKS5 代理: {proxy_host}:{proxy_port}")
+            else:
+                logger.warning(f"不支持的代理类型: {self.proxy}")
+        else:
+            logger.info("Reddit OAuth 客户端不使用代理")
 
     async def _get_access_token(self) -> str:
         """获取或刷新访问令牌"""

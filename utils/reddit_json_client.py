@@ -53,9 +53,33 @@ class RedditComment:
 class RedditJsonClient:
     """Reddit JSON API 客户端（无需 OAuth）"""
 
-    def __init__(self, user_agent: str = "linux:domo_app:v1.0.0 (by /u/SzeMeng76)"):
+    def __init__(self, user_agent: str = "linux:domo_app:v1.0.0 (by /u/SzeMeng76)", proxy: Optional[str] = None):
         self.user_agent = user_agent
         self.base_url = "https://www.reddit.com"
+        self.proxy = proxy  # SOCKS5 代理，如 "socks5://warp:40000"
+
+        # 设置代理
+        if self.proxy:
+            import socks
+            import socket
+            # 解析代理 URL
+            if self.proxy.startswith("socks5://"):
+                proxy_host_port = self.proxy.replace("socks5://", "")
+                if ":" in proxy_host_port:
+                    proxy_host, proxy_port = proxy_host_port.split(":")
+                    proxy_port = int(proxy_port)
+                else:
+                    proxy_host = proxy_host_port
+                    proxy_port = 1080
+
+                # 设置全局 SOCKS5 代理
+                socks.set_default_proxy(socks.SOCKS5, proxy_host, proxy_port)
+                socket.socket = socks.socksocket
+                logger.info(f"Reddit 客户端使用 SOCKS5 代理: {proxy_host}:{proxy_port}")
+            else:
+                logger.warning(f"不支持的代理类型: {self.proxy}")
+        else:
+            logger.info("Reddit 客户端不使用代理")
 
     def _make_request(self, url: str) -> Dict[str, Any]:
         """发送 HTTP 请求"""

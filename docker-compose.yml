@@ -27,7 +27,45 @@ services:
       - redis_data:/data
     networks:
       - appbot-network
-  
+
+  # WARP 代理服务 - 用于改变出口 IP 绕过封禁
+  warp:
+    image: caomingjun/warp:latest
+    container_name: appbot-warp
+    restart: always
+    privileged: true
+    device_cgroup_rules:
+      - 'c 10:200 rwm'
+    cap_add:
+      - MKNOD
+      - AUDIT_WRITE
+      - NET_ADMIN
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=0
+      - net.ipv4.conf.all.src_valid_mark=1
+    environment:
+      - WARP_SLEEP=2
+      # - WARP_LICENSE_KEY= # 可选：WARP+ 许可证
+    volumes:
+      - warp_data:/var/lib/cloudflare-warp
+    networks:
+      - appbot-network
+    ports:
+      - "1080:1080"  # SOCKS5 代理端口（默认 1080）
+
+  # FlareSolverr 服务 - 用于绕过 Cloudflare 验证
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: appbot-flaresolverr
+    restart: always
+    environment:
+      - LOG_LEVEL=info
+      - TZ=Asia/Shanghai
+    networks:
+      - appbot-network
+    ports:
+      - "8191:8191"
+
   # 服务名称，可以自定义，这里我们叫它 appbot。
   appbot:
     image: szemeng76/domobot:latest #szemeng76/domobot:main latest:稳定版 main:最新功能版
@@ -80,4 +118,5 @@ networks:
 volumes:
   mysql_data:
   redis_data:
+  warp_data:  # WARP 数据持久化
 
