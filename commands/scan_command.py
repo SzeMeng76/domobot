@@ -316,6 +316,9 @@ async def ping_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         target = context.args[1]
         await handle_mtr_test(update, context, target)
         return
+    elif first_arg == "warp":
+        await handle_warp_query(update, context)
+        return
 
     input_value = context.args[0]
 
@@ -644,6 +647,103 @@ async def handle_mtr_test(update: Update, context: ContextTypes.DEFAULT_TYPE, ta
     except Exception as e:
         logger.error(f"MTR 追踪失败: {e}", exc_info=True)
         await status_msg.edit_text(f"❌ 追踪失败: {str(e)}")
+        await _schedule_deletion(context, chat_id, status_msg.message_id, config.auto_delete_delay)
+
+    if update.message:
+        await delete_user_command(context, chat_id, update.message.message_id)
+
+
+async def handle_warp_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """查询 WARP 出口 IP 信息"""
+    config = get_config()
+    chat_id = update.effective_chat.id
+
+    status_msg = await context.bot.send_message(
+        chat_id=chat_id,
+        text="🔍 正在查询 WARP 出口 IP...\n⏳ 请稍候...",
+        parse_mode="Markdown"
+    )
+
+    try:
+        if not httpx_client:
+            await status_msg.edit_text("❌ HTTP 客户端未初始化")
+            await _schedule_deletion(context, chat_id, status_msg.message_id, config.auto_delete_delay)
+            return
+
+        # 通过 WARP 代理查询 IP 信息
+        proxies = {
+            "http://": "socks5://warp:1080",
+            "https://": "socks5://warp:1080"
+        }
+
+        # 查询 ipinfo.io
+        response = await httpx_client.get(
+            "https://ipinfo.io/json",
+            proxies=proxies,
+            timeout=15.0
+        )
+        response.raise_for_status()
+        warp_data = response.json()
+
+        # 查询 ipapi.is 获取更详细信息
+        warp_ip = warp_data.get("ip")
+        ipapi_data = None
+        if warp_ip:
+            ipapi_response = await httpx_client.get(
+                f"https://api.ipapi.is/?q={warp_ip}",
+                proxies=proxies,
+                timeout=15.0
+            )
+            if ipapi_response.status_code == 200:
+                ipapi_data = ipapi_response.json()
+
+        # 构建结果
+        result_text = "🌐 *WARP 出口 IP 信息*\n\n"
+        result_text += f"📍 *IP 地址*: `{warp_data.get('ip', 'N/A')}`\n"
+        result_text += f"🏙️ *城市*: {warp_data.get('city', 'N/A')}\n"
+        result_text += f"🌍 *国家*: {warp_data.get('country', 'N/A')}\n"
+        result_text += f"📌 *地区*: {warp_data.get('region', 'N/A')}\n"
+        result_text += f"🏢 *组织*: {warp_data.get('org', 'N/A')}\n"
+
+        if warp_data.get('loc'):
+            result_text += f"🗺️ *坐标*: {warp_data.get('loc')}\n"
+
+        # 添加 ipapi.is 的详细信息
+        if ipapi_data:
+            company = ipapi_data.get('company', {})
+            asn = ipapi_data.get('asn', {})
+
+            result_text += f"\n*详细信息*:\n"
+            result_text += f"🏢 *公司*: {company.get('name', 'N/A')}\n"
+            result_text += f"🔢 *ASN*: AS{asn.get('asn', 'N/A')} ({asn.get('org', 'N/A')})\n"
+
+            # IP 类型
+            ip_type = []
+            if ipapi_data.get('is_datacenter'):
+                ip_type.append("数据中心")
+            if ipapi_data.get('is_proxy'):
+                ip_type.append("代理")
+            if ipapi_data.get('is_vpn'):
+                ip_type.append("VPN")
+            if ipapi_data.get('is_tor'):
+                ip_type.append("Tor")
+            if ipapi_data.get('is_mobile'):
+                ip_type.append("移动网络")
+
+            if ip_type:
+                result_text += f"🏷️ *类型*: {', '.join(ip_type)}\n"
+            else:
+                result_text += f"🏷️ *类型*: 住宅/普通 IP\n"
+
+        result_text += f"\n💡 *提示*: 这是你的程序通过 WARP 访问外部网站时使用的 IP"
+
+        await status_msg.edit_text(result_text, parse_mode="Markdown")
+        await _schedule_deletion(context, chat_id, status_msg.message_id, config.auto_delete_delay)
+        logger.info(f"✅ WARP IP 查询完成: {warp_data.get('ip')}")
+
+    except Exception as e:
+        logger.error(f"WARP IP 查询失败: {e}", exc_info=True)
+        await status_msg.edit_text(f"❌ 查询失败: {str(e)}\n\n💡 请确保 WARP 容器正在运行")
         await _schedule_deletion(context, chat_id, status_msg.message_id, config.auto_delete_delay)
 
     if update.message:
