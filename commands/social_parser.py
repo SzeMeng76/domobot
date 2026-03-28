@@ -1095,7 +1095,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
 
         try:
             media_group = []
-            for img in media_list[:10]:
+            for idx, img in enumerate(media_list[:10]):
                 try:
                     original_path = Path(img.path)
 
@@ -1151,7 +1151,16 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                     with open(image_path, 'rb') as photo_file:
                         # 复制文件内容到内存，避免文件句柄在异步发送时关闭
                         photo_data = photo_file.read()
-                        media_group.append(InputMediaPhoto(media=photo_data))
+                        # 最后一张图片附加 caption，必须在创建时传入
+                        is_last = (idx == len(media_list[:10]) - 1)
+                        if is_last:
+                            media_group.append(InputMediaPhoto(
+                                media=photo_data,
+                                caption=caption,
+                                parse_mode="MarkdownV2"
+                            ))
+                        else:
+                            media_group.append(InputMediaPhoto(media=photo_data))
 
                 except Exception as e:
                     logger.warning(f"⚠️ Failed to process image {img.path}: {e}, skipping")
@@ -1162,14 +1171,8 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                 logger.error("❌ No valid images to send")
                 raise ValueError("All images failed validation")
 
-            # 优化：将 caption 附加到最后一张图片，而不是单独发送消息
-            # 参考 parse_hub_bot 的实现
+            # 发送媒体组（带 caption 和按钮）
             try:
-                # 最后一张图片附加 caption
-                media_group[-1].caption = caption
-                media_group[-1].parse_mode = "MarkdownV2"
-
-                # 发送媒体组（带 caption 和按钮）
                 @with_telegram_retry(max_retries=5)
                 async def _send_media_group_with_retry():
                     return await context.bot.send_media_group(
@@ -1518,33 +1521,52 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
         # 多个媒体文件，使用media_group分批发送（每批最多10个）
         # 使用 itertools.batched() 替代手动切片
         media_groups = []
-        for batch in batched(media_list, 10):
+        batches = list(batched(media_list, 10))
+        for batch_idx, batch in enumerate(batches):
             media_group = []
-            for media in batch:
+            batch_list = list(batch)
+            for media_idx, media in enumerate(batch_list):
                 try:
+                    is_last_batch = (batch_idx == len(batches) - 1)
+                    is_last_media = (media_idx == len(batch_list) - 1)
+                    should_add_caption = is_last_batch and is_last_media
+
                     if isinstance(media, VideoFile):
                         from utils.video_splitter import ensure_h264
                         v_path = await ensure_h264(str(media.path))
-                        media_group.append(InputMediaVideo(
-                            media=open(v_path, 'rb'),
-                            width=media.width or 0,
-                            height=media.height or 0,
-                            duration=media.duration or 0,
-                            supports_streaming=True
-                        ))
+                        if should_add_caption:
+                            media_group.append(InputMediaVideo(
+                                media=open(v_path, 'rb'),
+                                width=media.width or 0,
+                                height=media.height or 0,
+                                duration=media.duration or 0,
+                                supports_streaming=True,
+                                caption=caption,
+                                parse_mode="MarkdownV2"
+                            ))
+                        else:
+                            media_group.append(InputMediaVideo(
+                                media=open(v_path, 'rb'),
+                                width=media.width or 0,
+                                height=media.height or 0,
+                                duration=media.duration or 0,
+                                supports_streaming=True
+                            ))
                     elif isinstance(media, ImageFile):
-                        media_group.append(InputMediaPhoto(media=open(str(media.path), 'rb')))
+                        if should_add_caption:
+                            media_group.append(InputMediaPhoto(
+                                media=open(str(media.path), 'rb'),
+                                caption=caption,
+                                parse_mode="MarkdownV2"
+                            ))
+                        else:
+                            media_group.append(InputMediaPhoto(media=open(str(media.path), 'rb')))
                 except Exception as e:
                     logger.error(f"准备媒体失败: {e}")
                     continue
 
             if media_group:
                 try:
-                    # 优化：将 caption 附加到最后一个媒体项
-                    is_last_batch = batch == list(batched(media_list, 10))[-1]
-                    if is_last_batch:
-                        media_group[-1].caption = caption
-                        media_group[-1].parse_mode = "MarkdownV2"
 
                     @with_telegram_retry(max_retries=5)
                     async def _send_media_group():
