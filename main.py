@@ -380,11 +380,15 @@ async def setup_application(application: Application, config) -> None:
     # 初始化 Reddit 客户端（如果配置了）
     if config.reddit_client_id and config.reddit_client_secret:
         from utils.reddit_client import RedditClient
+        # 使用符合 Reddit 规范的 User-Agent 格式
+        # 格式: <platform>:<app ID>:<version> (by /u/<username>)
+        user_agent = f"linux:domobot:v1.0.0 (by /u/domobot_user)"
         reddit_client = RedditClient(
             client_id=config.reddit_client_id,
-            client_secret=config.reddit_client_secret
+            client_secret=config.reddit_client_secret,
+            user_agent=user_agent
         )
-        logger.info("✅ Reddit 客户端已初始化")
+        logger.info(f"✅ Reddit 客户端已初始化 (User-Agent: {user_agent})")
 
         # 注入 Reddit 依赖
         from commands import reddit_command
