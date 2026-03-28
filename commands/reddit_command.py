@@ -612,6 +612,52 @@ async def _send_reddit_media(context, chat_id, post, caption, reply_markup):
     temp_dir.mkdir(exist_ok=True)
 
     try:
+        # YouTube 链接（检测 post.url 是否为 YouTube）
+        if post.url and ('youtube.com/watch' in post.url or 'youtu.be/' in post.url):
+            logger.info(f"检测到 YouTube 链接: {post.url}")
+
+            # 调用 social_parser 的 ParseHub 解析
+            from utils.parse_hub_adapter import get_parse_adapter
+            parse_adapter = get_parse_adapter()
+
+            if parse_adapter:
+                try:
+                    logger.info(f"使用 ParseHub 解析 YouTube: {post.url}")
+
+                    # 解析 YouTube 链接
+                    result, parse_result, platform, parse_time, error_msg = await parse_adapter.parse_url(
+                        post.url,
+                        user_id=update.effective_user.id if update.effective_user else None,
+                        group_id=chat_id if chat_id < 0 else None
+                    )
+
+                    if result and parse_result:
+                        # 下载视频
+                        from commands.social_parser import _send_video
+
+                        # 使用 Reddit caption（保留 Reddit 帖子信息）
+                        messages = await _send_video(
+                            context=context,
+                            chat_id=chat_id,
+                            download_result=result,
+                            parse_result=parse_result,
+                            caption=caption,
+                            reply_parameters=None,
+                            reply_markup=reply_markup
+                        )
+
+                        logger.info(f"✅ YouTube 视频发送成功")
+                        return messages
+                    else:
+                        logger.warning(f"YouTube 解析失败: {error_msg}")
+                        # Fallback 到文本帖子
+                except Exception as e:
+                    logger.error(f"YouTube 解析失败: {e}", exc_info=True)
+                    # Fallback 到文本帖子
+            else:
+                logger.warning("ParseHub 未初始化，无法解析 YouTube")
+                # Fallback 到文本帖子
+
         # 视频（优先检查，因为视频也可能有 preview_image_url）
         if post.is_video and post.video_url:
             logger.info(f"下载并发送视频: {post.video_url}")
