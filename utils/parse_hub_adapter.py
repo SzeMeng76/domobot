@@ -505,7 +505,38 @@ class ParseHubAdapter:
                             return result
             raise ParseError("TikHub video endpoint返回数据中没有视频URL")
 
-        # Image post: call image endpoint with retry, never fall back to video
+        # Image post: try web/get_note_info_v7 first (most stable), then fallback to app_v2
+        logger.info(f"🎬 [TikHub] Trying primary endpoint: web/get_note_info_v7 for image")
+        try:
+            v7_api_url = f"https://api.tikhub.io/api/v1/xiaohongshu/web/get_note_info_v7?note_id={note_id}"
+            async with httpx.AsyncClient(timeout=30.0, proxy=proxy) as client:
+                v7_response = await client.get(v7_api_url, headers=auth_headers)
+
+            if v7_response.status_code == 200:
+                v7_data = v7_response.json()
+                items = v7_data.get("data", [])
+                if isinstance(items, list) and items:
+                    note_item = items[0].get("note_list", [{}])[0]
+                    title = note_item.get("title", "")
+                    desc = note_item.get("desc", "")
+                    images_list = note_item.get("images_list", [])
+                    if images_list:
+                        photos = []
+                        for img in images_list:
+                            img_url = img.get("url", "") or img.get("url_multi_level", {}).get("high", "")
+                            if img_url:
+                                img_url = re.sub(r'format/(heif|heic|webp|avif)', 'format/jpg', img_url)
+                                photos.append(ImageRef(url=img_url, ext="jpg", width=img.get("width", 0), height=img.get("height", 0)))
+                        if photos:
+                            logger.info(f"✅ [TikHub] XHS {len(photos)} images via web/get_note_info_v7")
+                            result = ImageParseResult(photo=photos, title=title, content=desc)
+                            result.raw_url = url
+                            return result
+        except Exception as v7_error:
+            logger.warning(f"⚠️ [TikHub] web/get_note_info_v7 failed: {v7_error}")
+
+        # Fallback: app_v2 image endpoint with retry
+        logger.info(f"🔄 [TikHub] Fallback to app_v2 image endpoint")
         max_retries = 3
         for attempt in range(max_retries):
             try:
@@ -533,7 +564,7 @@ class ParseHubAdapter:
                                     img_url = re.sub(r'format/(heif|heic|webp|avif)', 'format/jpg', img_url)
                                     photos.append(ImageRef(url=img_url, ext="jpg", width=img.get("width", 0), height=img.get("height", 0)))
                             if photos:
-                                logger.info(f"✅ [TikHub] XHS {len(photos)} images via TikHub")
+                                logger.info(f"✅ [TikHub] XHS {len(photos)} images via app_v2")
                                 result = ImageParseResult(photo=photos, title=title, content=desc)
                                 result.raw_url = url
                                 return result
