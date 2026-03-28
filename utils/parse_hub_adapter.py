@@ -336,8 +336,21 @@ class ParseHubAdapter:
 
             # 下载媒体（30分钟超时保护，防止CDN卡死导致流程挂起）
             try:
+                # 小红书图片需要大陆代理下载（视频不需要）
+                download_proxy = downloader_proxy
+                if platform_id in ('xiaohongshu', 'xhs'):
+                    from parsehub.types import ImageParseResult
+                    if isinstance(result, ImageParseResult):
+                        # 小红书图片：使用专门的代理（XHS_IMAGE_PROXY 环境变量）
+                        xhs_image_proxy = os.getenv('XHS_IMAGE_PROXY')
+                        if xhs_image_proxy:
+                            download_proxy = xhs_image_proxy
+                            logger.info(f"🖼️ [XHS] 图片使用大陆代理下载: {download_proxy[:30]}...")
+                        else:
+                            logger.warning(f"⚠️ [XHS] 图片需要大陆代理，但未配置 XHS_IMAGE_PROXY 环境变量")
+
                 download_result = await asyncio.wait_for(
-                    result.download(path=self.temp_dir, proxy=downloader_proxy),
+                    result.download(path=self.temp_dir, proxy=download_proxy),
                     timeout=60 * 30,  # 30分钟
                 )
             except TimeoutError:
