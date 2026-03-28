@@ -1,13 +1,15 @@
 """
 网络诊断命令
-支持 IP 检测、MAC 查询、网站检测、延迟测试、DNS 泄露、路由追踪
+支持 IP 检测、MAC 查询、网站检测、延迟测试、路由追踪
 """
 
 import logging
 import re
-from typing import Optional, Dict, Tuple
-from telegram import Update
+from typing import Optional, Dict, Tuple, List
+from telegram import Update, InlineQueryResultArticle, InputTextMessageContent
 from telegram.ext import ContextTypes
+from telegram.constants import ParseMode
+from uuid import uuid4
 
 from utils.command_factory import command_factory
 from utils.permissions import Permission
@@ -266,7 +268,7 @@ async def global_latency_test(target: str, test_type: str = "ping") -> Optional[
 
 async def ping_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    /ping <目标> - 网络诊断工具
+    /scan <目标> - 网络诊断工具
     支持: IP地址、MAC地址、域名、URL、延迟测试、路由追踪
     """
     config = get_config()
@@ -277,14 +279,14 @@ async def ping_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         help_text = (
             "🔍 *网络诊断工具*\n\n"
             "*使用方法：*\n"
-            "`/ping <目标>`\n\n"
+            "`/scan <目标>`\n\n"
             "*支持类型：*\n"
-            "• IP 地址: `/ping 8.8.8.8`\n"
-            "• MAC 地址: `/ping 00:1A:2B:3C:4D:5E`\n"
-            "• 域名: `/ping google.com`\n"
-            "• URL: `/ping https://google.com`\n"
-            "• 延迟测试: `/ping latency google.com`\n"
-            "• 路由追踪: `/ping mtr google.com`\n\n"
+            "• IP 地址: `/scan 8.8.8.8`\n"
+            "• MAC 地址: `/scan 00:1A:2B:3C:4D:5E`\n"
+            "• 域名: `/scan google.com`\n"
+            "• URL: `/scan https://google.com`\n"
+            "• 延迟测试: `/scan latency google.com`\n"
+            "• 路由追踪: `/scan mtr google.com`\n\n"
             "*查询信息：*\n"
             "• IP: 风控指数、类型、位置、ASN\n"
             "• MAC: 网卡厂商信息\n"
@@ -875,8 +877,147 @@ async def handle_ip_query(update: Update, context: ContextTypes.DEFAULT_TYPE, ip
 
 # 注册命令
 command_factory.register_command(
-    "ping",
+    "scan",
     ping_command,
     permission=Permission.USER,
     description="网络诊断工具（IP/MAC/域名/URL/延迟/MTR）"
 )
+
+
+async def handle_inline_scan(target: str, context: ContextTypes.DEFAULT_TYPE) -> List[InlineQueryResultArticle]:
+    """
+    处理 inline scan 查询
+    用法: @botname scan 8.8.8.8$
+    """
+    try:
+        # 检测输入类型
+        input_type, normalized_value = detect_input_type(target)
+
+        # 根据类型执行不同查询
+        if input_type == "ip":
+            result_text = await _inline_query_ip(normalized_value)
+        elif input_type == "mac":
+            result_text = await _inline_query_mac(normalized_value)
+        elif input_type == "domain":
+            result_text = await _inline_query_domain(normalized_value)
+        elif input_type == "url":
+            result_text = await _inline_query_url(normalized_value)
+        else:
+            result_text = f"❌ 无法识别的目标: {target}"
+
+        return [
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title=f"🔍 Scan: {target}",
+                description=f"查询 {input_type.upper()} 信息",
+                input_message_content=InputTextMessageContent(
+                    message_text=result_text,
+                    parse_mode=ParseMode.MARKDOWN
+                ),
+            )
+        ]
+
+    except Exception as e:
+        logger.error(f"Inline scan 失败: {e}", exc_info=True)
+        return [
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title="❌ 查询失败",
+                description=str(e)[:100],
+                input_message_content=InputTextMessageContent(
+                    message_text=f"❌ 查询失败: {str(e)}"
+                ),
+            )
+        ]
+
+
+async def _inline_query_ip(ip_address: str) -> str:
+    """Inline 查询 IP 信息"""
+    import asyncio
+
+    ipapi_task = get_ipapi_info(ip_address)
+    abuseipdb_task = get_abuseipdb_score(ip_address)
+
+    ipapi_data, abuseipdb_data = await asyncio.gather(ipapi_task, abuseipdb_task, return_exceptions=True)
+
+    if isinstance(ipapi_data, Exception) or not ipapi_data:
+        return f"❌ 无法获取 IP 信息: {ip_address}"
+
+    # 解析数据（简化版）
+    location_data = ipapi_data.get("location", {})
+    company_data = ipapi_data.get("company", {})
+    asn_data = ipapi_data.get("asn", {})
+
+    city = location_data.get("city", "")
+    country = location_data.get("country", "未知")
+    org = company_data.get("name", "未知")
+    company_type = company_data.get("type", "")
+    is_datacenter = ipapi_data.get("is_datacenter", False)
+    is_proxy = ipapi_data.get("is_proxy", False)
+
+    # 判断 IP 类型
+    if is_proxy:
+        ip_type = "🔒 代理/VPN"
+    elif is_datacenter:
+        ip_type = "🏢 数据中心"
+    elif company_type == "isp":
+        ip_type = "✅ 原生 IP"
+    else:
+        ip_type = "❓ 未知"
+
+    # 风控分数
+    abuse_score = 0
+    if isinstance(abuseipdb_data, dict):
+        abuse_score = abuseipdb_data.get("abuseConfidenceScore", 0)
+
+    result = f"📊 *IP 信息*\n\n"
+    result += f"🌐 IP: `{ip_address}`\n"
+    result += f"🎯 风控: {abuse_score}/100\n"
+    result += f"🏠 类型: {ip_type}\n"
+    result += f"📍 位置: {city}, {country}\n"
+    result += f"🏢 ISP: {org}"
+
+    return result
+
+
+async def _inline_query_mac(mac_address: str) -> str:
+    """Inline 查询 MAC 地址"""
+    vendor_data = await get_mac_vendor(mac_address)
+
+    if not vendor_data:
+        return f"❌ 无法获取 MAC 信息: {mac_address}"
+
+    vendor = vendor_data.get("vendor", "未知厂商")
+
+    return f"📀 *MAC 地址查询*\n\n🔢 MAC: `{mac_address}`\n🏢 厂商: {vendor}"
+
+
+async def _inline_query_domain(domain: str) -> str:
+    """Inline 查询域名"""
+    try:
+        import socket
+        ip_address = socket.gethostbyname(domain)
+        # 查询 IP 信息
+        ip_result = await _inline_query_ip(ip_address)
+        return f"🌐 *域名: {domain}*\n\n{ip_result}"
+    except socket.gaierror:
+        return f"❌ 域名解析失败: {domain}"
+
+
+async def _inline_query_url(url: str) -> str:
+    """Inline 查询 URL 可用性"""
+    check_data = await check_website(url)
+
+    if not check_data:
+        return f"❌ 无法访问: {url}"
+
+    status_code = check_data.get("status_code", 0)
+    elapsed_ms = check_data.get("elapsed_ms", 0)
+
+    if 200 <= status_code < 300:
+        status = "✅ 可访问"
+    else:
+        status = f"⚠️ HTTP {status_code}"
+
+    return f"🚦 *网站检测*\n\n🌐 URL: `{url}`\n{status}\n⏱️ 响应: {elapsed_ms}ms"
+

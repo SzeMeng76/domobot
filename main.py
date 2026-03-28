@@ -103,7 +103,7 @@ from commands import (
     netflix,
     ytmusic,
     news,
-    ping_command,
+    scan_command,
     spotify,
     steam,
     system_commands,
@@ -365,7 +365,7 @@ async def setup_application(application: Application, config) -> None:
     weather.set_dependencies(cache_manager, httpx_client)
     crypto.set_dependencies(cache_manager, httpx_client)
     bin.set_dependencies(cache_manager, httpx_client)
-    ping_command.set_dependencies(cache_manager, httpx_client)
+    scan_command.set_dependencies(cache_manager, httpx_client)
     movie.set_dependencies(cache_manager, httpx_client)
     movie.init_movie_service()
     time_command.set_dependencies(cache_manager)

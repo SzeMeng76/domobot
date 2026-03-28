@@ -263,6 +263,15 @@ class InlineQueryHandler:
             await update.inline_query.answer(results, cache_time=60)
             return
 
+        # Scan 网络诊断单独处理：返回单条结果
+        if parts and parts[0].lower() in ("scan",):
+            target = parts[1].strip() if len(parts) > 1 else ""
+            if target:
+                from commands.scan_command import handle_inline_scan
+                results = await handle_inline_scan(target, context)
+                await update.inline_query.answer(results, cache_time=10)
+                return
+
         # Movie 搜索单独处理：返回多条结果
         if parts and parts[0].lower() in ("movie",):
             keyword = parts[1].strip() if len(parts) > 1 else ""
