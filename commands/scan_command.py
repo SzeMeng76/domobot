@@ -895,27 +895,49 @@ async def handle_inline_scan(target: str, context: ContextTypes.DEFAULT_TYPE) ->
         first_arg = parts[0].lower() if parts else ""
 
         if first_arg == "latency" and len(parts) > 1:
-            result_text = "⏱️ *全球延迟测试*\n\n❌ Inline 模式不支持延迟测试\n\n💡 请在群组或私聊中使用:\n`/scan latency " + parts[1] + "`"
+            # 返回可点击的结果，点击后执行测试
+            result_id = f"scan_latency_{uuid4().hex[:16]}"
+            target_host = parts[1]
+
+            # 缓存目标信息
+            if not hasattr(context.bot_data, 'scan_inline_cache'):
+                context.bot_data['scan_inline_cache'] = {}
+            context.bot_data['scan_inline_cache'][result_id] = {
+                'type': 'latency',
+                'target': target_host
+            }
+
             return [
                 InlineQueryResultArticle(
-                    id=str(uuid4()),
-                    title="⏱️ 延迟测试",
-                    description="Inline 模式不支持，请使用命令",
+                    id=result_id,
+                    title=f"⏱️ 全球延迟测试: {target_host}",
+                    description="点击开始测试（需要 5-10 秒）",
                     input_message_content=InputTextMessageContent(
-                        message_text=result_text,
+                        message_text=f"⏱️ 正在测试 {target_host} 的全球延迟...\n\n⏳ 请稍候，预计需要 5-10 秒",
                         parse_mode=ParseMode.MARKDOWN
                     ),
                 )
             ]
         elif first_arg == "mtr" and len(parts) > 1:
-            result_text = "📡 *MTR 路由追踪*\n\n❌ Inline 模式不支持路由追踪\n\n💡 请在群组或私聊中使用:\n`/scan mtr " + parts[1] + "`"
+            # 返回可点击的结果，点击后执行测试
+            result_id = f"scan_mtr_{uuid4().hex[:16]}"
+            target_host = parts[1]
+
+            # 缓存目标信息
+            if not hasattr(context.bot_data, 'scan_inline_cache'):
+                context.bot_data['scan_inline_cache'] = {}
+            context.bot_data['scan_inline_cache'][result_id] = {
+                'type': 'mtr',
+                'target': target_host
+            }
+
             return [
                 InlineQueryResultArticle(
-                    id=str(uuid4()),
-                    title="📡 MTR 追踪",
-                    description="Inline 模式不支持，请使用命令",
+                    id=result_id,
+                    title=f"📡 MTR 路由追踪: {target_host}",
+                    description="点击开始追踪（需要 10-15 秒）",
                     input_message_content=InputTextMessageContent(
-                        message_text=result_text,
+                        message_text=f"📡 正在追踪 {target_host} 的路由...\n\n⏳ 请稍候，预计需要 10-15 秒",
                         parse_mode=ParseMode.MARKDOWN
                     ),
                 )
@@ -1051,4 +1073,145 @@ async def _inline_query_url(url: str) -> str:
         status = f"⚠️ HTTP {status_code}"
 
     return f"🚦 *网站检测*\n\n🌐 URL: `{url}`\n{status}\n⏱️ 响应: {elapsed_ms}ms"
+
+
+async def handle_inline_scan_chosen(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """
+    处理用户选择 inline scan 结果后的测试执行
+    用于 latency 和 MTR 测试
+    """
+    chosen_result = update.chosen_inline_result
+    inline_message_id = chosen_result.inline_message_id
+    result_id = chosen_result.result_id
+
+    # 只处理 scan_latency_ 和 scan_mtr_ 开头的结果
+    if not (result_id.startswith("scan_latency_") or result_id.startswith("scan_mtr_")):
+        return
+
+    # 从缓存获取测试信息
+    scan_cache = context.bot_data.get('scan_inline_cache', {})
+    cached_data = scan_cache.get(result_id)
+
+    if not cached_data:
+        try:
+            await context.bot.edit_message_text(
+                inline_message_id=inline_message_id,
+                text="❌ 测试请求已过期，请重新查询",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        except Exception:
+            pass
+        return
+
+    test_type = cached_data['type']
+    target = cached_data['target']
+
+    try:
+        if test_type == 'latency':
+            # 执行全球延迟测试
+            result = await global_latency_test(target)
+
+            if not result:
+                await context.bot.edit_message_text(
+                    inline_message_id=inline_message_id,
+                    text=f"❌ 延迟测试失败: {target}",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                return
+
+            # 格式化结果
+            response_lines = [f"⏱️ *全球延迟测试: {target}*\n"]
+
+            # 按大洲分组
+            continents = {}
+            for node in result:
+                continent = node.get("continent", "Unknown")
+                if continent not in continents:
+                    continents[continent] = []
+                continents[continent].append(node)
+
+            # 显示每个大洲的结果
+            for continent, nodes in continents.items():
+                response_lines.append(f"\n*{continent}*")
+                for node in nodes:
+                    city = node.get("city", "Unknown")
+                    avg_ms = node.get("avg_ms")
+                    if avg_ms is not None:
+                        # 根据延迟着色
+                        if avg_ms < 50:
+                            emoji = "🟢"
+                        elif avg_ms < 150:
+                            emoji = "🟡"
+                        else:
+                            emoji = "🔴"
+                        response_lines.append(f"{emoji} {city}: {avg_ms:.1f}ms")
+                    else:
+                        response_lines.append(f"❌ {city}: 超时")
+
+            # 计算平均延迟
+            valid_latencies = [n.get("avg_ms") for n in result if n.get("avg_ms") is not None]
+            if valid_latencies:
+                avg_latency = sum(valid_latencies) / len(valid_latencies)
+                response_lines.append(f"\n📊 平均延迟: {avg_latency:.1f}ms")
+
+            response_text = "\n".join(response_lines)
+
+            await context.bot.edit_message_text(
+                inline_message_id=inline_message_id,
+                text=response_text,
+                parse_mode=ParseMode.MARKDOWN
+            )
+
+        elif test_type == 'mtr':
+            # 执行 MTR 路由追踪
+            result = await global_latency_test(target, test_type="mtr")
+
+            if not result:
+                await context.bot.edit_message_text(
+                    inline_message_id=inline_message_id,
+                    text=f"❌ MTR 追踪失败: {target}",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                return
+
+            # 格式化 MTR 结果
+            response_lines = [f"📡 *MTR 路由追踪: {target}*\n"]
+
+            for hop in result[:15]:  # 最多显示 15 跳
+                hop_num = hop.get("hop", 0)
+                ip = hop.get("ip", "???")
+                avg_ms = hop.get("avg_ms")
+
+                if avg_ms is not None:
+                    response_lines.append(f"{hop_num}. `{ip}` - {avg_ms:.1f}ms")
+                else:
+                    response_lines.append(f"{hop_num}. `{ip}` - *")
+
+            response_text = "\n".join(response_lines)
+
+            await context.bot.edit_message_text(
+                inline_message_id=inline_message_id,
+                text=response_text,
+                parse_mode=ParseMode.MARKDOWN
+            )
+
+    except Exception as e:
+        logger.error(f"Inline scan chosen handler error: {e}")
+        try:
+            await context.bot.edit_message_text(
+                inline_message_id=inline_message_id,
+                text=f"❌ 测试执行失败: {str(e)}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        except Exception:
+            pass
+
+    finally:
+        # 清理缓存
+        if result_id in scan_cache:
+            del scan_cache[result_id]
+
 
