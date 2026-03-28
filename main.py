@@ -386,13 +386,31 @@ async def setup_application(application: Application, config) -> None:
     auto_parse_handler.set_adapter(parse_adapter)
 
     # 初始化 Reddit 客户端
-    # 只使用 OAuth 客户端（通过 WARP 代理）
+    # 支持 OAuth 和 JSON 两种模式，通过环境变量 REDDIT_API_MODE 控制
+    # REDDIT_API_MODE=oauth (默认) 或 json
     reddit_client = None
+    reddit_api_mode = os.getenv("REDDIT_API_MODE", "oauth").lower()
 
-    if config.reddit_client_id and config.reddit_client_secret:
+    if reddit_api_mode == "json":
+        # JSON 模式：使用 curl_cffi 伪装 TLS 指纹 + WARP 代理
+        try:
+            from utils.reddit_json_client import RedditJsonClient
+            user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+            reddit_client = RedditJsonClient(
+                user_agent=user_agent,
+                proxy="socks5://warp:1080",  # WARP SOCKS5 代理（Docker 服务名）
+                rotate_browser=True  # 启用浏览器轮询
+            )
+            logger.info(f"✅ Reddit JSON 客户端已初始化 (TLS 指纹伪装 + WARP 代理 + 浏览器轮询)")
+        except Exception as e:
+            logger.error(f"❌ Reddit JSON 客户端初始化失败: {e}")
+            logger.info("⚠️ 尝试回退到 OAuth 模式...")
+            reddit_api_mode = "oauth"
+
+    if reddit_api_mode == "oauth" and config.reddit_client_id and config.reddit_client_secret:
+        # OAuth 模式：需要 API key，通过 WARP 代理
         try:
             from utils.reddit_client import RedditClient
-            # 使用浏览器 User-Agent，配合 WARP 代理绕过 IP 封锁
             user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
             reddit_client = RedditClient(
                 client_id=config.reddit_client_id,
