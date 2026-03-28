@@ -53,19 +53,6 @@ services:
     ports:
       - "1080:1080"  # SOCKS5 代理端口（默认 1080）
 
-  # FlareSolverr 服务 - 用于绕过 Cloudflare 验证
-  flaresolverr:
-    image: ghcr.io/flaresolverr/flaresolverr:latest
-    container_name: appbot-flaresolverr
-    restart: always
-    environment:
-      - LOG_LEVEL=info
-      - TZ=Asia/Shanghai
-    networks:
-      - appbot-network
-    ports:
-      - "8191:8191"
-
   # 服务名称，可以自定义，这里我们叫它 appbot。
   appbot:
     image: szemeng76/domobot:latest #szemeng76/domobot:main latest:稳定版 main:最新功能版

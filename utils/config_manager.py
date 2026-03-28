@@ -22,7 +22,8 @@ class BotConfig:
 
         self.cmc_api_key: str = ""
         self.bin_api_key: str = ""
-        
+        self.abuseipdb_api_keys: list = []  # 支持多个 API Key 轮询
+
         # 电影信息API配置
         self.tmdb_api_key: str = ""
         self.trakt_api_key: str = ""
@@ -95,6 +96,7 @@ class BotConfig:
         self.map_cache_duration = 1800  # 30分钟，地图搜索缓存
         self.map_geocode_cache_duration = 3600  # 1小时，地理编码缓存
         self.map_directions_cache_duration = 600  # 10分钟，路线规划缓存
+        self.abuseipdb_cache_duration = 604800  # 7天，IP信誉检测缓存
         self.flight_cache_duration = 3600  # 1小时，航班搜索缓存
         self.flight_booking_cache_duration = 1800  # 30分钟，航班预订选项缓存
         self.flight_price_cache_duration = 7200  # 2小时，航班价格洞察缓存
@@ -366,6 +368,7 @@ class ConfigManager:
         self.config.map_cache_duration = get_int_env("MAP_CACHE_DURATION", "1800")
         self.config.map_geocode_cache_duration = get_int_env("MAP_GEOCODE_CACHE_DURATION", "3600")
         self.config.map_directions_cache_duration = get_int_env("MAP_DIRECTIONS_CACHE_DURATION", "600")
+        self.config.abuseipdb_cache_duration = get_int_env("ABUSEIPDB_CACHE_DURATION", "604800")
         self.config.flight_cache_duration = get_int_env("FLIGHT_CACHE_DURATION", "3600")
         self.config.flight_booking_cache_duration = get_int_env("FLIGHT_BOOKING_CACHE_DURATION", "1800")
         self.config.flight_price_cache_duration = get_int_env("FLIGHT_PRICE_CACHE_DURATION", "7200")
@@ -460,8 +463,11 @@ class ConfigManager:
         self.config.qweather_api_key = os.getenv("QWEATHER_API_KEY", "")
 
         self.config.cmc_api_key = os.getenv("CMC_API_KEY", "")
-        self.config.bin_api_key = os.getenv("BIN_API_KEY", "")
-        
+        self.config.bin_api_key = os.getenv("ABUSEIPDB_API_KEY", "")
+        # AbuseIPDB API Keys（支持多个，逗号分隔）
+        abuseipdb_keys_str = os.getenv("ABUSEIPDB_API_KEYS", os.getenv("ABUSEIPDB_API_KEY", ""))
+        self.config.abuseipdb_api_keys = [key.strip() for key in abuseipdb_keys_str.split(",") if key.strip()]
+
         # 电影信息 API 配置
         self.config.tmdb_api_key = os.getenv("TMDB_API_KEY", "")
         self.config.trakt_api_key = os.getenv("TRAKT_API_KEY", "")

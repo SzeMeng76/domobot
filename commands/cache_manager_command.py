@@ -47,6 +47,7 @@ CACHE_SERVICES = {
     'music': '网易云音乐缓存',
     'ytmusic': 'YouTube Music缓存',
     'reddit': 'Reddit缓存',
+    'abuseipdb': 'IP信誉检测缓存',
 }
 
 async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
