@@ -324,6 +324,7 @@ async def handle_inline_reddit_list(
 
             posts = await reddit_client.get_hot_posts(subreddit=subreddit, limit=10)
             title_prefix = f"🔥 r/{subreddit} 热门" if subreddit else "🔥 Reddit 全站热门"
+            message_prefix = title_prefix  # hot 命令没有特殊字符，不需要额外转义
         elif list_type == "top":
             subreddit = None
             time_filter = 'day'
@@ -346,7 +347,10 @@ async def handle_inline_reddit_list(
             posts = await reddit_client.get_top_posts(subreddit=subreddit, time_filter=time_filter, limit=10)
             time_map = {'hour': '本小时', 'day': '今日', 'week': '本周', 'month': '本月', 'year': '今年', 'all': '全部时间'}
             time_text = time_map.get(time_filter, time_filter)
+            # title 不需要转义（用于 InlineQueryResultArticle.title）
             title_prefix = f"🏆 r/{subreddit} Top ({time_text})" if subreddit else f"🏆 Reddit 全站 Top ({time_text})"
+            # message_text 需要转义（用于 MarkdownV2）
+            message_prefix = f"🏆 r/{subreddit} Top \\({time_text}\\)" if subreddit else f"🏆 Reddit 全站 Top \\({time_text}\\)"
         elif list_type == "new":
             subreddit = None
             if len(parts) > 2:
@@ -354,6 +358,7 @@ async def handle_inline_reddit_list(
 
             posts = await reddit_client.get_new_posts(subreddit=subreddit, limit=10)
             title_prefix = f"🆕 r/{subreddit} 最新" if subreddit else "🆕 Reddit 全站最新"
+            message_prefix = title_prefix  # new 命令没有特殊字符，不需要额外转义
         else:
             return [
                 InlineQueryResultArticle(
@@ -381,7 +386,7 @@ async def handle_inline_reddit_list(
 
         # 构建消息
         from commands.reddit_command import _escape_markdown
-        lines = [f"**{title_prefix}**\n"]
+        lines = [f"**{message_prefix}**\n"]
 
         for i, post in enumerate(posts, 1):
             post_title = _escape_markdown(post.title[:80])
