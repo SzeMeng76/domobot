@@ -90,8 +90,10 @@ async def ping_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         # 解析 HTML
         soup = BeautifulSoup(html, 'html.parser')
 
-        # 检查是否还在验证页面
-        if 'cf-turnstile' in html or 'captcha' in html.lower():
+        # 检查是否有实际内容（而不是检测 Turnstile 代码）
+        # 如果页面只有 Cloudflare 验证页面，body 会很短
+        body_text = soup.get_text(strip=True)
+        if len(body_text) < 100 or 'Checking your browser' in html:
             await status_msg.edit_text(
                 f"⚠️ 查询 `{ip_address}` 遇到人机验证\n"
                 f"Cloudflare 需要更多时间验证，请稍后重试",
