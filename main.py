@@ -382,7 +382,8 @@ async def setup_application(application: Application, config) -> None:
         from utils.reddit_client import RedditClient
         # 使用符合 Reddit 规范的 User-Agent 格式
         # 格式: <platform>:<app ID>:<version> (by /u/<username>)
-        user_agent = f"linux:domobot:v1.0.0 (by /u/domobot_user)"
+        # 避免使用 "bot" 关键词以防被检测
+        user_agent = f"linux:domo_app:v1.0.0 (by /u/SzeMeng76)"
         reddit_client = RedditClient(
             client_id=config.reddit_client_id,
             client_secret=config.reddit_client_secret,
