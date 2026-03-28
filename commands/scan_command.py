@@ -670,16 +670,13 @@ async def handle_warp_query(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             await _schedule_deletion(context, chat_id, status_msg.message_id, config.auto_delete_delay)
             return
 
-        # 通过 WARP 代理查询 IP 信息
-        proxies = {
-            "http://": "socks5://warp:1080",
-            "https://": "socks5://warp:1080"
-        }
+        # WARP SOCKS5 代理
+        proxy = "socks5://warp:1080"
 
         # 查询 ipinfo.io
         response = await httpx_client.get(
             "https://ipinfo.io/json",
-            proxies=proxies,
+            proxy=proxy,
             timeout=15.0
         )
         response.raise_for_status()
@@ -691,7 +688,7 @@ async def handle_warp_query(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         if warp_ip:
             ipapi_response = await httpx_client.get(
                 f"https://api.ipapi.is/?q={warp_ip}",
-                proxies=proxies,
+                proxy=proxy,
                 timeout=15.0
             )
             if ipapi_response.status_code == 200:
@@ -1214,7 +1211,7 @@ async def handle_inline_scan_chosen(
             # 执行全球延迟测试
             result = await global_latency_test(target)
 
-            if not result:
+            if not result or result.get("status") != "finished":
                 await context.bot.edit_message_text(
                     inline_message_id=inline_message_id,
                     text=f"❌ 延迟测试失败: {target}",
@@ -1222,40 +1219,67 @@ async def handle_inline_scan_chosen(
                 )
                 return
 
-            # 格式化结果
-            response_lines = [f"⏱️ *全球延迟测试: {target}*\n"]
+            # 解析结果
+            results = result.get("results", [])
+            if not results:
+                await context.bot.edit_message_text(
+                    inline_message_id=inline_message_id,
+                    text=f"❌ 未获取到测试结果: {target}",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                return
 
             # 按大洲分组
-            continents = {}
-            for node in result:
-                continent = node.get("continent", "Unknown")
-                if continent not in continents:
-                    continents[continent] = []
-                continents[continent].append(node)
+            continents = {"AS": "🌏 亚洲", "EU": "🌍 欧洲", "NA": "🌎 北美", "SA": "🌎 南美", "OC": "🌏 大洋洲", "AF": "🌍 非洲"}
+            grouped = {}
 
-            # 显示每个大洲的结果
-            for continent, nodes in continents.items():
-                response_lines.append(f"\n*{continent}*")
-                for node in nodes:
-                    city = node.get("city", "Unknown")
-                    avg_ms = node.get("avg_ms")
-                    if avg_ms is not None:
-                        # 根据延迟着色
-                        if avg_ms < 50:
+            for r in results:
+                probe = r.get("probe", {})
+                result_data = r.get("result", {})
+                stats = result_data.get("stats", {})
+
+                continent = probe.get("continent", "")
+                country = probe.get("country", "")
+                city = probe.get("city", "")
+                avg_latency = stats.get("avg", 0)
+
+                if continent not in grouped:
+                    grouped[continent] = []
+
+                grouped[continent].append({
+                    "country": country,
+                    "city": city,
+                    "latency": round(avg_latency, 1)
+                })
+
+            # 格式化输出
+            response_lines = [f"⏱️ *全球延迟测试: {target}*\n"]
+
+            for continent_code, continent_name in continents.items():
+                if continent_code in grouped:
+                    response_lines.append(f"{continent_name}:")
+                    for location in grouped[continent_code]:
+                        latency = location["latency"]
+                        # 延迟等级
+                        if latency < 50:
+                            emoji = "✅"
+                        elif latency < 100:
                             emoji = "🟢"
-                        elif avg_ms < 150:
+                        elif latency < 200:
                             emoji = "🟡"
+                        elif latency < 300:
+                            emoji = "🟠"
                         else:
                             emoji = "🔴"
-                        response_lines.append(f"{emoji} {city}: {avg_ms:.1f}ms")
-                    else:
-                        response_lines.append(f"❌ {city}: 超时")
+
+                        response_lines.append(f"  {location['city']}, {location['country']}: {latency}ms {emoji}")
+                    response_lines.append("")
 
             # 计算平均延迟
-            valid_latencies = [n.get("avg_ms") for n in result if n.get("avg_ms") is not None]
-            if valid_latencies:
-                avg_latency = sum(valid_latencies) / len(valid_latencies)
-                response_lines.append(f"\n📊 平均延迟: {avg_latency:.1f}ms")
+            all_latencies = [loc["latency"] for locs in grouped.values() for loc in locs]
+            if all_latencies:
+                avg_all = round(sum(all_latencies) / len(all_latencies), 1)
+                response_lines.append(f"📊 平均延迟: {avg_all}ms")
 
             response_text = "\n".join(response_lines)
 
@@ -1269,7 +1293,7 @@ async def handle_inline_scan_chosen(
             # 执行 MTR 路由追踪
             result = await global_latency_test(target, test_type="mtr")
 
-            if not result:
+            if not result or result.get("status") != "finished":
                 await context.bot.edit_message_text(
                     inline_message_id=inline_message_id,
                     text=f"❌ MTR 追踪失败: {target}",
@@ -1277,20 +1301,45 @@ async def handle_inline_scan_chosen(
                 )
                 return
 
-            # 格式化 MTR 结果
-            response_lines = [f"📡 *MTR 路由追踪: {target}*\n"]
+            # 解析结果（只显示第一个探测点的路由）
+            results = result.get("results", [])
+            if not results:
+                await context.bot.edit_message_text(
+                    inline_message_id=inline_message_id,
+                    text=f"❌ 未获取到追踪结果: {target}",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                return
 
-            for hop in result[:15]:  # 最多显示 15 跳
-                hop_num = hop.get("hop", 0)
-                ip = hop.get("ip", "???")
-                avg_ms = hop.get("avg_ms")
+            first_result = results[0]
+            probe = first_result.get("probe", {})
+            result_data = first_result.get("result", {})
+            hops = result_data.get("hops", [])
 
-                if avg_ms is not None:
-                    response_lines.append(f"{hop_num}. `{ip}` - {avg_ms:.1f}ms")
+            probe_location = f"{probe.get('city', '')}, {probe.get('country', '')}"
+
+            response_text = f"📡 *MTR 路由追踪: {target}*\n"
+            response_text += f"📍 *测试节点*: {probe_location}\n\n"
+            response_text += "```\n"
+            response_text += "跳 | IP地址              | 延迟\n"
+            response_text += "---|---------------------|------\n"
+
+            for i, hop in enumerate(hops[:15], 1):  # 只显示前15跳
+                stats = hop.get("stats", {})
+                avg_latency = stats.get("avg", 0)
+                loss = stats.get("loss", 0)
+                hostname = hop.get("resolvedHostname") or hop.get("resolvedAddress") or "*"
+
+                # 截断过长的主机名
+                if len(hostname) > 20:
+                    hostname = hostname[:17] + "..."
+
+                if loss == 100:
+                    response_text += f"{i:2d} | {'*':20s} | -\n"
                 else:
-                    response_lines.append(f"{hop_num}. `{ip}` - *")
+                    response_text += f"{i:2d} | {hostname:20s} | {avg_latency:.1f}ms\n"
 
-            response_text = "\n".join(response_lines)
+            response_text += "```"
 
             await context.bot.edit_message_text(
                 inline_message_id=inline_message_id,

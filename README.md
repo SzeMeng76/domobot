@@ -130,6 +130,8 @@ All configurations are managed via the `.env` file. You must copy `.env.example`
 | `OPENAI_API_KEY`            | **(Optional)** API Key from OpenAI for AI anti-spam detection feature. Feature is enabled by default if key is provided. After setting the key, enable anti-spam for specific groups via `/admin` panel. |                         |
 | `REDDIT_CLIENT_ID`          | **(Optional)** Reddit Client ID for the `/reddit` command. Obtain from Reddit App creation page. |                         |
 | `REDDIT_CLIENT_SECRET`      | **(Optional)** Reddit Client Secret for the `/reddit` command. Obtain from Reddit App creation page. |                         |
+| `REDDIT_API_MODE`           | **(Optional)** Reddit API mode: `oauth` (default, requires credentials) or `json` (TLS fingerprint + WARP proxy, no credentials needed). | `oauth`                 |
+| `ABUSEIPDB_API_KEY`         | **(Optional)** AbuseIPDB API Key for IP reputation checks in `/scan` command. Supports multiple keys separated by commas for rotation. |                         |
 
 The configuration is managed by the `BotConfig` class in `utils/config_manager.py`, which supports setting cache durations, auto-deletion toggles, feature flags, and performance parameters.
 
@@ -212,14 +214,28 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /platforms               # View list of 20+ supported platforms (all users)
 
 # Reddit Post Parser
-/reddit https://reddit.com/r/python/comments/xxx/  # Parse single post (supports images, videos, galleries)
+/reddit https://reddit.com/r/python/comments/xxx/  # Parse single post (supports images, videos, galleries, AI summary)
 /reddit hot                                        # All-site hot posts
 /reddit hot python                                 # r/python hot posts
 /reddit top                                        # All-site today's top
 /reddit top week                                   # All-site this week's top
 /reddit top python week                            # r/python this week's top
+/reddit new python                                 # r/python latest posts
 # Supported time ranges: hour, day, week, month, year, all
 # Features: AI summary (Chinese translation) and list AI translation
+# Inline mode: @bot reddit <link>$ - Quick parse Reddit posts in any chat
+# Dual API mode: OAuth (default) or JSON endpoint (TLS fingerprint + WARP proxy)
+
+# Network Diagnostic Tools
+/scan 8.8.8.8            # IP reputation check (ipapi.is + AbuseIPDB)
+/scan 00:1A:2B:3C:4D:5E  # MAC address vendor lookup
+/scan google.com         # Domain resolution + IP info
+/scan https://example.com # Website availability check
+/scan latency google.com # Global latency test (6 continents)
+/scan mtr google.com     # MTR route tracing (15 hops)
+/scan warp               # Check WARP exit IP info
+# Inline mode: @bot scan <target>$ - Supports IP/MAC/domain/URL queries
+# Latency and MTR tests execute after clicking in Inline mode
 ```
 
 #### Whitelist-Only Commands

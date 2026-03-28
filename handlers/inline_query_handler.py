@@ -415,6 +415,12 @@ class InlineQueryHandler:
 • `when 123456789$` - 查询用户信息
 • `when @username$` - 查询用户信息
 
+**🔍 网络诊断:**
+• `scan 8.8.8.8$` - IP信誉查询
+• `scan google.com$` - 域名解析+IP信息
+• `scan latency google.com$` - 全球延迟测试（点击查看详情）
+• `scan mtr google.com$` - 路由追踪（点击查看详情）
+
 **🎵 音乐:**
 • `netease 晴天$` - 搜索网易云音乐
 • `yt 晴天$` - 搜索YouTube Music
@@ -491,6 +497,7 @@ class InlineQueryHandler:
             "movie": "🎬 电影搜索 - 添加 $ 执行查询（支持中英文）",
             "tv": "📺 电视剧搜索 - 添加 $ 执行查询（支持中英文）",
             "reddit": "🔴 Reddit - 添加 $ 执行查询（hot/top/new列表）",
+            "scan": "🔍 网络诊断 - 添加 $ 执行查询（IP/域名/延迟/路由）",
         }
 
         hint = command_hints.get(command, f"💡 添加 '{self.trigger_suffix}' 执行命令")

@@ -128,8 +128,10 @@ docker-compose down
 | `LOG_LEVEL`                 | 设置日志级别 (`DEBUG`, `INFO`, `WARNING`, `ERROR`)。                        | `INFO`                  |
 | `LOAD_CUSTOM_SCRIPTS`       | 设为 `true` 以启用从 `custom_scripts/` 目录加载脚本的功能。                 | `false`                 |
 | `OPENAI_API_KEY`            | **（可选）** OpenAI的API Key，用于AI反垃圾检测功能。设置后功能自动启用。需要在 `/admin` 面板中为特定群组手动开启检测。 |                         |
-| `REDDIT_CLIENT_ID`          | **（可选）** Reddit的Client ID，用于启用 `/reddit` 命令。从Reddit App创建页面获取。 |                         |
-| `REDDIT_CLIENT_SECRET`      | **（可选）** Reddit的Client Secret，用于启用 `/reddit` 命令。从Reddit App创建页面获取。 |                         |
+| `REDDIT_CLIENT_ID`          | **（可选）** Reddit的Client ID，用于启用 `/reddit` 命令（OAuth模式）。从Reddit App创建页面获取。 |                         |
+| `REDDIT_CLIENT_SECRET`      | **（可选）** Reddit的Client Secret，用于启用 `/reddit` 命令（OAuth模式）。从Reddit App创建页面获取。 |                         |
+| `REDDIT_API_MODE`           | **（可选）** Reddit API模式：`oauth`（默认，需要CLIENT_ID/SECRET）或 `json`（JSON endpoint，TLS指纹伪装+WARP代理，无需API key）。 | `oauth`                 |
+| `ABUSEIPDB_API_KEY`         | **（可选）** AbuseIPDB API密钥，用于 `/scan` 命令的IP信誉检测。支持多个Key轮询（逗号分隔）。 |                         |
 
 配置由 `utils/config_manager.py` 中的 `BotConfig` 类管理，该类支持设置缓存时长、自动删除开关、功能开关和性能参数。
 
@@ -192,14 +194,29 @@ docker-compose down
 /meme 3                  # 获取3个随机表情包
 
 # Reddit 帖子解析
-/reddit https://reddit.com/r/python/comments/xxx/  # 解析单个帖子（支持图片、视频、图集）
+/reddit https://reddit.com/r/python/comments/xxx/  # 解析单个帖子（支持图片、视频、图集、AI总结）
 /reddit hot                                        # 全站热门帖子
 /reddit hot python                                 # r/python 热门帖子
 /reddit top                                        # 全站今日Top
 /reddit top week                                   # 全站本周Top
 /reddit top python week                            # r/python 本周Top
+/reddit new python                                 # r/python 最新帖子
 # 支持时间范围: hour, day, week, month, year, all
 # 支持AI总结（中文翻译）和列表AI翻译功能
+# Inline模式: @bot reddit <链接>$ - 在任何聊天中快速解析Reddit帖子
+# 双模式API: OAuth（默认）或 JSON endpoint（TLS指纹伪装+WARP代理）
+
+# 网络诊断工具
+/scan 8.8.8.8            # IP地址信誉检测（ipapi.is + AbuseIPDB）
+/scan 00:1A:2B:3C:4D:5E  # MAC地址厂商查询
+/scan google.com         # 域名解析 + IP信息
+/scan https://example.com # 网站可用性检测
+/scan latency google.com # 全球延迟测试（6大洲节点）
+/scan mtr google.com     # MTR路由追踪（显示15跳）
+/scan warp               # 查看WARP出口IP信息
+# Inline模式: @bot scan <目标>$ - 支持IP/MAC/域名/URL查询
+# 延迟和MTR测试在Inline模式下点击后执行
+
 /meme 5                  # 获取5个随机表情包（1-20范围）
 /meme                    # 显示帮助和使用指南
 

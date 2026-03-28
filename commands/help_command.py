@@ -84,7 +84,8 @@ Inline: `@bot netease 关键词$` - Inline搜索(有缓存直接发音频)
 🎮 *Steam* `/steam <游戏> [国家]` | `/steamb <包名>`
 📺 *流媒体* `/nf` `/ds` `/sp` `/max` - Netflix/Disney+/Spotify/HBO
 📱 *应用商店* `/app <名称>` - 详细内购项目 | `/gp <名称>` - 内购价格范围 | `/aps <服务>`
-🔴 *Reddit* `/reddit <链接>` - 解析帖子 | `/reddit hot/top/new [subreddit] [时间]` - 列表
+🔴 *Reddit* `/reddit <链接>` - 解析帖子(图片/视频/图集/AI总结) | `/reddit hot/top/new [subreddit] [时间]` - 列表 | Inline: `@bot reddit <链接>$`
+🔍 *网络诊断* `/scan <IP/MAC/域名/URL>` - IP信誉/MAC厂商/网站检测 | `/scan latency <目标>` - 全球延迟 | `/scan mtr <目标>` - 路由追踪 | `/scan warp` - WARP出口IP
 👤 *用户* `/when <ID/@用户>` `/id` - 注册时间&ID信息
 ⏰ *时区* `/time <时区>` `/timezone` - 时间查询&时区列表
 📰 *新闻* `/news` `/newslist` `/hotnews` - 40+源实时资讯
@@ -92,7 +93,7 @@ Inline: `@bot netease 关键词$` - Inline搜索(有缓存直接发音频)
 🌍 *支持地区* US CN TR IN MY JP GB DE 等40+国家
 💡 *特色* 支持中文地名 | 自动CNY转换 | 智能缓存 | 表达式计算
 
-⚡ 快速试用: `/nf` `/crypto btc` `/tq 北京` `/movie 复仇者` `/tv 权力的游戏` `/chart` `/news` `/time 北京` `/whois google.com` `/dns github.com` `/recipe` `/meme 3` `/finance AAPL` `/map 天安门` `/fuel my` `/flight 北京 洛杉矶 2024-12-25` `/hotel 东京 2024-12-25 2024-12-28` `/netease 晴天` `/yt chart` `/reddit hot python`"""
+⚡ 快速试用: `/nf` `/crypto btc` `/tq 北京` `/movie 复仇者` `/tv 权力的游戏` `/chart` `/news` `/time 北京` `/whois google.com` `/dns github.com` `/recipe` `/meme 3` `/finance AAPL` `/map 天安门` `/fuel my` `/flight 北京 洛杉矶 2024-12-25` `/hotel 东京 2024-12-25 2024-12-28` `/netease 晴天` `/yt chart` `/reddit hot python` `/scan 8.8.8.8` `/scan warp`"""
 
     admin_help_text = """
 
@@ -237,7 +238,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 🚀 *快速开始*
 `/rate USD 100` `/crypto btc` `/tq 北京` `/movie 复仇者` `/tv 权力的游戏` `/chart`
-`/steam 赛博朋克` `/nf` `/time 北京` `/whois google.com` `/dns github.com` `/news` `/recipe` `/meme 3` `/finance AAPL` `/map 天安门` `/flight 北京 洛杉矶 2024-12-25` `/hotel 东京 2024-12-25 2024-12-28` `/netease 晴天` `/yt chart` `/help`
+`/steam 赛博朋克` `/nf` `/time 北京` `/whois google.com` `/dns github.com` `/news` `/recipe` `/meme 3` `/finance AAPL` `/map 天安门` `/flight 北京 洛杉矶 2024-12-25` `/hotel 东京 2024-12-25 2024-12-28` `/netease 晴天` `/yt chart` `/reddit hot python` `/scan 8.8.8.8` `/scan warp` `/help`
 
 🌟 40+国家 | CNY转换 | 智能缓存 | 表达式计算 | 时区转换 | 新闻聚合 | 1000+中文菜谱 | 股市数据 | 163国燃油价格"""
 
