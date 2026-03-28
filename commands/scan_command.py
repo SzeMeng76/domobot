@@ -699,7 +699,7 @@ async def handle_warp_query(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         result_text += f"📌 *地区*: {data.get('regionName', 'N/A')}\n"
         result_text += f"🏢 *ISP*: {data.get('isp', 'N/A')}\n"
         result_text += f"🏢 *组织*: {data.get('org', 'N/A')}\n"
-        result_text += f"🔢 *AS*: {data.get('as', 'N/A')}\n"
+        result_text += f"🔢 *AS*: `{data.get('as', 'N/A')}`\n"
 
         if data.get('lat') and data.get('lon'):
             result_text += f"🗺️ *坐标*: {data.get('lat')}, {data.get('lon')}\n"
@@ -714,7 +714,7 @@ async def handle_warp_query(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
             result_text += f"\n*详细信息*:\n"
             result_text += f"🏢 *公司*: {company.get('name', 'N/A')}\n"
-            result_text += f"🔢 *ASN*: AS{asn.get('asn', 'N/A')} ({asn.get('org', 'N/A')})\n"
+            result_text += f"🔢 *ASN*: `AS{asn.get('asn', 'N/A')}` ({asn.get('org', 'N/A')})\n"
 
             # IP 类型
             ip_type = []
