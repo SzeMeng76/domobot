@@ -890,6 +890,37 @@ async def handle_inline_scan(target: str, context: ContextTypes.DEFAULT_TYPE) ->
     用法: @botname scan 8.8.8.8$
     """
     try:
+        # 检查是否是特殊命令
+        parts = target.split(None, 1)
+        first_arg = parts[0].lower() if parts else ""
+
+        if first_arg == "latency" and len(parts) > 1:
+            result_text = "⏱️ *全球延迟测试*\n\n❌ Inline 模式不支持延迟测试\n\n💡 请在群组或私聊中使用:\n`/scan latency " + parts[1] + "`"
+            return [
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title="⏱️ 延迟测试",
+                    description="Inline 模式不支持，请使用命令",
+                    input_message_content=InputTextMessageContent(
+                        message_text=result_text,
+                        parse_mode=ParseMode.MARKDOWN
+                    ),
+                )
+            ]
+        elif first_arg == "mtr" and len(parts) > 1:
+            result_text = "📡 *MTR 路由追踪*\n\n❌ Inline 模式不支持路由追踪\n\n💡 请在群组或私聊中使用:\n`/scan mtr " + parts[1] + "`"
+            return [
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title="📡 MTR 追踪",
+                    description="Inline 模式不支持，请使用命令",
+                    input_message_content=InputTextMessageContent(
+                        message_text=result_text,
+                        parse_mode=ParseMode.MARKDOWN
+                    ),
+                )
+            ]
+
         # 检测输入类型
         input_type, normalized_value = detect_input_type(target)
 
