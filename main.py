@@ -392,7 +392,8 @@ async def setup_application(application: Application, config) -> None:
     if use_json_client:
         try:
             from utils.reddit_json_client import RedditJsonClient
-            user_agent = f"linux:domo_app:v1.0.0 (by /u/SzeMeng76)"
+            # 使用真实浏览器 User-Agent，避免被检测为 bot
+            user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
             reddit_client = RedditJsonClient(
                 user_agent=user_agent,
                 proxy="socks5://warp:1080"  # WARP SOCKS5 代理（默认端口 1080）
@@ -404,7 +405,7 @@ async def setup_application(application: Application, config) -> None:
     elif config.reddit_client_id and config.reddit_client_secret:
         try:
             from utils.reddit_client import RedditClient
-            user_agent = f"linux:domo_app:v1.0.0 (by /u/SzeMeng76)"
+            user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
             reddit_client = RedditClient(
                 client_id=config.reddit_client_id,
                 client_secret=config.client_secret,

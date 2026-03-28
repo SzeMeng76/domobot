@@ -533,7 +533,9 @@ async def _handle_single_parse(
         config = get_config()
         if sent_messages:
             for msg in sent_messages:
-                await _schedule_deletion(context, chat_id, msg.message_id, config.auto_delete_delay)
+                # Pyrogram 消息使用 msg.id，python-telegram-bot 消息使用 msg.message_id
+                msg_id = msg.id if hasattr(msg, 'id') and not hasattr(msg, 'message_id') else msg.message_id
+                await _schedule_deletion(context, chat_id, msg_id, config.auto_delete_delay)
 
         logger.info(f"用户 {user_id} 解析成功: {platform} - {formatted['title']}")
 
