@@ -623,7 +623,8 @@ async def handle_inline_parse_chosen(
 
         # 链接部分（URL 也需要转义）
         escaped_url = html_escape(url)
-        link_part = f'\n\n<b>🔗 <a href="{escaped_url}">原链接</a></b>'
+        platform_name = platform.upper() if platform else "UNKNOWN"
+        link_part = f'\n\n<b>🔗 <a href="{escaped_url}">原链接</a></b>\n\n📱 平台: {platform_name}'
 
         # Telegram caption 限制 1024 字节（不是字符！），必须严格控制
         max_total_bytes = 1020

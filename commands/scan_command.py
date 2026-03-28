@@ -671,29 +671,41 @@ async def handle_warp_query(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             proxy="socks5://warp:1080",
             timeout=15.0
         ) as proxy_client:
-            # 查询 ipinfo.io
-            response = await proxy_client.get("https://ipinfo.io/json")
+            # 查询 ip-api.com (免费，无需token，限制更宽松)
+            response = await proxy_client.get("http://ip-api.com/json/?fields=status,message,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,query")
             response.raise_for_status()
-            warp_data = response.json()
+            data = response.json()
+
+            if data.get("status") != "success":
+                raise Exception(f"IP查询失败: {data.get('message', 'Unknown error')}")
+
+            warp_ip = data.get("query")
 
             # 查询 ipapi.is 获取更详细信息
-            warp_ip = warp_data.get("ip")
             ipapi_data = None
             if warp_ip:
-                ipapi_response = await proxy_client.get(f"https://api.ipapi.is/?q={warp_ip}")
-                if ipapi_response.status_code == 200:
-                    ipapi_data = ipapi_response.json()
+                try:
+                    ipapi_response = await proxy_client.get(f"https://api.ipapi.is/?q={warp_ip}")
+                    if ipapi_response.status_code == 200:
+                        ipapi_data = ipapi_response.json()
+                except Exception:
+                    pass  # ipapi.is 失败不影响主要功能
 
         # 构建结果
         result_text = "🌐 *WARP 出口 IP 信息*\n\n"
-        result_text += f"📍 *IP 地址*: `{warp_data.get('ip', 'N/A')}`\n"
-        result_text += f"🏙️ *城市*: {warp_data.get('city', 'N/A')}\n"
-        result_text += f"🌍 *国家*: {warp_data.get('country', 'N/A')}\n"
-        result_text += f"📌 *地区*: {warp_data.get('region', 'N/A')}\n"
-        result_text += f"🏢 *组织*: {warp_data.get('org', 'N/A')}\n"
+        result_text += f"📍 *IP 地址*: `{data.get('query', 'N/A')}`\n"
+        result_text += f"🏙️ *城市*: {data.get('city', 'N/A')}\n"
+        result_text += f"🌍 *国家*: {data.get('country', 'N/A')} ({data.get('countryCode', 'N/A')})\n"
+        result_text += f"📌 *地区*: {data.get('regionName', 'N/A')}\n"
+        result_text += f"🏢 *ISP*: {data.get('isp', 'N/A')}\n"
+        result_text += f"🏢 *组织*: {data.get('org', 'N/A')}\n"
+        result_text += f"🔢 *AS*: {data.get('as', 'N/A')}\n"
 
-        if warp_data.get('loc'):
-            result_text += f"🗺️ *坐标*: {warp_data.get('loc')}\n"
+        if data.get('lat') and data.get('lon'):
+            result_text += f"🗺️ *坐标*: {data.get('lat')}, {data.get('lon')}\n"
+
+        if data.get('timezone'):
+            result_text += f"🕐 *时区*: {data.get('timezone')}\n"
 
         # 添加 ipapi.is 的详细信息
         if ipapi_data:
