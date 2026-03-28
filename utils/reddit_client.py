@@ -6,12 +6,11 @@ Reddit API 客户端
 import asyncio
 import hashlib
 import logging
-import urllib.request
-import urllib.parse
 import json
 from base64 import b64encode
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -58,32 +57,17 @@ class RedditClient:
         self.client_id = client_id
         self.client_secret = client_secret
         self.user_agent = user_agent
-        self.proxy = proxy  # SOCKS5 代理，如 "socks5://warp:40000"
+        self.proxy = proxy  # SOCKS5 代理，如 "socks5://warp:1080"
         self.access_token: Optional[str] = None
         self.token_expiry: float = 0
 
-        # 设置代理
+        # 创建 httpx 客户端（支持 SOCKS5 代理）
         if self.proxy:
-            import socks
-            import socket
-            # 解析代理 URL
-            if self.proxy.startswith("socks5://"):
-                proxy_host_port = self.proxy.replace("socks5://", "")
-                if ":" in proxy_host_port:
-                    proxy_host, proxy_port = proxy_host_port.split(":")
-                    proxy_port = int(proxy_port)
-                else:
-                    proxy_host = proxy_host_port
-                    proxy_port = 1080
-
-                # 设置全局 SOCKS5 代理
-                socks.set_default_proxy(socks.SOCKS5, proxy_host, proxy_port)
-                socket.socket = socks.socksocket
-                logger.info(f"Reddit OAuth 客户端使用 SOCKS5 代理: {proxy_host}:{proxy_port}")
-            else:
-                logger.warning(f"不支持的代理类型: {self.proxy}")
+            logger.info(f"✅ Reddit OAuth 客户端使用 SOCKS5 代理: {self.proxy}")
+            self.http_client = httpx.AsyncClient(proxy=self.proxy, timeout=30.0)
         else:
-            logger.info("Reddit OAuth 客户端不使用代理")
+            logger.info("ℹ️ Reddit OAuth 客户端不使用代理")
+            self.http_client = httpx.AsyncClient(timeout=30.0)
 
     async def _get_access_token(self) -> str:
         """获取或刷新访问令牌"""
@@ -101,17 +85,15 @@ class RedditClient:
                 'User-Agent': self.user_agent,
                 'Content-Type': 'application/x-www-form-urlencoded'
             }
-            data = urllib.parse.urlencode({'grant_type': 'client_credentials'}).encode()
+            data = {'grant_type': 'client_credentials'}
 
-            req = urllib.request.Request(
+            response = await self.http_client.post(
                 'https://www.reddit.com/api/v1/access_token',
                 data=data,
-                headers=headers,
-                method='POST'
+                headers=headers
             )
-
-            response = await asyncio.to_thread(urllib.request.urlopen, req)
-            token_data = json.loads(response.read().decode())
+            response.raise_for_status()
+            token_data = response.json()
 
             self.access_token = token_data['access_token']
             self.token_expiry = now + (token_data['expires_in'] - 60)  # 提前60秒刷新
@@ -129,18 +111,14 @@ class RedditClient:
             token = await self._get_access_token()
             url = f"https://oauth.reddit.com{endpoint}"
 
-            if params:
-                query_params = urllib.parse.urlencode(params)
-                url += f"?{query_params}"
-
             headers = {
                 'Authorization': f'Bearer {token}',
                 'User-Agent': self.user_agent
             }
 
-            req = urllib.request.Request(url, headers=headers)
-            response = await asyncio.to_thread(urllib.request.urlopen, req)
-            return json.loads(response.read().decode())
+            response = await self.http_client.get(url, headers=headers, params=params)
+            response.raise_for_status()
+            return response.json()
 
         except Exception as e:
             logger.error(f"Reddit API 请求失败 ({endpoint}): {e}")

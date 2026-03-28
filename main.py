@@ -324,9 +324,15 @@ async def setup_application(application: Application, config) -> None:
         logger.warning("⚠️ AI反垃圾功能已启用但缺少OPENAI_API_KEY，功能将不可用")
 
     # 将核心组件存储到 bot_data 中
-    # 初始化社交媒体解析适配器
+    # 初始化社交媒体解析适配器（使用 WARP 代理）
     from utils.parse_hub_adapter import ParseHubAdapter
-    parse_adapter = ParseHubAdapter(cache_manager, user_cache_manager, config, pyrogram_helper)
+    parse_adapter = ParseHubAdapter(
+        cache_manager,
+        user_cache_manager,
+        config,
+        pyrogram_helper,
+        proxy="socks5://warp:1080"  # 使用 WARP 代理解析小红书等平台
+    )
 
     application.bot_data["cache_manager"] = cache_manager
     application.bot_data["rate_converter"] = rate_converter
@@ -378,33 +384,15 @@ async def setup_application(application: Application, config) -> None:
     auto_parse_handler.set_adapter(parse_adapter)
 
     # 初始化 Reddit 客户端
-    # 优先使用 OAuth 客户端（功能完整），通过 WARP 代理绕过 IP 封禁
-    # 如果 OAuth 失败，自动 fallback 到 JSON 客户端
-    use_json_client = False  # 设置为 True 强制使用 JSON 客户端（无需 API key）
+    # 默认使用 JSON 客户端（无需 API key，通过 WARP 代理绕过 IP 封禁）
+    # 如果需要使用 OAuth 客户端，设置 use_json_client = False
+    use_json_client = True  # 默认使用 JSON 客户端（推荐）
     reddit_client = None
 
-    if not use_json_client and config.reddit_client_id and config.reddit_client_secret:
-        try:
-            from utils.reddit_client import RedditClient
-            # 使用符合 Reddit 规范的 User-Agent 格式
-            user_agent = f"linux:domo_app:v1.0.0 (by /u/SzeMeng76)"
-            reddit_client = RedditClient(
-                client_id=config.reddit_client_id,
-                client_secret=config.reddit_client_secret,
-                user_agent=user_agent,
-                proxy="socks5://warp:1080"  # WARP SOCKS5 代理（默认端口 1080）
-            )
-            logger.info(f"✅ Reddit OAuth 客户端已初始化 (通过 WARP 代理)")
-        except Exception as e:
-            logger.warning(f"⚠️ Reddit OAuth 客户端初始化失败: {e}")
-            logger.info("🔄 尝试使用 JSON 客户端作为 fallback...")
-            use_json_client = True
-
-    if use_json_client or reddit_client is None:
+    if use_json_client:
         try:
             from utils.reddit_json_client import RedditJsonClient
             user_agent = f"linux:domo_app:v1.0.0 (by /u/SzeMeng76)"
-            # 使用 WARP 代理绕过 IP 封禁
             reddit_client = RedditJsonClient(
                 user_agent=user_agent,
                 proxy="socks5://warp:1080"  # WARP SOCKS5 代理（默认端口 1080）
@@ -412,6 +400,20 @@ async def setup_application(application: Application, config) -> None:
             logger.info(f"✅ Reddit JSON 客户端已初始化 (通过 WARP 代理)")
         except Exception as e:
             logger.error(f"❌ Reddit JSON 客户端初始化失败: {e}")
+            reddit_client = None
+    elif config.reddit_client_id and config.reddit_client_secret:
+        try:
+            from utils.reddit_client import RedditClient
+            user_agent = f"linux:domo_app:v1.0.0 (by /u/SzeMeng76)"
+            reddit_client = RedditClient(
+                client_id=config.reddit_client_id,
+                client_secret=config.client_secret,
+                user_agent=user_agent,
+                proxy="socks5://warp:1080"  # WARP SOCKS5 代理（默认端口 1080）
+            )
+            logger.info(f"✅ Reddit OAuth 客户端已初始化 (通过 WARP 代理)")
+        except Exception as e:
+            logger.error(f"❌ Reddit OAuth 客户端初始化失败: {e}")
             reddit_client = None
 
     if not reddit_client:

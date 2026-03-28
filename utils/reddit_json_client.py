@@ -6,11 +6,10 @@ Reddit JSON API 客户端（无需 OAuth）
 import asyncio
 import hashlib
 import logging
-import urllib.request
-import urllib.parse
 import json
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -56,47 +55,28 @@ class RedditJsonClient:
     def __init__(self, user_agent: str = "linux:domo_app:v1.0.0 (by /u/SzeMeng76)", proxy: Optional[str] = None):
         self.user_agent = user_agent
         self.base_url = "https://www.reddit.com"
-        self.proxy = proxy  # SOCKS5 代理，如 "socks5://warp:40000"
+        self.proxy = proxy  # SOCKS5 代理，如 "socks5://warp:1080"
 
-        # 设置代理
+        # 创建 httpx 客户端（支持 SOCKS5 代理）
         if self.proxy:
-            import socks
-            import socket
-            # 解析代理 URL
-            if self.proxy.startswith("socks5://"):
-                proxy_host_port = self.proxy.replace("socks5://", "")
-                if ":" in proxy_host_port:
-                    proxy_host, proxy_port = proxy_host_port.split(":")
-                    proxy_port = int(proxy_port)
-                else:
-                    proxy_host = proxy_host_port
-                    proxy_port = 1080
-
-                # 设置全局 SOCKS5 代理
-                socks.set_default_proxy(socks.SOCKS5, proxy_host, proxy_port)
-                socket.socket = socks.socksocket
-                logger.info(f"Reddit 客户端使用 SOCKS5 代理: {proxy_host}:{proxy_port}")
-            else:
-                logger.warning(f"不支持的代理类型: {self.proxy}")
+            logger.info(f"✅ Reddit JSON 客户端使用 SOCKS5 代理: {self.proxy}")
+            self.http_client = httpx.AsyncClient(proxy=self.proxy, timeout=30.0)
         else:
-            logger.info("Reddit 客户端不使用代理")
+            logger.info("ℹ️ Reddit JSON 客户端不使用代理")
+            self.http_client = httpx.AsyncClient(timeout=30.0)
 
-    def _make_request(self, url: str) -> Dict[str, Any]:
-        """发送 HTTP 请求"""
+    async def _async_request(self, url: str) -> Dict[str, Any]:
+        """异步发送请求"""
         try:
             headers = {
                 'User-Agent': self.user_agent
             }
-            req = urllib.request.Request(url, headers=headers)
-            response = urllib.request.urlopen(req, timeout=10)
-            return json.loads(response.read().decode())
+            response = await self.http_client.get(url, headers=headers)
+            response.raise_for_status()
+            return response.json()
         except Exception as e:
             logger.error(f"Reddit JSON 请求失败 ({url}): {e}")
             raise
-
-    async def _async_request(self, url: str) -> Dict[str, Any]:
-        """异步发送请求"""
-        return await asyncio.to_thread(self._make_request, url)
 
     def _parse_post(self, post_data: Dict[str, Any]) -> RedditPost:
         """解析帖子数据"""
