@@ -3,13 +3,14 @@ Reddit JSON API 客户端（无需 OAuth）
 使用 Reddit 公开的 JSON 端点，不需要 API key
 使用 curl_cffi 模拟浏览器 TLS 指纹绕过反爬虫检测
 支持多浏览器轮询以避免检测
+实现 circuit breaker 和自动 cooldown 机制
 """
 
 import asyncio
 import hashlib
 import logging
-import json
 import random
+import time
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 
@@ -23,8 +24,9 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-# 可用的浏览器指纹列表（兼容 curl-cffi 0.13.x，优先使用最新版本）
+# 可用的浏览器指纹列表（curl-cffi 0.14+ 支持，优先使用最新版本）
 BROWSER_POOL = [
+    'chrome142',
     'chrome136',
     'chrome133a',
     'chrome131',
@@ -32,11 +34,18 @@ BROWSER_POOL = [
     'chrome123',
     'chrome120',
     'safari260',
+    'safari2601',
     'safari184',
+    'firefox144',
     'firefox135',
-    'firefox133',
     'edge101',
 ]
+
+# Cooldown 配置
+COOLDOWN_FALLBACK_MIN = 300  # 5 分钟
+COOLDOWN_FALLBACK_MAX = 600  # 10 分钟
+COOLDOWN_JITTER_MIN = 5
+COOLDOWN_JITTER_MAX = 15
 
 
 @dataclass
@@ -75,9 +84,15 @@ class RedditComment:
 
 
 class RedditJsonClient:
-    """Reddit JSON API 客户端（使用 TLS 指纹伪装 + 浏览器轮询）"""
+    """Reddit JSON API 客户端（使用 TLS 指纹伪装 + 浏览器轮询 + Circuit Breaker）"""
 
-    def __init__(self, user_agent: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", proxy: Optional[str] = None, rotate_browser: bool = True):
+    def __init__(
+        self,
+        user_agent: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        proxy: Optional[str] = None,
+        rotate_browser: bool = True,
+        concurrency: int = 6
+    ):
         if not CURL_CFFI_AVAILABLE:
             raise ImportError("curl_cffi is required for RedditJsonClient. Install with: pip install curl_cffi")
 
@@ -87,6 +102,58 @@ class RedditJsonClient:
         self.rotate_browser = rotate_browser  # 是否轮询浏览器
         self.session: Optional[AsyncSession] = None
         self.current_browser = random.choice(BROWSER_POOL)  # 随机选择初始浏览器
+
+        # Circuit breaker 状态
+        self.cooldown_until: float = 0.0  # 冷却结束时间（monotonic time）
+        self.semaphore = asyncio.Semaphore(concurrency)  # 并发控制
+
+    def is_available(self) -> bool:
+        """检查是否可用（未在冷却期）"""
+        return time.monotonic() >= self.cooldown_until
+
+    def cooldown_remaining(self) -> float:
+        """返回剩余冷却时间（秒）"""
+        return max(0.0, self.cooldown_until - time.monotonic())
+
+    def _parse_rate_limit_headers(self, response) -> Optional[float]:
+        """解析 rate limit headers，返回 reset 时间（秒）"""
+        try:
+            # Reddit 使用 X-Ratelimit-Reset (Unix timestamp)
+            reset_header = response.headers.get('x-ratelimit-reset') or response.headers.get('X-Ratelimit-Reset')
+            if reset_header:
+                reset_timestamp = float(reset_header)
+                now = time.time()
+                return max(0, reset_timestamp - now)
+        except (ValueError, TypeError):
+            pass
+        return None
+
+    def _set_cooldown(self, status_code: int, response=None) -> None:
+        """设置冷却期"""
+        now = time.monotonic()
+
+        # 尝试从 headers 获取 reset 时间
+        reset_seconds = None
+        if response:
+            reset_seconds = self._parse_rate_limit_headers(response)
+
+        # 如果没有 reset header，使用随机回退时间
+        if reset_seconds is None:
+            base = random.uniform(COOLDOWN_FALLBACK_MIN, COOLDOWN_FALLBACK_MAX)
+        else:
+            base = reset_seconds
+
+        # 添加随机 jitter 避免同时重试
+        total = base + random.uniform(COOLDOWN_JITTER_MIN, COOLDOWN_JITTER_MAX)
+
+        previous_until = self.cooldown_until
+        new_until = max(previous_until, now + total)
+        self.cooldown_until = new_until
+
+        if previous_until <= now:
+            logger.warning(f"🚫 Reddit JSON API 进入冷却期: {status_code}, 冷却 {total:.0f} 秒")
+        else:
+            logger.debug(f"延长冷却期至 {new_until - now:.0f} 秒")
 
     async def _get_session(self) -> AsyncSession:
         """获取或创建 session"""
@@ -115,38 +182,52 @@ class RedditJsonClient:
         logger.info(f"🔄 切换浏览器指纹: {self.current_browser}")
 
     async def _make_request(self, url: str, retry_on_403: bool = True) -> Dict[str, Any]:
-        """发送 HTTP 请求"""
-        try:
-            session = await self._get_session()
-            # 完整的浏览器 headers，模拟真实浏览器行为
-            headers = {
-                'User-Agent': self.user_agent,
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'DNT': '1',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'none',
-                'Sec-Fetch-User': '?1',
-            }
+        """发送 HTTP 请求（带 circuit breaker 和并发控制）"""
+        # 检查是否在冷却期
+        if not self.is_available():
+            remaining = self.cooldown_remaining()
+            raise Exception(f"Reddit JSON API 冷却中，剩余 {remaining:.0f} 秒")
 
-            response = await session.get(url, headers=headers, timeout=15)
+        # 并发控制
+        async with self.semaphore:
+            try:
+                session = await self._get_session()
+                # 完整的浏览器 headers，模拟真实浏览器行为
+                headers = {
+                    'User-Agent': self.user_agent,
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.5',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'DNT': '1',
+                    'Connection': 'keep-alive',
+                    'Upgrade-Insecure-Requests': '1',
+                    'Sec-Fetch-Dest': 'document',
+                    'Sec-Fetch-Mode': 'navigate',
+                    'Sec-Fetch-Site': 'none',
+                    'Sec-Fetch-User': '?1',
+                }
 
-            # 如果遇到 403，尝试轮换浏览器重试
-            if response.status_code == 403 and retry_on_403 and self.rotate_browser:
-                logger.warning(f"⚠️ 收到 403 响应，尝试轮换浏览器重试...")
-                await self._rotate_browser()
-                return await self._make_request(url, retry_on_403=False)  # 只重试一次
+                response = await session.get(url, headers=headers, timeout=15)
 
-            response.raise_for_status()
-            return response.json()
+                # Circuit breaker: 处理 429/403
+                if response.status_code in (429, 403):
+                    self._set_cooldown(response.status_code, response)
 
-        except Exception as e:
-            logger.error(f"Reddit JSON 请求失败 ({url}): {e}")
-            raise
+                    # 如果是 403 且允许重试，尝试轮换浏览器
+                    if response.status_code == 403 and retry_on_403 and self.rotate_browser:
+                        logger.warning(f"⚠️ 收到 403 响应，尝试轮换浏览器重试...")
+                        await self._rotate_browser()
+                        return await self._make_request(url, retry_on_403=False)  # 只重试一次
+
+                    # 抛出异常让上层处理（可能回退到 OAuth）
+                    raise Exception(f"Reddit API {response.status_code}: 已进入冷却期")
+
+                response.raise_for_status()
+                return response.json()
+
+            except Exception as e:
+                logger.error(f"Reddit JSON 请求失败 ({url}): {e}")
+                raise
 
     def _parse_post(self, post_data: Dict[str, Any]) -> RedditPost:
         """解析帖子数据"""
