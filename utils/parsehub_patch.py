@@ -543,9 +543,48 @@ def patch_parsehub_yt_dlp():
                     raise ParseError(f"无法从URL提取note_id: {url}")
 
                 note_id = note_id_match.group(1)
-                logger.info(f"🎬 [TikHub] Fetching XHS via TikHub (app_v2): {note_id}")
-
                 headers = {"Authorization": f"Bearer {tikhub_api_key}"}
+
+                # Primary: web/get_note_info_v7 (最稳定)
+                logger.info(f"🎬 [TikHub] Trying primary endpoint: web/get_note_info_v7 (note_id={note_id})")
+                try:
+                    api_url = f"https://api.tikhub.io/api/v1/xiaohongshu/web/get_note_info_v7?note_id={note_id}"
+                    async with httpx.AsyncClient(timeout=30.0, proxy=self.proxy) as client:
+                        response = await client.get(api_url, headers=headers)
+
+                    if response.status_code == 200:
+                        data = response.json()
+                        items = data.get("data", [])
+                        if isinstance(items, list) and items:
+                            note_item = items[0].get("note_list", [{}])[0]
+                            title = note_item.get("title", "")
+                            desc = note_item.get("desc", "")
+                            note_type = note_item.get("type", "")
+
+                            if note_type == "video":
+                                video = note_item.get("video", {})
+                                consumer = video.get("consumer", {})
+                                origin_video_key = consumer.get("origin_video_key", "")
+                                if origin_video_key:
+                                    video_url = f"https://sns-na-i6.xhscdn.com/{origin_video_key}"
+                                    logger.info(f"✅ [TikHub] XHS video via web/get_note_info_v7")
+                                    return VideoParseResult(video=VideoRef(url=video_url), title=title, content=desc)
+
+                            images_list = note_item.get("images_list", [])
+                            if images_list:
+                                photos = []
+                                for img in images_list:
+                                    img_url = img.get("url", "") or img.get("url_multi_level", {}).get("high", "")
+                                    if img_url:
+                                        img_url = re.sub(r'format/(heif|heic|webp|avif)', 'format/jpg', img_url)
+                                        photos.append(ImageRef(url=img_url, ext="jpg", width=img.get("width", 0), height=img.get("height", 0)))
+                                if photos:
+                                    logger.info(f"✅ [TikHub] XHS {len(photos)} images via web/get_note_info_v7")
+                                    return ImageParseResult(photo=photos, title=title, content=desc)
+                except Exception as v7_error:
+                    logger.warning(f"⚠️ [TikHub] web/get_note_info_v7 failed: {v7_error}")
+
+                logger.info(f"🔄 [TikHub] Fallback to app_v2 endpoints")
 
                 # First call video endpoint to check note type
                 api_url = f"https://api.tikhub.io/api/v1/xiaohongshu/app_v2/get_video_note_detail?note_id={note_id}"
@@ -685,43 +724,6 @@ def patch_parsehub_yt_dlp():
                                     return ImageParseResult(photo=photos, **k_th)
                 except Exception as app_error:
                     logger.warning(f"⚠️ [TikHub] app/get_note_info failed: {app_error}")
-
-
-                # Fallback 2: web/get_note_info_v7
-                logger.info(f"🔄 [TikHub] Trying fallback endpoint: web/get_note_info_v7")
-                api_url = f"https://api.tikhub.io/api/v1/xiaohongshu/web/get_note_info_v7?note_id={note_id}"
-                async with httpx.AsyncClient(timeout=30.0, proxy=self.proxy) as client:
-                    response = await client.get(api_url, headers=headers)
-
-                if response.status_code == 200:
-                    data = response.json()
-                    items = data.get("data", [])
-                    if isinstance(items, list) and items:
-                        note_item = items[0].get("note_list", [{}])[0]
-                        title = note_item.get("title", "")
-                        desc = note_item.get("desc", "")
-                        note_type = note_item.get("type", "")
-
-                        if note_type == "video":
-                            video = note_item.get("video", {})
-                            consumer = video.get("consumer", {})
-                            origin_video_key = consumer.get("origin_video_key", "")
-                            if origin_video_key:
-                                video_url = f"https://sns-na-i6.xhscdn.com/{origin_video_key}"
-                                logger.info(f"✅ [TikHub] XHS video via web/get_note_info_v7")
-                                return VideoParseResult(video=VideoRef(url=video_url), title=title, content=desc)
-
-                        images_list = note_item.get("images_list", [])
-                        if images_list:
-                            photos = []
-                            for img in images_list:
-                                img_url = img.get("url", "") or img.get("url_multi_level", {}).get("high", "")
-                                if img_url:
-                                    img_url = re.sub(r'format/(heif|heic|webp|avif)', 'format/jpg', img_url)
-                                    photos.append(ImageRef(url=img_url, ext="jpg", width=img.get("width", 0), height=img.get("height", 0)))
-                            if photos:
-                                logger.info(f"✅ [TikHub] XHS {len(photos)} images via web/get_note_info_v7")
-                                return ImageParseResult(photo=photos, title=title, content=desc)
 
                 raise ParseError("TikHub所有endpoint均无法获取视频或图片URL")
 
