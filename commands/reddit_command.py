@@ -758,10 +758,12 @@ async def _send_reddit_media(context, chat_id, post, caption, reply_markup):
                 return list(messages) + [caption_msg]
 
         # 单张图片
-        elif post.preview_image_url:
-            logger.info(f"发送单张图片: {post.preview_image_url}")
+        elif post.preview_image_url or (post.url and post.url.endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp'))):
+            # 优先使用 preview_image_url（OAuth），否则使用 post.url（JSON endpoint）
+            image_url = post.preview_image_url or post.url
+            logger.info(f"发送单张图片: {image_url}")
 
-            img_path = await _download_image(post.preview_image_url, temp_dir)
+            img_path = await _download_image(image_url, temp_dir)
 
             @with_telegram_retry(max_retries=5)
             async def _send_photo():
