@@ -385,15 +385,30 @@ async def setup_application(application: Application, config) -> None:
     auto_parse_handler.set_adapter(parse_adapter)
 
     # 初始化 Reddit 客户端
-    # 默认使用 JSON 客户端（无需 API key，通过 WARP 代理绕过 IP 封禁）
-    # 如果需要使用 OAuth 客户端，设置 use_json_client = False
-    use_json_client = True  # 默认使用 JSON 客户端（推荐）
+    # 优先使用 OAuth 客户端（通过 WARP 代理），JSON 客户端作为 fallback
+    use_json_client = False  # 默认使用 OAuth 客户端
     reddit_client = None
 
-    if use_json_client:
+    if not use_json_client and config.reddit_client_id and config.reddit_client_secret:
+        try:
+            from utils.reddit_client import RedditClient
+            # 使用真实浏览器 User-Agent，避免被检测为 bot
+            user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+            reddit_client = RedditClient(
+                client_id=config.reddit_client_id,
+                client_secret=config.reddit_client_secret,
+                user_agent=user_agent,
+                proxy="socks5://warp:1080"  # WARP SOCKS5 代理（默认端口 1080）
+            )
+            logger.info(f"✅ Reddit OAuth 客户端已初始化 (通过 WARP 代理)")
+        except Exception as e:
+            logger.warning(f"⚠️ Reddit OAuth 客户端初始化失败: {e}")
+            logger.info("🔄 尝试使用 JSON 客户端作为 fallback...")
+            use_json_client = True
+
+    if use_json_client or reddit_client is None:
         try:
             from utils.reddit_json_client import RedditJsonClient
-            # 使用真实浏览器 User-Agent，避免被检测为 bot
             user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
             reddit_client = RedditJsonClient(
                 user_agent=user_agent,
@@ -402,20 +417,6 @@ async def setup_application(application: Application, config) -> None:
             logger.info(f"✅ Reddit JSON 客户端已初始化 (通过 WARP 代理)")
         except Exception as e:
             logger.error(f"❌ Reddit JSON 客户端初始化失败: {e}")
-            reddit_client = None
-    elif config.reddit_client_id and config.reddit_client_secret:
-        try:
-            from utils.reddit_client import RedditClient
-            user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-            reddit_client = RedditClient(
-                client_id=config.reddit_client_id,
-                client_secret=config.client_secret,
-                user_agent=user_agent,
-                proxy="socks5://warp:1080"  # WARP SOCKS5 代理（默认端口 1080）
-            )
-            logger.info(f"✅ Reddit OAuth 客户端已初始化 (通过 WARP 代理)")
-        except Exception as e:
-            logger.error(f"❌ Reddit OAuth 客户端初始化失败: {e}")
             reddit_client = None
 
     if not reddit_client:
