@@ -665,34 +665,24 @@ async def handle_warp_query(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     )
 
     try:
-        if not httpx_client:
-            await status_msg.edit_text("❌ HTTP 客户端未初始化")
-            await _schedule_deletion(context, chat_id, status_msg.message_id, config.auto_delete_delay)
-            return
-
-        # WARP SOCKS5 代理
-        proxy = "socks5://warp:1080"
-
-        # 查询 ipinfo.io
-        response = await httpx_client.get(
-            "https://ipinfo.io/json",
-            proxy=proxy,
+        # 创建带 WARP 代理的临时客户端
+        import httpx
+        async with httpx.AsyncClient(
+            proxy="socks5://warp:1080",
             timeout=15.0
-        )
-        response.raise_for_status()
-        warp_data = response.json()
+        ) as proxy_client:
+            # 查询 ipinfo.io
+            response = await proxy_client.get("https://ipinfo.io/json")
+            response.raise_for_status()
+            warp_data = response.json()
 
-        # 查询 ipapi.is 获取更详细信息
-        warp_ip = warp_data.get("ip")
-        ipapi_data = None
-        if warp_ip:
-            ipapi_response = await httpx_client.get(
-                f"https://api.ipapi.is/?q={warp_ip}",
-                proxy=proxy,
-                timeout=15.0
-            )
-            if ipapi_response.status_code == 200:
-                ipapi_data = ipapi_response.json()
+            # 查询 ipapi.is 获取更详细信息
+            warp_ip = warp_data.get("ip")
+            ipapi_data = None
+            if warp_ip:
+                ipapi_response = await proxy_client.get(f"https://api.ipapi.is/?q={warp_ip}")
+                if ipapi_response.status_code == 200:
+                    ipapi_data = ipapi_response.json()
 
         # 构建结果
         result_text = "🌐 *WARP 出口 IP 信息*\n\n"
@@ -1004,6 +994,12 @@ async def handle_inline_scan(target: str, context: ContextTypes.DEFAULT_TYPE) ->
                 'target': target_host
             }
 
+            # 添加一个按钮显示测试信息
+            from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+            reply_markup = InlineKeyboardMarkup([
+                [InlineKeyboardButton("⏱️ 全球延迟测试", url=f"https://globalping.io")]
+            ])
+
             return [
                 InlineQueryResultArticle(
                     id=result_id,
@@ -1013,6 +1009,7 @@ async def handle_inline_scan(target: str, context: ContextTypes.DEFAULT_TYPE) ->
                         message_text=f"⏱️ 正在测试 {target_host} 的全球延迟...\n\n⏳ 请稍候，预计需要 5-10 秒",
                         parse_mode=ParseMode.MARKDOWN
                     ),
+                    reply_markup=reply_markup
                 )
             ]
         elif first_arg == "mtr" and len(parts) > 1:
@@ -1028,6 +1025,12 @@ async def handle_inline_scan(target: str, context: ContextTypes.DEFAULT_TYPE) ->
                 'target': target_host
             }
 
+            # 添加一个按钮显示测试信息
+            from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+            reply_markup = InlineKeyboardMarkup([
+                [InlineKeyboardButton("📡 MTR 路由追踪", url=f"https://globalping.io")]
+            ])
+
             return [
                 InlineQueryResultArticle(
                     id=result_id,
@@ -1037,6 +1040,7 @@ async def handle_inline_scan(target: str, context: ContextTypes.DEFAULT_TYPE) ->
                         message_text=f"📡 正在追踪 {target_host} 的路由...\n\n⏳ 请稍候，预计需要 10-15 秒",
                         parse_mode=ParseMode.MARKDOWN
                     ),
+                    reply_markup=reply_markup
                 )
             ]
 
