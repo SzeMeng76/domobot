@@ -43,28 +43,29 @@ def get_next_abuseipdb_key() -> Optional[str]:
     return api_key
 
 
-async def get_myip_info(ip_address: str) -> Optional[Dict]:
-    """从 MyIP 服务获取 IP 信息"""
+async def get_ipapi_info(ip_address: str) -> Optional[Dict]:
+    """从 ipapi.is 获取 IP 信息"""
+    if not httpx_client:
+        logger.error("httpx_client 未初始化")
+        return None
+
     try:
-        # 使用 Docker 内部网络访问 MyIP 服务
-        url = f"http://myip:11966/api/ipinfo"
-        params = {"ip": ip_address}
+        url = f"https://api.ipapi.is/?q={ip_address}"
         headers = {
-            "Referer": "http://localhost:18966/",  # MyIP 需要 Referer
             "User-Agent": "DomoBot/1.0"
         }
 
-        logger.info(f"查询 MyIP 信息: {ip_address}")
+        logger.info(f"查询 ipapi.is 信息: {ip_address}")
 
-        response = await httpx_client.get(url, params=params, headers=headers, timeout=30.0)
+        response = await httpx_client.get(url, headers=headers, timeout=30.0)
         response.raise_for_status()
 
         data = response.json()
-        logger.info(f"✅ MyIP 查询成功: {ip_address}")
+        logger.info(f"✅ ipapi.is 查询成功: {ip_address}")
         return data
 
     except Exception as e:
-        logger.error(f"MyIP 查询失败: {e}", exc_info=True)
+        logger.error(f"ipapi.is 查询失败: {e}", exc_info=True)
         return None
 
 
@@ -164,38 +165,54 @@ async def ping_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     )
 
     try:
-        # 并行查询 MyIP 和 AbuseIPDB
+        # 并行查询 ipapi.is 和 AbuseIPDB
         import asyncio
-        myip_task = get_myip_info(ip_address)
+        ipapi_task = get_ipapi_info(ip_address)
         abuseipdb_task = get_abuseipdb_score(ip_address)
 
-        myip_data, abuseipdb_data = await asyncio.gather(myip_task, abuseipdb_task, return_exceptions=True)
+        ipapi_data, abuseipdb_data = await asyncio.gather(ipapi_task, abuseipdb_task, return_exceptions=True)
 
         # 处理异常
-        if isinstance(myip_data, Exception):
-            logger.error(f"MyIP 查询异常: {myip_data}")
-            myip_data = None
+        if isinstance(ipapi_data, Exception):
+            logger.error(f"ipapi.is 查询异常: {ipapi_data}")
+            ipapi_data = None
         if isinstance(abuseipdb_data, Exception):
             logger.error(f"AbuseIPDB 查询异常: {abuseipdb_data}")
             abuseipdb_data = None
 
-        if not myip_data:
+        if not ipapi_data:
             await status_msg.edit_text("❌ 查询失败：无法获取 IP 信息")
             await _schedule_deletion(context, chat_id, status_msg.message_id, config.auto_delete_delay)
             if update.message:
                 await delete_user_command(context, chat_id, update.message.message_id)
             return
 
-        # 解析 MyIP 数据
-        ip = myip_data.get("ip", ip_address)
-        city = myip_data.get("city", "")
-        region = myip_data.get("region", "")
-        country_name = myip_data.get("country_name", "未知")
-        country_code = myip_data.get("country_code", "")
-        asn = myip_data.get("asn", "")
-        org = myip_data.get("org", "未知")
-        latitude = myip_data.get("latitude", 0)
-        longitude = myip_data.get("longitude", 0)
+        # 解析 ipapi.is 数据
+        location_data = ipapi_data.get("location", {})
+        asn_data = ipapi_data.get("asn", {})
+        company_data = ipapi_data.get("company", {})
+
+        ip = ipapi_data.get("ip", ip_address)
+        city = location_data.get("city", "")
+        region = location_data.get("state", "")
+        country_name = location_data.get("country", "未知")
+        country_code = location_data.get("country_code", "")
+        asn = f"AS{asn_data.get('asn', '')}" if asn_data.get('asn') else ""
+        org = company_data.get("name", asn_data.get("org", "未知"))
+        latitude = location_data.get("latitude", 0)
+        longitude = location_data.get("longitude", 0)
+
+        # ipapi.is 特有字段
+        is_datacenter = ipapi_data.get("is_datacenter", False)
+        is_proxy = ipapi_data.get("is_proxy", False)
+        is_vpn = ipapi_data.get("is_vpn", False)
+        is_tor = ipapi_data.get("is_tor", False)
+        is_mobile = ipapi_data.get("is_mobile", False)
+        is_crawler = ipapi_data.get("is_crawler", False)
+        is_abuser = ipapi_data.get("is_abuser", False)
+        company_type = company_data.get("type", "")
+        company_abuser_score = company_data.get("abuser_score", "")
+        asn_abuser_score = asn_data.get("abuser_score", "")
 
         # 解析 AbuseIPDB 数据（风控分数）
         abuse_score = 0
@@ -211,29 +228,45 @@ async def ping_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             is_tor = abuseipdb_data.get("isTor", False)
             total_reports = abuseipdb_data.get("totalReports", 0)
 
-        # 判断是否原生 IP
+        # 判断 IP 类型（优先使用 ipapi.is 数据）
         native_emoji = "❓"
         native_text = "未知"
 
-        if usage_type:
+        if is_tor:
+            native_emoji = "🧅"
+            native_text = "Tor 节点"
+        elif is_proxy or is_vpn:
+            native_emoji = "🔒"
+            native_text = "代理/VPN"
+        elif is_datacenter:
+            native_emoji = "🏢"
+            native_text = "数据中心"
+        elif is_mobile:
+            native_emoji = "📱"
+            native_text = "移动网络"
+        elif company_type == "isp":
+            native_emoji = "✅"
+            native_text = "原生 IP (ISP)"
+        elif company_type == "hosting":
+            native_emoji = "🏢"
+            native_text = "托管服务"
+        elif company_type == "business":
+            native_emoji = "🏢"
+            native_text = "企业网络"
+        elif usage_type:
+            # 如果有 AbuseIPDB 数据，作为补充
             usage_lower = usage_type.lower()
             if "residential" in usage_lower or "fixed line isp" in usage_lower:
                 native_emoji = "✅"
                 native_text = "原生 IP"
-            elif "data center" in usage_lower or "hosting" in usage_lower or "web hosting" in usage_lower:
-                native_emoji = "🏢"
-                native_text = "数据中心"
             elif "mobile" in usage_lower or "cellular" in usage_lower:
                 native_emoji = "📱"
                 native_text = "移动网络"
             elif "content delivery" in usage_lower or "cdn" in usage_lower:
                 native_emoji = "🌐"
                 native_text = "CDN"
-            elif "corporate" in usage_lower or "business" in usage_lower:
-                native_emoji = "🏢"
-                native_text = "企业网络"
         else:
-            # 没有 AbuseIPDB 数据，根据 ASN/Org 简单判断
+            # 根据 ASN/Org 简单判断
             org_lower = org.lower()
             if any(keyword in org_lower for keyword in ["hosting", "server", "cloud", "datacenter", "data center"]):
                 native_emoji = "🏢"
@@ -273,15 +306,27 @@ async def ping_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
         # 风控指数（如果有 AbuseIPDB 数据）
         if abuseipdb_data:
-            result_text += f"🎯 *风控指数*: {risk_emoji} *{abuse_score}/100* ({risk_level})\n"
+            result_text += f"🎯 *AbuseIPDB 风控*: {risk_emoji} *{abuse_score}/100* ({risk_level})\n"
 
         result_text += f"🏠 *IP 类型*: {native_emoji} *{native_text}*\n"
 
+        # ipapi.is 特殊标签
+        tags = []
+        if is_crawler:
+            tags.append("🕷️ 爬虫")
+        if is_abuser:
+            tags.append("⚠️ 滥用者")
         if is_whitelisted:
-            result_text += f"⭐ *白名单 IP*\n"
+            tags.append("⭐ 白名单")
 
-        if is_tor:
-            result_text += f"🧅 *Tor 出口节点*\n"
+        if tags:
+            result_text += f"🏷️ *标签*: {' '.join(tags)}\n"
+
+        # ipapi.is 滥用分数
+        if company_abuser_score:
+            result_text += f"📊 *公司滥用分数*: {company_abuser_score}\n"
+        if asn_abuser_score:
+            result_text += f"📊 *ASN 滥用分数*: {asn_abuser_score}\n"
 
         result_text += (
             f"\n📍 *地理位置*\n"
@@ -296,12 +341,12 @@ async def ping_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         if asn:
             result_text += f"• ASN: {asn}\n"
 
-        if usage_type:
-            result_text += f"• 用途: {usage_type}\n"
+        if company_type:
+            result_text += f"• 类型: {company_type.upper()}\n"
 
         if total_reports > 0:
             result_text += (
-                f"\n⚠️ *滥用报告*\n"
+                f"\n⚠️ *AbuseIPDB 报告*\n"
                 f"• 总报告数: {total_reports}\n"
             )
 

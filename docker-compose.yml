@@ -53,19 +53,6 @@ services:
     ports:
       - "1080:1080"  # SOCKS5 代理端口（默认 1080）
 
-  # MyIP 服务 - IP 工具箱（IP 信息查询、风控检测等）
-  myip:
-    image: jason5ng32/myip:latest
-    container_name: appbot-myip
-    restart: always
-    environment:
-      - TZ=Asia/Shanghai
-    networks:
-      - appbot-network
-    ports:
-      - "18966:18966"  # 前端端口
-      - "11966:11966"  # 后端 API 端口
-
   # 服务名称，可以自定义，这里我们叫它 appbot。
   appbot:
     image: szemeng76/domobot:latest #szemeng76/domobot:main latest:稳定版 main:最新功能版
