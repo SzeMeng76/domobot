@@ -48,13 +48,12 @@ class ParseHubAdapter:
         self.config = config
         self.pyrogram_helper = pyrogram_helper  # 存储Pyrogram helper
 
-        # 初始化 ParseHub，支持代理
+        # 初始化 ParseHub（2.0.15+ proxy 参数在 parse() 方法传递，不在 __init__）
+        self.parsehub = ParseHub()
+        self.proxy = proxy  # 保存 proxy，在调用 parse() 时传递
         if proxy:
-            # ParseHub 使用 httpx，支持 socks5://host:port 格式
-            self.parsehub = ParseHub(proxy=proxy)
-            logger.info(f"ParseHub 使用代理: {proxy}")
+            logger.info(f"ParseHub 将使用代理: {proxy}")
         else:
-            self.parsehub = ParseHub()
             logger.info("ParseHub 不使用代理")
 
         self.temp_dir = Path(tempfile.gettempdir()) / "domobot_parse"
