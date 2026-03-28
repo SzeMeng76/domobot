@@ -88,6 +88,4 @@ pydub>=0.25.1  # 音频切片（Whisper转录大文件）
 opencv-python-headless>=4.13.0.92  # 视频截图（转录失败时的fallback）
 aiofiles>=25.1.0  # 异步文件读取（图片base64转换）
 
-# Reddit API (无需额外依赖，使用标准库 urllib)
-# SOCKS5 代理支持（用于通过 WARP 绕过 IP 封禁）
-PySocks>=1.7.1
+# Reddit API (使用 httpx，原生支持 SOCKS5 代理)

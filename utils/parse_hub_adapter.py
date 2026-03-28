@@ -32,7 +32,7 @@ _inflight_results: Dict[str, Any] = {}
 class ParseHubAdapter:
     """ParseHub 适配器类"""
 
-    def __init__(self, cache_manager=None, user_manager=None, config=None, pyrogram_helper=None):
+    def __init__(self, cache_manager=None, user_manager=None, config=None, pyrogram_helper=None, proxy: Optional[str] = None):
         """
         初始化适配器
 
@@ -41,12 +41,22 @@ class ParseHubAdapter:
             user_manager: MySQL 用户管理器
             config: Bot配置对象
             pyrogram_helper: Pyrogram客户端（用于大文件上传）
+            proxy: SOCKS5 代理地址（如 "socks5://warp:1080"）
         """
         self.cache_manager = cache_manager
         self.user_manager = user_manager
         self.config = config
         self.pyrogram_helper = pyrogram_helper  # 存储Pyrogram helper
-        self.parsehub = ParseHub()
+
+        # 初始化 ParseHub，支持代理
+        if proxy:
+            # ParseHub 使用 httpx，支持 socks5://host:port 格式
+            self.parsehub = ParseHub(proxy=proxy)
+            logger.info(f"ParseHub 使用代理: {proxy}")
+        else:
+            self.parsehub = ParseHub()
+            logger.info("ParseHub 不使用代理")
+
         self.temp_dir = Path(tempfile.gettempdir()) / "domobot_parse"
         self.temp_dir.mkdir(exist_ok=True)
 
