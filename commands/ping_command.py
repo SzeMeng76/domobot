@@ -205,10 +205,69 @@ async def check_website(url: str) -> Optional[Dict]:
         return None
 
 
+async def global_latency_test(target: str, test_type: str = "ping") -> Optional[Dict]:
+    """
+    全球延迟测试或 MTR 路由追踪
+    test_type: "ping" 或 "mtr"
+    """
+    if not httpx_client:
+        logger.error("httpx_client 未初始化")
+        return None
+
+    try:
+        # 创建测试任务
+        payload = {
+            "type": test_type,
+            "target": target,
+            "limit": 6,
+            "locations": [
+                {"continent": "AS"},
+                {"continent": "EU"},
+                {"continent": "NA"},
+                {"continent": "OC"},
+                {"continent": "SA"},
+                {"continent": "AF"}
+            ]
+        }
+
+        logger.info(f"创建 {test_type} 测试: {target}")
+
+        response = await httpx_client.post(
+            "https://api.globalping.io/v1/measurements",
+            json=payload,
+            timeout=10.0
+        )
+        response.raise_for_status()
+        data = response.json()
+        measurement_id = data.get("id")
+
+        if not measurement_id:
+            return None
+
+        # 等待测试完成
+        import asyncio
+        await asyncio.sleep(5 if test_type == "ping" else 10)
+
+        # 获取结果
+        response = await httpx_client.get(
+            f"https://api.globalping.io/v1/measurements/{measurement_id}",
+            timeout=30.0
+        )
+        response.raise_for_status()
+        result = response.json()
+
+        logger.info(f"✅ {test_type} 测试完成: {target}")
+        return result
+
+    except Exception as e:
+        logger.error(f"{test_type} 测试失败: {e}", exc_info=True)
+        return None
+
+
 async def ping_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     /ping <目标> - 网络诊断工具
-    支持: IP地址、MAC地址、域名、URL
+    支持: IP地址、MAC地址、域名、URL、延迟测试、路由追踪
     """
     config = get_config()
     chat_id = update.effective_chat.id
@@ -223,12 +282,16 @@ async def ping_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "• IP 地址: `/ping 8.8.8.8`\n"
             "• MAC 地址: `/ping 00:1A:2B:3C:4D:5E`\n"
             "• 域名: `/ping google.com`\n"
-            "• URL: `/ping https://google.com`\n\n"
+            "• URL: `/ping https://google.com`\n"
+            "• 延迟测试: `/ping latency google.com`\n"
+            "• 路由追踪: `/ping mtr google.com`\n\n"
             "*查询信息：*\n"
             "• IP: 风控指数、类型、位置、ASN\n"
             "• MAC: 网卡厂商信息\n"
             "• 域名: 解析 IP + IP 信息\n"
-            "• URL: 可用性 + 响应时间"
+            "• URL: 可用性 + 响应时间\n"
+            "• Latency: 全球延迟测试\n"
+            "• MTR: 路由追踪"
         )
         msg = await context.bot.send_message(
             chat_id=chat_id,
@@ -238,6 +301,18 @@ async def ping_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await _schedule_deletion(context, chat_id, msg.message_id, config.auto_delete_delay)
         if update.message:
             await delete_user_command(context, chat_id, update.message.message_id)
+        return
+
+    # 检查是否是特殊命令
+    first_arg = context.args[0].lower()
+
+    if first_arg == "latency" and len(context.args) > 1:
+        target = context.args[1]
+        await handle_latency_test(update, context, target)
+        return
+    elif first_arg == "mtr" and len(context.args) > 1:
+        target = context.args[1]
+        await handle_mtr_test(update, context, target)
         return
 
     input_value = context.args[0]
@@ -400,6 +475,179 @@ async def handle_domain_query(update: Update, context: ContextTypes.DEFAULT_TYPE
             await delete_user_command(context, chat_id, update.message.message_id)
 
 
+async def handle_latency_test(update: Update, context: ContextTypes.DEFAULT_TYPE, target: str) -> None:
+    """处理全球延迟测试"""
+    config = get_config()
+    chat_id = update.effective_chat.id
+
+    status_msg = await context.bot.send_message(
+        chat_id=chat_id,
+        text=f"🔍 正在测试全球延迟: `{target}`\n⏳ 请稍候 5-10 秒...",
+        parse_mode="Markdown"
+    )
+
+    try:
+        result = await global_latency_test(target, "ping")
+
+        if not result or result.get("status") != "finished":
+            await status_msg.edit_text("❌ 延迟测试失败")
+            await _schedule_deletion(context, chat_id, status_msg.message_id, config.auto_delete_delay)
+            if update.message:
+                await delete_user_command(context, chat_id, update.message.message_id)
+            return
+
+        # 解析结果
+        results = result.get("results", [])
+        if not results:
+            await status_msg.edit_text("❌ 未获取到测试结果")
+            await _schedule_deletion(context, chat_id, status_msg.message_id, config.auto_delete_delay)
+            if update.message:
+                await delete_user_command(context, chat_id, update.message.message_id)
+            return
+
+        # 按大洲分组
+        continents = {"AS": "🌏 亚洲", "EU": "🌍 欧洲", "NA": "🌎 北美", "SA": "🌎 南美", "OC": "🌏 大洋洲", "AF": "🌍 非洲"}
+        grouped = {}
+
+        for r in results:
+            probe = r.get("probe", {})
+            result_data = r.get("result", {})
+            stats = result_data.get("stats", {})
+
+            continent = probe.get("continent", "")
+            country = probe.get("country", "")
+            city = probe.get("city", "")
+            avg_latency = stats.get("avg", 0)
+
+            if continent not in grouped:
+                grouped[continent] = []
+
+            grouped[continent].append({
+                "country": country,
+                "city": city,
+                "latency": round(avg_latency, 1)
+            })
+
+        # 格式化输出
+        result_text = f"⏱️ *全球延迟测试: {target}*\n\n"
+
+        for continent_code, continent_name in continents.items():
+            if continent_code in grouped:
+                result_text += f"{continent_name}:\n"
+                for location in grouped[continent_code]:
+                    latency = location["latency"]
+                    # 延迟等级
+                    if latency < 50:
+                        emoji = "✅"
+                    elif latency < 100:
+                        emoji = "🟢"
+                    elif latency < 200:
+                        emoji = "🟡"
+                    elif latency < 300:
+                        emoji = "🟠"
+                    else:
+                        emoji = "🔴"
+
+                    result_text += f"  {location['city']}, {location['country']}: {latency}ms {emoji}\n"
+                result_text += "\n"
+
+        # 计算平均延迟
+        all_latencies = [loc["latency"] for locs in grouped.values() for loc in locs]
+        if all_latencies:
+            avg_all = round(sum(all_latencies) / len(all_latencies), 1)
+            min_latency = min(all_latencies)
+            best_location = next((loc for locs in grouped.values() for loc in locs if loc["latency"] == min_latency), None)
+
+            result_text += f"📊 *平均延迟*: {avg_all}ms\n"
+            if best_location:
+                result_text += f"✅ *最佳节点*: {best_location['city']}, {best_location['country']} ({min_latency}ms)"
+
+        await status_msg.edit_text(result_text, parse_mode="Markdown")
+        await _schedule_deletion(context, chat_id, status_msg.message_id, config.auto_delete_delay)
+        logger.info(f"✅ 延迟测试完成: {target}")
+
+    except Exception as e:
+        logger.error(f"延迟测试失败: {e}", exc_info=True)
+        await status_msg.edit_text(f"❌ 测试失败: {str(e)}")
+        await _schedule_deletion(context, chat_id, status_msg.message_id, config.auto_delete_delay)
+
+    if update.message:
+        await delete_user_command(context, chat_id, update.message.message_id)
+
+
+async def handle_mtr_test(update: Update, context: ContextTypes.DEFAULT_TYPE, target: str) -> None:
+    """处理 MTR 路由追踪"""
+    config = get_config()
+    chat_id = update.effective_chat.id
+
+    status_msg = await context.bot.send_message(
+        chat_id=chat_id,
+        text=f"🔍 正在追踪路由: `{target}`\n⏳ 请稍候 10-15 秒...",
+        parse_mode="Markdown"
+    )
+
+    try:
+        result = await global_latency_test(target, "mtr")
+
+        if not result or result.get("status") != "finished":
+            await status_msg.edit_text("❌ 路由追踪失败")
+            await _schedule_deletion(context, chat_id, status_msg.message_id, config.auto_delete_delay)
+            if update.message:
+                await delete_user_command(context, chat_id, update.message.message_id)
+            return
+
+        # 解析结果（只显示第一个探测点的路由）
+        results = result.get("results", [])
+        if not results:
+            await status_msg.edit_text("❌ 未获取到追踪结果")
+            await _schedule_deletion(context, chat_id, status_msg.message_id, config.auto_delete_delay)
+            if update.message:
+                await delete_user_command(context, chat_id, update.message.message_id)
+            return
+
+        first_result = results[0]
+        probe = first_result.get("probe", {})
+        result_data = first_result.get("result", {})
+        hops = result_data.get("hops", [])
+
+        probe_location = f"{probe.get('city', '')}, {probe.get('country', '')}"
+
+        result_text = f"📡 *MTR 路由追踪: {target}*\n"
+        result_text += f"📍 *测试节点*: {probe_location}\n\n"
+        result_text += "```\n"
+        result_text += "跳 | IP地址              | 延迟\n"
+        result_text += "---|---------------------|------\n"
+
+        for i, hop in enumerate(hops[:15], 1):  # 只显示前15跳
+            stats = hop.get("stats", {})
+            avg_latency = stats.get("avg", 0)
+            loss = stats.get("loss", 0)
+            hostname = hop.get("resolvedHostname") or hop.get("resolvedAddress") or "*"
+
+            # 截断过长的主机名
+            if len(hostname) > 20:
+                hostname = hostname[:17] + "..."
+
+            if loss == 100:
+                result_text += f"{i:2d} | {'*':20s} | -\n"
+            else:
+                result_text += f"{i:2d} | {hostname:20s} | {avg_latency:.1f}ms\n"
+
+        result_text += "```"
+
+        await status_msg.edit_text(result_text, parse_mode="Markdown")
+        await _schedule_deletion(context, chat_id, status_msg.message_id, config.auto_delete_delay)
+        logger.info(f"✅ MTR 追踪完成: {target}")
+
+    except Exception as e:
+        logger.error(f"MTR 追踪失败: {e}", exc_info=True)
+        await status_msg.edit_text(f"❌ 追踪失败: {str(e)}")
+        await _schedule_deletion(context, chat_id, status_msg.message_id, config.auto_delete_delay)
+
+    if update.message:
+        await delete_user_command(context, chat_id, update.message.message_id)
+
+
 async def handle_ip_query(update: Update, context: ContextTypes.DEFAULT_TYPE, ip_address: str, domain: str = None, status_msg = None) -> None:
     """处理 IP 地址查询"""
     config = get_config()
@@ -560,7 +808,7 @@ async def handle_ip_query(update: Update, context: ContextTypes.DEFAULT_TYPE, ip
 
         # 风控指数（如果有 AbuseIPDB 数据）
         if abuseipdb_data:
-            result_text += f"🎯 *AbuseIPDB 风控*: {risk_emoji} *{abuse_score}/100* ({risk_level})\n"
+            result_text += f"🎯 *风控*: {risk_emoji} *{abuse_score}/100* ({risk_level})\n"
 
         result_text += f"🏠 *IP 类型*: {native_emoji} *{native_text}*\n"
 
@@ -600,11 +848,9 @@ async def handle_ip_query(update: Update, context: ContextTypes.DEFAULT_TYPE, ip
 
         if total_reports > 0:
             result_text += (
-                f"\n⚠️ *AbuseIPDB 报告*\n"
+                f"\n⚠️ *滥用报告*\n"
                 f"• 总报告数: {total_reports}\n"
             )
-
-        result_text += f"\n🔗 [查看详情](https://ipcheck.ing/?ip={ip})"
 
         await status_msg.edit_text(
             result_text,
@@ -632,5 +878,5 @@ command_factory.register_command(
     "ping",
     ping_command,
     permission=Permission.USER,
-    description="网络诊断工具（IP/MAC/域名/URL）"
+    description="网络诊断工具（IP/MAC/域名/URL/延迟/MTR）"
 )
