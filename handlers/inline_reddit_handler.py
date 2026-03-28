@@ -346,8 +346,7 @@ async def handle_inline_reddit_list(
             posts = await reddit_client.get_top_posts(subreddit=subreddit, time_filter=time_filter, limit=10)
             time_map = {'hour': '本小时', 'day': '今日', 'week': '本周', 'month': '本月', 'year': '今年', 'all': '全部时间'}
             time_text = time_map.get(time_filter, time_filter)
-            # 转义括号
-            title_prefix = f"🏆 r/{subreddit} Top \\({time_text}\\)" if subreddit else f"🏆 Reddit 全站 Top \\({time_text}\\)"
+            title_prefix = f"🏆 r/{subreddit} Top ({time_text})" if subreddit else f"🏆 Reddit 全站 Top ({time_text})"
         elif list_type == "new":
             subreddit = None
             if len(parts) > 2:
