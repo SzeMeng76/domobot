@@ -510,7 +510,14 @@ def format_directions(directions: Dict, service_type: str) -> str:
     result = f"🛣️ *路线规划*\n\n"
     result += f"🚩 起点: {start}\n"
     result += f"🏁 终点: {end}\n\n"
-    result += f"📏 距离: `{distance}`\n"
+
+    # 检查主路线是否有toll
+    main_has_tolls = False
+    if 'steps' in directions and directions['steps']:
+        main_has_tolls = any('Toll road' in step for step in directions['steps'])
+
+    toll_status = " 💰" if main_has_tolls else " 🆓"
+    result += f"📏 距离: `{distance}`{toll_status}\n"
     result += f"⏱️ 时间: `{duration}`\n"
 
     # Routes API v2 新功能
@@ -852,7 +859,7 @@ async def _execute_nearby_search(update: Update, context: ContextTypes.DEFAULT_T
     
     type_names = {
         'restaurant': '餐厅',
-        'hospital': '医院', 
+        'hospital': '医院',
         'bank': '银行',
         'gas_station': '加油站',
         'supermarket': '超市',
@@ -861,9 +868,10 @@ async def _execute_nearby_search(update: Update, context: ContextTypes.DEFAULT_T
     }
     type_name = type_names.get(place_type, place_type)
     loading_message = f"🔍 正在搜索附近的{type_name}... ⏳"
-    
+
     if callback_query:
-        await callback_query.edit_message_text(
+        await _safe_edit_message(
+            callback_query,
             text=foldable_text_v2(loading_message),
             parse_mode="MarkdownV2"
         )
@@ -877,13 +885,13 @@ async def _execute_nearby_search(update: Update, context: ContextTypes.DEFAULT_T
         # 调度自动删除
         config = get_config()
         await _schedule_auto_delete(context, message.chat_id, message.message_id, config.auto_delete_delay)
-    
+
     try:
         service_type = "amap" if language == "zh" else "google_maps"
-        
+
         # 使用缓存服务搜索附近
         nearby_places = await map_cache_service.search_nearby_with_cache(lat, lng, place_type, language, 1000)
-        
+
         if nearby_places:
             # 找到附近服务
             result_text = format_nearby_results(nearby_places, service_type, place_type)
@@ -895,7 +903,8 @@ async def _execute_nearby_search(update: Update, context: ContextTypes.DEFAULT_T
 
             if callback_query:
                 # callback_query 不能发送照片
-                await callback_query.edit_message_text(
+                await _safe_edit_message(
+                    callback_query,
                     text=foldable_text_with_markdown_v2(result_text),
                     parse_mode="MarkdownV2",
                     reply_markup=reply_markup
@@ -951,7 +960,8 @@ async def _execute_nearby_search(update: Update, context: ContextTypes.DEFAULT_T
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             if callback_query:
-                await callback_query.edit_message_text(
+                await _safe_edit_message(
+                    callback_query,
                     text=error_msg,
                     reply_markup=reply_markup
                 )
@@ -975,7 +985,7 @@ async def _execute_nearby_search(update: Update, context: ContextTypes.DEFAULT_T
         
         config = get_config()
         if callback_query:
-            await callback_query.edit_message_text(
+            await _safe_edit_message(callback_query, 
                 text=error_msg,
                 reply_markup=reply_markup
             )
@@ -996,7 +1006,7 @@ async def _execute_location_search(update: Update, context: ContextTypes.DEFAULT
     loading_message = f"🔍 正在搜索 {query}... ⏳"
     
     if callback_query:
-        await callback_query.edit_message_text(
+        await _safe_edit_message(callback_query, 
             text=foldable_text_v2(loading_message),
             parse_mode="MarkdownV2"
         )
@@ -1017,7 +1027,7 @@ async def _execute_location_search(update: Update, context: ContextTypes.DEFAULT
         if not service:
             error_msg = "❌ 地图服务暂不可用"
             if callback_query:
-                await callback_query.edit_message_text(error_msg)
+                await _safe_edit_message(callback_query, error_msg)
                 await _schedule_auto_delete(context, callback_query.message.chat_id, callback_query.message.message_id, 5)
             else:
                 await message.edit_text(error_msg)
@@ -1067,7 +1077,7 @@ async def _execute_location_search(update: Update, context: ContextTypes.DEFAULT
 
             if callback_query:
                 # callback_query 不能发送照片，只能编辑文本
-                await callback_query.edit_message_text(
+                await _safe_edit_message(callback_query, 
                     text=foldable_text_with_markdown_v2(result_text),
                     parse_mode="MarkdownV2",
                     reply_markup=reply_markup
@@ -1120,7 +1130,8 @@ async def _execute_location_search(update: Update, context: ContextTypes.DEFAULT
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             if callback_query:
-                await callback_query.edit_message_text(
+                await _safe_edit_message(
+                    callback_query,
                     text=error_msg,
                     reply_markup=reply_markup
                 )
@@ -1144,7 +1155,7 @@ async def _execute_location_search(update: Update, context: ContextTypes.DEFAULT
         
         config = get_config()
         if callback_query:
-            await callback_query.edit_message_text(
+            await _safe_edit_message(callback_query, 
                 text=error_msg,
                 reply_markup=reply_markup
             )

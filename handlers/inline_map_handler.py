@@ -7,6 +7,7 @@ Inline Map Handler
 import logging
 import json
 import re
+import time
 from datetime import datetime
 from typing import Optional, Dict
 from telegram import InlineQueryResultArticle, InlineQueryResultPhoto, InputTextMessageContent, InlineKeyboardButton, InlineKeyboardMarkup
@@ -21,6 +22,11 @@ logger = logging.getLogger(__name__)
 
 # Telegraph 相关配置
 TELEGRAPH_API_URL = "https://api.telegra.ph"
+
+# 全局缓存：存储地图图片信息（5分钟TTL）
+_map_photo_cache: Dict[str, Dict] = {}
+_cache_timestamps: Dict[str, float] = {}
+CACHE_TTL = 300  # 5分钟
 
 # 价格等级映射
 PRICE_LEVEL_MAP = {
@@ -212,6 +218,145 @@ def format_directions_for_telegraph(directions: Dict, service_type: str) -> str:
     return content
 
 
+async def handle_chosen_map_result(update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    处理用户选择 inline 地图结果后的图片下载和上传
+
+    Args:
+        update: Telegram Update
+        context: Context
+    """
+    chosen_result = update.chosen_inline_result
+    inline_message_id = chosen_result.inline_message_id
+    result_id = chosen_result.result_id
+
+    logger.info(f"[Inline Map Chosen] result_id={result_id}, inline_message_id={inline_message_id}")
+
+    # 从缓存中获取照片信息
+    cached_data = _map_photo_cache.get(result_id, None)
+
+    if not cached_data:
+        # 没有缓存的照片，跳过
+        logger.info(f"[Inline Map Chosen] 无缓存照片: {result_id}")
+        return
+
+    logger.info(f"[Inline Map Chosen] 找到缓存照片，开始下载上传")
+
+    photo_url = cached_data["photo_url"]
+    caption = cached_data["caption"]
+    reply_markup = cached_data["reply_markup"]
+
+    try:
+        import tempfile
+        from pathlib import Path
+
+        # 更新状态
+        await context.bot.edit_message_text(
+            inline_message_id=inline_message_id,
+            text="📥 下载图片中..."
+        )
+
+        # 下载图片
+        temp_dir = Path(tempfile.gettempdir()) / "domobot_map"
+        temp_dir.mkdir(exist_ok=True)
+
+        async with httpx_client.stream('GET', photo_url) as response:
+            response.raise_for_status()
+
+            # 保存到临时文件
+            temp_file = temp_dir / f"map_{result_id}.jpg"
+            with open(temp_file, 'wb') as f:
+                async for chunk in response.aiter_bytes():
+                    f.write(chunk)
+
+        photo_size_mb = temp_file.stat().st_size / (1024 * 1024)
+        logger.info(f"[Inline Map] 图片下载完成: {photo_size_mb:.1f}MB")
+
+        # 检查文件大小
+        if photo_size_mb > 10:
+            # 图片过大
+            await context.bot.edit_message_text(
+                inline_message_id=inline_message_id,
+                text=f"{caption}\n\n⚠️ 图片过大 ({photo_size_mb:.1f}MB)，无法上传",
+                parse_mode="Markdown",
+                reply_markup=reply_markup
+            )
+            _map_photo_cache.pop(result_id, None)
+            _cache_timestamps.pop(result_id, None)
+            temp_file.unlink(missing_ok=True)
+            return
+
+        # 更新状态
+        await context.bot.edit_message_text(
+            inline_message_id=inline_message_id,
+            text=f"📤 上传图片中... ({photo_size_mb:.1f}MB)"
+        )
+
+        # 使用临时频道上传图片
+        from telegram import InputMediaPhoto
+        from utils.config_manager import ConfigManager
+
+        config_manager = ConfigManager()
+        temp_channel_id = config_manager.config.inline_parse_temp_channel
+
+        if not temp_channel_id:
+            await context.bot.edit_message_text(
+                inline_message_id=inline_message_id,
+                text=f"{caption}\n\n❌ 配置错误：未设置临时存储频道",
+                parse_mode="Markdown",
+                reply_markup=reply_markup
+            )
+            temp_file.unlink(missing_ok=True)
+            return
+
+        # 先上传到临时频道获取 file_id
+        with open(temp_file, 'rb') as photo_file:
+            sent_message = await context.bot.send_photo(
+                chat_id=temp_channel_id,
+                photo=photo_file,
+                read_timeout=300,
+                write_timeout=300,
+                connect_timeout=30
+            )
+            file_id = sent_message.photo[-1].file_id
+
+        # 使用 file_id 编辑 inline 消息
+        input_media = InputMediaPhoto(
+            media=file_id,
+            caption=caption,
+            parse_mode="Markdown"
+        )
+
+        await context.bot.edit_message_media(
+            inline_message_id=inline_message_id,
+            media=input_media,
+            reply_markup=reply_markup
+        )
+
+        logger.info(f"[Inline Map] 图片上传成功: {photo_size_mb:.1f}MB")
+
+        # 清理
+        temp_file.unlink(missing_ok=True)
+        _map_photo_cache.pop(result_id, None)
+        _cache_timestamps.pop(result_id, None)
+
+    except Exception as e:
+        logger.error(f"[Inline Map] 图片处理失败: {e}", exc_info=True)
+        try:
+            await context.bot.edit_message_text(
+                inline_message_id=inline_message_id,
+                text=f"{caption}\n\n❌ 图片加载失败",
+                parse_mode="Markdown",
+                reply_markup=reply_markup
+            )
+        except Exception:
+            pass
+
+        # 清理
+        _map_photo_cache.pop(result_id, None)
+        _cache_timestamps.pop(result_id, None)
+
+
 async def handle_inline_map_search(query: str, context: ContextTypes.DEFAULT_TYPE, user_locale: str = None) -> list:
     """
     处理地图搜索 inline query
@@ -357,36 +502,33 @@ async def handle_inline_map_search(query: str, context: ContextTypes.DEFAULT_TYP
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        # 如果有照片，返回照片结果
+        # 如果有照片，缓存照片信息用于 chosen handler
+        result_id = str(uuid4())
         if location_data.get('photos') and len(location_data['photos']) > 0:
             photo_url = location_data['photos'][0]
+            _map_photo_cache[result_id] = {
+                "photo_url": photo_url,
+                "caption": result_text,
+                "reply_markup": reply_markup
+            }
+            _cache_timestamps[result_id] = time.time()
+            logger.info(f"[Inline Map] 缓存照片信息: {result_id}")
 
-            return [
-                InlineQueryResultPhoto(
-                    id=str(uuid4()),
-                    photo_url=photo_url,
-                    thumbnail_url=photo_url,
-                    title=f"📍 {name}",
-                    description=f"{address}\n⭐ {location_data.get('rating', 'N/A')} | {service_name}",
-                    caption=result_text,
-                    parse_mode="Markdown",
-                    reply_markup=reply_markup
-                )
-            ]
-        else:
-            # 没有照片，返回文本结果
-            return [
-                InlineQueryResultArticle(
-                    id=str(uuid4()),
-                    title=f"📍 {name}",
-                    description=f"{address}\n⭐ {location_data.get('rating', 'N/A')} | {service_name}",
-                    input_message_content=InputTextMessageContent(
-                        message_text=result_text,
-                        parse_mode="Markdown"
-                    ),
-                    reply_markup=reply_markup
-                )
-            ]
+        # 使用 Article 类型而不是 Photo，避免 thumbnail 访问问题
+        # Google Places API 的照片 URL 可能有访问限制
+        return [
+            InlineQueryResultArticle(
+                id=result_id,
+                title=f"📍 {name}",
+                description=f"{address[:80]}\n⭐ {location_data.get('rating', 'N/A')} | {service_name}",
+                thumbnail_url="https://img.icons8.com/color/96/000000/marker.png",
+                input_message_content=InputTextMessageContent(
+                    message_text=result_text,
+                    parse_mode="Markdown"
+                ),
+                reply_markup=reply_markup
+            )
+        ]
 
     except Exception as e:
         logger.error(f"Inline map search 失败: {e}", exc_info=True)
@@ -539,35 +681,31 @@ async def handle_inline_map_nearby(query: str, context: ContextTypes.DEFAULT_TYP
                 desc_parts.append(f"⭐ {place['rating']}")
             description = " | ".join(desc_parts) if desc_parts else "查看详情"
 
-            # 如果有照片，返回照片结果
+            # 如果有照片，缓存照片信息用于 chosen handler
+            result_id = str(uuid4())
             if place.get('photos') and len(place['photos']) > 0:
                 photo_url = place['photos'][0]
-                results.append(
-                    InlineQueryResultPhoto(
-                        id=str(uuid4()),
-                        photo_url=photo_url,
-                        thumbnail_url=photo_url,
-                        title=f"📍 {name}",
-                        description=description,
-                        caption=result_text,
-                        parse_mode="Markdown",
-                        reply_markup=reply_markup
-                    )
+                _map_photo_cache[result_id] = {
+                    "photo_url": photo_url,
+                    "caption": result_text,
+                    "reply_markup": reply_markup
+                }
+                _cache_timestamps[result_id] = time.time()
+
+            # 使用 Article 类型避免 thumbnail 访问问题
+            results.append(
+                InlineQueryResultArticle(
+                    id=result_id,
+                    title=f"📍 {name}",
+                    description=description,
+                    thumbnail_url="https://img.icons8.com/color/96/000000/marker.png",
+                    input_message_content=InputTextMessageContent(
+                        message_text=result_text,
+                        parse_mode="Markdown"
+                    ),
+                    reply_markup=reply_markup
                 )
-            else:
-                # 没有照片，返回文本结果
-                results.append(
-                    InlineQueryResultArticle(
-                        id=str(uuid4()),
-                        title=f"📍 {name}",
-                        description=description,
-                        input_message_content=InputTextMessageContent(
-                            message_text=result_text,
-                            parse_mode="Markdown"
-                        ),
-                        reply_markup=reply_markup
-                    )
-                )
+            )
 
         return results
 
@@ -707,7 +845,14 @@ async def handle_inline_map_directions(query: str, context: ContextTypes.DEFAULT
         # 距离和时间
         distance = directions.get('distance', '未知')
         duration = directions.get('duration', '未知')
-        result_text += f"📏 距离: {distance}\n"
+
+        # 检查主路线是否有toll
+        main_has_tolls = False
+        if 'steps' in directions and directions['steps']:
+            main_has_tolls = any('Toll road' in step for step in directions['steps'])
+
+        toll_status = " 💰" if main_has_tolls else " 🆓"
+        result_text += f"📏 距离: {distance}{toll_status}\n"
         result_text += f"⏱️ 时间: {duration}\n"
 
         # 生态友好标识

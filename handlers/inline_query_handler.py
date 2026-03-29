@@ -686,6 +686,10 @@ async def setup_inline_query_handler(application) -> None:
             await handle_inline_reddit_chosen(update, context)
         elif result_id.startswith("scan_latency_") or result_id.startswith("scan_mtr_"):
             await handle_inline_scan_chosen(update, context)
+        else:
+            # 地图照片（使用 UUID，没有特定前缀）
+            from handlers.inline_map_handler import handle_chosen_map_result
+            await handle_chosen_map_result(update, context)
 
     application.add_handler(
         ChosenInlineResultHandler(_chosen_inline_dispatcher)
