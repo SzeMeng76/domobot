@@ -39,6 +39,7 @@ class InlineCommandAdapter:
         command_handlers = {
             "rate": self._handle_rate,
             "weather": self._handle_weather,
+            "tq": self._handle_weather,  # tq 是 weather 的别名
             "steam": self._handle_steam,
             "netflix": self._handle_netflix,
             "disney": self._handle_disney,

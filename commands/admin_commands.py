@@ -911,7 +911,7 @@ class AdminPanelHandler:
         text = "📊 *API 用量查询*\n\n请选择要查询的服务："
         keyboard = [
             [InlineKeyboardButton("🎬 TikHub", callback_data="api_usage_tikhub")],
-            [InlineKeyboardButton("✈️ SerpAPI (Google Flights)", callback_data="api_usage_serp")],
+            [InlineKeyboardButton("🔍 SerpAPI", callback_data="api_usage_serp")],
             [InlineKeyboardButton("🔙 返回主菜单", callback_data="back_to_main")],
         ]
         await self._show_panel(query, text, InlineKeyboardMarkup(keyboard))
