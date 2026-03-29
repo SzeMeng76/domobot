@@ -66,6 +66,7 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 -   🎮 **Steam Prices:** Multi-region price comparison for Steam games, bundles, and comprehensive search functionality. *(Whitelist required)*
 -   📱 **App Stores:** Application and in-app purchase price lookup for the App Store (detailed IAP items with pricing) and Google Play (IAP price ranges). *(Whitelist required)*
 -   🎥 **Social Media Parser (Full Parsing):** Whitelist users/groups only - comprehensive content parser supporting 20+ platforms including TikTok, YouTube, Twitter/X, Instagram, Douyin, Bilibili, Xiaohongshu, and more. Features include **command mode** with `/parse <link>` for manual parsing, **auto-parse mode** (admin configurable per-group via `/admin` panel), **AI-powered summaries** using GPT-5-mini for content insights, **video splitting** for large files (>50MB) using FFmpeg, **image host upload** (Catbox/Litterbox/Zio.ooo) for oversized content, **video transcription** (OpenAI Whisper/Azure/FastWhisper) for audio-to-text, **Telegraph publishing** for long-form content, **platform-specific cookies** for Twitter/Instagram/Facebook authentication, and **intelligent proxy routing** with global and per-platform configuration. Supports reply-to-message parsing. All advanced features are optional and can be enabled via `.env` configuration. *(Whitelist required)*
+-   🔍 **Network Diagnostic Tools:** Comprehensive network analysis and troubleshooting toolkit. Features **IP reputation checking** with AbuseIPDB multi-key rotation and ipapi.is integration for abuse scores and threat intelligence, **MAC address vendor lookup** using IEEE OUI database for hardware identification, **domain resolution** with A/AAAA record queries and geolocation data, **website availability monitoring** with HTTP status codes and response time measurements, **global latency testing** across 6 continents with 20+ locations for network performance analysis, **MTR route tracing** with 15-hop path analysis including packet loss and latency statistics, **WARP detection** for Cloudflare WARP exit IP identification, and **inline mode support** for quick diagnostics in any chat. Supports IP addresses (IPv4/IPv6), MAC addresses (multiple formats), domain names, and URLs with intelligent input type detection and comprehensive error handling. *(Whitelist required)*
 -   🔐 **Admin System:** A comprehensive admin permission system with user/group whitelisting.
 -   📊 **User Caching & Stats:** Caching user data and command usage statistics.
 -   🛡️ **AI Anti-Spam:** Intelligent spam detection system powered by OpenAI GPT-4o-mini with **group-level configuration**, automatic user verification based on join time and activity, customizable spam score thresholds, comprehensive logging and statistics, **global statistics dashboard**, **Telegraph-integrated log viewing**, and automatic data cleanup. Features smart detection for new users while respecting verified members, detailed spam analysis with reasoning and mock text, ban/mute actions, and complete admin panel integration with per-group and cross-group analytics.
@@ -226,16 +227,17 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 # Inline mode: @bot reddit <link>$ - Quick parse Reddit posts in any chat
 # Dual API mode: OAuth (default) or JSON endpoint (TLS fingerprint + WARP proxy)
 
-# Network Diagnostic Tools
-/scan 8.8.8.8            # IP reputation check (ipapi.is + AbuseIPDB)
-/scan 00:1A:2B:3C:4D:5E  # MAC address vendor lookup
-/scan google.com         # Domain resolution + IP info
-/scan https://example.com # Website availability check
-/scan latency google.com # Global latency test (6 continents)
-/scan mtr google.com     # MTR route tracing (15 hops)
-/scan warp               # Check WARP exit IP info
+# Network Diagnostic Tools (IP Reputation, MAC Lookup, DNS Resolution, Global Latency & MTR)
+/scan 8.8.8.8            # IP reputation check (ipapi.is + AbuseIPDB multi-key rotation)
+/scan 00:1A:2B:3C:4D:5E  # MAC address vendor lookup (IEEE OUI database)
+/scan google.com         # Domain resolution + IP info (A/AAAA records + geolocation)
+/scan https://example.com # Website availability check (HTTP status + response time)
+/scan latency google.com # Global latency test (6 continents, 20+ locations)
+/scan mtr google.com     # MTR route tracing (15 hops with packet loss & latency)
+/scan warp               # Check WARP exit IP info (Cloudflare WARP detection)
+# Features: IP abuse score, threat intelligence, MAC vendor identification, DNS resolution, global network performance
 # Inline mode: @bot scan <target>$ - Supports IP/MAC/domain/URL queries
-# Latency and MTR tests execute after clicking in Inline mode
+# Latency and MTR tests execute after clicking in Inline mode for detailed results
 ```
 
 #### Whitelist-Only Commands
