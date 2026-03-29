@@ -5,6 +5,10 @@ Inline Map Handler
 """
 
 import logging
+import json
+import re
+from datetime import datetime
+from typing import Optional, Dict
 from telegram import InlineQueryResultArticle, InlineQueryResultPhoto, InputTextMessageContent, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from uuid import uuid4
@@ -14,6 +18,9 @@ from utils.map_services import MapServiceManager
 from utils.config_manager import get_config
 
 logger = logging.getLogger(__name__)
+
+# Telegraph 相关配置
+TELEGRAPH_API_URL = "https://api.telegra.ph"
 
 # 价格等级映射
 PRICE_LEVEL_MAP = {
@@ -39,6 +46,170 @@ def set_dependencies(hc):
         google_api_key=config.google_maps_api_key,
         amap_api_key=config.amap_api_key
     )
+
+
+async def create_telegraph_page(title: str, content: str) -> Optional[str]:
+    """创建Telegraph页面用于显示长内容"""
+    try:
+        # 创建Telegraph账户
+        account_data = {
+            "short_name": "MapBot",
+            "author_name": "MengBot Map Service",
+            "author_url": "https://t.me/mengpricebot"
+        }
+
+        response = await httpx_client.post(f"{TELEGRAPH_API_URL}/createAccount", data=account_data)
+        if response.status_code != 200:
+            logger.warning(f"创建Telegraph账户失败: {response.status_code}")
+            return None
+
+        account_info = response.json()
+        if not account_info.get("ok"):
+            logger.warning(f"Telegraph账户创建响应错误: {account_info}")
+            return None
+
+        access_token = account_info["result"]["access_token"]
+
+        # 创建页面内容
+        page_content = [
+            {
+                "tag": "p",
+                "children": [content]
+            }
+        ]
+
+        page_data = {
+            "access_token": access_token,
+            "title": title,
+            "content": json.dumps(page_content),
+            "return_content": "true"
+        }
+
+        response = await httpx_client.post(f"{TELEGRAPH_API_URL}/createPage", data=page_data)
+        if response.status_code != 200:
+            logger.warning(f"创建Telegraph页面失败: {response.status_code}")
+            return None
+
+        page_info = response.json()
+        if not page_info.get("ok"):
+            logger.warning(f"Telegraph页面创建响应错误: {page_info}")
+            return None
+
+        logger.info(f"成功创建Telegraph页面: {page_info['result']['url']}")
+        return page_info["result"]["url"]
+    except Exception as e:
+        logger.error(f"创建Telegraph页面失败: {e}")
+        return None
+
+
+def format_directions_for_telegraph(directions: Dict, service_type: str) -> str:
+    """将路线规划格式化为Telegraph友好的格式"""
+    distance = directions.get('distance', '未知')
+    duration = directions.get('duration', '未知')
+    start = directions.get('start_address', '')
+    end = directions.get('end_address', '')
+
+    content = f"""路线规划详情
+
+📍 起点: {start}
+📍 终点: {end}
+
+📊 路线信息:
+• 距离: {distance}
+• 预计时间: {duration}
+"""
+
+    # Routes API v2 新功能
+    api_version = directions.get('api_version', 'directions_v1')
+
+    if api_version == 'routes_v2':
+        # 环保路线标识
+        if directions.get('is_eco_friendly'):
+            content += "• 🌱 环保路线: 已优化油耗\n"
+
+        # 燃油消耗
+        if directions.get('fuel_consumption_liters'):
+            fuel = directions['fuel_consumption_liters']
+            content += f"• ⛽ 预计油耗: {fuel:.2f} L\n"
+
+        # 过路费信息
+        if directions.get('tolls'):
+            tolls = directions['tolls']
+            if tolls.get('estimatedPrice'):
+                price = tolls['estimatedPrice']
+                currency = price.get('currencyCode', 'USD')
+                amount = price.get('units', 0)
+                nanos = price.get('nanos', 0)
+                total = amount + nanos / 1_000_000_000
+                content += f"• 💰 过路费: {total:.2f} {currency}\n"
+
+        content += f"\n_使用 Routes API v2_\n"
+
+    content += "\n🛣️ 主路线详细指引:\n"
+
+    # 添加主路线所有步骤
+    if 'steps' in directions and directions['steps']:
+        for i, step in enumerate(directions['steps'], 1):
+            # 清理HTML标签
+            step_clean = re.sub(r'<[^>]+>', ' ', step)
+            step_clean = re.sub(r'\s+', ' ', step_clean)
+            step_clean = step_clean.strip()
+
+            # 如果包含 "Toll road"，添加收费标记
+            if 'Toll road' in step_clean:
+                step_clean = step_clean.replace('Toll road', '💰 收费路段')
+
+            content += f"{i}. {step_clean}\n\n"
+    else:
+        content += "暂无详细指引信息\n\n"
+
+    # 添加备选路线
+    if directions.get('alternative_routes'):
+        alt_routes = directions['alternative_routes']
+        for route_num, alt in enumerate(alt_routes, 2):
+            toll_tag = " 💰 有收费" if alt.get('has_tolls') else " 🆓 无收费"
+            eco_tag = " 🌱 环保" if alt.get('is_eco_friendly') else ""
+
+            content += f"\n{'='*60}\n"
+            content += f"🔀 备选路线 {route_num}: {alt['distance']} · {alt['duration']}{toll_tag}{eco_tag}\n"
+
+            if alt.get('description'):
+                content += f"经由: {alt['description']}\n"
+
+            if alt.get('toll_info') and alt['toll_info'].get('estimatedPrice'):
+                toll_price = alt['toll_info']['estimatedPrice']
+                currency = toll_price.get('currencyCode', 'USD')
+                amount = toll_price.get('units', 0)
+                nanos = toll_price.get('nanos', 0)
+                total = amount + nanos / 1_000_000_000
+                content += f"过路费: {total:.2f} {currency}\n"
+
+            content += f"\n详细指引:\n"
+
+            # 添加备选路线的步骤
+            if alt.get('steps'):
+                for i, step in enumerate(alt['steps'], 1):
+                    # 清理HTML标签
+                    step_clean = re.sub(r'<[^>]+>', ' ', step)
+                    step_clean = re.sub(r'\s+', ' ', step_clean)
+                    step_clean = step_clean.strip()
+
+                    # 如果包含 "Toll road"，添加收费标记
+                    if 'Toll road' in step_clean:
+                        step_clean = step_clean.replace('Toll road', '💰 收费路段')
+
+                    content += f"{i}. {step_clean}\n\n"
+            else:
+                content += "暂无详细指引信息\n\n"
+
+    service_name = "Google Maps" if service_type == "google_maps" else "高德地图"
+    content += f"""
+---
+数据来源: {service_name}
+生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+来源: MengBot 地图服务"""
+
+    return content
 
 
 async def handle_inline_map_search(query: str, context: ContextTypes.DEFAULT_TYPE, user_locale: str = None) -> list:
@@ -514,7 +685,7 @@ async def handle_inline_map_directions(query: str, context: ContextTypes.DEFAULT
         dest_lat = destination_data.get('lat')
         dest_lng = destination_data.get('lng')
 
-        directions = await service.get_directions(origin_lat, origin_lng, dest_lat, dest_lng, httpx_client)
+        directions = await service.get_directions(origin_query, destination_query, "driving", httpx_client)
 
         if not directions:
             return [
@@ -534,10 +705,10 @@ async def handle_inline_map_directions(query: str, context: ContextTypes.DEFAULT
         result_text += f"📍 终点: {destination_data.get('name')}\n\n"
 
         # 距离和时间
-        distance_km = directions.get('distance', 0) / 1000
-        duration_min = directions.get('duration', 0) / 60
-        result_text += f"📏 距离: {distance_km:.1f} km\n"
-        result_text += f"⏱️ 时间: {int(duration_min)} 分钟\n"
+        distance = directions.get('distance', '未知')
+        duration = directions.get('duration', '未知')
+        result_text += f"📏 距离: {distance}\n"
+        result_text += f"⏱️ 时间: {duration}\n"
 
         # 生态友好标识
         if directions.get('is_eco_friendly'):
@@ -559,6 +730,11 @@ async def handle_inline_map_directions(query: str, context: ContextTypes.DEFAULT
                 total = amount + nanos / 1_000_000_000
                 result_text += f"💰 过路费: {total:.2f} {currency}\n"
 
+        # 备选路线信息
+        if directions.get('alternative_routes'):
+            alt_count = len(directions['alternative_routes'])
+            result_text += f"\n🔀 找到 {alt_count} 条备选路线\n"
+
         # 地图链接 - 构建路线规划 URL
         if language == "zh":
             # 高德地图路线规划
@@ -567,18 +743,30 @@ async def handle_inline_map_directions(query: str, context: ContextTypes.DEFAULT
             # Google Maps 路线规划
             map_url = f"https://maps.google.com/maps?saddr={origin_lat},{origin_lng}&daddr={dest_lat},{dest_lng}"
 
-        result_text += f"\n🗺️ [查看地图]({map_url})"
+        # 创建Telegraph页面显示详细路线
+        service_type = "amap" if language == "zh" else "google_maps"
+        telegraph_content = format_directions_for_telegraph(directions, service_type)
+        telegraph_title = f"路线: {origin_data.get('name')} → {destination_data.get('name')}"
+        telegraph_url = await create_telegraph_page(telegraph_title, telegraph_content)
 
+        if telegraph_url:
+            result_text += f"\n📄 [查看详细路线指引]({telegraph_url})"
+
+        result_text += f"\n🗺️ [在地图中查看]({map_url})"
         result_text += f"\n\n_数据来源: {service_name}_"
 
         # 创建按钮
         keyboard = [[InlineKeyboardButton("🗺️ 查看路线", url=map_url)]]
+        if telegraph_url:
+            keyboard[0].append(InlineKeyboardButton("📄 详细指引", url=telegraph_url))
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         # 描述文本
-        description = f"{distance_km:.1f}km | {int(duration_min)}分钟"
+        description = f"{distance} | {duration}"
         if directions.get('is_eco_friendly'):
             description += " | 🌱"
+        if directions.get('alternative_routes'):
+            description += f" | {len(directions['alternative_routes'])} 条备选"
 
         return [
             InlineQueryResultArticle(

@@ -543,7 +543,24 @@ def format_directions(directions: Dict, service_type: str) -> str:
                 result += f"\n🔀 *备选路线* ({len(alt_routes)} 条):\n"
                 for i, alt in enumerate(alt_routes[:2], 2):  # 最多显示2条备选
                     eco_tag = " 🌱" if alt.get('is_eco_friendly') else ""
-                    result += f"`{i}.` {alt['distance']} · {alt['duration']}{eco_tag}\n"
+                    toll_tag = " 💰" if alt.get('has_tolls') else " 🆓"
+                    result += f"`{i}.` {alt['distance']} · {alt['duration']}{eco_tag}{toll_tag}\n"
+
+                    # 显示路线描述（主要道路）
+                    if alt.get('description'):
+                        desc = alt['description']
+                        if len(desc) > 50:
+                            desc = desc[:50] + "..."
+                        result += f"   _经由: {desc}_\n"
+
+                    # 显示过路费（如果有）
+                    if alt.get('toll_info') and alt['toll_info'].get('estimatedPrice'):
+                        toll_price = alt['toll_info']['estimatedPrice']
+                        currency = toll_price.get('currencyCode', 'USD')
+                        amount = toll_price.get('units', 0)
+                        nanos = toll_price.get('nanos', 0)
+                        total = float(amount) + (float(nanos) / 1_000_000_000)
+                        result += f"   过路费: {currency} {total:.2f}\n"
 
     result += "\n"
 
@@ -667,18 +684,62 @@ def format_directions_for_telegraph(directions: Dict, service_type: str) -> str:
 
         content += f"\n_使用 Routes API v2_\n"
 
-    content += "\n🛣️ 详细指引:\n"
+    content += "\n🛣️ 主路线详细指引:\n"
 
-    # 添加所有步骤
+    # 添加主路线所有步骤
     if 'steps' in directions and directions['steps']:
         for i, step in enumerate(directions['steps'], 1):
             # 清理HTML标签
             step_clean = re.sub(r'<[^>]+>', ' ', step)
             step_clean = re.sub(r'\s+', ' ', step_clean)
             step_clean = step_clean.strip()
+
+            # 如果包含 "Toll road"，添加收费标记
+            if 'Toll road' in step_clean:
+                step_clean = step_clean.replace('Toll road', '💰 收费路段')
+
             content += f"{i}. {step_clean}\n\n"
     else:
         content += "暂无详细指引信息\n\n"
+
+    # 添加备选路线
+    if directions.get('alternative_routes'):
+        alt_routes = directions['alternative_routes']
+        for route_num, alt in enumerate(alt_routes, 2):
+            toll_tag = " 💰 有收费" if alt.get('has_tolls') else " 🆓 无收费"
+            eco_tag = " 🌱 环保" if alt.get('is_eco_friendly') else ""
+
+            content += f"\n{'='*60}\n"
+            content += f"🔀 备选路线 {route_num}: {alt['distance']} · {alt['duration']}{toll_tag}{eco_tag}\n"
+
+            if alt.get('description'):
+                content += f"经由: {alt['description']}\n"
+
+            if alt.get('toll_info') and alt['toll_info'].get('estimatedPrice'):
+                toll_price = alt['toll_info']['estimatedPrice']
+                currency = toll_price.get('currencyCode', 'USD')
+                amount = toll_price.get('units', 0)
+                nanos = toll_price.get('nanos', 0)
+                total = amount + nanos / 1_000_000_000
+                content += f"过路费: {total:.2f} {currency}\n"
+
+            content += f"\n详细指引:\n"
+
+            # 添加备选路线的步骤
+            if alt.get('steps'):
+                for i, step in enumerate(alt['steps'], 1):
+                    # 清理HTML标签
+                    step_clean = re.sub(r'<[^>]+>', ' ', step)
+                    step_clean = re.sub(r'\s+', ' ', step_clean)
+                    step_clean = step_clean.strip()
+
+                    # 如果包含 "Toll road"，添加收费标记
+                    if 'Toll road' in step_clean:
+                        step_clean = step_clean.replace('Toll road', '💰 收费路段')
+
+                    content += f"{i}. {step_clean}\n\n"
+            else:
+                content += "暂无详细指引信息\n\n"
 
     service_name = "Google Maps" if service_type == "google_maps" else "高德地图"
     content += f"""

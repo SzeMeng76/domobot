@@ -429,7 +429,7 @@ class GoogleMapsService(MapService):
                 "units": "METRIC",
                 "computeAlternativeRoutes": True,  # 计算备选路线
                 "routeModifiers": {
-                    "avoidTolls": False,  # 不避开收费路段（需要显示过路费）
+                    "avoidTolls": False,  # 不避开收费路段，给用户最优路线
                     "avoidHighways": False,
                     "avoidFerries": False
                 },
@@ -452,8 +452,8 @@ class GoogleMapsService(MapService):
             headers = {
                 'Content-Type': 'application/json',
                 'X-Goog-Api-Key': self.api_key,
-                # 正确的 FieldMask：fuelConsumptionMicroliters 在 routes.travelAdvisory 下
-                'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.polyline,routes.legs.steps.navigationInstruction,routes.legs.travelAdvisory.tollInfo,routes.travelAdvisory.fuelConsumptionMicroliters,routes.travelAdvisory,routes.routeLabels'
+                # 正确的 FieldMask：包含 description 和 fuelConsumptionMicroliters
+                'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.polyline,routes.legs.steps.navigationInstruction,routes.legs.travelAdvisory.tollInfo,routes.travelAdvisory.fuelConsumptionMicroliters,routes.travelAdvisory,routes.routeLabels,routes.description'
             }
 
             # 先尝试完整功能
@@ -478,9 +478,9 @@ class GoogleMapsService(MapService):
                         "travelMode": travel_mode,
                         "languageCode": "en",
                         "units": "METRIC",
-                        "computeAlternativeRoutes": False,
+                        "computeAlternativeRoutes": True,  # 保留备选路线
                         "routeModifiers": {
-                            "avoidTolls": False,
+                            "avoidTolls": False,  # 不避开收费路段，给用户最优路线
                             "avoidHighways": False,
                             "avoidFerries": False
                         },
@@ -575,12 +575,109 @@ class GoogleMapsService(MapService):
                         alt_duration_text = f"{alt_duration_minutes} mins" if alt_duration_minutes > 0 else f"{alt_duration_seconds} secs"
 
                         alt_labels = alt_route.get('routeLabels', [])
+                        alt_description = alt_route.get('description', '')
+
+                        # 提取备选路线的步骤
+                        alt_steps = []
+                        alt_has_tolls = False
+                        if 'legs' in alt_route and alt_route['legs']:
+                            for leg in alt_route['legs']:
+                                if 'steps' in leg:
+                                    for step in leg['steps']:
+                                        if 'navigationInstruction' in step:
+                                            instruction = step['navigationInstruction'].get('instructions', '')
+                                            if instruction:
+                                                alt_steps.append(instruction)
+                                                # 检查是否包含收费路段
+                                                if 'Toll road' in instruction:
+                                                    alt_has_tolls = True
+
+                        # 提取备选路线的过路费信息
+                        alt_toll_info = None
+                        if 'legs' in alt_route and alt_route['legs']:
+                            for leg in alt_route['legs']:
+                                if 'travelAdvisory' in leg:
+                                    advisory = leg['travelAdvisory']
+                                    if 'tollInfo' in advisory and advisory['tollInfo']:
+                                        alt_toll_info = advisory['tollInfo']
+                                        if 'estimatedPrice' in alt_toll_info and alt_toll_info['estimatedPrice']:
+                                            alt_toll_info['estimatedPrice'] = alt_toll_info['estimatedPrice'][0]
+                                        break
 
                         alternative_routes.append({
                             'distance': alt_distance_text,
                             'duration': alt_duration_text,
-                            'is_eco_friendly': 'FUEL_EFFICIENT' in alt_labels
+                            'is_eco_friendly': 'FUEL_EFFICIENT' in alt_labels,
+                            'description': alt_description,
+                            'toll_info': alt_toll_info,
+                            'has_tolls': alt_has_tolls,
+                            'steps': alt_steps
                         })
+
+                # 额外请求：获取避开收费路段的路线作为备选
+                try:
+                    request_body_no_toll = request_body_basic.copy() if 'request_body_basic' in locals() else request_body_full.copy()
+                    request_body_no_toll["routeModifiers"]["avoidTolls"] = True
+                    request_body_no_toll["computeAlternativeRoutes"] = False  # 只要一条无toll路线
+
+                    # 移除环保路线请求（避免冲突）
+                    if "requestedReferenceRoutes" in request_body_no_toll:
+                        del request_body_no_toll["requestedReferenceRoutes"]
+                    if "routingPreference" in request_body_no_toll:
+                        del request_body_no_toll["routingPreference"]
+
+                    response_no_toll = await httpx_client.post(url, json=request_body_no_toll, headers=headers, timeout=30)
+
+                    if response_no_toll.status_code == 200:
+                        data_no_toll = response_no_toll.json()
+                        if 'routes' in data_no_toll and data_no_toll['routes']:
+                            no_toll_route = data_no_toll['routes'][0]
+
+                            # 检查这条路线是否真的没有toll（避免重复）
+                            no_toll_steps = []
+                            has_toll_check = False
+                            if 'legs' in no_toll_route and no_toll_route['legs']:
+                                for leg in no_toll_route['legs']:
+                                    if 'steps' in leg:
+                                        for step in leg['steps']:
+                                            if 'navigationInstruction' in step:
+                                                instruction = step['navigationInstruction'].get('instructions', '')
+                                                if instruction:
+                                                    no_toll_steps.append(instruction)
+                                                    if 'Toll road' in instruction:
+                                                        has_toll_check = True
+
+                            # 只添加真正无toll的路线，且与现有路线不重复
+                            if not has_toll_check:
+                                no_toll_distance_meters = no_toll_route.get('distanceMeters', 0)
+                                no_toll_distance_km = no_toll_distance_meters / 1000
+                                no_toll_distance_text = f"{no_toll_distance_km:.1f} km"
+
+                                no_toll_duration_seconds = int(no_toll_route.get('duration', '0s').rstrip('s'))
+                                no_toll_duration_minutes = no_toll_duration_seconds // 60
+                                no_toll_duration_text = f"{no_toll_duration_minutes} mins"
+
+                                # 检查是否与现有路线重复（距离相差小于1km）
+                                is_duplicate = False
+                                for existing_alt in alternative_routes:
+                                    existing_dist = float(existing_alt['distance'].replace(' km', ''))
+                                    if abs(existing_dist - no_toll_distance_km) < 1.0:
+                                        is_duplicate = True
+                                        break
+
+                                if not is_duplicate:
+                                    alternative_routes.append({
+                                        'distance': no_toll_distance_text,
+                                        'duration': no_toll_duration_text,
+                                        'is_eco_friendly': False,
+                                        'description': no_toll_route.get('description', '无收费路段路线'),
+                                        'toll_info': None,
+                                        'has_tolls': False,
+                                        'steps': no_toll_steps
+                                    })
+                                    logger.info(f"添加无收费路段备选路线: {no_toll_distance_text}, {no_toll_duration_text}")
+                except Exception as e:
+                    logger.warning(f"获取无收费路段备选路线失败: {e}")
 
                 result = {
                     'distance': distance_text,
