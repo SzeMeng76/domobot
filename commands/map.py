@@ -1553,17 +1553,38 @@ def format_reverse_geocoding_result(reverse_data: Dict, service_type: str, lat: 
     return result
 
 async def _safe_edit_message(query, text, reply_markup=None, parse_mode=None):
-    """安全地编辑消息，处理内容相同的情况"""
+    """安全地编辑消息，处理内容相同的情况和照片消息"""
     try:
-        await query.edit_message_text(
-            text=text,
-            reply_markup=reply_markup,
-            parse_mode=parse_mode
-        )
+        # 检查消息是否包含照片
+        if query.message.photo:
+            # 如果是照片消息，使用 edit_message_caption
+            await query.edit_message_caption(
+                caption=text,
+                reply_markup=reply_markup,
+                parse_mode=parse_mode
+            )
+        else:
+            # 如果是文本消息，使用 edit_message_text
+            await query.edit_message_text(
+                text=text,
+                reply_markup=reply_markup,
+                parse_mode=parse_mode
+            )
     except Exception as e:
         if "Message is not modified" in str(e):
             # 消息内容相同，忽略这个错误
             logger.debug(f"消息内容相同，跳过编辑: {text[:50]}...")
+        elif "There is no text in the message to edit" in str(e):
+            # 照片消息但尝试编辑文本，尝试用 caption
+            try:
+                await query.edit_message_caption(
+                    caption=text,
+                    reply_markup=reply_markup,
+                    parse_mode=parse_mode
+                )
+            except Exception as e2:
+                logger.error(f"编辑照片消息 caption 失败: {e2}")
+                raise
         else:
             logger.error(f"编辑消息失败: {e}")
             raise
