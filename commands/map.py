@@ -1693,8 +1693,10 @@ async def _safe_edit_message(query, text, reply_markup=None, parse_mode=None):
             if len(text) > 1024:
                 # Caption太长，删除照片改用纯文本消息
                 logger.warning(f"Caption太长 ({len(text)} 字符)，删除照片改用文本消息")
+                chat_id = query.message.chat_id
                 await query.message.delete()
-                await query.message.reply_text(
+                await query.message.get_bot().send_message(
+                    chat_id=chat_id,
                     text=text,
                     reply_markup=reply_markup,
                     parse_mode=parse_mode
@@ -1714,17 +1716,23 @@ async def _safe_edit_message(query, text, reply_markup=None, parse_mode=None):
                 parse_mode=parse_mode
             )
     except Exception as e:
-        if "Message is not modified" in str(e):
+        error_str = str(e)
+        if "Message is not modified" in error_str:
             # 消息内容相同，忽略这个错误
             logger.debug(f"消息内容相同，跳过编辑: {text[:50]}...")
-        elif "There is no text in the message to edit" in str(e):
+        elif "Message to edit not found" in error_str or "Message to be replied not found" in error_str:
+            # 消息已被删除，无法编辑，忽略
+            logger.warning(f"消息已被删除，无法编辑")
+        elif "There is no text in the message to edit" in error_str:
             # 照片消息但尝试编辑文本，尝试用 caption
             try:
                 if len(text) > 1024:
                     # Caption太长，删除照片改用纯文本消息
                     logger.warning(f"Caption太长 ({len(text)} 字符)，删除照片改用文本消息")
+                    chat_id = query.message.chat_id
                     await query.message.delete()
-                    await query.message.reply_text(
+                    await query.message.get_bot().send_message(
+                        chat_id=chat_id,
                         text=text,
                         reply_markup=reply_markup,
                         parse_mode=parse_mode
@@ -1736,21 +1744,29 @@ async def _safe_edit_message(query, text, reply_markup=None, parse_mode=None):
                         parse_mode=parse_mode
                     )
             except Exception as e2:
-                logger.error(f"编辑消息失败: {e2}")
-                raise
-        elif "Media_caption_too_long" in str(e):
+                if "Message to edit not found" in str(e2):
+                    logger.warning(f"消息已被删除，无法编辑")
+                else:
+                    logger.error(f"编辑消息失败: {e2}")
+                    raise
+        elif "Media_caption_too_long" in error_str:
             # Caption太长，删除照片改用纯文本消息
             logger.warning(f"Caption太长，删除照片改用文本消息")
             try:
+                chat_id = query.message.chat_id
                 await query.message.delete()
-                await query.message.reply_text(
+                await query.message.get_bot().send_message(
+                    chat_id=chat_id,
                     text=text,
                     reply_markup=reply_markup,
                     parse_mode=parse_mode
                 )
             except Exception as e2:
-                logger.error(f"删除照片并发送文本失败: {e2}")
-                raise
+                if "Message to edit not found" in str(e2):
+                    logger.warning(f"消息已被删除，无法编辑")
+                else:
+                    logger.error(f"删除照片并发送文本失败: {e2}")
+                    raise
         else:
             logger.error(f"编辑消息失败: {e}")
             raise

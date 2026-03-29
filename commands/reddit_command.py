@@ -628,7 +628,7 @@ async def _send_reddit_media(context, chat_id, post, caption, reply_markup, upda
                     # 解析 YouTube 链接
                     result, parse_result, platform, parse_time, error_msg = await parse_adapter.parse_url(
                         post.url,
-                        user_id=update.effective_user.id if update.effective_user else None,
+                        user_id=update.effective_user.id if update and update.effective_user else None,
                         group_id=chat_id if chat_id < 0 else None
                     )
 
