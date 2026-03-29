@@ -23,6 +23,7 @@ class BotConfig:
         self.cmc_api_key: str = ""
         self.bin_api_key: str = ""
         self.abuseipdb_api_keys: list = []  # 支持多个 API Key 轮询
+        self.ipdata_api_keys: list = []  # ipdata.co API Keys 轮询
 
         # 电影信息API配置
         self.tmdb_api_key: str = ""

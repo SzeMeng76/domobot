@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 cache_manager = None
 httpx_client = None
 _api_key_index = 0  # AbuseIPDB API Key 轮询索引
+_ipdata_key_index = 0  # ipdata.co API Key 轮询索引
 
 def set_dependencies(c_manager, h_client):
     """设置依赖注入"""
@@ -41,6 +42,21 @@ def get_next_abuseipdb_key() -> Optional[str]:
     # 轮询获取 API Key
     api_key = config.abuseipdb_api_keys[_api_key_index % len(config.abuseipdb_api_keys)]
     _api_key_index += 1
+
+    return api_key
+
+
+def get_next_ipdata_key() -> Optional[str]:
+    """获取下一个可用的 ipdata.co API Key（轮询）"""
+    global _ipdata_key_index
+    config = get_config()
+
+    if not config.ipdata_api_keys:
+        return None
+
+    # 轮询获取 API Key
+    api_key = config.ipdata_api_keys[_ipdata_key_index % len(config.ipdata_api_keys)]
+    _ipdata_key_index += 1
 
     return api_key
 
@@ -103,6 +119,48 @@ async def get_ipapi_info(ip_address: str) -> Optional[Dict]:
 
     except Exception as e:
         logger.error(f"ipapi.is 查询失败: {e}", exc_info=True)
+        return None
+
+
+async def get_ipdata_info(ip_address: str) -> Optional[Dict]:
+    """从 ipdata.co 获取 IP 信息（带缓存）"""
+    cache_key = f"ipdata_{ip_address}"
+    cached_data = await cache_manager.load_cache(cache_key, subdirectory="ipdata")
+    if cached_data:
+        logger.info(f"使用缓存的 ipdata.co 数据: {ip_address}")
+        return cached_data
+
+    api_key = get_next_ipdata_key()
+    if not api_key:
+        logger.warning("无可用的 ipdata.co API Key，跳过查询")
+        return None
+
+    try:
+        # 只请求需要的字段，节省配额
+        fields = "ip,city,region,region_code,country_name,country_code,continent_name,continent_code,latitude,longitude,postal,asn,threat,time_zone"
+        url = f"https://api.ipdata.co/{ip_address}?api-key={api_key}&fields={fields}"
+        headers = {
+            "User-Agent": "DomoBot/1.0",
+            "Accept": "application/json"
+        }
+
+        logger.info(f"查询 ipdata.co 信息: {ip_address}")
+
+        response = await httpx_client.get(url, headers=headers, timeout=30.0)
+        response.raise_for_status()
+
+        data = response.json()
+
+        if data and 'ip' in data:
+            # 缓存结果（默认7天）
+            await cache_manager.save_cache(cache_key, data, subdirectory="ipdata")
+            logger.info(f"✅ ipdata.co 查询成功并缓存: {ip_address}")
+            return data
+
+        return None
+
+    except Exception as e:
+        logger.error(f"ipdata.co 查询失败: {e}", exc_info=True)
         return None
 
 
@@ -750,7 +808,7 @@ async def handle_warp_query(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await delete_user_command(context, chat_id, update.message.message_id)
 
 
-async def handle_ip_query(update: Update, context: ContextTypes.DEFAULT_TYPE, ip_address: str, domain: str = None, status_msg = None) -> None:
+async def handle_ip_query(update: Update, context: ContextTypes.DEFAULT_TYPE, ip_address: str, domain: Optional[str] = None, status_msg = None) -> None:
     """处理 IP 地址查询"""
     config = get_config()
     chat_id = update.effective_chat.id
@@ -764,206 +822,39 @@ async def handle_ip_query(update: Update, context: ContextTypes.DEFAULT_TYPE, ip
         )
 
     try:
-        # 并行查询 ipapi.is 和 AbuseIPDB
+        # 优先使用 ipdata.co，失败时fallback到 ipapi.is
         import asyncio
-        ipapi_task = get_ipapi_info(ip_address)
-        abuseipdb_task = get_abuseipdb_score(ip_address)
 
-        ipapi_data, abuseipdb_data = await asyncio.gather(ipapi_task, abuseipdb_task, return_exceptions=True)
+        ipdata_data = await get_ipdata_info(ip_address)
 
-        # 处理异常
-        if isinstance(ipapi_data, Exception):
-            logger.error(f"ipapi.is 查询异常: {ipapi_data}")
-            ipapi_data = None
-        if isinstance(abuseipdb_data, Exception):
-            logger.error(f"AbuseIPDB 查询异常: {abuseipdb_data}")
-            abuseipdb_data = None
-
-        if not ipapi_data:
-            await status_msg.edit_text("❌ 查询失败：无法获取 IP 信息")
-            await _schedule_deletion(context, chat_id, status_msg.message_id, config.auto_delete_delay)
-            if update.message:
-                await delete_user_command(context, chat_id, update.message.message_id)
-            return
-
-        # 解析 ipapi.is 数据
-        location_data = ipapi_data.get("location", {})
-        asn_data = ipapi_data.get("asn", {})
-        company_data = ipapi_data.get("company", {})
-
-        ip = ipapi_data.get("ip", ip_address)
-        city = location_data.get("city", "")
-        region = location_data.get("state", "")
-        country_name = location_data.get("country", "未知")
-        country_code = location_data.get("country_code", "")
-        asn = f"AS{asn_data.get('asn', '')}" if asn_data.get('asn') else ""
-        org = company_data.get("name", asn_data.get("org", "未知"))
-        latitude = location_data.get("latitude", 0)
-        longitude = location_data.get("longitude", 0)
-
-        # ipapi.is 特有字段
-        is_datacenter = ipapi_data.get("is_datacenter", False)
-        is_proxy = ipapi_data.get("is_proxy", False)
-        is_vpn = ipapi_data.get("is_vpn", False)
-        is_tor = ipapi_data.get("is_tor", False)
-        is_mobile = ipapi_data.get("is_mobile", False)
-        is_crawler = ipapi_data.get("is_crawler", False)
-        is_abuser = ipapi_data.get("is_abuser", False)
-        company_type = company_data.get("type", "")
-        company_abuser_score = company_data.get("abuser_score", "")
-        asn_abuser_score = asn_data.get("abuser_score", "")
-
-        # 解析 AbuseIPDB 数据（风控分数）
-        abuse_score = 0
-        usage_type = ""
-        is_whitelisted = False
-        is_tor = False
-        total_reports = 0
-
-        if abuseipdb_data:
-            abuse_score = abuseipdb_data.get("abuseConfidenceScore", 0)
-            usage_type = abuseipdb_data.get("usageType", "")
-            is_whitelisted = abuseipdb_data.get("isWhitelisted", False)
-            is_tor = abuseipdb_data.get("isTor", False)
-            total_reports = abuseipdb_data.get("totalReports", 0)
-
-        # 判断 IP 类型（优先使用 ipapi.is 数据）
-        native_emoji = "❓"
-        native_text = "未知"
-
-        if is_tor:
-            native_emoji = "🧅"
-            native_text = "Tor 节点"
-        elif is_proxy or is_vpn:
-            native_emoji = "🔒"
-            native_text = "代理/VPN"
-        elif is_datacenter:
-            native_emoji = "🏢"
-            native_text = "数据中心"
-        elif is_mobile:
-            native_emoji = "📱"
-            native_text = "移动网络"
-        elif company_type == "isp":
-            native_emoji = "✅"
-            native_text = "原生 IP (ISP)"
-        elif company_type == "hosting":
-            native_emoji = "🏢"
-            native_text = "托管服务"
-        elif company_type == "business":
-            native_emoji = "🏢"
-            native_text = "企业网络"
-        elif usage_type:
-            # 如果有 AbuseIPDB 数据，作为补充
-            usage_lower = usage_type.lower()
-            if "residential" in usage_lower or "fixed line isp" in usage_lower:
-                native_emoji = "✅"
-                native_text = "原生 IP"
-            elif "mobile" in usage_lower or "cellular" in usage_lower:
-                native_emoji = "📱"
-                native_text = "移动网络"
-            elif "content delivery" in usage_lower or "cdn" in usage_lower:
-                native_emoji = "🌐"
-                native_text = "CDN"
+        if ipdata_data:
+            # 使用 ipdata.co 数据
+            logger.info(f"使用 ipdata.co 数据: {ip_address}")
+            await _handle_ip_query_with_ipdata(update, context, ip_address, ipdata_data, domain, status_msg)
         else:
-            # 根据 ASN/Org 简单判断
-            org_lower = org.lower()
-            if any(keyword in org_lower for keyword in ["hosting", "server", "cloud", "datacenter", "data center"]):
-                native_emoji = "🏢"
-                native_text = "数据中心"
-            elif any(keyword in org_lower for keyword in ["telecom", "mobile", "wireless", "cellular"]):
-                native_emoji = "📱"
-                native_text = "移动网络"
-            else:
-                native_emoji = "✅"
-                native_text = "可能原生"
+            # Fallback 到 ipapi.is + AbuseIPDB
+            logger.info(f"Fallback 到 ipapi.is: {ip_address}")
+            ipapi_task = get_ipapi_info(ip_address)
+            abuseipdb_task = get_abuseipdb_score(ip_address)
 
-        # 根据滥用分数判断风险等级
-        if abuse_score == 0:
-            risk_emoji = "✅"
-            risk_level = "安全"
-        elif abuse_score < 25:
-            risk_emoji = "🟢"
-            risk_level = "低风险"
-        elif abuse_score < 50:
-            risk_emoji = "🟡"
-            risk_level = "中风险"
-        elif abuse_score < 75:
-            risk_emoji = "🟠"
-            risk_level = "高风险"
-        else:
-            risk_emoji = "🔴"
-            risk_level = "极高风险"
+            ipapi_data, abuseipdb_data = await asyncio.gather(ipapi_task, abuseipdb_task, return_exceptions=True)
 
-        # 格式化结果
-        location_parts = [city, region, country_name]
-        location = ", ".join([p for p in location_parts if p])
+            # 处理异常
+            if isinstance(ipapi_data, Exception):
+                logger.error(f"ipapi.is 查询异常: {ipapi_data}")
+                ipapi_data = None
+            if isinstance(abuseipdb_data, Exception):
+                logger.error(f"AbuseIPDB 查询异常: {abuseipdb_data}")
+                abuseipdb_data = None
 
-        result_text = (
-            f"📊 *IP 信息检测结果*\n\n"
-        )
+            if not ipapi_data:
+                await status_msg.edit_text("❌ 查询失败：无法获取 IP 信息")
+                await _schedule_deletion(context, chat_id, status_msg.message_id, config.auto_delete_delay)
+                if update.message:
+                    await delete_user_command(context, chat_id, update.message.message_id)
+                return
 
-        # 如果是从域名查询来的，显示域名
-        if domain:
-            result_text += f"🌐 域名: `{domain}`\n"
-
-        result_text += f"🌐 IP: `{ip}`\n\n"
-
-        # 风控指数（如果有 AbuseIPDB 数据）
-        if abuseipdb_data:
-            result_text += f"🎯 *风控*: {risk_emoji} *{abuse_score}/100* ({risk_level})\n"
-
-        result_text += f"🏠 *IP 类型*: {native_emoji} *{native_text}*\n"
-
-        # ipapi.is 特殊标签
-        tags = []
-        if is_crawler:
-            tags.append("🕷️ 爬虫")
-        if is_abuser:
-            tags.append("⚠️ 滥用者")
-        if is_whitelisted:
-            tags.append("⭐ 白名单")
-
-        if tags:
-            result_text += f"🏷️ *标签*: {' '.join(tags)}\n"
-
-        # ipapi.is 滥用分数
-        if company_abuser_score:
-            result_text += f"📊 *公司滥用分数*: {company_abuser_score}\n"
-        if asn_abuser_score:
-            result_text += f"📊 *ASN 滥用分数*: {asn_abuser_score}\n"
-
-        result_text += (
-            f"\n📍 *地理位置*\n"
-            f"• 位置: {location}\n"
-        )
-
-        if latitude and longitude:
-            result_text += f"• 坐标: {latitude}, {longitude}\n"
-
-        result_text += f"• ISP: {org}\n"
-
-        if asn:
-            result_text += f"• ASN: {asn}\n"
-
-        if company_type:
-            result_text += f"• 类型: {company_type.upper()}\n"
-
-        if total_reports > 0:
-            result_text += (
-                f"\n⚠️ *滥用报告*\n"
-                f"• 总报告数: {total_reports}\n"
-            )
-
-        await status_msg.edit_text(
-            result_text,
-            parse_mode="Markdown",
-            disable_web_page_preview=True
-        )
-
-        # 自动删除结果消息
-        await _schedule_deletion(context, chat_id, status_msg.message_id, config.auto_delete_delay)
-
-        logger.info(f"✅ IP 查询成功: {ip_address} (风控分数: {abuse_score})")
+            await _handle_ip_query_with_ipapi(update, context, ip_address, ipapi_data, abuseipdb_data, domain, status_msg)
 
     except Exception as e:
         logger.error(f"IP 查询失败: {e}", exc_info=True)
@@ -973,6 +864,354 @@ async def handle_ip_query(update: Update, context: ContextTypes.DEFAULT_TYPE, ip
 
     if update.message:
         await delete_user_command(context, chat_id, update.message.message_id)
+
+
+async def _handle_ip_query_with_ipdata(update: Update, context: ContextTypes.DEFAULT_TYPE, ip_address: str, ipdata_data: Dict, domain: Optional[str] = None, status_msg = None) -> None:
+    """使用 ipdata.co 数据处理 IP 查询"""
+    config = get_config()
+    chat_id = update.effective_chat.id
+
+    # 解析 ipdata.co 数据
+    ip = ipdata_data.get("ip", ip_address)
+    city = ipdata_data.get("city", "")
+    region = ipdata_data.get("region", "")
+    country_name = ipdata_data.get("country_name", "未知")
+    country_code = ipdata_data.get("country_code", "")
+    latitude = ipdata_data.get("latitude", 0)
+    longitude = ipdata_data.get("longitude", 0)
+    postal = ipdata_data.get("postal", "")
+
+    # ASN 信息
+    asn_data = ipdata_data.get("asn", {})
+    asn = asn_data.get("asn", "")
+    asn_name = asn_data.get("name", "未知")
+    asn_type = asn_data.get("type", "")
+
+    # Threat 信息
+    threat_data = ipdata_data.get("threat", {})
+    is_tor = threat_data.get("is_tor", False)
+    is_proxy = threat_data.get("is_proxy", False)
+    is_datacenter = threat_data.get("is_datacenter", False)
+    is_anonymous = threat_data.get("is_anonymous", False)
+    is_known_attacker = threat_data.get("is_known_attacker", False)
+    is_known_abuser = threat_data.get("is_known_abuser", False)
+    is_threat = threat_data.get("is_threat", False)
+    blocklists = threat_data.get("blocklists", [])
+
+    # 获取 scores（如果有的话，付费版才有）
+    scores = threat_data.get("scores", {})
+    vpn_score = scores.get("vpn_score", 0)
+    proxy_score = scores.get("proxy_score", 0)
+    threat_score = scores.get("threat_score", 0)
+    trust_score = scores.get("trust_score", None)
+
+    # 如果没有 trust_score，根据 threat 信息计算风险分数
+    if trust_score is None:
+        risk_score = 0
+        if is_known_attacker:
+            risk_score += 50
+        if is_known_abuser:
+            risk_score += 30
+        if is_threat:
+            risk_score += 40
+        if is_tor:
+            risk_score += 20
+        if is_proxy:
+            risk_score += 15
+        if is_anonymous:
+            risk_score += 10
+        if len(blocklists) > 0:
+            risk_score += min(len(blocklists) * 10, 30)
+        risk_score = min(risk_score, 100)
+    else:
+        # trust_score 是 0-100，100最安全，转换为风险分数（100-trust_score）
+        risk_score = 100 - trust_score
+
+    # 判断 IP 类型
+    native_emoji = "❓"
+    native_text = "未知"
+
+    if is_tor:
+        native_emoji = "🧅"
+        native_text = "Tor 节点"
+    elif is_proxy:
+        native_emoji = "🔒"
+        native_text = "代理/VPN"
+    elif is_datacenter:
+        native_emoji = "🏢"
+        native_text = "数据中心"
+    elif asn_type == "isp":
+        native_emoji = "✅"
+        native_text = "原生 IP (ISP)"
+    elif asn_type == "hosting":
+        native_emoji = "🏢"
+        native_text = "托管服务"
+    else:
+        native_emoji = "✅"
+        native_text = "住宅 IP"
+
+    # 风险等级
+    if risk_score >= 75:
+        risk_emoji = "🔴"
+        risk_level = "高危"
+    elif risk_score >= 50:
+        risk_emoji = "🟠"
+        risk_level = "可疑"
+    elif risk_score >= 25:
+        risk_emoji = "🟡"
+        risk_level = "中等"
+    else:
+        risk_emoji = "✅"
+        risk_level = "安全"
+
+    # 格式化结果
+    location_parts = [city, region, country_name]
+    location = ", ".join([p for p in location_parts if p])
+
+    result_text = f"📊 *IP 信息检测结果*\n\n"
+
+    if domain:
+        result_text += f"🌐 域名: `{domain}`\n"
+
+    result_text += f"🌐 IP: `{ip}`\n\n"
+
+    # 显示风险分数
+    result_text += f"🎯 *风险分数*: {risk_emoji} *{risk_score}/100* ({risk_level})\n"
+
+    # 如果有详细的 scores，也显示
+    if trust_score is not None:
+        result_text += f"📊 *信任分数*: {trust_score}/100\n"
+    if vpn_score > 0:
+        result_text += f"🔒 *VPN概率*: {vpn_score}%\n"
+    if proxy_score > 0:
+        result_text += f"🌐 *代理概率*: {proxy_score}%\n"
+    if threat_score > 0:
+        result_text += f"⚠️ *威胁概率*: {threat_score}%\n"
+
+    result_text += f"🏠 *IP 类型*: {native_emoji} *{native_text}*\n"
+
+    # 威胁标签
+    tags = []
+    if is_tor:
+        tags.append("🧅 Tor")
+    if is_proxy:
+        tags.append("🔒 代理")
+    if is_known_attacker:
+        tags.append("⚠️ 已知攻击者")
+    if is_known_abuser:
+        tags.append("⚠️ 滥用者")
+    if is_anonymous:
+        tags.append("🎭 匿名")
+
+    if tags:
+        result_text += f"🏷️ *标签*: {' '.join(tags)}\n"
+
+    # 黑名单信息
+    if blocklists:
+        result_text += f"📋 *黑名单*: {len(blocklists)} 个\n"
+        for bl in blocklists[:3]:  # 只显示前3个
+            result_text += f"  • {bl.get('name', 'Unknown')} ({bl.get('type', 'unknown')})\n"
+
+    result_text += f"\n📍 *地理位置*\n"
+    result_text += f"• 位置: {location}\n"
+
+    if latitude and longitude:
+        result_text += f"• 坐标: {latitude}, {longitude}\n"
+
+    if postal:
+        result_text += f"• 邮编: {postal}\n"
+
+    result_text += f"• ISP: {asn_name}\n"
+
+    if asn:
+        result_text += f"• ASN: {asn}\n"
+
+    if asn_type:
+        result_text += f"• 类型: {asn_type.upper()}\n"
+
+    await status_msg.edit_text(
+        result_text,
+        parse_mode="Markdown",
+        disable_web_page_preview=True
+    )
+
+    await _schedule_deletion(context, chat_id, status_msg.message_id, config.auto_delete_delay)
+    logger.info(f"✅ IP 查询成功 (ipdata.co): {ip_address}")
+
+
+async def _handle_ip_query_with_ipapi(update: Update, context: ContextTypes.DEFAULT_TYPE, ip_address: str, ipapi_data: Dict, abuseipdb_data: Optional[Dict], domain: Optional[str] = None, status_msg = None) -> None:
+    """使用 ipapi.is + AbuseIPDB 数据处理 IP 查询"""
+    config = get_config()
+    chat_id = update.effective_chat.id
+
+    # 解析 ipapi.is 数据
+    location_data = ipapi_data.get("location", {})
+    asn_data = ipapi_data.get("asn", {})
+    company_data = ipapi_data.get("company", {})
+
+    ip = ipapi_data.get("ip", ip_address)
+    city = location_data.get("city", "")
+    region = location_data.get("state", "")
+    country_name = location_data.get("country", "未知")
+    country_code = location_data.get("country_code", "")
+    asn = f"AS{asn_data.get('asn', '')}" if asn_data.get('asn') else ""
+    org = company_data.get("name", asn_data.get("org", "未知"))
+    latitude = location_data.get("latitude", 0)
+    longitude = location_data.get("longitude", 0)
+
+    # ipapi.is 特有字段
+    is_datacenter = ipapi_data.get("is_datacenter", False)
+    is_proxy = ipapi_data.get("is_proxy", False)
+    is_vpn = ipapi_data.get("is_vpn", False)
+    is_tor = ipapi_data.get("is_tor", False)
+    is_mobile = ipapi_data.get("is_mobile", False)
+    is_crawler = ipapi_data.get("is_crawler", False)
+    is_abuser = ipapi_data.get("is_abuser", False)
+    company_type = company_data.get("type", "")
+    company_abuser_score = company_data.get("abuser_score", "")
+    asn_abuser_score = asn_data.get("abuser_score", "")
+
+    # 解析 AbuseIPDB 数据（风控分数）
+    abuse_score = 0
+    usage_type = ""
+    is_whitelisted = False
+    is_tor_abuse = False
+    total_reports = 0
+
+    if abuseipdb_data:
+        abuse_score = abuseipdb_data.get("abuseConfidenceScore", 0)
+        usage_type = abuseipdb_data.get("usageType", "")
+        is_whitelisted = abuseipdb_data.get("isWhitelisted", False)
+        is_tor_abuse = abuseipdb_data.get("isTor", False)
+        total_reports = abuseipdb_data.get("totalReports", 0)
+
+    # 判断 IP 类型（优先使用 ipapi.is 数据）
+    native_emoji = "❓"
+    native_text = "未知"
+
+    if is_tor or is_tor_abuse:
+        native_emoji = "🧅"
+        native_text = "Tor 节点"
+    elif is_proxy or is_vpn:
+        native_emoji = "🔒"
+        native_text = "代理/VPN"
+    elif is_datacenter:
+        native_emoji = "🏢"
+        native_text = "数据中心"
+    elif is_mobile:
+        native_emoji = "📱"
+        native_text = "移动网络"
+    elif company_type == "isp":
+        native_emoji = "✅"
+        native_text = "原生 IP (ISP)"
+    elif company_type == "hosting":
+        native_emoji = "🏢"
+        native_text = "托管服务"
+    elif company_type == "business":
+        native_emoji = "🏢"
+        native_text = "企业网络"
+    elif usage_type:
+        # 如果有 AbuseIPDB 数据，作为补充
+        usage_lower = usage_type.lower()
+        if "residential" in usage_lower or "fixed line isp" in usage_lower:
+            native_emoji = "✅"
+            native_text = "原生 IP"
+        elif "mobile" in usage_lower or "cellular" in usage_lower:
+            native_emoji = "📱"
+            native_text = "移动网络"
+        elif "content delivery" in usage_lower or "cdn" in usage_lower:
+            native_emoji = "🌐"
+            native_text = "CDN"
+    else:
+        # 根据 ASN/Org 简单判断
+        org_lower = org.lower()
+        if any(keyword in org_lower for keyword in ["hosting", "server", "cloud", "datacenter", "data center"]):
+            native_emoji = "🏢"
+            native_text = "数据中心"
+        elif any(keyword in org_lower for keyword in ["telecom", "mobile", "wireless", "cellular"]):
+            native_emoji = "📱"
+            native_text = "移动网络"
+        else:
+            native_emoji = "✅"
+            native_text = "可能原生"
+
+    # 根据滥用分数判断风险等级
+    if abuse_score == 0:
+        risk_emoji = "✅"
+        risk_level = "安全"
+    elif abuse_score < 25:
+        risk_emoji = "🟢"
+        risk_level = "低风险"
+    elif abuse_score < 50:
+        risk_emoji = "🟡"
+        risk_level = "中风险"
+    elif abuse_score < 75:
+        risk_emoji = "🟠"
+        risk_level = "高风险"
+    else:
+        risk_emoji = "🔴"
+        risk_level = "极高风险"
+
+    # 格式化结果
+    location_parts = [city, region, country_name]
+    location = ", ".join([p for p in location_parts if p])
+
+    result_text = f"📊 *IP 信息检测结果*\n\n"
+
+    # 如果是从域名查询来的，显示域名
+    if domain:
+        result_text += f"🌐 域名: `{domain}`\n"
+
+    result_text += f"🌐 IP: `{ip}`\n\n"
+
+    # 风控指数（如果有 AbuseIPDB 数据）
+    if abuseipdb_data:
+        result_text += f"🎯 *风控*: {risk_emoji} *{abuse_score}/100* ({risk_level})\n"
+
+    result_text += f"🏠 *IP 类型*: {native_emoji} *{native_text}*\n"
+
+    # ipapi.is 特殊标签
+    tags = []
+    if is_crawler:
+        tags.append("🕷️ 爬虫")
+    if is_abuser:
+        tags.append("⚠️ 滥用者")
+    if is_whitelisted:
+        tags.append("⭐ 白名单")
+
+    if tags:
+        result_text += f"🏷️ *标签*: {' '.join(tags)}\n"
+
+    # ipapi.is 滥用分数
+    if company_abuser_score:
+        result_text += f"📊 *公司滥用分数*: {company_abuser_score}\n"
+    if asn_abuser_score:
+        result_text += f"📊 *ASN 滥用分数*: {asn_abuser_score}\n"
+
+    result_text += f"\n📍 *地理位置*\n• 位置: {location}\n"
+
+    if latitude and longitude:
+        result_text += f"• 坐标: {latitude}, {longitude}\n"
+
+    result_text += f"• ISP: {org}\n"
+
+    if asn:
+        result_text += f"• ASN: {asn}\n"
+
+    if company_type:
+        result_text += f"• 类型: {company_type.upper()}\n"
+
+    if total_reports > 0:
+        result_text += f"\n⚠️ *滥用报告*\n• 总报告数: {total_reports}\n"
+
+    await status_msg.edit_text(
+        result_text,
+        parse_mode="Markdown",
+        disable_web_page_preview=True
+    )
+
+    await _schedule_deletion(context, chat_id, status_msg.message_id, config.auto_delete_delay)
+    logger.info(f"✅ IP 查询成功 (ipapi.is): {ip_address} (风控分数: {abuse_score})")
 
 
 # 注册命令
