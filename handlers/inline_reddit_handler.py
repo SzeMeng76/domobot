@@ -196,8 +196,11 @@ async def handle_inline_reddit_query(
                 )
             ]
         # 图片：返回图片（缓存后在 chosen handler 中下载上传）
-        elif post.preview_image_url:
+        elif (post.url and post.url.endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp'))) or post.preview_image_url:
             result_id = f"reddit_image_{uuid4()}"
+
+            # 优先使用 post.url（JSON endpoint），否则使用 preview_image_url（OAuth）
+            image_url = post.url if (post.url and post.url.endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp'))) else post.preview_image_url
 
             # 缓存图片信息（用于 chosen handler）
             _reddit_video_cache[result_id] = {
@@ -205,7 +208,7 @@ async def handle_inline_reddit_query(
                 "caption": caption,
                 "url_hash": url_hash,
                 "reply_markup": reply_markup,
-                "image_url": post.preview_image_url,
+                "image_url": image_url,
                 "image_index": 1
             }
             _cache_timestamps[result_id] = time.time()

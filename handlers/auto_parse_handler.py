@@ -222,6 +222,7 @@ async def _auto_parse_reddit(url: str, user_id: int, group_id: int, message, con
             caption_parts.append(f"\n{_escape_markdown(text_preview)}")
 
         caption_parts.append(f"\n🔗 [原帖链接]({post.permalink})")
+        caption_parts.append(f"\n📱 平台: REDDIT")
         caption_parts.append("\n🤖 自动解析")
 
         caption = "\n\n".join(caption_parts)
