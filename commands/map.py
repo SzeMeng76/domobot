@@ -705,10 +705,34 @@ async def map_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await delete_user_command(context, update.message.chat_id, update.message.message_id)
         return
     
-    # 如果有参数，直接搜索位置
+    # 如果有参数，检测是位置搜索还是路线规划
     if context.args:
         query = " ".join(context.args)
-        await _execute_location_search(update, context, query)
+
+        # 检测是否是路线规划（包含 "to" 或 "到"）
+        if ' to ' in query.lower() or ' 到 ' in query:
+            # 路线规划: "起点 to 终点" 或 "起点 到 终点"
+            if ' to ' in query.lower():
+                parts = query.lower().split(' to ', 1)
+                origin = query[:len(parts[0])].strip()
+                destination = query[len(parts[0])+4:].strip()
+            else:
+                parts = query.split(' 到 ', 1)
+                origin = parts[0].strip()
+                destination = parts[1].strip()
+
+            if origin and destination:
+                await _execute_route_planning(update, context, origin, destination)
+            else:
+                await send_error(
+                    context,
+                    update.message.chat_id,
+                    "❌ 路线规划格式错误\n\n请使用格式: `/map 起点 to 终点` 或 `/map 起点 到 终点`\n\n例如: `/map 北京站 到 天安门`"
+                )
+        else:
+            # 位置搜索
+            await _execute_location_search(update, context, query)
+
         await delete_user_command(context, update.message.chat_id, update.message.message_id)
         return
     
@@ -1601,7 +1625,8 @@ async def _safe_edit_message(query, text, reply_markup=None, parse_mode=None):
             )
         else:
             # 如果是文本消息，使用 edit_message_text
-            await query.edit_message_text(
+            await _safe_edit_message(
+            query,
                 text=text,
                 reply_markup=reply_markup,
                 parse_mode=parse_mode
@@ -1729,7 +1754,8 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             ]
         ]
         
-        await query.edit_message_text(
+        await _safe_edit_message(
+            query,
             text="📍 请选择要搜索的服务类型:\n\n注意: 需要先提供你的位置信息",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
@@ -1746,8 +1772,9 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             'hotel': '酒店'
         }
         type_name = type_names.get(place_type, place_type)
-        
-        await query.edit_message_text(
+
+        await _safe_edit_message(
+            query,
             text=f"📍 请发送你的位置信息或输入地址\n\n将为你搜索附近的{type_name}",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
@@ -1782,7 +1809,8 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             ]
         ]
         
-        await query.edit_message_text(
+        await _safe_edit_message(
+            query,
             text=f"📍 请选择要搜索的服务类型:\n\n位置: {lat:.6f}, {lng:.6f}",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
@@ -1801,9 +1829,9 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         # 处理短ID映射的callback
         short_id = data.split(":", 1)[1]
         full_data = get_full_map_id(short_id)
-        
+
         if not full_data:
-            await query.edit_message_text("❌ 链接已过期，请重新搜索")
+            await _safe_edit_message(query, "❌ 链接已过期，请重新搜索")
             config = get_config()
             await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
             return
@@ -1838,7 +1866,8 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 ]
             ]
             
-            await query.edit_message_text(
+            await _safe_edit_message(
+                query,
                 text=f"📍 请选择要搜索的服务类型:\n\n位置: {lat:.6f}, {lng:.6f}",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
@@ -1880,8 +1909,9 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             "destination": destination,
             "waiting_for": "origin"
         })
-        
-        await query.edit_message_text(
+
+        await _safe_edit_message(
+            query,
             text=f"🛣️ 路线规划到: {destination}\n\n请输入起点地址或发送位置信息",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
@@ -1927,7 +1957,8 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             ]
         ]
         
-        await query.edit_message_text(
+        await _safe_edit_message(
+            query,
             text="🗺️ 地理编码服务:\n\n• **地址转坐标**: 输入地址获取经纬度\n• **坐标转地址**: 输入坐标获取详细地址",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="MarkdownV2"
@@ -1942,7 +1973,8 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             "waiting_for": "address"
         })
         
-        await query.edit_message_text(
+        await _safe_edit_message(
+            query,
             text="📮 请输入要转换的地址:\n\n例如: 北京市天安门广场",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
@@ -1958,7 +1990,8 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             "waiting_for": "coordinates"
         })
         
-        await query.edit_message_text(
+        await _safe_edit_message(
+            query,
             text="🌐 请输入坐标 (格式: 纬度,经度):\n\n例如: 39.9042,116.4074",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
@@ -1974,7 +2007,8 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             "waiting_for": "route"
         })
         
-        await query.edit_message_text(
+        await _safe_edit_message(
+            query,
             text="🛣️ 路线规划:\n\n请提供起点和终点信息\n格式: 起点 到 终点\n\n例如: 北京西站 到 天安门",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]

@@ -415,8 +415,8 @@ class GoogleMapsService(MapService):
             }
             travel_mode = travel_mode_map.get(mode, 'DRIVE')
 
-            # 构建请求 body - 启用所有高级功能
-            request_body = {
+            # 先尝试完整功能（包括环保路线）
+            request_body_full = {
                 "origin": {
                     "address": origin
                 },
@@ -445,18 +445,61 @@ class GoogleMapsService(MapService):
 
             # 如果是驾车模式，添加车辆信息以优化环保路线
             if travel_mode == 'DRIVE':
-                request_body["routeModifiers"]["vehicleInfo"] = {
+                request_body_full["routeModifiers"]["vehicleInfo"] = {
                     "emissionType": "GASOLINE"  # 默认汽油车，可以是 DIESEL, ELECTRIC, HYBRID
                 }
 
             headers = {
                 'Content-Type': 'application/json',
                 'X-Goog-Api-Key': self.api_key,
-                # 简化 FieldMask，使用通配符获取所有 legs 和 routes 数据
-                'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.polyline,routes.legs,routes.travelAdvisory,routes.routeLabels'
+                # 正确的 FieldMask：fuelConsumptionMicroliters 在 routes.travelAdvisory 下
+                'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.polyline,routes.legs.steps.navigationInstruction,routes.legs.travelAdvisory.tollInfo,routes.travelAdvisory.fuelConsumptionMicroliters,routes.travelAdvisory,routes.routeLabels'
             }
 
-            response = await httpx_client.post(url, json=request_body, headers=headers, timeout=30)
+            # 先尝试完整功能
+            response = await httpx_client.post(url, json=request_body_full, headers=headers, timeout=30)
+
+            # 如果返回 400 且错误是 FUEL_EFFICIENT 不支持，降级到基础功能
+            if response.status_code == 400:
+                error_data = response.json()
+                error_message = error_data.get('error', {}).get('message', '')
+
+                if 'FUEL_EFFICIENT' in error_message or 'not supported' in error_message:
+                    logger.info(f"Routes API: 该地区不支持环保路线功能，降级到基础功能")
+
+                    # 降级请求：移除环保路线相关功能
+                    request_body_basic = {
+                        "origin": {
+                            "address": origin
+                        },
+                        "destination": {
+                            "address": destination
+                        },
+                        "travelMode": travel_mode,
+                        "languageCode": "en",
+                        "units": "METRIC",
+                        "computeAlternativeRoutes": False,
+                        "routeModifiers": {
+                            "avoidTolls": False,
+                            "avoidHighways": False,
+                            "avoidFerries": False
+                        },
+                        "extraComputations": [
+                            "TOLLS",
+                            "FUEL_CONSUMPTION"
+                        ],
+                        "polylineQuality": "HIGH_QUALITY",
+                        "polylineEncoding": "ENCODED_POLYLINE"
+                    }
+
+                    if travel_mode == 'DRIVE':
+                        request_body_basic["routeModifiers"]["vehicleInfo"] = {
+                            "emissionType": "GASOLINE"
+                        }
+
+                    # 重新请求
+                    response = await httpx_client.post(url, json=request_body_basic, headers=headers, timeout=30)
+
             response.raise_for_status()
 
             data = response.json()
@@ -489,9 +532,11 @@ class GoogleMapsService(MapService):
                 route_labels = route.get('routeLabels', [])
                 is_eco_friendly = 'FUEL_EFFICIENT' in route_labels
 
-                # 提取过路费信息
+                # 提取过路费信息和燃油消耗
                 toll_info = None
                 fuel_consumption = None
+
+                # 过路费在 legs.travelAdvisory.tollInfo
                 if 'legs' in route and route['legs']:
                     for leg in route['legs']:
                         if 'travelAdvisory' in leg:
@@ -504,11 +549,13 @@ class GoogleMapsService(MapService):
                                 if 'estimatedPrice' in toll_info and toll_info['estimatedPrice']:
                                     toll_info['estimatedPrice'] = toll_info['estimatedPrice'][0]
 
-                            # 油耗（微升）
-                            if 'fuelConsumptionMicroliters' in advisory:
-                                fuel_microliters = advisory['fuelConsumptionMicroliters']
-                                fuel_liters = fuel_microliters / 1_000_000
-                                fuel_consumption = f"{fuel_liters:.2f} L"
+                # 燃油消耗在 routes.travelAdvisory.fuelConsumptionMicroliters
+                if 'travelAdvisory' in route:
+                    route_advisory = route['travelAdvisory']
+                    if 'fuelConsumptionMicroliters' in route_advisory:
+                        fuel_microliters = int(route_advisory['fuelConsumptionMicroliters'])
+                        fuel_liters = fuel_microliters / 1_000_000
+                        fuel_consumption = fuel_liters  # 返回数字，不是字符串
 
                 # 提取实时交通信息
                 traffic_info = None

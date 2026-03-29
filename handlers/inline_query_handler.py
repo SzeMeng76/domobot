@@ -319,6 +319,53 @@ class InlineQueryHandler:
             await update.inline_query.answer(results, cache_time=60)
             return
 
+        # Map 地图搜索单独处理
+        if parts and parts[0].lower() in ("map",):
+            if len(parts) > 1:
+                # 先检查整个查询是否包含 "to" 或 "到" (路线规划)
+                full_query = " ".join(parts[1:]).strip()
+
+                if ' to ' in full_query.lower() or ' 到 ' in full_query:
+                    # 直接路线规划: map 起点 to 终点 或 map 起点 到 终点
+                    user_locale = update.inline_query.from_user.language_code if update.inline_query.from_user else None
+                    from handlers.inline_map_handler import handle_inline_map_directions
+                    results = await handle_inline_map_directions(full_query, context, user_locale)
+                    await update.inline_query.answer(results, cache_time=60)
+                    return
+                # 检查是否是 nearby 命令
+                elif parts[1].lower() == "nearby":
+                    # map nearby restaurant 埃菲尔铁塔
+                    keyword = " ".join(parts[2:]).strip() if len(parts) > 2 else ""
+                    user_locale = update.inline_query.from_user.language_code if update.inline_query.from_user else None
+                    from handlers.inline_map_handler import handle_inline_map_nearby
+                    results = await handle_inline_map_nearby(keyword, context, user_locale)
+                    await update.inline_query.answer(results, cache_time=60)
+                    return
+                elif parts[1].lower() in ("route", "directions"):
+                    # map route 北京站 to 天安门
+                    keyword = " ".join(parts[2:]).strip() if len(parts) > 2 else ""
+                    user_locale = update.inline_query.from_user.language_code if update.inline_query.from_user else None
+                    from handlers.inline_map_handler import handle_inline_map_directions
+                    results = await handle_inline_map_directions(keyword, context, user_locale)
+                    await update.inline_query.answer(results, cache_time=60)
+                    return
+                else:
+                    # 普通地图搜索
+                    keyword = full_query
+                    user_locale = update.inline_query.from_user.language_code if update.inline_query.from_user else None
+                    from handlers.inline_map_handler import handle_inline_map_search
+                    results = await handle_inline_map_search(keyword, context, user_locale)
+                    await update.inline_query.answer(results, cache_time=60)
+                    return
+            else:
+                # 只有 "map"，显示帮助
+                keyword = ""
+                user_locale = update.inline_query.from_user.language_code if update.inline_query.from_user else None
+                from handlers.inline_map_handler import handle_inline_map_search
+                results = await handle_inline_map_search(keyword, context, user_locale)
+                await update.inline_query.answer(results, cache_time=60)
+                return
+
         # 直接执行命令并返回结果
         results = await self._execute_and_create_results(command_text, user_id, context)
 
@@ -414,6 +461,8 @@ class InlineQueryHandler:
 • `chart movie$` - 影视排行榜
 • `when 123456789$` - 查询用户信息
 • `when @username$` - 查询用户信息
+• `map 埃菲尔铁塔$` - 地图搜索（自动选择高德/Google Maps）
+• `map Eiffel Tower$` - 地图搜索（支持中英文）
 
 **🔍 网络诊断:**
 • `scan 8.8.8.8$` - IP信誉查询
@@ -605,6 +654,13 @@ async def setup_inline_query_handler(application) -> None:
 
     handler = InlineQueryHandler()
 
+    # 初始化 inline_map_handler 依赖
+    from handlers import inline_map_handler
+    httpx_client = application.bot_data.get("httpx_client")
+    if httpx_client:
+        inline_map_handler.set_dependencies(httpx_client)
+        logger.info("✅ Inline Map Handler 依赖已初始化")
+
     # 注册 inline query 处理器
     application.add_handler(
         TelegramInlineQueryHandler(handler.handle_inline_query)
@@ -635,4 +691,4 @@ async def setup_inline_query_handler(application) -> None:
         ChosenInlineResultHandler(_chosen_inline_dispatcher)
     )
 
-    logger.info("✅ Inline Query 处理器已注册（含 Parse + Music + YTMusic + Reddit + Scan 支持）")
+    logger.info("✅ Inline Query 处理器已注册（含 Parse + Music + YTMusic + Reddit + Scan + Map 支持）")
