@@ -578,7 +578,8 @@ async def reddit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             chat_id,
             post,
             caption,
-            reply_markup
+            reply_markup,
+            update
         )
 
         # 删除状态消息
@@ -604,7 +605,7 @@ async def reddit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await delete_user_command(context, chat_id, update.message.message_id)
 
 
-async def _send_reddit_media(context, chat_id, post, caption, reply_markup):
+async def _send_reddit_media(context, chat_id, post, caption, reply_markup, update=None):
     """发送 Reddit 媒体内容"""
     from telegram import InputMediaPhoto
 
