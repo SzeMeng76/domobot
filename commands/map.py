@@ -450,7 +450,7 @@ def format_nearby_results(places: List[Dict], service_type: str, place_type: str
     type_name = type_names.get(place_type, place_type)
     result = f"📍 *附近的{type_name}*\n\n"
 
-    for i, place in enumerate(places[:8], 1):  # 显示前8个结果
+    for i, place in enumerate(places[:5], 1):  # 显示前5个结果，避免caption太长
         name = place['name']
         address = place.get('address', '')
 
@@ -1689,16 +1689,26 @@ async def _safe_edit_message(query, text, reply_markup=None, parse_mode=None):
     try:
         # 检查消息是否包含照片
         if query.message.photo:
-            # 如果是照片消息，使用 edit_message_caption
-            await query.edit_message_caption(
-                caption=text,
-                reply_markup=reply_markup,
-                parse_mode=parse_mode
-            )
+            # 检查caption长度（Telegram限制1024字符）
+            if len(text) > 1024:
+                # Caption太长，删除照片改用纯文本消息
+                logger.warning(f"Caption太长 ({len(text)} 字符)，删除照片改用文本消息")
+                await query.message.delete()
+                await query.message.reply_text(
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode=parse_mode
+                )
+            else:
+                # 如果是照片消息，使用 edit_message_caption
+                await query.edit_message_caption(
+                    caption=text,
+                    reply_markup=reply_markup,
+                    parse_mode=parse_mode
+                )
         else:
             # 如果是文本消息，使用 edit_message_text
-            await _safe_edit_message(
-            query,
+            await query.edit_message_text(
                 text=text,
                 reply_markup=reply_markup,
                 parse_mode=parse_mode
@@ -1710,13 +1720,36 @@ async def _safe_edit_message(query, text, reply_markup=None, parse_mode=None):
         elif "There is no text in the message to edit" in str(e):
             # 照片消息但尝试编辑文本，尝试用 caption
             try:
-                await query.edit_message_caption(
-                    caption=text,
+                if len(text) > 1024:
+                    # Caption太长，删除照片改用纯文本消息
+                    logger.warning(f"Caption太长 ({len(text)} 字符)，删除照片改用文本消息")
+                    await query.message.delete()
+                    await query.message.reply_text(
+                        text=text,
+                        reply_markup=reply_markup,
+                        parse_mode=parse_mode
+                    )
+                else:
+                    await query.edit_message_caption(
+                        caption=text,
+                        reply_markup=reply_markup,
+                        parse_mode=parse_mode
+                    )
+            except Exception as e2:
+                logger.error(f"编辑消息失败: {e2}")
+                raise
+        elif "Media_caption_too_long" in str(e):
+            # Caption太长，删除照片改用纯文本消息
+            logger.warning(f"Caption太长，删除照片改用文本消息")
+            try:
+                await query.message.delete()
+                await query.message.reply_text(
+                    text=text,
                     reply_markup=reply_markup,
                     parse_mode=parse_mode
                 )
             except Exception as e2:
-                logger.error(f"编辑照片消息 caption 失败: {e2}")
+                logger.error(f"删除照片并发送文本失败: {e2}")
                 raise
         else:
             logger.error(f"编辑消息失败: {e}")
