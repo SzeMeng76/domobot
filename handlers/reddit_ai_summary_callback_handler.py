@@ -186,7 +186,181 @@ async def reddit_ai_summary_callback(update: Update, context: ContextTypes.DEFAU
 
                 content_text = "\n\n".join(content_parts)
 
-                # 调用 AI 总结（使用自定义 prompt）
+                # 处理媒体（图片/视频）
+                image_base64_list = []
+                video_subtitles = ""
+                video_path = None
+
+                # 1. 检查是否是YouTube链接 - 使用ParseHub下载
+                if post.url and ('youtube.com/watch' in post.url or 'youtu.be/' in post.url):
+                    logger.info(f"🎬 检测到 YouTube 链接: {post.url}")
+
+                    try:
+                        from utils.parse_hub_adapter import get_parse_adapter
+                        parse_adapter = get_parse_adapter()
+
+                        if parse_adapter:
+                            logger.info(f"📥 使用 ParseHub 下载 YouTube 视频...")
+
+                            # 解析并下载YouTube视频
+                            download_result, parse_result, platform, _, error_msg = await parse_adapter.parse_url(
+                                post.url,
+                                user_id=None,
+                                group_id=None
+                            )
+
+                            if download_result and download_result.media:
+                                media = download_result.media if not isinstance(download_result.media, list) else download_result.media[0]
+                                video_path = media.path
+                                logger.info(f"✅ YouTube 视频已下载: {video_path}")
+                            else:
+                                logger.warning(f"⚠️ YouTube 下载失败: {error_msg}")
+                        else:
+                            logger.warning("ParseHub 未初始化")
+
+                    except Exception as e:
+                        logger.warning(f"⚠️ YouTube 处理失败: {e}")
+
+                # 2. 检查是否是Reddit原生视频
+                elif post.is_video and post.video_url:
+                    logger.info(f"🎬 检测到 Reddit 视频: {post.video_url}")
+
+                    try:
+                        import tempfile
+                        import httpx
+                        from pathlib import Path
+
+                        # 检查视频大小
+                        async with httpx.AsyncClient(timeout=30.0) as client:
+                            head_response = await client.head(post.video_url)
+                            video_size = int(head_response.headers.get('content-length', 0))
+                            video_size_mb = video_size / (1024 * 1024)
+
+                            logger.info(f"📊 视频大小: {video_size_mb:.2f}MB")
+
+                            # 只处理<50MB的视频
+                            if video_size_mb < 50:
+                                logger.info(f"📥 下载视频...")
+
+                                # 下载视频
+                                response = await client.get(post.video_url)
+                                response.raise_for_status()
+
+                                temp_dir = Path(tempfile.gettempdir()) / "domobot_reddit_ai"
+                                temp_dir.mkdir(exist_ok=True)
+
+                                video_path = temp_dir / f"reddit_{url_hash}.mp4"
+                                with open(video_path, 'wb') as f:
+                                    f.write(response.content)
+
+                                logger.info(f"✅ 视频已下载: {video_path}")
+                            else:
+                                logger.info(f"⚠️ 视频过大 ({video_size_mb:.2f}MB)，跳过处理")
+
+                    except Exception as e:
+                        logger.warning(f"⚠️ 视频处理失败: {e}")
+
+                # 统一处理视频转录/截图（YouTube或Reddit视频）
+                if video_path:
+                    # 尝试转录视频
+                    if _ai_summarizer and hasattr(_ai_summarizer, 'transcription_api_key') and _ai_summarizer.transcription_api_key:
+                        try:
+                            from utils.ai_summary import AISummarizer
+                            summarizer = AISummarizer(
+                                api_key=_ai_summarizer.api_key,
+                                base_url=_ai_summarizer.base_url,
+                                model=_ai_summarizer.model,
+                                transcription_provider=getattr(_ai_summarizer, 'transcription_provider', 'openai'),
+                                transcription_api_key=_ai_summarizer.transcription_api_key,
+                                transcription_base_url=getattr(_ai_summarizer, 'transcription_base_url', '')
+                            )
+                            video_subtitles = await summarizer._video_to_subtitles(str(video_path))
+                            if video_subtitles:
+                                logger.info(f"✅ 视频转录成功: {len(video_subtitles)} 字符")
+                                content_parts.append(f"\n视频字幕: {video_subtitles}")
+                                content_text = "\n\n".join(content_parts)
+                        except Exception as e:
+                            logger.warning(f"⚠️ 视频转录失败: {e}")
+
+                    # Fallback: 提取视频截图
+                    if not video_subtitles:
+                        try:
+                            import base64
+                            from utils.ai_summary import _video_to_screenshot, _image_to_base64
+                            import asyncio
+
+                            logger.info(f"📸 提取视频截图...")
+                            img_path = await asyncio.to_thread(_video_to_screenshot, str(video_path))
+                            img_b64 = await asyncio.to_thread(_image_to_base64, img_path)
+                            image_base64_list.append(img_b64)
+                            logger.info(f"✅ 视频截图已转换为base64")
+                        except Exception as e:
+                            logger.warning(f"⚠️ 视频截图提取失败: {e}")
+
+                    # 清理临时文件
+                    try:
+                        from pathlib import Path
+                        Path(video_path).unlink()
+                    except Exception:
+                        pass
+
+                # 3. 处理图片
+                else:
+                    image_urls = []
+
+                    # Gallery（多图）
+                    if post.gallery_items:
+                        image_urls.extend(post.gallery_items[:5])  # 最多5张
+                        logger.info(f"📷 检测到 Gallery: {len(post.gallery_items)} 张图片")
+                    # 单图：优先使用 post.url（JSON endpoint），否则使用 preview_image_url（OAuth）
+                    elif post.url and post.url.endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp')):
+                        image_urls.append(post.url)
+                    elif post.preview_image_url:
+                        image_urls.append(post.preview_image_url)
+
+                    # 下载并转换图片
+                    if image_urls:
+                        try:
+                        import tempfile
+                        import httpx
+                        import base64
+                        from pathlib import Path
+
+                        logger.info(f"📷 下载 {len(image_urls)} 张 Reddit 图片...")
+
+                        temp_dir = Path(tempfile.gettempdir()) / "domobot_reddit_ai"
+                        temp_dir.mkdir(exist_ok=True)
+
+                        async with httpx.AsyncClient(timeout=30.0) as client:
+                            for idx, image_url in enumerate(image_urls):
+                                try:
+                                    # 下载图片
+                                    response = await client.get(image_url)
+                                    response.raise_for_status()
+
+                                    # 保存到临时文件
+                                    img_path = temp_dir / f"reddit_{url_hash}_{idx}.jpg"
+                                    with open(img_path, 'wb') as f:
+                                        f.write(response.content)
+
+                                    # 转换为base64
+                                    with open(img_path, 'rb') as f:
+                                        img_b64 = base64.b64encode(f.read()).decode('utf-8')
+                                        image_base64_list.append(img_b64)
+
+                                    # 清理临时文件
+                                    img_path.unlink()
+
+                                except Exception as e:
+                                    logger.warning(f"⚠️ 图片 {idx+1} 下载失败: {e}")
+                                    continue
+
+                        logger.info(f"✅ 成功转换 {len(image_base64_list)} 张图片为base64")
+
+                    except Exception as e:
+                        logger.warning(f"⚠️ 图片处理失败: {e}")
+
+                # 调用 AI 总结（使用自定义 prompt + 图片）
                 from openai import AsyncOpenAI
 
                 try:
@@ -195,9 +369,23 @@ async def reddit_ai_summary_callback(update: Update, context: ContextTypes.DEFAU
                         base_url=_ai_summarizer.base_url
                     )
 
+                    # 构建消息内容（文本 + 图片）
+                    from typing import Any, Dict, List
+                    content: List[Dict[str, Any]] = [{"type": "text", "text": content_text}]
+
+                    # 添加图片
+                    for img_b64 in image_base64_list:
+                        content.append({
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{img_b64}",
+                                "detail": "low"
+                            }
+                        })
+
                     messages = [
                         {"role": "system", "content": REDDIT_SUMMARY_PROMPT},
-                        {"role": "user", "content": content_text},
+                        {"role": "user", "content": content},
                         {"role": "user", "content": "请对以上 Reddit 帖子进行总结！"}
                     ]
 
@@ -211,6 +399,7 @@ async def reddit_ai_summary_callback(update: Update, context: ContextTypes.DEFAU
                     async for chunk in stream:
                         if chunk.choices and chunk.choices[0].delta.content:
                             ai_summary += chunk.choices[0].delta.content
+
 
                 except Exception as e:
                     logger.error(f"AI 总结生成失败: {e}", exc_info=True)
