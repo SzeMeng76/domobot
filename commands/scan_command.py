@@ -739,7 +739,7 @@ async def handle_warp_query(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
         await status_msg.edit_text(result_text, parse_mode="HTML")
         await _schedule_deletion(context, chat_id, status_msg.message_id, config.auto_delete_delay)
-        logger.info(f"✅ WARP IP 查询完成: {warp_data.get('ip')}")
+        logger.info(f"✅ WARP IP 查询完成: {data.get('query')}")
 
     except Exception as e:
         logger.error(f"WARP IP 查询失败: {e}", exc_info=True)
