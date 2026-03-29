@@ -157,8 +157,8 @@ async def map_nearby_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             for idx, place in enumerate(places[:10], 1):
                 name = place.get("name", "未知")
                 address = place.get("address", "")
-                distance = place.get("distance", 0)
-                rating = place.get("rating", 0)
+                distance = place.get("distance")
+                rating = place.get("rating")
 
                 # 转义特殊字符
                 from telegram.helpers import escape_markdown
@@ -166,9 +166,9 @@ async def map_nearby_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                 safe_address = escape_markdown(address, version=2) if address else ""
 
                 line = f"{idx}\\. *{safe_name}*"
-                if rating > 0:
+                if rating and rating > 0:
                     line += f" ⭐ {rating}"
-                if distance > 0:
+                if distance and distance > 0:
                     if distance < 1000:
                         line += f" \\({int(distance)}m\\)"
                     else:
@@ -187,13 +187,13 @@ async def map_nearby_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                 for idx, place in enumerate(places, 1):
                     name = place.get("name", "未知")
                     address = place.get("address", "")
-                    distance = place.get("distance", 0)
-                    rating = place.get("rating", 0)
+                    distance = place.get("distance")
+                    rating = place.get("rating")
 
                     telegraph_content += f"<p><strong>{idx}. {name}</strong>"
-                    if rating > 0:
+                    if rating and rating > 0:
                         telegraph_content += f" ⭐ {rating}"
-                    if distance > 0:
+                    if distance and distance > 0:
                         if distance < 1000:
                             telegraph_content += f" ({int(distance)}m)"
                         else:
