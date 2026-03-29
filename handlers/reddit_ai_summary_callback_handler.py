@@ -321,44 +321,44 @@ async def reddit_ai_summary_callback(update: Update, context: ContextTypes.DEFAU
                     # 下载并转换图片
                     if image_urls:
                         try:
-                        import tempfile
-                        import httpx
-                        import base64
-                        from pathlib import Path
+                            import tempfile
+                            import httpx
+                            import base64
+                            from pathlib import Path
 
-                        logger.info(f"📷 下载 {len(image_urls)} 张 Reddit 图片...")
+                            logger.info(f"📷 下载 {len(image_urls)} 张 Reddit 图片...")
 
-                        temp_dir = Path(tempfile.gettempdir()) / "domobot_reddit_ai"
-                        temp_dir.mkdir(exist_ok=True)
+                            temp_dir = Path(tempfile.gettempdir()) / "domobot_reddit_ai"
+                            temp_dir.mkdir(exist_ok=True)
 
-                        async with httpx.AsyncClient(timeout=30.0) as client:
-                            for idx, image_url in enumerate(image_urls):
-                                try:
-                                    # 下载图片
-                                    response = await client.get(image_url)
-                                    response.raise_for_status()
+                            async with httpx.AsyncClient(timeout=30.0) as client:
+                                for idx, image_url in enumerate(image_urls):
+                                    try:
+                                        # 下载图片
+                                        response = await client.get(image_url)
+                                        response.raise_for_status()
 
-                                    # 保存到临时文件
-                                    img_path = temp_dir / f"reddit_{url_hash}_{idx}.jpg"
-                                    with open(img_path, 'wb') as f:
-                                        f.write(response.content)
+                                        # 保存到临时文件
+                                        img_path = temp_dir / f"reddit_{url_hash}_{idx}.jpg"
+                                        with open(img_path, 'wb') as f:
+                                            f.write(response.content)
 
-                                    # 转换为base64
-                                    with open(img_path, 'rb') as f:
-                                        img_b64 = base64.b64encode(f.read()).decode('utf-8')
-                                        image_base64_list.append(img_b64)
+                                        # 转换为base64
+                                        with open(img_path, 'rb') as f:
+                                            img_b64 = base64.b64encode(f.read()).decode('utf-8')
+                                            image_base64_list.append(img_b64)
 
-                                    # 清理临时文件
-                                    img_path.unlink()
+                                        # 清理临时文件
+                                        img_path.unlink()
 
-                                except Exception as e:
-                                    logger.warning(f"⚠️ 图片 {idx+1} 下载失败: {e}")
-                                    continue
+                                    except Exception as e:
+                                        logger.warning(f"⚠️ 图片 {idx+1} 下载失败: {e}")
+                                        continue
 
-                        logger.info(f"✅ 成功转换 {len(image_base64_list)} 张图片为base64")
+                            logger.info(f"✅ 成功转换 {len(image_base64_list)} 张图片为base64")
 
-                    except Exception as e:
-                        logger.warning(f"⚠️ 图片处理失败: {e}")
+                        except Exception as e:
+                            logger.warning(f"⚠️ 图片处理失败: {e}")
 
                 # 调用 AI 总结（使用自定义 prompt + 图片）
                 from openai import AsyncOpenAI
