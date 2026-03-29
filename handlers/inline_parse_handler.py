@@ -388,7 +388,7 @@ async def handle_inline_parse_query(
             # 过滤掉None的媒体项
             media_list = [m for m in media_list if m is not None]
 
-            # 如果没有有效媒体，检查是否有长文本可以发布到Telegraph
+            # 如果没有有效媒体，返回文本内容
             if not media_list:
                 raw_text = ""
                 if parse_result.title:
@@ -396,49 +396,78 @@ async def handle_inline_parse_query(
                 if parse_result.content:
                     raw_text += parse_result.content
 
-                # 超过500字，发布到Telegraph
-                if len(raw_text) > 500:
-                    try:
-                        logger.info(f"[Inline Parse] 检测到长文本 ({len(raw_text)}字)，发布到Telegraph")
-                        from markdown import markdown
+                # 如果有文本内容
+                if raw_text.strip():
+                    # 超过500字，发布到Telegraph
+                    if len(raw_text) > 500:
+                        try:
+                            logger.info(f"[Inline Parse] 检测到长文本 ({len(raw_text)}字)，发布到Telegraph")
+                            from markdown import markdown
 
-                        # 将文本转换为HTML
-                        html_content = markdown(raw_text)
+                            # 将文本转换为HTML
+                            html_content = markdown(raw_text)
 
-                        # 发布到Telegraph
-                        telegraph_url = await parse_adapter.publish_to_telegraph(parse_result, html_content)
+                            # 发布到Telegraph
+                            telegraph_url = await parse_adapter.publish_to_telegraph(parse_result, html_content)
 
-                        if telegraph_url:
-                            # 构建消息
-                            message_text = f"📄 {parse_result.title or '长文本内容'}\n\n"
-                            message_text += f"📖 [在Telegraph阅读完整内容]({telegraph_url})\n\n"
-                            message_text += f"🔗 [原链接]({url})"
+                            if telegraph_url:
+                                # 构建消息
+                                message_text = f"📄 {parse_result.title or '长文本内容'}\n\n"
+                                message_text += f"📖 [在Telegraph阅读完整内容]({telegraph_url})\n\n"
+                                message_text += f"🔗 [原链接]({url})"
 
-                            # 添加按钮
-                            buttons = [
-                                [InlineKeyboardButton("📖 Telegraph", url=telegraph_url)],
-                                [InlineKeyboardButton("🔗 原链接", url=url)]
-                            ]
-                            if parse_adapter.config and parse_adapter.config.enable_ai_summary:
-                                url_hash = get_url_hash(url)
-                                buttons[1].append(InlineKeyboardButton("📝 AI总结", callback_data=f"summary_{url_hash}"))
-                            keyboard = InlineKeyboardMarkup(buttons)
+                                # 添加按钮
+                                buttons = [
+                                    [InlineKeyboardButton("📖 Telegraph", url=telegraph_url)],
+                                    [InlineKeyboardButton("🔗 原链接", url=url)]
+                                ]
+                                if parse_adapter.config and parse_adapter.config.enable_ai_summary:
+                                    url_hash = get_url_hash(url)
+                                    buttons[1].append(InlineKeyboardButton("📝 AI总结", callback_data=f"summary_{url_hash}"))
+                                keyboard = InlineKeyboardMarkup(buttons)
 
-                            return [
-                                InlineQueryResultArticle(
-                                    id=str(uuid4()),
-                                    title=f"📄 {parse_result.title or '长文本'}",
-                                    description=f"已发布到Telegraph ({len(raw_text)}字)",
-                                    thumbnail_url="https://img.icons8.com/color/96/000000/document.png",
-                                    input_message_content=InputTextMessageContent(
-                                        message_text=message_text,
-                                        parse_mode=ParseMode.MARKDOWN
-                                    ),
-                                    reply_markup=keyboard
-                                )
-                            ]
-                    except Exception as e:
-                        logger.error(f"[Inline Parse] Telegraph发布失败: {e}")
+                                return [
+                                    InlineQueryResultArticle(
+                                        id=str(uuid4()),
+                                        title=f"📄 {parse_result.title or '长文本'}",
+                                        description=f"已发布到Telegraph ({len(raw_text)}字)",
+                                        thumbnail_url="https://img.icons8.com/color/96/000000/document.png",
+                                        input_message_content=InputTextMessageContent(
+                                            message_text=message_text,
+                                            parse_mode=ParseMode.MARKDOWN
+                                        ),
+                                        reply_markup=keyboard
+                                    )
+                                ]
+                        except Exception as e:
+                            logger.error(f"[Inline Parse] Telegraph发布失败: {e}")
+
+                    # 文本少于500字，直接显示
+                    message_text = raw_text
+                    if len(message_text) > 200:
+                        message_text = message_text[:200] + "..."
+                    message_text += f"\n\n🔗 [原链接]({url})"
+
+                    # 添加按钮
+                    buttons = [[InlineKeyboardButton("🔗 原链接", url=url)]]
+                    if parse_adapter.config and parse_adapter.config.enable_ai_summary:
+                        url_hash = get_url_hash(url)
+                        buttons[0].append(InlineKeyboardButton("📝 AI总结", callback_data=f"summary_{url_hash}"))
+                    keyboard = InlineKeyboardMarkup(buttons)
+
+                    return [
+                        InlineQueryResultArticle(
+                            id=str(uuid4()),
+                            title=f"📄 {parse_result.title or '文本内容'}",
+                            description=raw_text[:100] if len(raw_text) > 100 else raw_text,
+                            thumbnail_url="https://img.icons8.com/color/96/000000/document.png",
+                            input_message_content=InputTextMessageContent(
+                                message_text=message_text,
+                                parse_mode=ParseMode.MARKDOWN
+                            ),
+                            reply_markup=keyboard
+                        )
+                    ]
 
             # 构建 caption
             caption_parts = []
