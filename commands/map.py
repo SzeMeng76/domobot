@@ -660,10 +660,16 @@ def format_directions_for_telegraph(directions: Dict, service_type: str) -> str:
 📍 起点: {start}
 📍 终点: {end}
 
-📊 路线信息:
-• 距离: {distance}
-• 预计时间: {duration}
-"""
+📊 路线信息:"""
+
+    # 检查主路线是否有toll
+    main_has_tolls = False
+    if 'steps' in directions and directions['steps']:
+        main_has_tolls = any('Toll road' in step for step in directions['steps'])
+
+    toll_status = " 💰 有收费" if main_has_tolls else " 🆓 无收费"
+    content += f"\n• 距离: {distance}{toll_status}"
+    content += f"\n• 预计时间: {duration}\n"
 
     # Routes API v2 新功能
     api_version = directions.get('api_version', 'directions_v1')
@@ -888,6 +894,7 @@ async def _execute_nearby_search(update: Update, context: ContextTypes.DEFAULT_T
 
     try:
         service_type = "amap" if language == "zh" else "google_maps"
+        service_name = "高德地图" if language == "zh" else "Google Maps"
 
         # 使用缓存服务搜索附近
         nearby_places = await map_cache_service.search_nearby_with_cache(lat, lng, place_type, language, 1000)
@@ -902,13 +909,60 @@ async def _execute_nearby_search(update: Update, context: ContextTypes.DEFAULT_T
             reply_markup = InlineKeyboardMarkup(keyboard)
 
             if callback_query:
-                # callback_query 不能发送照片
-                await _safe_edit_message(
-                    callback_query,
-                    text=foldable_text_with_markdown_v2(result_text),
-                    parse_mode="MarkdownV2",
-                    reply_markup=reply_markup
-                )
+                # callback_query 需要编辑消息
+                # 检查是否有照片且文本太长
+                if callback_query.message.photo and len(result_text) > 1024:
+                    # Caption太长，创建Telegraph
+                    try:
+                        logger.info(f"附近搜索结果太长 ({len(result_text)}字)，创建Telegraph")
+                        telegraph_url = await create_telegraph_page(
+                            f"附近的{type_name}",
+                            result_text
+                        )
+
+                        if telegraph_url:
+                            # 创建简短消息 + Telegraph链接
+                            short_text = f"📍 *附近的{type_name}*\n\n"
+                            short_text += f"找到 {len(nearby_places)} 个结果\n\n"
+                            short_text += f"📄 [查看完整列表]({telegraph_url})\n\n"
+                            short_text += f"_数据来源: {service_name}_"
+
+                            keyboard.insert(0, [InlineKeyboardButton("📄 查看完整列表", url=telegraph_url)])
+                            reply_markup = InlineKeyboardMarkup(keyboard)
+
+                            await _safe_edit_message(
+                                callback_query,
+                                text=foldable_text_with_markdown_v2(short_text),
+                                parse_mode="MarkdownV2",
+                                reply_markup=reply_markup
+                            )
+                        else:
+                            # Telegraph创建失败，截断文本
+                            short_text = result_text[:900] + "\n\n_\\.\\.\\. 结果过多，部分省略_"
+                            await _safe_edit_message(
+                                callback_query,
+                                text=foldable_text_with_markdown_v2(short_text),
+                                parse_mode="MarkdownV2",
+                                reply_markup=reply_markup
+                            )
+                    except Exception as e:
+                        logger.error(f"创建Telegraph失败: {e}")
+                        # 截断文本
+                        short_text = result_text[:900] + "\n\n_\\.\\.\\. 结果过多，部分省略_"
+                        await _safe_edit_message(
+                            callback_query,
+                            text=foldable_text_with_markdown_v2(short_text),
+                            parse_mode="MarkdownV2",
+                            reply_markup=reply_markup
+                        )
+                else:
+                    # 文本不长或没有照片，正常编辑
+                    await _safe_edit_message(
+                        callback_query,
+                        text=foldable_text_with_markdown_v2(result_text),
+                        parse_mode="MarkdownV2",
+                        reply_markup=reply_markup
+                    )
             else:
                 # 删除 loading 消息
                 await message.delete()

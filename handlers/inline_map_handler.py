@@ -120,10 +120,16 @@ def format_directions_for_telegraph(directions: Dict, service_type: str) -> str:
 📍 起点: {start}
 📍 终点: {end}
 
-📊 路线信息:
-• 距离: {distance}
-• 预计时间: {duration}
-"""
+📊 路线信息:"""
+
+    # 检查主路线是否有toll
+    main_has_tolls = False
+    if 'steps' in directions and directions['steps']:
+        main_has_tolls = any('Toll road' in step for step in directions['steps'])
+
+    toll_status = " 💰 有收费" if main_has_tolls else " 🆓 无收费"
+    content += f"\n• 距离: {distance}{toll_status}"
+    content += f"\n• 预计时间: {duration}\n"
 
     # Routes API v2 新功能
     api_version = directions.get('api_version', 'directions_v1')
@@ -493,11 +499,18 @@ async def handle_inline_map_search(query: str, context: ContextTypes.DEFAULT_TYP
 
         result_text += f"\n\n_数据来源: {service_name}_"
 
-        # 创建按钮
+        # 创建按钮 - 添加多个附近搜索快捷按钮
         keyboard = [
+            [InlineKeyboardButton("🗺️ 查看地图", url=map_url)],
             [
-                InlineKeyboardButton("🗺️ 查看地图", url=map_url),
-                InlineKeyboardButton("🔍 附近搜索", switch_inline_query_current_chat=f"map nearby restaurant {name}$")
+                InlineKeyboardButton("🍽️ 餐厅", switch_inline_query_current_chat=f"map nearby restaurant {name}$"),
+                InlineKeyboardButton("🏥 医院", switch_inline_query_current_chat=f"map nearby hospital {name}$"),
+                InlineKeyboardButton("🏦 银行", switch_inline_query_current_chat=f"map nearby bank {name}$")
+            ],
+            [
+                InlineKeyboardButton("⛽ 加油站", switch_inline_query_current_chat=f"map nearby gas_station {name}$"),
+                InlineKeyboardButton("🏪 超市", switch_inline_query_current_chat=f"map nearby supermarket {name}$"),
+                InlineKeyboardButton("🏨 酒店", switch_inline_query_current_chat=f"map nearby hotel {name}$")
             ]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -634,6 +647,75 @@ async def handle_inline_map_nearby(query: str, context: ContextTypes.DEFAULT_TYP
 
         # 构建结果列表
         results = []
+
+        # 如果结果较多，添加一个"查看全部"选项（Telegraph汇总）
+        if len(nearby_places) > 5:
+            try:
+                # 构建Telegraph内容
+                type_names = {
+                    'restaurant': '餐厅',
+                    'hospital': '医院',
+                    'bank': '银行',
+                    'gas_station': '加油站',
+                    'supermarket': '超市',
+                    'school': '学校',
+                    'hotel': '酒店'
+                }
+                type_name = type_names.get(place_type, place_type or '地点')
+
+                telegraph_content = f"📍 附近的{type_name}\n\n"
+                telegraph_content += f"位置: {location_data.get('name')}\n\n"
+                telegraph_content += "="*60 + "\n\n"
+
+                for i, place in enumerate(nearby_places[:20], 1):  # Telegraph显示前20个
+                    telegraph_content += f"{i}. {place.get('name', 'Unknown')}\n"
+                    if place.get('address'):
+                        telegraph_content += f"   地址: {place['address']}\n"
+                    if place.get('rating'):
+                        telegraph_content += f"   评分: {'⭐' * int(place['rating'])} {place['rating']}"
+                        if place.get('user_ratings_total'):
+                            telegraph_content += f" ({place['user_ratings_total']}条)"
+                        telegraph_content += "\n"
+                    if place.get('is_open') is not None:
+                        status = "🟢 营业中" if place['is_open'] else "🔴 已打烊"
+                        telegraph_content += f"   状态: {status}\n"
+                    telegraph_content += "\n"
+
+                telegraph_content += f"\n数据来源: {service_name}"
+
+                # 创建Telegraph页面
+                telegraph_url = await create_telegraph_page(
+                    f"附近的{type_name} - {location_data.get('name')}",
+                    telegraph_content
+                )
+
+                if telegraph_url:
+                    # 添加"查看全部"结果
+                    summary_text = f"📍 **附近的{type_name}**\n\n"
+                    summary_text += f"位置: {location_data.get('name')}\n"
+                    summary_text += f"找到 {len(nearby_places)} 个结果\n\n"
+                    summary_text += f"📄 [在Telegraph查看完整列表]({telegraph_url})\n\n"
+                    summary_text += f"_数据来源: {service_name}_"
+
+                    results.append(
+                        InlineQueryResultArticle(
+                            id=str(uuid4()),
+                            title=f"📄 查看全部 ({len(nearby_places)} 个结果)",
+                            description=f"在Telegraph查看完整列表",
+                            thumbnail_url="https://img.icons8.com/color/96/000000/list.png",
+                            input_message_content=InputTextMessageContent(
+                                message_text=summary_text,
+                                parse_mode="Markdown"
+                            ),
+                            reply_markup=InlineKeyboardMarkup([[
+                                InlineKeyboardButton("📄 查看完整列表", url=telegraph_url)
+                            ]])
+                        )
+                    )
+            except Exception as e:
+                logger.error(f"创建Telegraph汇总失败: {e}")
+
+        # 添加各个地点的详细结果
         for place in nearby_places[:10]:  # 最多返回10个结果
             name = place.get('name', 'Unknown')
             address = place.get('address', '')
