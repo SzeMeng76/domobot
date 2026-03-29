@@ -326,7 +326,7 @@ async def setup_application(application: Application, config) -> None:
 
     # 将核心组件存储到 bot_data 中
     # 初始化社交媒体解析适配器（使用 WARP 代理）
-    from utils.parse_hub_adapter import ParseHubAdapter
+    from utils.parse_hub_adapter import ParseHubAdapter, set_parse_adapter
     parse_adapter = ParseHubAdapter(
         cache_manager,
         user_cache_manager,
@@ -334,6 +334,9 @@ async def setup_application(application: Application, config) -> None:
         pyrogram_helper,
         proxy="socks5://warp:1080"  # 使用 WARP 代理解析小红书等平台
     )
+
+    # 设置全局 ParseHub 适配器实例
+    set_parse_adapter(parse_adapter)
 
     application.bot_data["cache_manager"] = cache_manager
     application.bot_data["rate_converter"] = rate_converter

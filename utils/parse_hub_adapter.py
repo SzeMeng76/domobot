@@ -1219,3 +1219,18 @@ class ParseHubAdapter:
             logger.error(f"Telegraph发布失败: {e}")
             return None
 
+
+# 全局 ParseHub 适配器实例
+_parse_adapter_instance: Optional[ParseHubAdapter] = None
+
+
+def set_parse_adapter(adapter: ParseHubAdapter):
+    """设置全局 ParseHub 适配器实例"""
+    global _parse_adapter_instance
+    _parse_adapter_instance = adapter
+
+
+def get_parse_adapter() -> Optional[ParseHubAdapter]:
+    """获取全局 ParseHub 适配器实例"""
+    return _parse_adapter_instance
+
