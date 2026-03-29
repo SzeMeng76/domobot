@@ -185,7 +185,8 @@ async def get_abuseipdb_score(ip_address: str) -> Optional[Dict]:
         }
         params = {
             "ipAddress": ip_address,
-            "maxAgeInDays": 90
+            "maxAgeInDays": 90,
+            "verbose": True
         }
 
         logger.info(f"查询 AbuseIPDB 风控分数: {ip_address}")
@@ -1077,6 +1078,7 @@ async def _handle_ip_query_with_ipapi(update: Update, context: ContextTypes.DEFA
     is_whitelisted = False
     is_tor_abuse = False
     total_reports = 0
+    reports = []
 
     if abuseipdb_data:
         abuse_score = abuseipdb_data.get("abuseConfidenceScore", 0)
@@ -1084,6 +1086,7 @@ async def _handle_ip_query_with_ipapi(update: Update, context: ContextTypes.DEFA
         is_whitelisted = abuseipdb_data.get("isWhitelisted", False)
         is_tor_abuse = abuseipdb_data.get("isTor", False)
         total_reports = abuseipdb_data.get("totalReports", 0)
+        reports = abuseipdb_data.get("reports", [])
 
     # 判断 IP 类型（优先使用 ipapi.is 数据）
     native_emoji = "❓"
@@ -1203,6 +1206,47 @@ async def _handle_ip_query_with_ipapi(update: Update, context: ContextTypes.DEFA
 
     if total_reports > 0:
         result_text += f"\n⚠️ *滥用报告*\n• 总报告数: {total_reports}\n"
+
+        # 显示最近的报告详情（最多3条）
+        if reports:
+            # AbuseIPDB 类别映射
+            category_map = {
+                3: "欺诈订单", 4: "DDoS 攻击", 5: "FTP 暴力破解",
+                6: "Ping of Death", 7: "网络钓鱼", 8: "欺诈 VoIP",
+                9: "开放代理", 10: "Web 垃圾邮件", 11: "邮件垃圾",
+                12: "博客垃圾", 13: "VPN IP", 14: "端口扫描",
+                15: "黑客攻击", 16: "SQL 注入", 17: "欺骗",
+                18: "暴力破解", 19: "恶意机器人", 20: "漏洞利用",
+                21: "Web 应用攻击", 22: "SSH", 23: "IoT 目标"
+            }
+
+            result_text += "\n📋 *最近报告*:\n"
+            for i, report in enumerate(reports[:3], 1):
+                reported_at = report.get("reportedAt", "")
+                categories = report.get("categories", [])
+                comment = report.get("comment", "")
+
+                # 格式化时间（只显示日期）
+                if reported_at:
+                    try:
+                        from datetime import datetime
+                        dt = datetime.fromisoformat(reported_at.replace("Z", "+00:00"))
+                        date_str = dt.strftime("%Y-%m-%d")
+                    except:
+                        date_str = reported_at[:10]
+                else:
+                    date_str = "未知"
+
+                # 转换类别
+                category_names = [category_map.get(cat, f"类别{cat}") for cat in categories]
+                category_str = ", ".join(category_names) if category_names else "未分类"
+
+                result_text += f"{i}. `{date_str}` - {category_str}\n"
+                if comment:
+                    # 限制评论长度
+                    comment_short = comment[:50] + "..." if len(comment) > 50 else comment
+                    result_text += f"   _{comment_short}_\n"
+
 
     await status_msg.edit_text(
         result_text,
