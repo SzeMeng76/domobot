@@ -341,71 +341,114 @@ def format_location_info(location_data: Dict, service_type: str) -> str:
     address = location_data.get('address', '')
     lat = location_data.get('lat')
     lng = location_data.get('lng')
-    
-    # 基本信息 - 移除手动转义，让foldable_text_with_markdown_v2统一处理
-    name = location_data.get('name', 'Unknown')
-    address = location_data.get('address', '')
-    
+
     result = f"📍 *{name}*\n\n"
     result += f"📮 地址: {address}\n"
     result += f"🌐 坐标: `{lat:.6f}, {lng:.6f}`\n"
-    
-    # 添加评分信息 (Google Maps)
+
+    # Places API (New) 新功能
+    api_version = location_data.get('api_version', 'places_legacy')
+
+    # 评分信息
     if 'rating' in location_data and location_data['rating']:
         rating = location_data['rating']
         stars = "⭐" * int(rating)
-        result += f"⭐ 评分: {stars} `{rating}`\n"
-    
-    # 添加类型信息
+        result += f"⭐ 评分: {stars} `{rating}`"
+
+        # 评分数量 (New API)
+        if 'user_ratings_total' in location_data and location_data['user_ratings_total']:
+            result += f" ({location_data['user_ratings_total']} 条评价)"
+        result += "\n"
+
+    # 价格等级 (New API)
+    if 'price_level' in location_data and location_data['price_level']:
+        result += f"💰 价格: {location_data['price_level']}\n"
+
+    # 营业状态 (New API)
+    if 'business_status' in location_data:
+        status = location_data['business_status']
+        if status == 'OPERATIONAL':
+            status_text = "✅ 营业中"
+        elif status == 'CLOSED_TEMPORARILY':
+            status_text = "⏸️ 暂停营业"
+        elif status == 'CLOSED_PERMANENTLY':
+            status_text = "❌ 已关闭"
+        else:
+            status_text = status
+        result += f"🏪 状态: {status_text}\n"
+
+    # 营业时间 (New API)
+    if 'opening_hours' in location_data and location_data['opening_hours']:
+        hours = location_data['opening_hours']
+        if 'open_now' in hours:
+            open_status = "🟢 营业中" if hours['open_now'] else "🔴 已打烊"
+            result += f"🕐 营业: {open_status}\n"
+
+    # 电话 (New API)
+    if 'phone' in location_data and location_data['phone']:
+        result += f"📞 电话: {location_data['phone']}\n"
+
+    # 网站 (New API)
+    if 'website' in location_data and location_data['website']:
+        result += f"🌐 网站: {location_data['website']}\n"
+
+    # 简介 (New API)
+    if 'editorial_summary' in location_data and location_data['editorial_summary']:
+        summary = location_data['editorial_summary']
+        if len(summary) > 100:
+            summary = summary[:100] + "..."
+        result += f"\n📝 简介: _{summary}_\n"
+
+    # 类型信息
     if 'types' in location_data and location_data['types']:
-        # 格式化类型名称
         types_list = []
         for t in location_data['types'][:3]:
             formatted_type = format_place_type(t)
             types_list.append(formatted_type)
         types_str = ', '.join(types_list)
-        result += f"🏷️ 类型: {types_str}\n"
+        result += f"\n🏷️ 类型: {types_str}\n"
     elif 'type' in location_data:
-        # 处理单个类型
         formatted_type = format_place_type(str(location_data['type']))
-        result += f"🏷️ 类型: {formatted_type}\n"
-    
-    # 添加城市信息 (高德地图)
+        result += f"\n🏷️ 类型: {formatted_type}\n"
+
+    # 城市信息 (高德地图)
     if 'cityname' in location_data:
         result += f"🏙️ 城市: {location_data['cityname']}\n"
-    
+
     service_name = "Google Maps" if service_type == "google_maps" else "高德地图"
+    if api_version == 'places_new':
+        service_name += " (Places API New)"
     result += f"\n_数据来源: {service_name}_"
     result += f"\n_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
-    
+
     return result
 
 def format_nearby_results(places: List[Dict], service_type: str, place_type: str) -> str:
     """格式化附近搜索结果"""
     if not places:
         return f"❌ 未找到附近的{place_type}服务"
-    
+
     type_names = {
         'restaurant': '餐厅',
-        'hospital': '医院', 
+        'hospital': '医院',
         'bank': '银行',
         'gas_station': '加油站',
         'supermarket': '超市',
         'school': '学校',
         'hotel': '酒店'
     }
-    
+
     type_name = type_names.get(place_type, place_type)
     result = f"📍 *附近的{type_name}*\n\n"
-    
+
     for i, place in enumerate(places[:8], 1):  # 显示前8个结果
         name = place['name']
         address = place.get('address', '')
-        
+
         result += f"`{i:2d}.` *{name}*\n"
         if address:
             result += f"     📮 {address}\n"
-        
+
         # 距离信息
         if 'distance' in place:
             distance = place['distance']
@@ -413,34 +456,87 @@ def format_nearby_results(places: List[Dict], service_type: str, place_type: str
                 result += f"     📏 距离: {distance}\n"
             else:
                 result += f"     📏 距离: {distance}米\n"
-        
-        # 评分信息 (Google Maps)
+
+        # 评分信息
         if 'rating' in place and place['rating']:
             rating = place['rating']
             stars = "⭐" * int(rating)
-            result += f"     ⭐ 评分: {stars} `{rating}`\n"
-        
+            result += f"     ⭐ 评分: {stars} `{rating}`"
+
+            # 评分数量 (New API)
+            if 'user_ratings_total' in place and place['user_ratings_total']:
+                result += f" ({place['user_ratings_total']})"
+            result += "\n"
+
+        # 价格等级 (New API)
+        if 'price_level' in place and place['price_level']:
+            result += f"     💰 价格: {place['price_level']}\n"
+
+        # 营业状态 (New API)
+        if 'is_open' in place and place['is_open'] is not None:
+            open_status = "🟢 营业中" if place['is_open'] else "🔴 已打烊"
+            result += f"     🕐 {open_status}\n"
+
         result += "\n"
-    
+
     service_name = "Google Maps" if service_type == "google_maps" else "高德地图"
+
+    # 检查是否使用新版 API
+    if places and places[0].get('api_version') == 'places_new':
+        service_name += " (Places API New)"
+
     result += f"_数据来源: {service_name}_\n"
     result += f"_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
-    
+
     return result
 
 def format_directions(directions: Dict, service_type: str) -> str:
     """格式化路线规划结果"""
     distance = directions.get('distance', '未知')
-    duration = directions.get('duration', '未知') 
+    duration = directions.get('duration', '未知')
     start = directions.get('start_address', '')
     end = directions.get('end_address', '')
-    
+
     result = f"🛣️ *路线规划*\n\n"
     result += f"🚩 起点: {start}\n"
     result += f"🏁 终点: {end}\n\n"
     result += f"📏 距离: `{distance}`\n"
-    result += f"⏱️ 时间: `{duration}`\n\n"
-    
+    result += f"⏱️ 时间: `{duration}`\n"
+
+    # Routes API v2 新功能
+    api_version = directions.get('api_version', 'directions_v1')
+
+    if api_version == 'routes_v2':
+        # 环保路线标识
+        if directions.get('is_eco_friendly'):
+            result += f"🌱 环保路线: 已优化油耗\n"
+
+        # 油耗估算
+        if directions.get('fuel_consumption'):
+            result += f"⛽ 预估油耗: `{directions['fuel_consumption']}`\n"
+
+        # 过路费信息
+        if directions.get('toll_info'):
+            toll_info = directions['toll_info']
+            if 'estimatedPrice' in toll_info:
+                toll_price = toll_info['estimatedPrice']
+                currency = toll_price.get('currencyCode', 'USD')
+                amount = toll_price.get('units', 0)
+                nanos = toll_price.get('nanos', 0)
+                total = float(amount) + (float(nanos) / 1_000_000_000)
+                result += f"💰 过路费: `{currency} {total:.2f}`\n"
+
+        # 备选路线
+        if directions.get('alternative_routes'):
+            alt_routes = directions['alternative_routes']
+            if alt_routes:
+                result += f"\n🔀 *备选路线* ({len(alt_routes)} 条):\n"
+                for i, alt in enumerate(alt_routes[:2], 2):  # 最多显示2条备选
+                    eco_tag = " 🌱" if alt.get('is_eco_friendly') else ""
+                    result += f"`{i}.` {alt['distance']} · {alt['duration']}{eco_tag}\n"
+
+    result += "\n"
+
     # 添加路线步骤 - 显示前8步，如果超过则提示使用Telegraph
     if 'steps' in directions and directions['steps']:
         result += "📋 *路线指引:*\n"
@@ -451,15 +547,17 @@ def format_directions(directions: Dict, service_type: str) -> str:
             step_clean = re.sub(r'\s+', ' ', step_clean)  # 合并多个空格
             step_clean = step_clean.strip()  # 去除首尾空格
             result += f"`{i}.` {step_clean}\n"
-        
+
         # 如果步骤超过8个，添加提示
         if len(directions['steps']) > 8:
             result += f"\n_...还有 {len(directions['steps']) - 8} 个步骤，完整路线将通过Telegraph显示_\n"
-    
+
     service_name = "Google Maps" if service_type == "google_maps" else "高德地图"
+    if api_version == 'routes_v2':
+        service_name += " (Routes API v2)"
     result += f"\n📊 数据来源: {service_name}"
     result += f"\n🕐 更新时间: {datetime.now().strftime('%H:%M:%S')}"
-    
+
     return result
 
 async def create_telegraph_page(title: str, content: str) -> Optional[str]:
@@ -668,24 +766,61 @@ async def _execute_nearby_search(update: Update, context: ContextTypes.DEFAULT_T
         if nearby_places:
             # 找到附近服务
             result_text = format_nearby_results(nearby_places, service_type, place_type)
-            
+
             keyboard = [
                 [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            
+
             if callback_query:
+                # callback_query 不能发送照片
                 await callback_query.edit_message_text(
                     text=foldable_text_with_markdown_v2(result_text),
                     parse_mode="MarkdownV2",
                     reply_markup=reply_markup
                 )
             else:
-                await message.edit_text(
+                # 删除 loading 消息
+                await message.delete()
+
+                # 收集有照片的地点
+                places_with_photos = [p for p in nearby_places if p.get('photos') and len(p['photos']) > 0]
+
+                # 如果有照片，先发送照片组（最多10张）
+                if places_with_photos:
+                    from telegram import InputMediaPhoto
+
+                    media_group = []
+                    for i, place in enumerate(places_with_photos[:10], 1):  # Telegram 限制最多10张
+                        photo_url = place['photos'][0]
+                        # 第一张照片带简短说明
+                        if i == 1:
+                            caption = f"{i}. {place['name']}"
+                            if place.get('rating'):
+                                caption += f" - {place['rating']}★"
+                        else:
+                            caption = f"{i}. {place['name']}"
+
+                        media_group.append(InputMediaPhoto(media=photo_url, caption=caption))
+
+                    try:
+                        # 发送照片组
+                        await context.bot.send_media_group(
+                            chat_id=update.message.chat_id,
+                            media=media_group
+                        )
+                    except Exception as e:
+                        logger.warning(f"发送照片组失败: {e}")
+
+                # 发送详细文本信息
+                sent_msg = await context.bot.send_message(
+                    chat_id=update.message.chat_id,
                     text=foldable_text_with_markdown_v2(result_text),
                     parse_mode="MarkdownV2",
                     reply_markup=reply_markup
                 )
+                config = get_config()
+                await _schedule_auto_delete(context, sent_msg.chat_id, sent_msg.message_id, config.auto_delete_delay)
         else:
             # 未找到结果
             error_msg = f"❌ 未找到附近的{type_name}"
@@ -776,21 +911,21 @@ async def _execute_location_search(update: Update, context: ContextTypes.DEFAULT
         if location_data:
             # 找到位置信息
             result_text = format_location_info(location_data, service_type)
-            
+
             # 生成地图和导航链接
             lat, lng = location_data['lat'], location_data['lng']
             map_url = service.get_map_url(lat, lng)
             nav_url = service.get_navigation_url(query)
-            
+
             # 创建按钮 - 使用精确坐标而不是原始查询
             lat, lng = location_data['lat'], location_data['lng']
-            
+
             # 生成短ID用于callback_data
             nearby_data = f"{lat},{lng}:{language}"
             route_data = f"{lat},{lng}:{location_data['name']}:{language}"
             nearby_short_id = get_short_map_id(f"nearby_here:{nearby_data}")
             route_short_id = get_short_map_id(f"route_to_coords:{route_data}")
-            
+
             keyboard = [
                 [
                     InlineKeyboardButton("🗺️ 查看地图", url=map_url),
@@ -805,19 +940,56 @@ async def _execute_location_search(update: Update, context: ContextTypes.DEFAULT
                 ]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            
+
+            # 检查是否有照片
+            has_photo = location_data.get('photos') and len(location_data['photos']) > 0
+
             if callback_query:
+                # callback_query 不能发送照片，只能编辑文本
                 await callback_query.edit_message_text(
                     text=foldable_text_with_markdown_v2(result_text),
                     parse_mode="MarkdownV2",
                     reply_markup=reply_markup
                 )
             else:
-                await message.edit_text(
-                    text=foldable_text_with_markdown_v2(result_text),
-                    parse_mode="MarkdownV2",
-                    reply_markup=reply_markup
-                )
+                # 删除 loading 消息
+                await message.delete()
+
+                # 如果有照片，发送照片+caption
+                if has_photo:
+                    photo_url = location_data['photos'][0]
+                    try:
+                        sent_msg = await context.bot.send_photo(
+                            chat_id=update.message.chat_id,
+                            photo=photo_url,
+                            caption=foldable_text_with_markdown_v2(result_text),
+                            parse_mode="MarkdownV2",
+                            reply_markup=reply_markup
+                        )
+                        # 调度自动删除
+                        config = get_config()
+                        await _schedule_auto_delete(context, sent_msg.chat_id, sent_msg.message_id, config.auto_delete_delay)
+                    except Exception as e:
+                        logger.warning(f"发送照片失败，fallback 到纯文本: {e}")
+                        # 照片发送失败，fallback 到纯文本
+                        sent_msg = await context.bot.send_message(
+                            chat_id=update.message.chat_id,
+                            text=foldable_text_with_markdown_v2(result_text),
+                            parse_mode="MarkdownV2",
+                            reply_markup=reply_markup
+                        )
+                        config = get_config()
+                        await _schedule_auto_delete(context, sent_msg.chat_id, sent_msg.message_id, config.auto_delete_delay)
+                else:
+                    # 没有照片，发送纯文本
+                    sent_msg = await context.bot.send_message(
+                        chat_id=update.message.chat_id,
+                        text=foldable_text_with_markdown_v2(result_text),
+                        parse_mode="MarkdownV2",
+                        reply_markup=reply_markup
+                    )
+                    config = get_config()
+                    await _schedule_auto_delete(context, sent_msg.chat_id, sent_msg.message_id, config.auto_delete_delay)
         else:
             # 未找到结果
             error_msg = f"❌ 未找到位置: {query}"
