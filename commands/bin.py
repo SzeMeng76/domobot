@@ -108,13 +108,13 @@ async def get_bin_info(bin_number: str) -> Optional[Dict]:
             else:
                 logging.warning(f"BIN API 返回空数据: {data}")
         elif response.status_code == 400:
-            logging.warning(f"BIN API 请求参数错误: {bin_number}")
+            logging.warning(f"BIN API 请求参数错误: {bin_number}, response: {response.text}")
         elif response.status_code == 401:
-            logging.warning("BIN API 认证失败")
+            logging.warning(f"BIN API 认证失败, response: {response.text}")
         elif response.status_code == 429:
-            logging.warning("BIN API 请求频率超限")
+            logging.warning(f"BIN API 请求频率超限, response: {response.text}")
         else:
-            logging.warning(f"BIN API 请求失败: HTTP {response.status_code}")
+            logging.warning(f"BIN API 请求失败: HTTP {response.status_code}, response: {response.text}")
     except Exception as e:
         logging.error(f"BIN API 请求异常: {e}")
     return None
