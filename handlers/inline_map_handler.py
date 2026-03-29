@@ -303,8 +303,24 @@ async def handle_chosen_map_result(update, context: ContextTypes.DEFAULT_TYPE):
         pyrogram_helper = getattr(parse_adapter_instance, 'pyrogram_helper', None)
 
         if pyrogram_helper and pyrogram_helper.is_started and pyrogram_helper.client:
-            from pyrogram.types import InputMediaPhoto as PyrogramInputMediaPhoto
+            from pyrogram.types import InputMediaPhoto as PyrogramInputMediaPhoto, InlineKeyboardMarkup as PyrogramInlineKeyboardMarkup, InlineKeyboardButton as PyrogramInlineKeyboardButton
             from pyrogram.enums import ParseMode as PyrogramParseMode
+
+            # 转换 python-telegram-bot 的 InlineKeyboardMarkup 到 Pyrogram 格式
+            pyrogram_reply_markup = None
+            if reply_markup:
+                pyrogram_buttons = []
+                for row in reply_markup.inline_keyboard:
+                    pyrogram_row = []
+                    for button in row:
+                        if button.url:
+                            pyrogram_row.append(PyrogramInlineKeyboardButton(text=button.text, url=button.url))
+                        elif button.callback_data:
+                            pyrogram_row.append(PyrogramInlineKeyboardButton(text=button.text, callback_data=button.callback_data))
+                    if pyrogram_row:
+                        pyrogram_buttons.append(pyrogram_row)
+                if pyrogram_buttons:
+                    pyrogram_reply_markup = PyrogramInlineKeyboardMarkup(pyrogram_buttons)
 
             await pyrogram_helper.client.edit_inline_media(
                 inline_message_id=inline_message_id,
@@ -313,7 +329,7 @@ async def handle_chosen_map_result(update, context: ContextTypes.DEFAULT_TYPE):
                     caption=caption,
                     parse_mode=PyrogramParseMode.MARKDOWN
                 ),
-                reply_markup=reply_markup
+                reply_markup=pyrogram_reply_markup
             )
             logger.info(f"[Inline Map] Pyrogram 图片上传成功: {photo_size_mb:.1f}MB")
         else:
