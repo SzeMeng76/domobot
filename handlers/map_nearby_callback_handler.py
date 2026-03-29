@@ -108,13 +108,26 @@ async def map_nearby_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             await query.answer("❌ 地图服务未初始化", show_alert=True)
             return
 
+        # 获取 httpx_client
+        httpx_client = context.bot_data.get("httpx_client")
+        if not httpx_client:
+            await query.answer("❌ HTTP客户端未初始化", show_alert=True)
+            return
+
+        # 获取地图服务（默认使用英文，优先 Google Maps）
+        service = _map_service.get_service('en')
+        if not service:
+            await query.answer("❌ 地图服务未初始化", show_alert=True)
+            return
+
         # 搜索附近地点
         try:
-            places = await _map_service.search_nearby_places(
+            places = await service.search_nearby(
                 float(lat),
                 float(lng),
                 category_type,
-                radius=2000
+                radius=2000,
+                httpx_client=httpx_client
             )
 
             if not places:
