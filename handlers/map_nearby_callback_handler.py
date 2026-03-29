@@ -47,14 +47,18 @@ async def map_nearby_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             return
 
         # callback_data 格式: map_nearby_{type}_{lat}_{lng}
+        # 注意：type 可能包含下划线（如 gas_station）
+        # 所以需要从右边提取 lat 和 lng
         parts = query.data.split("_")
         if len(parts) < 5:
             await query.answer("❌ 数据格式错误", show_alert=True)
             return
 
-        category_type = parts[2]  # restaurant, hospital, etc.
-        lat = parts[3]
-        lng = parts[4]
+        # 从右边提取 lat 和 lng（最后两个部分）
+        lng = parts[-1]
+        lat = parts[-2]
+        # category_type 是中间的所有部分（去掉 "map_nearby_" 前缀和最后两个坐标）
+        category_type = "_".join(parts[2:-2])
 
         # 验证 category
         if category_type not in CATEGORY_MAP:

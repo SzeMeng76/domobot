@@ -291,7 +291,8 @@ async def reddit_ai_summary_callback(update: Update, context: ContextTypes.DEFAU
 
                             logger.info(f"📸 提取视频截图...")
                             img_path = await asyncio.to_thread(_video_to_screenshot, str(video_path))
-                            img_b64 = await asyncio.to_thread(_image_to_base64, img_path)
+                            # _image_to_base64 是 async 函数，直接 await 而不是用 to_thread
+                            img_b64 = await _image_to_base64(img_path)
                             image_base64_list.append(img_b64)
                             logger.info(f"✅ 视频截图已转换为base64")
                         except Exception as e:
