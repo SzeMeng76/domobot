@@ -190,6 +190,8 @@ async def reddit_ai_summary_callback(update: Update, context: ContextTypes.DEFAU
                 image_base64_list = []
                 video_subtitles = ""
                 video_path = None
+                video_screenshot_path = None
+                image_paths = []
 
                 # 1. 检查是否是YouTube链接 - 使用ParseHub下载
                 if post.url and ('youtube.com/watch' in post.url or 'youtu.be/' in post.url):
@@ -285,18 +287,17 @@ async def reddit_ai_summary_callback(update: Update, context: ContextTypes.DEFAU
                     # Fallback: 提取视频截图
                     if not video_subtitles:
                         try:
-                            import base64
                             from utils.ai_summary import _video_to_screenshot, _image_to_base64
                             import asyncio
 
                             logger.info(f"📸 提取视频截图...")
                             img_path = await asyncio.to_thread(_video_to_screenshot, str(video_path))
-                            # _image_to_base64 是 async 函数，直接 await 而不是用 to_thread
-                            img_b64 = await _image_to_base64(img_path)
-                            image_base64_list.append(img_b64)
-                            logger.info(f"✅ 视频截图已转换为base64")
+                            # 添加到image_tasks列表，稍后统一处理（和social parse一样）
+                            video_screenshot_path = img_path
+                            logger.info(f"✅ 视频截图已提取")
                         except Exception as e:
                             logger.warning(f"⚠️ 视频截图提取失败: {e}")
+                            video_screenshot_path = None
 
                     # 清理临时文件
                     try:
@@ -319,12 +320,11 @@ async def reddit_ai_summary_callback(update: Update, context: ContextTypes.DEFAU
                     elif post.preview_image_url:
                         image_urls.append(post.preview_image_url)
 
-                    # 下载并转换图片
+                    # 下载所有图片
                     if image_urls:
                         try:
                             import tempfile
                             import httpx
-                            import base64
                             from pathlib import Path
 
                             logger.info(f"📷 下载 {len(image_urls)} 张 Reddit 图片...")
@@ -344,22 +344,61 @@ async def reddit_ai_summary_callback(update: Update, context: ContextTypes.DEFAU
                                         with open(img_path, 'wb') as f:
                                             f.write(response.content)
 
-                                        # 转换为base64
-                                        with open(img_path, 'rb') as f:
-                                            img_b64 = base64.b64encode(f.read()).decode('utf-8')
-                                            image_base64_list.append(img_b64)
-
-                                        # 清理临时文件
-                                        img_path.unlink()
+                                        image_paths.append(img_path)
 
                                     except Exception as e:
                                         logger.warning(f"⚠️ 图片 {idx+1} 下载失败: {e}")
                                         continue
 
-                            logger.info(f"✅ 成功转换 {len(image_base64_list)} 张图片为base64")
+                            logger.info(f"✅ 成功下载 {len(image_paths)} 张图片")
 
                         except Exception as e:
-                            logger.warning(f"⚠️ 图片处理失败: {e}")
+                            logger.warning(f"⚠️ 图片下载失败: {e}")
+
+                # 4. 统一处理所有图片转base64（和social parse一样的方式）
+                if video_screenshot_path or image_paths:
+                    try:
+                        from utils.ai_summary import _image_to_base64
+                        import asyncio
+
+                        image_tasks = []
+
+                        # 添加视频截图
+                        if video_screenshot_path:
+                            image_tasks.append(_image_to_base64(video_screenshot_path))
+
+                        # 添加普通图片
+                        for img_path in image_paths:
+                            image_tasks.append(_image_to_base64(str(img_path)))
+
+                        # 并发转换所有图片
+                        if image_tasks:
+                            logger.info(f"🔄 转换 {len(image_tasks)} 张图片为base64...")
+                            results = await asyncio.gather(*image_tasks, return_exceptions=True)
+
+                            # 过滤成功的结果
+                            for result in results:
+                                if isinstance(result, str):
+                                    image_base64_list.append(result)
+
+                            logger.info(f"✅ 成功转换 {len(image_base64_list)} 张图片为base64")
+
+                        # 清理临时文件
+                        if video_screenshot_path:
+                            try:
+                                from pathlib import Path
+                                Path(video_screenshot_path).unlink()
+                            except Exception:
+                                pass
+
+                        for img_path in image_paths:
+                            try:
+                                img_path.unlink()
+                            except Exception:
+                                pass
+
+                    except Exception as e:
+                        logger.warning(f"⚠️ 图片转换失败: {e}")
 
                 # 调用 AI 总结（使用自定义 prompt + 图片）
                 from openai import AsyncOpenAI
