@@ -48,6 +48,14 @@ TELEGRAPH_API_URL = "https://api.telegra.ph"
 map_data_mapping = {}
 mapping_counter = 0
 
+# 价格等级映射
+PRICE_LEVEL_MAP = {
+    '$': '💵 便宜',
+    '$$': '💵💵 中等',
+    '$$$': '💵💵💵 较贵',
+    '$$$$': '💵💵💵💵 很贵'
+}
+
 # 创建地图会话管理器
 map_session_manager = SessionManager("MapService", max_age=1800, max_sessions=200)  # 30分钟会话
 
@@ -362,7 +370,8 @@ def format_location_info(location_data: Dict, service_type: str) -> str:
 
     # 价格等级 (New API)
     if 'price_level' in location_data and location_data['price_level']:
-        result += f"💰 价格: {location_data['price_level']}\n"
+        price_text = PRICE_LEVEL_MAP.get(location_data['price_level'], location_data['price_level'])
+        result += f"💰 价格: {price_text}\n"
 
     # 营业状态 (New API)
     if 'business_status' in location_data:
@@ -470,7 +479,8 @@ def format_nearby_results(places: List[Dict], service_type: str, place_type: str
 
         # 价格等级 (New API)
         if 'price_level' in place and place['price_level']:
-            result += f"     💰 价格: {place['price_level']}\n"
+            price_text = PRICE_LEVEL_MAP.get(place['price_level'], place['price_level'])
+            result += f"     💰 价格: {price_text}\n"
 
         # 营业状态 (New API)
         if 'is_open' in place and place['is_open'] is not None:
@@ -617,10 +627,10 @@ async def create_telegraph_page(title: str, content: str) -> Optional[str]:
 def format_directions_for_telegraph(directions: Dict, service_type: str) -> str:
     """将路线规划格式化为Telegraph友好的格式"""
     distance = directions.get('distance', '未知')
-    duration = directions.get('duration', '未知') 
+    duration = directions.get('duration', '未知')
     start = directions.get('start_address', '')
     end = directions.get('end_address', '')
-    
+
     content = f"""路线规划详情
 
 📍 起点: {start}
@@ -629,10 +639,36 @@ def format_directions_for_telegraph(directions: Dict, service_type: str) -> str:
 📊 路线信息:
 • 距离: {distance}
 • 预计时间: {duration}
-
-🛣️ 详细指引:
 """
-    
+
+    # Routes API v2 新功能
+    api_version = directions.get('api_version', 'directions_v1')
+
+    if api_version == 'routes_v2':
+        # 环保路线标识
+        if directions.get('is_eco_friendly'):
+            content += "• 🌱 环保路线: 已优化油耗\n"
+
+        # 燃油消耗
+        if directions.get('fuel_consumption_liters'):
+            fuel = directions['fuel_consumption_liters']
+            content += f"• ⛽ 预计油耗: {fuel:.2f} L\n"
+
+        # 过路费信息
+        if directions.get('tolls'):
+            tolls = directions['tolls']
+            if tolls.get('estimatedPrice'):
+                price = tolls['estimatedPrice']
+                currency = price.get('currencyCode', 'USD')
+                amount = price.get('units', 0)
+                nanos = price.get('nanos', 0)
+                total = amount + nanos / 1_000_000_000
+                content += f"• 💰 过路费: {total:.2f} {currency}\n"
+
+        content += f"\n_使用 Routes API v2_\n"
+
+    content += "\n🛣️ 详细指引:\n"
+
     # 添加所有步骤
     if 'steps' in directions and directions['steps']:
         for i, step in enumerate(directions['steps'], 1):
@@ -643,14 +679,14 @@ def format_directions_for_telegraph(directions: Dict, service_type: str) -> str:
             content += f"{i}. {step_clean}\n\n"
     else:
         content += "暂无详细指引信息\n\n"
-    
+
     service_name = "Google Maps" if service_type == "google_maps" else "高德地图"
     content += f"""
 ---
 数据来源: {service_name}
 生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 来源: MengBot 地图服务"""
-    
+
     return content
 
 async def map_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
