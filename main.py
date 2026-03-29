@@ -222,6 +222,11 @@ def setup_handlers(application: Application):
     application.add_handler(get_weather_ai_handler())
     logger.info("✅ Weather AI日报callback处理器已注册")
 
+    # 注册 Map Nearby callback handler
+    from handlers.map_nearby_callback_handler import get_map_nearby_handler
+    application.add_handler(get_map_nearby_handler())
+    logger.info("✅ Map Nearby callback处理器已注册")
+
     # 使用命令工厂设置处理器（包括 UnifiedTextHandler）
     command_factory.setup_handlers(application)
 
@@ -378,6 +383,19 @@ async def setup_application(application: Application, config) -> None:
     memes.set_dependencies(cache_manager, httpx_client)
     finance.set_dependencies(cache_manager, httpx_client)
     map.set_dependencies(cache_manager, httpx_client)
+
+    # 设置 Map Nearby callback handler 依赖
+    from handlers import map_nearby_callback_handler
+    from utils.map_services import MapServiceManager
+    from utils.telegraph_helper import TelegraphPublisher
+    map_service_manager = MapServiceManager(
+        google_api_key=config.google_maps_api_key,
+        amap_api_key=config.amap_api_key
+    )
+    telegraph_publisher = TelegraphPublisher()
+    map_nearby_callback_handler.set_map_service(map_service_manager)
+    map_nearby_callback_handler.set_telegraph_service(telegraph_publisher)
+
     flight.set_dependencies(cache_manager, httpx_client)
     hotel.set_dependencies(cache_manager, httpx_client)
     fuel.set_dependencies(cache_manager, httpx_client)

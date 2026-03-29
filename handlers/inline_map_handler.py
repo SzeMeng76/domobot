@@ -499,18 +499,18 @@ async def handle_inline_map_search(query: str, context: ContextTypes.DEFAULT_TYP
 
         result_text += f"\n\n_数据来源: {service_name}_"
 
-        # 创建按钮 - 添加多个附近搜索快捷按钮
+        # 创建按钮 - 添加附近搜索category按钮
         keyboard = [
             [InlineKeyboardButton("🗺️ 查看地图", url=map_url)],
             [
-                InlineKeyboardButton("🍽️ 餐厅", switch_inline_query_current_chat=f"map nearby restaurant {name}$"),
-                InlineKeyboardButton("🏥 医院", switch_inline_query_current_chat=f"map nearby hospital {name}$"),
-                InlineKeyboardButton("🏦 银行", switch_inline_query_current_chat=f"map nearby bank {name}$")
+                InlineKeyboardButton("🍽️ 餐厅", callback_data=f"map_nearby_restaurant_{lat}_{lng}"),
+                InlineKeyboardButton("🏥 医院", callback_data=f"map_nearby_hospital_{lat}_{lng}"),
+                InlineKeyboardButton("🏦 银行", callback_data=f"map_nearby_bank_{lat}_{lng}")
             ],
             [
-                InlineKeyboardButton("⛽ 加油站", switch_inline_query_current_chat=f"map nearby gas_station {name}$"),
-                InlineKeyboardButton("🏪 超市", switch_inline_query_current_chat=f"map nearby supermarket {name}$"),
-                InlineKeyboardButton("🏨 酒店", switch_inline_query_current_chat=f"map nearby hotel {name}$")
+                InlineKeyboardButton("⛽ 加油站", callback_data=f"map_nearby_gas_station_{lat}_{lng}"),
+                InlineKeyboardButton("🏪 超市", callback_data=f"map_nearby_supermarket_{lat}_{lng}"),
+                InlineKeyboardButton("🏨 酒店", callback_data=f"map_nearby_hotel_{lat}_{lng}")
             ]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
