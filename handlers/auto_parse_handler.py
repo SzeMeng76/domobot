@@ -221,11 +221,11 @@ async def _auto_parse_reddit(url: str, user_id: int, group_id: int, message, con
                 text_preview += "..."
             caption_parts.append(f"\n{_escape_markdown(text_preview)}")
 
-        caption_parts.append(f"\n🔗 [原帖链接]({post.permalink})")
-        caption_parts.append(f"\n📱 平台: REDDIT")
-        caption_parts.append("\n🤖 自动解析")
+        caption_parts.append(f"🔗 [原帖链接]({post.permalink})")
+        caption_parts.append(f"📱 平台: REDDIT")
+        caption_parts.append("🤖 自动解析")
 
-        caption = "\n\n".join(caption_parts)
+        caption = "\n".join(caption_parts)
 
         # 生成 URL 哈希（用于 AI 总结 callback）
         from utils.reddit_client import RedditClient
