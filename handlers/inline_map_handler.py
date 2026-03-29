@@ -298,48 +298,66 @@ async def handle_chosen_map_result(update, context: ContextTypes.DEFAULT_TYPE):
             text=f"📤 上传图片中... ({photo_size_mb:.1f}MB)"
         )
 
-        # 使用临时频道上传图片
-        from telegram import InputMediaPhoto
-        from utils.config_manager import ConfigManager
+        # 优先使用 Pyrogram 直接上传（支持大文件，无需临时频道）
+        from commands.social_parser import _adapter as parse_adapter_instance
+        pyrogram_helper = getattr(parse_adapter_instance, 'pyrogram_helper', None)
 
-        config_manager = ConfigManager()
-        temp_channel_id = config_manager.config.inline_parse_temp_channel
+        if pyrogram_helper and pyrogram_helper.is_started and pyrogram_helper.client:
+            from pyrogram.types import InputMediaPhoto as PyrogramInputMediaPhoto
+            from pyrogram.enums import ParseMode as PyrogramParseMode
 
-        if not temp_channel_id:
-            await context.bot.edit_message_text(
+            await pyrogram_helper.client.edit_inline_media(
                 inline_message_id=inline_message_id,
-                text=f"{caption}\n\n❌ 配置错误：未设置临时存储频道",
-                parse_mode="Markdown",
+                media=PyrogramInputMediaPhoto(
+                    media=str(temp_file),
+                    caption=caption,
+                    parse_mode=PyrogramParseMode.MARKDOWN
+                ),
                 reply_markup=reply_markup
             )
-            temp_file.unlink(missing_ok=True)
-            return
+            logger.info(f"[Inline Map] Pyrogram 图片上传成功: {photo_size_mb:.1f}MB")
+        else:
+            # Pyrogram 不可用，fallback 到临时频道方案
+            from telegram import InputMediaPhoto
+            from utils.config_manager import ConfigManager
 
-        # 先上传到临时频道获取 file_id
-        with open(temp_file, 'rb') as photo_file:
-            sent_message = await context.bot.send_photo(
-                chat_id=temp_channel_id,
-                photo=photo_file,
-                read_timeout=300,
-                write_timeout=300,
-                connect_timeout=30
+            config_manager = ConfigManager()
+            temp_channel_id = config_manager.config.inline_parse_temp_channel
+
+            if not temp_channel_id:
+                await context.bot.edit_message_text(
+                    inline_message_id=inline_message_id,
+                    text=f"{caption}\n\n❌ 配置错误：未设置临时存储频道且 Pyrogram 不可用",
+                    parse_mode="Markdown",
+                    reply_markup=reply_markup
+                )
+                temp_file.unlink(missing_ok=True)
+                return
+
+            # 先上传到临时频道获取 file_id
+            with open(temp_file, 'rb') as photo_file:
+                sent_message = await context.bot.send_photo(
+                    chat_id=temp_channel_id,
+                    photo=photo_file,
+                    read_timeout=300,
+                    write_timeout=300,
+                    connect_timeout=30
+                )
+                file_id = sent_message.photo[-1].file_id
+
+            # 使用 file_id 编辑 inline 消息
+            input_media = InputMediaPhoto(
+                media=file_id,
+                caption=caption,
+                parse_mode="Markdown"
             )
-            file_id = sent_message.photo[-1].file_id
 
-        # 使用 file_id 编辑 inline 消息
-        input_media = InputMediaPhoto(
-            media=file_id,
-            caption=caption,
-            parse_mode="Markdown"
-        )
-
-        await context.bot.edit_message_media(
-            inline_message_id=inline_message_id,
-            media=input_media,
-            reply_markup=reply_markup
-        )
-
-        logger.info(f"[Inline Map] 图片上传成功: {photo_size_mb:.1f}MB")
+            await context.bot.edit_message_media(
+                inline_message_id=inline_message_id,
+                media=input_media,
+                reply_markup=reply_markup
+            )
+            logger.info(f"[Inline Map] 临时频道图片上传成功: {photo_size_mb:.1f}MB")
 
         # 清理
         temp_file.unlink(missing_ok=True)
