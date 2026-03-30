@@ -285,11 +285,33 @@ async def handle_inline_parse_query(
                 buttons[0].append(InlineKeyboardButton("📝 AI总结", callback_data=f"summary_{url_hash}"))
                 # 缓存解析数据到Redis（用于AI总结回调）
                 if parse_adapter.cache_manager:
+                    # 序列化 parse_result（保存图片URL等信息）
+                    parse_result_dict = {
+                        'type': type(parse_result).__name__,
+                        'title': parse_result.title or '',
+                        'content': parse_result.content or '',
+                        'platform': str(parse_result.platform.id) if hasattr(parse_result, 'platform') else 'unknown',
+                    }
+                    # 保存媒体URL（图片/视频）
+                    if hasattr(parse_result, 'media') and parse_result.media:
+                        media = parse_result.media
+                        media_list = media if isinstance(media, list) else [media]
+                        parse_result_dict['media'] = []
+                        for m in media_list:
+                            if hasattr(m, 'url'):
+                                parse_result_dict['media'].append({
+                                    'type': type(m).__name__,
+                                    'url': m.url,
+                                    'width': getattr(m, 'width', 0),
+                                    'height': getattr(m, 'height', 0),
+                                })
+
                     cache_data = {
                         'url': display_url,
                         'title': parse_result.title or '',
                         'content': parse_result.content or '',
-                        'platform': parse_result.platform.id if hasattr(parse_result, 'platform') else 'unknown'
+                        'platform': str(parse_result.platform.id) if hasattr(parse_result, 'platform') else 'unknown',
+                        'parse_result': parse_result_dict
                     }
                     await parse_adapter.cache_manager.set(
                         f"summary:{url_hash}",
@@ -329,11 +351,33 @@ async def handle_inline_parse_query(
                 buttons[0].append(InlineKeyboardButton("📝 AI总结", callback_data=f"summary_{url_hash}"))
                 # 缓存解析数据到Redis（用于AI总结回调）
                 if parse_adapter.cache_manager:
+                    # 序列化 parse_result（保存图片URL等信息）
+                    parse_result_dict = {
+                        'type': type(parse_result).__name__,
+                        'title': parse_result.title or '',
+                        'content': parse_result.content or '',
+                        'platform': str(parse_result.platform.id) if hasattr(parse_result, 'platform') else 'unknown',
+                    }
+                    # 保存媒体URL（图片/视频）
+                    if hasattr(parse_result, 'media') and parse_result.media:
+                        media = parse_result.media
+                        media_list = media if isinstance(media, list) else [media]
+                        parse_result_dict['media'] = []
+                        for m in media_list:
+                            if hasattr(m, 'url'):
+                                parse_result_dict['media'].append({
+                                    'type': type(m).__name__,
+                                    'url': m.url,
+                                    'width': getattr(m, 'width', 0),
+                                    'height': getattr(m, 'height', 0),
+                                })
+
                     cache_data = {
                         'url': display_url,
                         'title': parse_result.title or '',
                         'content': parse_result.content or '',
-                        'platform': parse_result.platform.id if hasattr(parse_result, 'platform') else 'unknown'
+                        'platform': str(parse_result.platform.id) if hasattr(parse_result, 'platform') else 'unknown',
+                        'parse_result': parse_result_dict
                     }
                     await parse_adapter.cache_manager.set(
                         f"summary:{url_hash}",
@@ -489,11 +533,33 @@ async def handle_inline_parse_query(
                 buttons[0].append(InlineKeyboardButton("📝 AI总结", callback_data=f"summary_{url_hash}"))
                 # 缓存解析数据到Redis（用于AI总结回调）
                 if parse_adapter.cache_manager:
+                    # 序列化 parse_result（保存图片URL等信息）
+                    parse_result_dict = {
+                        'type': type(parse_result).__name__,
+                        'title': parse_result.title or '',
+                        'content': parse_result.content or '',
+                        'platform': str(parse_result.platform.id) if hasattr(parse_result, 'platform') else 'unknown',
+                    }
+                    # 保存媒体URL（图片/视频）
+                    if hasattr(parse_result, 'media') and parse_result.media:
+                        media = parse_result.media
+                        media_list = media if isinstance(media, list) else [media]
+                        parse_result_dict['media'] = []
+                        for m in media_list:
+                            if hasattr(m, 'url'):
+                                parse_result_dict['media'].append({
+                                    'type': type(m).__name__,
+                                    'url': m.url,
+                                    'width': getattr(m, 'width', 0),
+                                    'height': getattr(m, 'height', 0),
+                                })
+
                     cache_data = {
                         'url': display_url,
                         'title': parse_result.title or '',
                         'content': parse_result.content or '',
-                        'platform': parse_result.platform.id if hasattr(parse_result, 'platform') else 'unknown'
+                        'platform': str(parse_result.platform.id) if hasattr(parse_result, 'platform') else 'unknown',
+                        'parse_result': parse_result_dict
                     }
                     await parse_adapter.cache_manager.set(
                         f"summary:{url_hash}",
@@ -879,6 +945,12 @@ async def _handle_video_inline(
             await _update_status(f"{caption}\n\n❌ 下载失败")
             return
 
+        # 缓存 download_result 到内存（用于AI总结）
+        from handlers.ai_summary_callback_handler import cache_download_result
+        url_hash = get_url_hash(url)
+        cache_download_result(url_hash, download_result)
+        logger.info(f"[Inline Parse] 已缓存 download_result 到内存: {url_hash}")
+
         media = download_result.media
         if isinstance(media, list):
             media = media[0]
@@ -1038,6 +1110,12 @@ async def _handle_image_inline(
                 parse_mode=ParseMode.MARKDOWN_V2
             )
             return
+
+        # 缓存 download_result 到内存（用于AI总结）
+        from handlers.ai_summary_callback_handler import cache_download_result
+        url_hash = get_url_hash(url)
+        cache_download_result(url_hash, download_result)
+        logger.info(f"[Inline Parse] 已缓存 download_result 到内存: {url_hash}")
 
         media_list = download_result.media if isinstance(download_result.media, list) else [download_result.media]
         media_list = [m for m in media_list if m and hasattr(m, 'path') and m.path]

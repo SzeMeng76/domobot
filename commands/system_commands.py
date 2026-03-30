@@ -538,7 +538,7 @@ def get_user_level_by_date(creation_date):
 async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     查询用户的详细信息（基于ID估算注册日期）
-    支持: /when 123456789 或 /when @username 或回复消息使用 /when
+    支持: /when (查询自己) 或 /when 123456789 或 /when @username 或回复消息使用 /when
     """
     message = update.effective_message
     chat = update.effective_chat
@@ -564,7 +564,7 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if message.reply_to_message and message.reply_to_message.from_user:
             target_user = message.reply_to_message.from_user
             target_user_id = target_user.id
-            
+
         # 方法2: 检查是否有参数
         elif context.args:
             param = context.args[0].strip()
@@ -710,6 +710,11 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 from utils.message_manager import _schedule_deletion
                 await _schedule_deletion(context, chat.id, sent_message.message_id, 180)
                 return
+
+        # 方法3: 如果没有回复也没有参数，查询自己
+        else:
+            target_user = user
+            target_user_id = user.id
 
         # 如果没有获取到任何用户信息
         if not target_user_id:
