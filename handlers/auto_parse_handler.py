@@ -176,12 +176,42 @@ async def _auto_parse_single(url: str, user_id: int, group_id: int, message, con
             reply_markup = InlineKeyboardMarkup(buttons)
 
             if _adapter.cache_manager:
+                # 序列化 parse_result（保存图片URL等信息）
+                parse_result_dict = None
+
+                if parse_result:
+                    parse_result_dict = {
+                        'type': type(parse_result).__name__,
+                        'title': getattr(parse_result, 'title', ''),
+                        'content': getattr(parse_result, 'content', ''),
+                        'platform': getattr(parse_result, 'platform', platform),
+                    }
+                    # 保存媒体URL（图片/视频）
+                    if hasattr(parse_result, 'media') and parse_result.media:
+                        media = parse_result.media
+                        media_list = media if isinstance(media, list) else [media]
+                        parse_result_dict['media'] = []
+                        for m in media_list:
+                            if hasattr(m, 'url'):
+                                parse_result_dict['media'].append({
+                                    'type': type(m).__name__,
+                                    'url': m.url,
+                                    'width': getattr(m, 'width', 0),
+                                    'height': getattr(m, 'height', 0),
+                                })
+
+                # 缓存 download_result 到内存（用于AI总结，包含本地文件）
+                if result:
+                    from handlers.ai_summary_callback_handler import cache_download_result
+                    cache_download_result(url_hash, result)
+
                 cache_data = {
                     'url': formatted['url'],
                     'caption': caption,
                     'title': formatted.get('title', ''),
                     'content': formatted.get('content', ''),
-                    'platform': platform
+                    'platform': platform,
+                    'parse_result': parse_result_dict
                 }
                 await _adapter.cache_manager.set(
                     f"summary:{url_hash}",

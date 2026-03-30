@@ -17,11 +17,29 @@ _adapter = None
 # 格式: {message_id: {"original": "原始caption", "summary": "AI总结内容", "url": "原始URL"}}
 _message_cache = {}
 
+# 缓存 download_result（用于AI总结）
+# 格式: {url_hash: download_result}
+# 短期缓存（1小时），避免内存泄漏
+_download_result_cache = {}
+
 
 def set_adapter(adapter):
     """设置ParseHubAdapter实例"""
     global _adapter
     _adapter = adapter
+
+
+def cache_download_result(url_hash: str, download_result):
+    """缓存 download_result（用于AI总结）"""
+    global _download_result_cache
+    _download_result_cache[url_hash] = download_result
+
+    # 清理旧缓存（只保留最近 50 个）
+    if len(_download_result_cache) > 50:
+        # 删除最旧的 10 个
+        keys_to_delete = list(_download_result_cache.keys())[:10]
+        for key in keys_to_delete:
+            del _download_result_cache[key]
 
 
 async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -118,6 +136,13 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                 # 没有缓存，从Redis读取parse_result并生成AI总结
                 logger.info(f"📍 使用缓存的parse_result生成AI总结")
 
+                # 优先从内存中获取 download_result（包含本地文件）
+                download_result = _download_result_cache.get(url_hash)
+                if download_result:
+                    logger.info(f"✅ 从内存缓存读取 download_result")
+                else:
+                    logger.info(f"⚠️ 内存中没有 download_result，将使用图片URL")
+
                 # 从缓存中重建parse_result对象
                 parse_result_dict = cache_data.get('parse_result')
                 if not parse_result_dict:
@@ -131,7 +156,7 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                         media=[]
                     )
                 else:
-                    # 重建简化的parse_result对象（只包含文本和图片URL）
+                    # 重建简化的parse_result对象
                     from types import SimpleNamespace
                     parse_result = SimpleNamespace(
                         title=parse_result_dict.get('title', ''),
@@ -153,10 +178,9 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
                     logger.info(f"📍 重建parse_result: title={parse_result.title}, media_count={len(parse_result.media)}")
 
-                # 生成AI总结（传递parse_result，不需要download_result）
-                # AI总结会从图片URL下载图片（使用代理）
+                # 生成AI总结（优先使用 download_result 中的本地文件）
                 logger.info(f"📍 准备调用 generate_ai_summary")
-                ai_summary = await _adapter.generate_ai_summary(parse_result, download_result=None)
+                ai_summary = await _adapter.generate_ai_summary(parse_result, download_result=download_result)
                 logger.info(f"📍 generate_ai_summary 调用完成")
 
                 if not ai_summary:

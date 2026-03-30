@@ -517,6 +517,7 @@ async def _handle_single_parse(
         if _adapter.config and _adapter.config.enable_ai_summary and _adapter.cache_manager:
             # 序列化 parse_result（保存图片URL等信息）
             parse_result_dict = None
+
             if parse_result:
                 logger.info(f"📍 parse_result存在: type={type(parse_result).__name__}, title={getattr(parse_result, 'title', 'N/A')}")
                 parse_result_dict = {
@@ -543,6 +544,12 @@ async def _handle_single_parse(
                     logger.warning(f"⚠️ parse_result没有media或media为空")
             else:
                 logger.error(f"❌ parse_result是None！无法缓存媒体信息")
+
+            # 缓存 download_result 到内存（用于AI总结，包含本地文件）
+            if result:
+                from handlers.ai_summary_callback_handler import cache_download_result
+                cache_download_result(url_hash, result)
+                logger.info(f"✅ 已缓存 download_result 到内存: {url_hash}")
 
             cache_data = {
                 'url': display_url,  # 使用短链接（永久有效）
