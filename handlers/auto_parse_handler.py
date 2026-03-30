@@ -180,6 +180,7 @@ async def _auto_parse_single(url: str, user_id: int, group_id: int, message, con
                 parse_result_dict = None
 
                 if parse_result:
+                    logger.info(f"📍 parse_result存在: type={type(parse_result).__name__}, title={getattr(parse_result, 'title', 'N/A')}")
                     parse_result_dict = {
                         'type': type(parse_result).__name__,
                         'title': getattr(parse_result, 'title', ''),
@@ -199,11 +200,17 @@ async def _auto_parse_single(url: str, user_id: int, group_id: int, message, con
                                     'width': getattr(m, 'width', 0),
                                     'height': getattr(m, 'height', 0),
                                 })
+                        logger.info(f"📍 parse_result.media: {len(parse_result_dict['media'])} items")
+                    else:
+                        logger.warning(f"⚠️ parse_result没有media或media为空")
+                else:
+                    logger.error(f"❌ parse_result是None！无法缓存媒体信息")
 
                 # 缓存 download_result 到内存（用于AI总结，包含本地文件）
                 if result:
                     from handlers.ai_summary_callback_handler import cache_download_result
                     cache_download_result(url_hash, result)
+                    logger.info(f"✅ 已缓存 download_result 到内存: {url_hash}")
 
                 cache_data = {
                     'url': formatted['url'],
@@ -219,6 +226,7 @@ async def _auto_parse_single(url: str, user_id: int, group_id: int, message, con
                     ttl=86400,
                     subdirectory="social_parser"
                 )
+                logger.info(f"✅ 已缓存解析数据（含parse_result）: cache:social_parser:summary:{url_hash}")
         else:
             reply_markup = InlineKeyboardMarkup(buttons)
 
