@@ -772,9 +772,13 @@ async def handle_ip_query(update: Update, context: ContextTypes.DEFAULT_TYPE, ip
         ipdata_data = await get_ipdata_info(ip_address)
 
         if ipdata_data:
-            # 使用 ipdata.co 数据
+            # 使用 ipdata.co 数据 + AbuseIPDB 补充
             logger.info(f"使用 ipdata.co 数据: {ip_address}")
-            await _handle_ip_query_with_ipdata(update, context, ip_address, ipdata_data, domain, status_msg)
+            abuseipdb_data = await get_abuseipdb_score(ip_address)
+            if isinstance(abuseipdb_data, Exception):
+                logger.error(f"AbuseIPDB 查询异常: {abuseipdb_data}")
+                abuseipdb_data = None
+            await _handle_ip_query_with_ipdata(update, context, ip_address, ipdata_data, abuseipdb_data, domain, status_msg)
         else:
             # Fallback 到 ipapi.is + AbuseIPDB
             logger.info(f"Fallback 到 ipapi.is: {ip_address}")
@@ -810,8 +814,8 @@ async def handle_ip_query(update: Update, context: ContextTypes.DEFAULT_TYPE, ip
         await delete_user_command(context, chat_id, update.message.message_id)
 
 
-async def _handle_ip_query_with_ipdata(update: Update, context: ContextTypes.DEFAULT_TYPE, ip_address: str, ipdata_data: Dict, domain: Optional[str] = None, status_msg = None) -> None:
-    """使用 ipdata.co 数据处理 IP 查询"""
+async def _handle_ip_query_with_ipdata(update: Update, context: ContextTypes.DEFAULT_TYPE, ip_address: str, ipdata_data: Dict, abuseipdb_data: Optional[Dict], domain: Optional[str] = None, status_msg = None) -> None:
+    """使用 ipdata.co + AbuseIPDB 数据处理 IP 查询"""
     config = get_config()
     chat_id = update.effective_chat.id
 
@@ -973,6 +977,54 @@ async def _handle_ip_query_with_ipdata(update: Update, context: ContextTypes.DEF
     if asn_type:
         result_text += f"• 类型: {asn_type.upper()}\n"
 
+    # 添加 AbuseIPDB 的滥用报告（补充信息）
+    if abuseipdb_data:
+        total_reports = abuseipdb_data.get("totalReports", 0)
+        reports = abuseipdb_data.get("reports", [])
+
+        if total_reports > 0:
+            result_text += f"\n⚠️ *滥用报告*\n• 总报告数: {total_reports}\n"
+
+            # 显示最近的报告详情（最多3条）
+            if reports:
+                # AbuseIPDB 类别映射
+                category_map = {
+                    3: "欺诈订单", 4: "DDoS 攻击", 5: "FTP 暴力破解",
+                    6: "Ping of Death", 7: "网络钓鱼", 8: "欺诈 VoIP",
+                    9: "开放代理", 10: "Web 垃圾邮件", 11: "邮件垃圾",
+                    12: "博客垃圾", 13: "VPN IP", 14: "端口扫描",
+                    15: "黑客攻击", 16: "SQL 注入", 17: "欺骗",
+                    18: "暴力破解", 19: "恶意机器人", 20: "漏洞利用",
+                    21: "Web 应用攻击", 22: "SSH", 23: "IoT 目标"
+                }
+
+                result_text += "\n📋 *最近报告*:\n"
+                for i, report in enumerate(reports[:3], 1):
+                    reported_at = report.get("reportedAt", "")
+                    categories = report.get("categories", [])
+                    comment = report.get("comment", "")
+
+                    # 格式化时间（只显示日期）
+                    if reported_at:
+                        try:
+                            from datetime import datetime
+                            dt = datetime.fromisoformat(reported_at.replace("Z", "+00:00"))
+                            date_str = dt.strftime("%Y-%m-%d")
+                        except:
+                            date_str = reported_at[:10]
+                    else:
+                        date_str = "未知"
+
+                    # 转换类别
+                    category_names = [category_map.get(cat, f"类别{cat}") for cat in categories]
+                    category_str = ", ".join(category_names) if category_names else "未分类"
+
+                    result_text += f"{i}. `{date_str}` - {category_str}\n"
+                    if comment:
+                        # 限制评论长度
+                        comment_short = comment[:50] + "..." if len(comment) > 50 else comment
+                        result_text += f"   _{comment_short}_\n"
+
     await status_msg.edit_text(
         result_text,
         parse_mode="Markdown",
@@ -980,7 +1032,7 @@ async def _handle_ip_query_with_ipdata(update: Update, context: ContextTypes.DEF
     )
 
     await _schedule_deletion(context, chat_id, status_msg.message_id, config.auto_delete_delay)
-    logger.info(f"✅ IP 查询成功 (ipdata.co): {ip_address}")
+    logger.info(f"✅ IP 查询成功 (ipdata.co + AbuseIPDB): {ip_address}")
 
 
 async def _handle_ip_query_with_ipapi(update: Update, context: ContextTypes.DEFAULT_TYPE, ip_address: str, ipapi_data: Dict, abuseipdb_data: Optional[Dict], domain: Optional[str] = None, status_msg = None) -> None:

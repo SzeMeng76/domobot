@@ -471,6 +471,10 @@ class ConfigManager:
         abuseipdb_keys_str = os.getenv("ABUSEIPDB_API_KEYS", os.getenv("ABUSEIPDB_API_KEY", ""))
         self.config.abuseipdb_api_keys = [key.strip() for key in abuseipdb_keys_str.split(",") if key.strip()]
 
+        # ipdata.co API Keys（支持多个，逗号分隔）
+        ipdata_keys_str = os.getenv("IPDATA_API_KEYS", os.getenv("IPDATA_API_KEY", ""))
+        self.config.ipdata_api_keys = [key.strip() for key in ipdata_keys_str.split(",") if key.strip()]
+
         # 电影信息 API 配置
         self.config.tmdb_api_key = os.getenv("TMDB_API_KEY", "")
         self.config.trakt_api_key = os.getenv("TRAKT_API_KEY", "")
