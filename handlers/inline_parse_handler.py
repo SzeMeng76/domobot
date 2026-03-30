@@ -827,7 +827,7 @@ async def handle_inline_parse_chosen(
 
         # 链接部分（URL 也需要转义）
         escaped_url = html_escape(url)
-        platform_name = platform.upper() if platform else "UNKNOWN"
+        platform_name = str(parse_result.platform.id).upper() if hasattr(parse_result, 'platform') and parse_result.platform else "UNKNOWN"
         link_part = f'\n\n<b>🔗 <a href="{escaped_url}">原链接</a></b>\n\n📱 平台: {platform_name}'
 
         # Telegram caption 限制 1024 字节（不是字符！），必须严格控制
@@ -860,7 +860,7 @@ async def handle_inline_parse_chosen(
         elif isinstance(parse_result, (VideoParseResult, ImageParseResult, MultimediaParseResult)):
             # 视频/混合媒体中的视频
             await _handle_video_inline(
-                context, inline_message_id, parse_result, parse_adapter, caption, url, media_index, is_article, result_id, reply_markup
+                context, inline_message_id, parse_result, parse_adapter, caption, url, display_url, media_index, is_article, result_id, reply_markup
             )
         else:
             # 其他类型（不应该到这里，因为前面已经过滤了）
@@ -959,6 +959,7 @@ async def _handle_video_inline(
     parse_adapter,
     caption: str,
     url: str,
+    display_url: str = None,
     media_index: int = 0,
     is_article: bool = False,
     result_id: str = None,
@@ -966,6 +967,10 @@ async def _handle_video_inline(
 ) -> None:
     """处理视频 inline 结果"""
     try:
+        # 如果没有传入 display_url，使用 url
+        if not display_url:
+            display_url = url
+
         # Helper: Article 类型用 edit_message_text，Photo 类型用 edit_message_caption
         async def _update_status(text: str, parse_mode=None):
             if is_article:
@@ -996,8 +1001,7 @@ async def _handle_video_inline(
 
         # 缓存 download_result 到内存（用于AI总结）
         from handlers.ai_summary_callback_handler import cache_download_result
-        # 使用 display_url 生成 hash，与 AI 总结按钮的 callback_data 保持一致
-        display_url = getattr(parse_result, 'raw_url', url) or url
+        # 使用传入的 display_url，与 AI 总结按钮的 callback_data 保持一致
         url_hash = get_url_hash(display_url)
         cache_download_result(url_hash, download_result)
         logger.info(f"[Inline Parse] 已缓存 download_result 到内存: {url_hash} (display_url: {display_url[:50]}...)")
