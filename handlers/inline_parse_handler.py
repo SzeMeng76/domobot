@@ -74,14 +74,15 @@ def _clean_expired_cache():
 
 
 def _build_cached_inline_results(cached_data: dict, url: str, parse_adapter=None) -> list:
-
     """使用file_id缓存构建inline结果（直接使用Telegram服务器上的文件）"""
+    display_url = url
+
     # 构建按钮：原链接 + AI总结（如果启用）
-    buttons = [[InlineKeyboardButton("🔗 原链接", url=url)]]
+    buttons = [[InlineKeyboardButton("🔗 原链接", url=display_url)]]
 
     # 添加 AI 总结按钮（如果启用）
     if parse_adapter and parse_adapter.config and parse_adapter.config.enable_ai_summary:
-        url_hash = get_url_hash(url)
+        url_hash = get_url_hash(display_url)
         buttons[0].append(InlineKeyboardButton("📝 AI总结", callback_data=f"summary_{url_hash}"))
 
     keyboard = InlineKeyboardMarkup(buttons)
@@ -240,6 +241,10 @@ async def handle_inline_parse_query(
         # 记录解析结果类型
         logger.info(f"[Inline Parse] URL: {url[:50]}... | 类型: {type(parse_result).__name__} | 标题: {parse_result.title[:30] if parse_result.title else 'None'}")
 
+        # 获取 raw_url（跳转后的真实URL，用于显示）
+        display_url = getattr(parse_result, 'raw_url', url) or url
+        logger.info(f"[Inline Parse] display_url: {display_url[:80]}...")
+
         # 构建 inline 结果
         from parsehub.types import VideoParseResult, ImageParseResult, RichTextParseResult, MultimediaParseResult
 
@@ -274,14 +279,14 @@ async def handle_inline_parse_query(
             _cache_timestamps[result_id] = time.time()
 
             # 添加原链接按钮 + AI总结按钮（如果启用）
-            buttons = [[InlineKeyboardButton("🔗 原链接", url=url)]]
+            buttons = [[InlineKeyboardButton("🔗 原链接", url=display_url)]]
             if parse_adapter.config and parse_adapter.config.enable_ai_summary:
-                url_hash = get_url_hash(url)
+                url_hash = get_url_hash(display_url)
                 buttons[0].append(InlineKeyboardButton("📝 AI总结", callback_data=f"summary_{url_hash}"))
                 # 缓存解析数据到Redis（用于AI总结回调）
                 if parse_adapter.cache_manager:
                     cache_data = {
-                        'url': url,
+                        'url': display_url,
                         'title': parse_result.title or '',
                         'content': parse_result.content or '',
                         'platform': parse_result.platform.id if hasattr(parse_result, 'platform') else 'unknown'
@@ -318,14 +323,14 @@ async def handle_inline_parse_query(
             caption_text = "\n\n".join(caption_parts) if caption_parts else "⏳ 下载中..."
 
             # 添加原链接按钮 + AI总结按钮（如果启用）
-            buttons = [[InlineKeyboardButton("🔗 原链接", url=url)]]
+            buttons = [[InlineKeyboardButton("🔗 原链接", url=display_url)]]
             if parse_adapter.config and parse_adapter.config.enable_ai_summary:
-                url_hash = get_url_hash(url)
+                url_hash = get_url_hash(display_url)
                 buttons[0].append(InlineKeyboardButton("📝 AI总结", callback_data=f"summary_{url_hash}"))
                 # 缓存解析数据到Redis（用于AI总结回调）
                 if parse_adapter.cache_manager:
                     cache_data = {
-                        'url': url,
+                        'url': display_url,
                         'title': parse_result.title or '',
                         'content': parse_result.content or '',
                         'platform': parse_result.platform.id if hasattr(parse_result, 'platform') else 'unknown'
@@ -478,14 +483,14 @@ async def handle_inline_parse_query(
             caption_text = "\n\n".join(caption_parts) if caption_parts else ""
 
             # 添加原链接按钮 + AI总结按钮（如果启用）
-            buttons = [[InlineKeyboardButton("🔗 原链接", url=url)]]
+            buttons = [[InlineKeyboardButton("🔗 原链接", url=display_url)]]
             if parse_adapter.config and parse_adapter.config.enable_ai_summary:
-                url_hash = get_url_hash(url)
+                url_hash = get_url_hash(display_url)
                 buttons[0].append(InlineKeyboardButton("📝 AI总结", callback_data=f"summary_{url_hash}"))
                 # 缓存解析数据到Redis（用于AI总结回调）
                 if parse_adapter.cache_manager:
                     cache_data = {
-                        'url': url,
+                        'url': display_url,
                         'title': parse_result.title or '',
                         'content': parse_result.content or '',
                         'platform': parse_result.platform.id if hasattr(parse_result, 'platform') else 'unknown'

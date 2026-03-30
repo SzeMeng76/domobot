@@ -482,19 +482,23 @@ async def _handle_single_parse(
             caption = "无标题"
 
         if formatted['url']:
-            caption += f"\n\n🔗 [原链接]({formatted['url']})"
+            # 对于小红书，优先使用原始短链接（永久有效），否则使用跳转后的URL
+            display_url = url if 'xhslink.com' in url else formatted['url']
+            caption += f"\n\n🔗 [原链接]({display_url})"
         caption += f"\n\n📱 平台: {platform.upper()}"
 
         # 更新状态
         await _safe_edit_status("📤 上传中...")
 
         # 生成URL的MD5哈希（用于callback_data和缓存key）
-        url_hash = get_url_hash(formatted['url'])
-        logger.info(f"🔑 URL哈希: {url_hash}")
+        # 对于小红书，优先使用原始短链接
+        display_url = url if 'xhslink.com' in url else formatted['url']
+        url_hash = get_url_hash(display_url)
+        logger.info(f"🔑 URL哈希: {url_hash}, 显示URL: {display_url[:50]}...")
 
         # 创建inline keyboard按钮
         from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-        buttons = [[InlineKeyboardButton("🔗 原链接", url=formatted['url'])]]
+        buttons = [[InlineKeyboardButton("🔗 原链接", url=display_url)]]
 
         # 如果启用了AI总结，添加AI总结按钮
         if _adapter.config and _adapter.config.enable_ai_summary:
@@ -531,7 +535,7 @@ async def _handle_single_parse(
                             })
 
             cache_data = {
-                'url': formatted['url'],
+                'url': display_url,  # 使用短链接（永久有效）
                 'caption': caption,
                 'title': formatted.get('title', ''),
                 'content': formatted.get('content', ''),

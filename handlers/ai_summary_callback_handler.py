@@ -121,30 +121,37 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                 # 从缓存中重建parse_result对象
                 parse_result_dict = cache_data.get('parse_result')
                 if not parse_result_dict:
-                    await query.answer("❌ 缓存数据不完整，无法生成总结", show_alert=True)
-                    return
-
-                # 重建简化的parse_result对象（只包含文本和图片URL）
-                from types import SimpleNamespace
-                parse_result = SimpleNamespace(
-                    title=parse_result_dict.get('title', ''),
-                    content=parse_result_dict.get('content', ''),
-                    platform=parse_result_dict.get('platform', ''),
-                    media=[]
-                )
-
-                # 重建media列表（包含图片URL）
-                media_list = parse_result_dict.get('media', [])
-                for m in media_list:
-                    media_obj = SimpleNamespace(
-                        url=m.get('url', ''),
-                        width=m.get('width', 0),
-                        height=m.get('height', 0),
-                        type=m.get('type', '')
+                    # 兼容旧缓存：如果没有parse_result，只用文本生成总结
+                    logger.warning(f"⚠️ 缓存中没有parse_result，使用纯文本生成总结")
+                    from types import SimpleNamespace
+                    parse_result = SimpleNamespace(
+                        title=cache_data.get('title', ''),
+                        content=cache_data.get('content', ''),
+                        platform=cache_data.get('platform', ''),
+                        media=[]
                     )
-                    parse_result.media.append(media_obj)
+                else:
+                    # 重建简化的parse_result对象（只包含文本和图片URL）
+                    from types import SimpleNamespace
+                    parse_result = SimpleNamespace(
+                        title=parse_result_dict.get('title', ''),
+                        content=parse_result_dict.get('content', ''),
+                        platform=parse_result_dict.get('platform', ''),
+                        media=[]
+                    )
 
-                logger.info(f"📍 重建parse_result: title={parse_result.title}, media_count={len(parse_result.media)}")
+                    # 重建media列表（包含图片URL）
+                    media_list = parse_result_dict.get('media', [])
+                    for m in media_list:
+                        media_obj = SimpleNamespace(
+                            url=m.get('url', ''),
+                            width=m.get('width', 0),
+                            height=m.get('height', 0),
+                            type=m.get('type', '')
+                        )
+                        parse_result.media.append(media_obj)
+
+                    logger.info(f"📍 重建parse_result: title={parse_result.title}, media_count={len(parse_result.media)}")
 
                 # 生成AI总结（传递parse_result，不需要download_result）
                 # AI总结会从图片URL下载图片（使用代理）
