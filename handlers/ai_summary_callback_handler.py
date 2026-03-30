@@ -115,23 +115,41 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                 ai_summary = ai_summary_cache.get('summary', '')
                 logger.info(f"✅ 使用缓存的AI总结")
             else:
-                # 没有缓存，重新解析URL并生成AI总结（类似parse_hub_bot）
-                logger.info(f"📍 重新解析URL: {original_url}")
+                # 没有缓存，从Redis读取parse_result并生成AI总结
+                logger.info(f"📍 使用缓存的parse_result生成AI总结")
 
-                # 重新解析获取完整的DownloadResult
-                download_result, parse_result, platform, _, error_msg = await _adapter.parse_url(
-                    original_url,
-                    user_id=query.from_user.id,
-                    group_id=None
-                )
-
-                if not download_result and not parse_result:
-                    await query.answer("❌ 重新解析失败，无法生成总结", show_alert=True)
+                # 从缓存中重建parse_result对象
+                parse_result_dict = cache_data.get('parse_result')
+                if not parse_result_dict:
+                    await query.answer("❌ 缓存数据不完整，无法生成总结", show_alert=True)
                     return
 
-                # 生成AI总结（传递ParseResult和DownloadResult）
+                # 重建简化的parse_result对象（只包含文本和图片URL）
+                from types import SimpleNamespace
+                parse_result = SimpleNamespace(
+                    title=parse_result_dict.get('title', ''),
+                    content=parse_result_dict.get('content', ''),
+                    platform=parse_result_dict.get('platform', ''),
+                    media=[]
+                )
+
+                # 重建media列表（包含图片URL）
+                media_list = parse_result_dict.get('media', [])
+                for m in media_list:
+                    media_obj = SimpleNamespace(
+                        url=m.get('url', ''),
+                        width=m.get('width', 0),
+                        height=m.get('height', 0),
+                        type=m.get('type', '')
+                    )
+                    parse_result.media.append(media_obj)
+
+                logger.info(f"📍 重建parse_result: title={parse_result.title}, media_count={len(parse_result.media)}")
+
+                # 生成AI总结（传递parse_result，不需要download_result）
+                # AI总结会从图片URL下载图片（使用代理）
                 logger.info(f"📍 准备调用 generate_ai_summary")
-                ai_summary = await _adapter.generate_ai_summary(parse_result, download_result)
+                ai_summary = await _adapter.generate_ai_summary(parse_result, download_result=None)
                 logger.info(f"📍 generate_ai_summary 调用完成")
 
                 if not ai_summary:

@@ -507,12 +507,36 @@ async def _handle_single_parse(
 
         # 缓存解析数据到Redis（用于AI总结回调）
         if _adapter.config and _adapter.config.enable_ai_summary and _adapter.cache_manager:
+            # 序列化 parse_result（保存图片URL等信息）
+            parse_result_dict = None
+            if parse_result:
+                parse_result_dict = {
+                    'type': type(parse_result).__name__,
+                    'title': getattr(parse_result, 'title', ''),
+                    'content': getattr(parse_result, 'content', ''),
+                    'platform': getattr(parse_result, 'platform', platform),
+                }
+                # 保存媒体URL（图片/视频）
+                if hasattr(parse_result, 'media') and parse_result.media:
+                    media = parse_result.media
+                    media_list = media if isinstance(media, list) else [media]
+                    parse_result_dict['media'] = []
+                    for m in media_list:
+                        if hasattr(m, 'url'):
+                            parse_result_dict['media'].append({
+                                'type': type(m).__name__,
+                                'url': m.url,
+                                'width': getattr(m, 'width', 0),
+                                'height': getattr(m, 'height', 0),
+                            })
+
             cache_data = {
                 'url': formatted['url'],
                 'caption': caption,
                 'title': formatted.get('title', ''),
                 'content': formatted.get('content', ''),
-                'platform': platform
+                'platform': platform,
+                'parse_result': parse_result_dict  # 缓存序列化的parse_result
             }
             await _adapter.cache_manager.set(
                 f"summary:{url_hash}",
@@ -520,7 +544,7 @@ async def _handle_single_parse(
                 ttl=86400,
                 subdirectory="social_parser"
             )
-            logger.info(f"✅ 已缓存解析数据: cache:social_parser:summary:{url_hash}")
+            logger.info(f"✅ 已缓存解析数据（含parse_result）: cache:social_parser:summary:{url_hash}")
 
         # 发送媒体（带按钮）
         reply_params = ReplyParameters(message_id=reply_to_message_id) if reply_to_message_id else None

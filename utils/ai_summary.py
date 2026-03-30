@@ -84,34 +84,50 @@ class AISummarizer:
             Summary text or None on failure
         """
         try:
-            # Collect media files from download_result
+            # Collect media files from download_result OR parse_result
             media_list = []
             if download_result and download_result.media:
+                # 优先使用download_result（本地文件）
                 media = download_result.media
                 media_list = media if isinstance(media, list) else [media]
+                logger.info(f"[AI Summary] 使用download_result中的{len(media_list)}个媒体文件")
+            elif parse_result and hasattr(parse_result, 'media') and parse_result.media:
+                # 降级：使用parse_result中的URL（需要下载）
+                media = parse_result.media
+                media_list = media if isinstance(media, list) else [media]
+                logger.info(f"[AI Summary] 使用parse_result中的{len(media_list)}个媒体URL")
 
             # Process videos (transcription) and images (base64)
             subtitles = ""
             image_tasks = []
 
             for item in media_list:
-                if _is_video(item):
-                    subtitles = await self._video_to_subtitles(item.path)
-                    if not subtitles:
-                        # Fallback: extract screenshot from video
-                        try:
-                            img_path = await asyncio.to_thread(_video_to_screenshot, item.path)
-                            image_tasks.append(_image_to_base64(img_path))
-                        except Exception as e:
-                            logger.warning(f"Video screenshot extraction failed: {e}")
-                elif _is_image(item):
-                    image_tasks.append(_image_to_base64(item.path))
+                # 检查是否是本地文件（有path属性）还是URL（有url属性）
+                if hasattr(item, 'path') and item.path:
+                    # 本地文件路径
+                    if _is_video(item):
+                        subtitles = await self._video_to_subtitles(item.path)
+                        if not subtitles:
+                            # Fallback: extract screenshot from video
+                            try:
+                                img_path = await asyncio.to_thread(_video_to_screenshot, item.path)
+                                image_tasks.append(_image_to_base64(img_path))
+                            except Exception as e:
+                                logger.warning(f"Video screenshot extraction failed: {e}")
+                    elif _is_image(item):
+                        image_tasks.append(_image_to_base64(item.path))
+                elif hasattr(item, 'url') and item.url:
+                    # URL（需要下载）
+                    if _is_image(item) or getattr(item, 'type', '') in ('ImageRef', 'Image'):
+                        logger.info(f"[AI Summary] 从URL下载图片: {item.url[:80]}...")
+                        image_tasks.append(_download_and_encode_image(item.url))
 
             # Gather image base64 results
             image_results = []
             if image_tasks:
                 results = await asyncio.gather(*image_tasks, return_exceptions=True)
                 image_results = [r for r in results if isinstance(r, str)]
+                logger.info(f"[AI Summary] 成功处理{len(image_results)}张图片")
 
             # Build message content
             text_parts = []
@@ -284,7 +300,7 @@ async def _image_to_base64(image_path: str, max_size: int = 512, quality: int = 
 
             # Resize if larger than max_size (512px matches OpenAI detail:low)
             if img.width > max_size or img.height > max_size:
-                img.thumbnail((max_size, max_size), Image.LANCZOS)
+                img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
 
             buf = io.BytesIO()
             img.save(buf, format="JPEG", quality=quality, optimize=True)
@@ -292,3 +308,60 @@ async def _image_to_base64(image_path: str, max_size: int = 512, quality: int = 
 
     data = await asyncio.to_thread(_compress)
     return base64.b64encode(data).decode("utf-8")
+
+
+async def _download_and_encode_image(image_url: str, max_size: int = 512, quality: int = 70) -> str:
+    """
+    Download image from URL and convert to compressed base64 string for AI consumption.
+    Uses proxy for XHS images (小红书图片需要大陆代理).
+    """
+    import httpx
+    import os
+
+    # 检测是否是小红书图片（需要大陆代理）
+    is_xhs_image = 'xhscdn.com' in image_url or 'xiaohongshu.com' in image_url
+
+    # 获取代理配置
+    proxy = None
+    if is_xhs_image:
+        # 小红书图片：使用专门的代理（XHS_IMAGE_PROXY 环境变量）
+        proxy = os.getenv('XHS_IMAGE_PROXY')
+        if proxy:
+            logger.info(f"[AI Summary] 小红书图片使用大陆代理: {proxy[:30]}...")
+        else:
+            logger.warning(f"[AI Summary] 小红书图片需要大陆代理，但未配置 XHS_IMAGE_PROXY")
+
+    try:
+        # 下载图片
+        async with httpx.AsyncClient(proxy=proxy, timeout=30.0, follow_redirects=True) as client:
+            response = await client.get(image_url)
+            response.raise_for_status()
+            image_data = response.content
+
+        logger.info(f"[AI Summary] 图片下载成功: {len(image_data)} bytes")
+
+        # 压缩并转换为base64
+        def _compress():
+            img = Image.open(io.BytesIO(image_data))
+
+            # Strip EXIF metadata by converting mode
+            if img.mode in ("RGBA", "P", "LA"):
+                img = img.convert("RGB")
+            elif img.mode != "RGB":
+                img = img.convert("RGB")
+
+            # Resize if larger than max_size (512px matches OpenAI detail:low)
+            if img.width > max_size or img.height > max_size:
+                img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=quality, optimize=True)
+            return buf.getvalue()
+
+        compressed_data = await asyncio.to_thread(_compress)
+        return base64.b64encode(compressed_data).decode("utf-8")
+
+    except Exception as e:
+        logger.error(f"[AI Summary] 图片下载失败: {image_url[:80]}... - {e}")
+        raise
+
