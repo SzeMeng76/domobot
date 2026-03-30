@@ -1995,6 +1995,117 @@ async def list_points_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             await _schedule_deletion(context, chat.id, sent_message.message_id, 10)
 
 
+async def group_stat_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    群组DC分布统计命令
+    使用方法: /gstat
+    统计群组成员的数据中心(DC)分布情况
+    """
+    message = update.effective_message
+    chat = update.effective_chat
+    user = update.effective_user
+
+    if not message or not chat or not user:
+        return
+
+    # 只在群组中可用
+    if chat.type not in ["group", "supergroup"]:
+        await message.reply_text("❌ 此命令只能在群组中使用")
+        return
+
+    # 立即删除用户命令
+    await delete_user_command(context, chat.id, message.message_id)
+
+    # 发送处理中消息
+    status_msg = await send_search_result(context, chat.id, "📊 正在统计群组成员DC分布，请稍候...")
+
+    try:
+        # 获取 Pyrogram helper
+        pyrogram_helper = context.bot_data.get("pyrogram_helper")
+        if not pyrogram_helper or not pyrogram_helper.is_started:
+            await context.bot.edit_message_text(
+                chat_id=chat.id,
+                message_id=status_msg.message_id,
+                text="❌ Pyrogram 未初始化，无法获取DC信息"
+            )
+            from utils.message_manager import _schedule_deletion
+            await _schedule_deletion(context, chat.id, status_msg.message_id, 10)
+            return
+
+        # 统计DC分布
+        dc_stats = {}  # {dc_id: count}
+        total_members = 0
+        members_with_dc = 0
+
+        # DC位置映射
+        dc_locations = {
+            1: "🇺🇸 美国-迈阿密",
+            2: "🇳🇱 荷兰-阿姆斯特丹",
+            3: "🇺🇸 美国-迈阿密",
+            4: "🇳🇱 荷兰-阿姆斯特丹",
+            5: "🇸🇬 新加坡"
+        }
+
+        # 遍历群成员
+        async for member in pyrogram_helper.client.get_chat_members(chat.id):
+            total_members += 1
+
+            if member.user and member.user.dc_id:
+                dc_id = member.user.dc_id
+                dc_stats[dc_id] = dc_stats.get(dc_id, 0) + 1
+                members_with_dc += 1
+
+        # 构建结果消息
+        if not dc_stats:
+            result_text = "📊 **群组DC分布统计**\n\n"
+            result_text += f"👥 总成员数: {total_members}\n"
+            result_text += f"❌ 无法获取任何成员的DC信息\n\n"
+            result_text += "💡 *提示: 只有设置了公开头像的用户才能获取DC信息*"
+        else:
+            result_text = "📊 **群组DC分布统计**\n\n"
+            result_text += f"👥 总成员数: {total_members}\n"
+            result_text += f"✅ 可统计: {members_with_dc} ({members_with_dc * 100 / total_members:.1f}%)\n\n"
+
+            # 按DC ID排序
+            sorted_dcs = sorted(dc_stats.items(), key=lambda x: x[1], reverse=True)
+
+            result_text += "**DC分布:**\n"
+            for dc_id, count in sorted_dcs:
+                percentage = count * 100 / members_with_dc
+                location = dc_locations.get(dc_id, "未知位置")
+                bar_length = int(percentage / 5)  # 每5%一个方块
+                bar = "█" * bar_length + "░" * (20 - bar_length)
+                result_text += f"\nDC{dc_id} {location}\n"
+                result_text += f"`{bar}` {count}人 ({percentage:.1f}%)\n"
+
+            result_text += f"\n💡 *提示: 只有设置了公开头像的用户才能统计DC信息*"
+
+        # 更新消息
+        await context.bot.edit_message_text(
+            chat_id=chat.id,
+            message_id=status_msg.message_id,
+            text=result_text,
+            parse_mode="Markdown"
+        )
+
+        # 调度删除
+        from utils.message_manager import _schedule_deletion
+        await _schedule_deletion(context, chat.id, status_msg.message_id, 120)
+
+    except Exception as e:
+        logger.error(f"群组DC统计失败: {e}", exc_info=True)
+        try:
+            await context.bot.edit_message_text(
+                chat_id=chat.id,
+                message_id=status_msg.message_id,
+                text=f"❌ 统计失败: {str(e)}"
+            )
+            from utils.message_manager import _schedule_deletion
+            await _schedule_deletion(context, chat.id, status_msg.message_id, 10)
+        except Exception:
+            pass
+
+
 # 注册命令
 command_factory.register_command("id", get_id_command, permission=Permission.NONE, description="获取用户或群组的ID")
 command_factory.register_command("when", when_command, permission=Permission.NONE, description="查询用户详细信息（支持数字ID、用户名或回复消息）")
@@ -2003,3 +2114,4 @@ command_factory.register_command("cleanid", clean_id_command, permission=Permiss
 command_factory.register_command("addpoint", add_point_command, permission=Permission.ADMIN, description="添加已知数据点（管理员专用）")
 command_factory.register_command("removepoint", remove_point_command, permission=Permission.ADMIN, description="删除已知数据点（管理员专用）")
 command_factory.register_command("listpoints", list_points_command, permission=Permission.ADMIN, description="列出已知数据点（管理员专用）")
+command_factory.register_command("gstat", group_stat_command, permission=Permission.NONE, description="统计群组成员DC分布")
