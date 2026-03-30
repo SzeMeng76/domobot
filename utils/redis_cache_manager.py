@@ -94,6 +94,7 @@ class RedisCacheManager:
             "inline_parse": 86400 * 7,  # 7天，inline parse file_id缓存
             "social_parser": self.config.parser_cache_duration,  # 社交媒体解析缓存
             "reddit": self.config.reddit_cache_duration,  # Reddit缓存
+            "system": self.config.gstat_cache_duration,  # 系统命令缓存（/gstat等）
         }
 
         # 对于搜索结果特殊处理

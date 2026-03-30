@@ -383,6 +383,7 @@ async def setup_application(application: Application, config) -> None:
     memes.set_dependencies(cache_manager, httpx_client)
     finance.set_dependencies(cache_manager, httpx_client)
     map.set_dependencies(cache_manager, httpx_client)
+    system_commands.set_dependencies(cache_manager)
 
     # 设置 Map Nearby callback handler 依赖
     from handlers import map_nearby_callback_handler

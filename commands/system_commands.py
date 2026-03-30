@@ -15,6 +15,15 @@ from utils.permissions import Permission
 
 logger = logging.getLogger(__name__)
 
+# 全局依赖
+cache_manager = None
+
+
+def set_dependencies(cm):
+    """设置依赖"""
+    global cache_manager
+    cache_manager = cm
+
 
 def format_user_status(status):
     """
@@ -2016,6 +2025,21 @@ async def group_stat_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     # 立即删除用户命令
     await delete_user_command(context, chat.id, message.message_id)
 
+    # 检查缓存（TTL由redis_cache_manager根据subdirectory自动获取）
+    cache_key = f"gstat:{chat.id}"
+
+    if cache_manager:
+        cached_result = await cache_manager.get(cache_key, subdirectory="system")
+        if cached_result:
+            # 使用缓存结果
+            result_text = cached_result.get("result_text", "")
+            if result_text:
+                sent_msg = await send_search_result(context, chat.id, result_text, parse_mode="Markdown")
+                from utils.message_manager import _schedule_deletion
+                if sent_msg:
+                    await _schedule_deletion(context, chat.id, sent_msg.message_id, 120)
+                return
+
     # 发送处理中消息
     status_msg = await send_search_result(context, chat.id, "📊 正在统计群组成员DC分布，请稍候...")
 
@@ -2079,6 +2103,12 @@ async def group_stat_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 result_text += f"`{bar}` {count}人 ({percentage:.1f}%)\n"
 
             result_text += f"\n💡 *提示: 只有设置了公开头像的用户才能统计DC信息*"
+
+        # 缓存结果（TTL由redis_cache_manager根据subdirectory自动获取）
+        if cache_manager:
+            cache_data = {"result_text": result_text}
+            await cache_manager.set(cache_key, cache_data, subdirectory="system")
+            logger.info(f"✅ 已缓存群组 {chat.id} 的DC统计结果")
 
         # 更新消息
         await context.bot.edit_message_text(

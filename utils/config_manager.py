@@ -110,6 +110,7 @@ class BotConfig:
         self.ytmusic_chart_cache_duration = 1800  # 30分钟，YouTube Music榜单缓存
         self.ytmusic_search_cache_duration = 3600  # 1小时，YouTube Music搜索缓存
         self.ytmusic_lyric_cache_duration = 86400  # 24小时，YouTube Music歌词缓存
+        self.gstat_cache_duration = 600  # 10分钟，群组DC统计缓存
 
         # 网易云音乐配置
         self.music_u_cookie: str = ""  # 网易云 MUSIC_U cookie
@@ -394,6 +395,7 @@ class ConfigManager:
         self.config.ytmusic_chart_cache_duration = get_int_env("YTMUSIC_CHART_CACHE_DURATION", "1800")
         self.config.ytmusic_search_cache_duration = get_int_env("YTMUSIC_SEARCH_CACHE_DURATION", "3600")
         self.config.ytmusic_lyric_cache_duration = get_int_env("YTMUSIC_LYRIC_CACHE_DURATION", "86400")
+        self.config.gstat_cache_duration = get_int_env("GSTAT_CACHE_DURATION", "600")
         self.config.music_download_timeout = get_int_env("MUSIC_DOWNLOAD_TIMEOUT", "60")
 
         # API配置

@@ -48,6 +48,7 @@ CACHE_SERVICES = {
     'ytmusic': 'YouTube Music缓存',
     'reddit': 'Reddit缓存',
     'abuseipdb': 'IP信誉检测缓存',
+    'system': '系统命令缓存（/gstat等）',
 }
 
 async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
@@ -186,6 +187,9 @@ async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
                 prefixes = ["music:file:", "music:search:", "music:chart:", "music:lyric:"]
                 for prefix in prefixes:
                     await cache_manager.clear_cache(subdirectory="music", key_prefix=prefix)
+            elif service == 'system':
+                # 清理系统命令缓存（如 /gstat 的群组DC统计）
+                await cache_manager.clear_cache(subdirectory="system")
             else:
                 await cache_manager.clear_cache(subdirectory=service)
             
