@@ -44,6 +44,29 @@ async def auto_parse_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if not message:
         return
 
+    # 去重：检查这条消息是否已经被处理过
+    message_id = message.message_id
+    chat_id = update.effective_chat.id
+
+    # 使用 chat_data 存储已处理的消息ID（避免重复处理）
+    if 'processed_messages' not in context.chat_data:
+        context.chat_data['processed_messages'] = set()
+
+    # 如果已处理过，直接返回
+    if message_id in context.chat_data['processed_messages']:
+        logger.debug(f"消息 {message_id} 已被处理过，跳过")
+        return
+
+    # 标记为已处理
+    context.chat_data['processed_messages'].add(message_id)
+
+    # 清理旧的消息ID（只保留最近100条）
+    if len(context.chat_data['processed_messages']) > 100:
+        # 转换为列表，删除最旧的50条
+        old_ids = list(context.chat_data['processed_messages'])[:50]
+        for old_id in old_ids:
+            context.chat_data['processed_messages'].discard(old_id)
+
     # 获取消息文本
     text = message.text or message.caption
     if not text:
@@ -101,7 +124,8 @@ async def _auto_parse_single(url: str, user_id: int, group_id: int, message, con
     try:
         result, parse_result, platform, parse_time, error_msg = await _adapter.parse_url(url, user_id, group_id)
 
-        if not result:
+        # 检查是否解析失败（parse_result 为 None 表示解析失败）
+        if not parse_result:
             if error_msg:
                 error_text = f"**❌ 自动解析失败:**\n```\n{error_msg}\n```"
             else:
@@ -114,7 +138,10 @@ async def _auto_parse_single(url: str, user_id: int, group_id: int, message, con
             return
 
         # 更新状态
-        await status_msg.edit_text("📥 下载中...")
+        if result:
+            await status_msg.edit_text("📥 下载中...")
+        else:
+            await status_msg.edit_text("📥 解析成功，准备发送...")
 
         # 格式化结果
         formatted = await _adapter.format_result(result, platform, parse_result=parse_result)

@@ -441,7 +441,8 @@ async def _handle_single_parse(
     try:
         result, parse_result, platform, parse_time, error_msg = await _adapter.parse_url(url, user_id, group_id)
 
-        if not result:
+        # 检查是否解析失败（parse_result 为 None 表示解析失败）
+        if not parse_result:
             if error_msg:
                 error_text = f"**❌ 解析失败:**\n```\n{error_msg}\n```"
             else:
@@ -450,7 +451,10 @@ async def _handle_single_parse(
             return
 
         # 更新状态
-        await _safe_edit_status("📥 下载中...")
+        if result:
+            await _safe_edit_status("📥 下载中...")
+        else:
+            await _safe_edit_status("📥 解析成功，准备发送...")
 
         # 格式化结果（result 现在是 DownloadResult）
         formatted = await _adapter.format_result(result, platform, parse_result=parse_result)

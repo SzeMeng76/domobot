@@ -382,9 +382,15 @@ class ParseHubAdapter:
             parse_time = time.time() - start_time
 
             # 设置 raw_url（原始URL，用于显示）
-            if result and not hasattr(result, 'raw_url'):
-                result.raw_url = url
-                logger.info(f"✅ 设置 raw_url: {url[:80]}...")
+            # ParseHub 会自动设置 raw_url 为跳转后的 URL，但我们需要保留原始短链接
+            if result:
+                # 对于小红书短链接，强制使用原始 URL（永久有效）
+                if 'xhslink.com' in url:
+                    result.raw_url = url
+                    logger.info(f"✅ 强制设置 raw_url 为短链接: {url[:80]}...")
+                elif not result.raw_url:
+                    result.raw_url = url
+                    logger.info(f"✅ 设置 raw_url: {url[:80]}...")
 
             # 注意：DownloadResult不能序列化，不缓存到Redis
             # ParseHub自己有内存缓存机制处理重复URL
