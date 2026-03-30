@@ -159,7 +159,12 @@ class AISummarizer:
             ]
 
             # Call LLM
-            client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url)
+            import httpx
+            client = AsyncOpenAI(
+                api_key=self.api_key,
+                base_url=self.base_url,
+                timeout=httpx.Timeout(60.0, connect=10.0)  # 60s总超时，10s连接超时
+            )
             stream = await client.chat.completions.create(
                 model=self.model,
                 messages=messages,
