@@ -2041,7 +2041,7 @@ async def group_stat_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         dc_locations = {
             1: "🇺🇸 美国-迈阿密",
             2: "🇳🇱 荷兰-阿姆斯特丹",
-            3: "🇺🇸 美国-迈阿密",
+            3: "🇺🇸 美国-华盛顿",
             4: "🇳🇱 荷兰-阿姆斯特丹",
             5: "🇸🇬 新加坡"
         }

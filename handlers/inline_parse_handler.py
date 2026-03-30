@@ -1065,12 +1065,13 @@ async def _handle_video_inline(
                 # 上传失败 → 保留缓存以便重试
             await _update_status(plain_caption)
 
-        # 清理临时文件
-        try:
-            import shutil
-            shutil.rmtree(download_result.output_dir, ignore_errors=True)
-        except Exception:
-            pass
+        # 不立即清理临时文件，保留供 AI 总结使用
+        # download_result 已缓存到内存，文件会在系统定期清理时删除
+        # try:
+        #     import shutil
+        #     shutil.rmtree(download_result.output_dir, ignore_errors=True)
+        # except Exception:
+        #     pass
 
     except Exception as e:
         logger.error(f"视频 inline 处理失败: {e}", exc_info=True)
@@ -1213,12 +1214,13 @@ async def _handle_image_inline(
                     parse_mode=ParseMode.MARKDOWN_V2
                 )
 
-        # 清理临时文件
-        try:
-            import shutil
-            shutil.rmtree(download_result.output_dir, ignore_errors=True)
-        except Exception:
-            pass
+        # 不立即清理临时文件，保留供 AI 总结使用
+        # download_result 已缓存到内存，文件会在系统定期清理时删除
+        # try:
+        #     import shutil
+        #     shutil.rmtree(download_result.output_dir, ignore_errors=True)
+        # except Exception:
+        #     pass
 
     except Exception as e:
         logger.error(f"图片 inline 处理失败: {e}", exc_info=True)
