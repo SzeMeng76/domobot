@@ -106,6 +106,35 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
             # 检查 adapter 是否可用
             if not _adapter:
+                # 恢复原始内容
+                try:
+                    if is_inline:
+                        try:
+                            await context.bot.edit_message_text(
+                                inline_message_id=inline_message_id,
+                                text="❌ 解析功能未初始化"
+                            )
+                        except Exception:
+                            await context.bot.edit_message_caption(
+                                inline_message_id=inline_message_id,
+                                caption="❌ 解析功能未初始化"
+                            )
+                    elif current_caption:
+                        await query.edit_message_caption(
+                            caption=current_caption,
+                            parse_mode="Markdown",
+                            reply_markup=query.message.reply_markup
+                        )
+                    else:
+                        await query.edit_message_text(
+                            text=current_caption,
+                            parse_mode="Markdown",
+                            reply_markup=query.message.reply_markup,
+                            link_preview_options=LinkPreviewOptions(is_disabled=True)
+                        )
+                except Exception:
+                    pass
+
                 await query.answer("❌ 解析功能未初始化", show_alert=True)
                 return
 
@@ -116,6 +145,39 @@ async def ai_summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
             if not cache_data:
                 logger.error(f"❌ 缓存已失效: cache:social_parser:summary:{url_hash}")
+
+                # 恢复原始内容（移除"生成中"状态）
+                try:
+                    if is_inline:
+                        # Inline 消息无法恢复，只能显示错误
+                        try:
+                            await context.bot.edit_message_text(
+                                inline_message_id=inline_message_id,
+                                text="❌ 缓存已失效，请重新发送链接"
+                            )
+                        except Exception:
+                            await context.bot.edit_message_caption(
+                                inline_message_id=inline_message_id,
+                                caption="❌ 缓存已失效，请重新发送链接"
+                            )
+                    elif current_caption:
+                        # 恢复原始 caption
+                        await query.edit_message_caption(
+                            caption=current_caption,
+                            parse_mode="Markdown",
+                            reply_markup=query.message.reply_markup
+                        )
+                    else:
+                        # 恢复原始 text
+                        await query.edit_message_text(
+                            text=current_caption,
+                            parse_mode="Markdown",
+                            reply_markup=query.message.reply_markup,
+                            link_preview_options=LinkPreviewOptions(is_disabled=True)
+                        )
+                except Exception as restore_error:
+                    logger.warning(f"恢复原始内容失败: {restore_error}")
+
                 await query.answer("❌ 缓存已失效，请重新发送链接", show_alert=True)
                 return
 
