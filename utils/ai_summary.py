@@ -290,12 +290,24 @@ class AISummarizer:
 
 def _is_video(media) -> bool:
     """Check if media is a video type"""
+    # 优先检查文件扩展名
+    if hasattr(media, 'path') and media.path:
+        ext = str(media.path).lower().split('.')[-1]
+        return ext in ('mp4', 'mov', 'avi', 'mkv', 'flv', 'wmv', 'webm', 'm4v')
+
+    # 降级：检查类型名称
     type_name = type(media).__name__
     return type_name in ("Video", "VideoRef", "VideoFile")
 
 
 def _is_image(media) -> bool:
     """Check if media is an image type"""
+    # 优先检查文件扩展名
+    if hasattr(media, 'path') and media.path:
+        ext = str(media.path).lower().split('.')[-1]
+        return ext in ('jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic', 'heif')
+
+    # 降级：检查类型名称
     type_name = type(media).__name__
     return type_name in ("Image", "ImageRef", "ImageFile", "LivePhoto")
 
