@@ -730,75 +730,18 @@ async def handle_warp_query(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             proxy="socks5://warp:1080",
             timeout=15.0
         ) as proxy_client:
-            # 查询 ip-api.com (免费，无需token，限制更宽松)
-            response = await proxy_client.get("http://ip-api.com/json/?fields=status,message,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,query")
+            # 查询 ip-api.com 获取 WARP IP
+            response = await proxy_client.get("http://ip-api.com/json/?fields=query")
             response.raise_for_status()
             data = response.json()
 
-            if data.get("status") != "success":
-                raise Exception(f"IP查询失败: {data.get('message', 'Unknown error')}")
-
             warp_ip = data.get("query")
+            if not warp_ip:
+                raise Exception("无法获取 WARP IP 地址")
 
-            # 查询 ipapi.is 获取更详细信息
-            ipapi_data = None
-            if warp_ip:
-                try:
-                    ipapi_response = await proxy_client.get(f"https://api.ipapi.is/?q={warp_ip}")
-                    if ipapi_response.status_code == 200:
-                        ipapi_data = ipapi_response.json()
-                except Exception:
-                    pass  # ipapi.is 失败不影响主要功能
-
-        # 构建结果 (使用 HTML 格式，避免 Markdown 转义问题)
-        from html import escape as html_escape
-        result_text = "🌐 <b>WARP 出口 IP 信息</b>\n\n"
-        result_text += f"📍 <b>IP 地址</b>: <code>{html_escape(data.get('query', 'N/A'))}</code>\n"
-        result_text += f"🏙️ <b>城市</b>: {html_escape(data.get('city', 'N/A'))}\n"
-        result_text += f"🌍 <b>国家</b>: {html_escape(data.get('country', 'N/A'))} ({html_escape(data.get('countryCode', 'N/A'))})\n"
-        result_text += f"📌 <b>地区</b>: {html_escape(data.get('regionName', 'N/A'))}\n"
-        result_text += f"🏢 <b>ISP</b>: {html_escape(data.get('isp', 'N/A'))}\n"
-        result_text += f"🏢 <b>组织</b>: {html_escape(data.get('org', 'N/A'))}\n"
-        result_text += f"🔢 <b>AS</b>: {html_escape(data.get('as', 'N/A'))}\n"
-
-        if data.get('lat') and data.get('lon'):
-            result_text += f"🗺️ <b>坐标</b>: {data.get('lat')}, {data.get('lon')}\n"
-
-        if data.get('timezone'):
-            result_text += f"🕐 <b>时区</b>: {html_escape(data.get('timezone', 'N/A'))}\n"
-
-        # 添加 ipapi.is 的详细信息
-        if ipapi_data:
-            company = ipapi_data.get('company', {})
-            asn = ipapi_data.get('asn', {})
-
-            result_text += f"\n<b>详细信息</b>:\n"
-            result_text += f"🏢 <b>公司</b>: {html_escape(company.get('name', 'N/A'))}\n"
-            result_text += f"🔢 <b>ASN</b>: AS{asn.get('asn', 'N/A')} ({html_escape(asn.get('org', 'N/A'))})\n"
-
-            # IP 类型
-            ip_type = []
-            if ipapi_data.get('is_datacenter'):
-                ip_type.append("数据中心")
-            if ipapi_data.get('is_proxy'):
-                ip_type.append("代理")
-            if ipapi_data.get('is_vpn'):
-                ip_type.append("VPN")
-            if ipapi_data.get('is_tor'):
-                ip_type.append("Tor")
-            if ipapi_data.get('is_mobile'):
-                ip_type.append("移动网络")
-
-            if ip_type:
-                result_text += f"🏷️ <b>类型</b>: {', '.join(ip_type)}\n"
-            else:
-                result_text += f"🏷️ <b>类型</b>: 住宅/普通 IP\n"
-
-        result_text += f"\n💡 <b>提示</b>: 这是你的程序通过 WARP 访问外部网站时使用的 IP"
-
-        await status_msg.edit_text(result_text, parse_mode="HTML")
-        await _schedule_deletion(context, chat_id, status_msg.message_id, config.auto_delete_delay)
-        logger.info(f"✅ WARP IP 查询完成: {data.get('query')}")
+        # 使用 handle_ip_query 获取完整的 IP 信息（包括风控、AbuseIPDB 等）
+        await handle_ip_query(update, context, warp_ip, domain=None, status_msg=status_msg)
+        logger.info(f"✅ WARP IP 查询完成: {warp_ip}")
 
     except Exception as e:
         logger.error(f"WARP IP 查询失败: {e}", exc_info=True)
