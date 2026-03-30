@@ -947,9 +947,11 @@ async def _handle_video_inline(
 
         # 缓存 download_result 到内存（用于AI总结）
         from handlers.ai_summary_callback_handler import cache_download_result
-        url_hash = get_url_hash(url)
+        # 使用 display_url 生成 hash，与 AI 总结按钮的 callback_data 保持一致
+        display_url = getattr(parse_result, 'raw_url', url) or url
+        url_hash = get_url_hash(display_url)
         cache_download_result(url_hash, download_result)
-        logger.info(f"[Inline Parse] 已缓存 download_result 到内存: {url_hash}")
+        logger.info(f"[Inline Parse] 已缓存 download_result 到内存: {url_hash} (display_url: {display_url[:50]}...)")
 
         media = download_result.media
         if isinstance(media, list):
@@ -1114,9 +1116,11 @@ async def _handle_image_inline(
 
         # 缓存 download_result 到内存（用于AI总结）
         from handlers.ai_summary_callback_handler import cache_download_result
-        url_hash = get_url_hash(url)
+        # 使用 display_url 生成 hash，与 AI 总结按钮的 callback_data 保持一致
+        display_url = getattr(parse_result, 'raw_url', url) or url
+        url_hash = get_url_hash(display_url)
         cache_download_result(url_hash, download_result)
-        logger.info(f"[Inline Parse] 已缓存 download_result 到内存: {url_hash}")
+        logger.info(f"[Inline Parse] 已缓存 download_result 到内存: {url_hash} (display_url: {display_url[:50]}...)")
 
         media_list = download_result.media if isinstance(download_result.media, list) else [download_result.media]
         media_list = [m for m in media_list if m and hasattr(m, 'path') and m.path]
