@@ -105,7 +105,8 @@ class AISummarizer:
                 # 检查是否是本地文件（有path属性）还是URL（有url属性）
                 if hasattr(item, 'path') and item.path:
                     # 本地文件路径
-                    logger.info(f"[AI Summary] 处理本地文件: {item.path}")
+                    item_type = type(item).__name__
+                    logger.info(f"[AI Summary] 处理本地文件: {item.path}, 类型: {item_type}")
                     if _is_video(item):
                         subtitles = await self._video_to_subtitles(item.path)
                         if not subtitles:
@@ -118,6 +119,8 @@ class AISummarizer:
                     elif _is_image(item):
                         logger.info(f"[AI Summary] 添加图片任务: {item.path}")
                         image_tasks.append(_image_to_base64(item.path))
+                    else:
+                        logger.warning(f"[AI Summary] 未知媒体类型: {item_type}, 路径: {item.path}")
                 elif hasattr(item, 'url') and item.url:
                     # URL（需要下载）
                     if _is_image(item) or getattr(item, 'type', '') in ('ImageRef', 'Image'):
