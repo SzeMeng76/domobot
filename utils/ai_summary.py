@@ -295,9 +295,9 @@ def _is_video(media) -> bool:
         ext = str(media.path).lower().split('.')[-1]
         return ext in ('mp4', 'mov', 'avi', 'mkv', 'flv', 'wmv', 'webm', 'm4v')
 
-    # 降级：检查类型名称
+    # 降级：检查类型名称（ParseHub 实际类型）
     type_name = type(media).__name__
-    return type_name in ("Video", "VideoRef", "VideoFile")
+    return type_name in ("VideoFile", "VideoRef", "AniFile", "AniRef")
 
 
 def _is_image(media) -> bool:
@@ -307,9 +307,9 @@ def _is_image(media) -> bool:
         ext = str(media.path).lower().split('.')[-1]
         return ext in ('jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic', 'heif')
 
-    # 降级：检查类型名称
+    # 降级：检查类型名称（ParseHub 实际类型）
     type_name = type(media).__name__
-    return type_name in ("Image", "ImageRef", "ImageFile", "LivePhoto")
+    return type_name in ("ImageFile", "ImageRef", "LivePhotoFile", "LivePhotoRef", "MediaFile", "MediaRef")
 
 
 def _video_to_screenshot(video_path: str) -> str:
