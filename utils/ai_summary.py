@@ -105,6 +105,7 @@ class AISummarizer:
                 # 检查是否是本地文件（有path属性）还是URL（有url属性）
                 if hasattr(item, 'path') and item.path:
                     # 本地文件路径
+                    logger.info(f"[AI Summary] 处理本地文件: {item.path}")
                     if _is_video(item):
                         subtitles = await self._video_to_subtitles(item.path)
                         if not subtitles:
@@ -115,6 +116,7 @@ class AISummarizer:
                             except Exception as e:
                                 logger.warning(f"Video screenshot extraction failed: {e}")
                     elif _is_image(item):
+                        logger.info(f"[AI Summary] 添加图片任务: {item.path}")
                         image_tasks.append(_image_to_base64(item.path))
                 elif hasattr(item, 'url') and item.url:
                     # URL（需要下载）
@@ -125,9 +127,15 @@ class AISummarizer:
             # Gather image base64 results
             image_results = []
             if image_tasks:
+                logger.info(f"[AI Summary] 开始处理 {len(image_tasks)} 个图片任务")
                 results = await asyncio.gather(*image_tasks, return_exceptions=True)
-                image_results = [r for r in results if isinstance(r, str)]
-                logger.info(f"[AI Summary] 成功处理{len(image_results)}张图片")
+                for i, r in enumerate(results):
+                    if isinstance(r, str):
+                        image_results.append(r)
+                        logger.info(f"[AI Summary] 图片任务 {i} 成功，base64长度: {len(r)}")
+                    else:
+                        logger.error(f"[AI Summary] 图片任务 {i} 失败: {r}")
+                logger.info(f"[AI Summary] 最终成功处理 {len(image_results)} 张图片")
 
             # Build message content
             text_parts = []
@@ -142,7 +150,8 @@ class AISummarizer:
                 logger.warning("No content to summarize")
                 return None
 
-            content = [{"type": "text", "text": "\n".join(text_parts)}]
+            from typing import Any, Dict, List
+            content: List[Dict[str, Any]] = [{"type": "text", "text": "\n".join(text_parts)}]
             for img_b64 in image_results:
                 content.append({
                     "type": "image_url",
