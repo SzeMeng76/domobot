@@ -514,6 +514,7 @@ async def _handle_single_parse(
             # 序列化 parse_result（保存图片URL等信息）
             parse_result_dict = None
             if parse_result:
+                logger.info(f"📍 parse_result存在: type={type(parse_result).__name__}, title={getattr(parse_result, 'title', 'N/A')}")
                 parse_result_dict = {
                     'type': type(parse_result).__name__,
                     'title': getattr(parse_result, 'title', ''),
@@ -533,6 +534,11 @@ async def _handle_single_parse(
                                 'width': getattr(m, 'width', 0),
                                 'height': getattr(m, 'height', 0),
                             })
+                    logger.info(f"📍 parse_result.media: {len(parse_result_dict['media'])} items")
+                else:
+                    logger.warning(f"⚠️ parse_result没有media或media为空")
+            else:
+                logger.error(f"❌ parse_result是None！无法缓存媒体信息")
 
             cache_data = {
                 'url': display_url,  # 使用短链接（永久有效）

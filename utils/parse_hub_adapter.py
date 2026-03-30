@@ -381,6 +381,11 @@ class ParseHubAdapter:
 
             parse_time = time.time() - start_time
 
+            # 设置 raw_url（原始URL，用于显示）
+            if result and not hasattr(result, 'raw_url'):
+                result.raw_url = url
+                logger.info(f"✅ 设置 raw_url: {url[:80]}...")
+
             # 注意：DownloadResult不能序列化，不缓存到Redis
             # ParseHub自己有内存缓存机制处理重复URL
 
