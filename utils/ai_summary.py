@@ -158,6 +158,17 @@ class AISummarizer:
                 {"role": "user", "content": "请对以上内容进行总结！"},
             ]
 
+            # 调试：打印消息结构
+            logger.info(f"[AI Summary] 准备发送请求，content包含 {len(content)} 个元素")
+            for i, item in enumerate(content):
+                if item.get('type') == 'image_url':
+                    image_url_data = item.get('image_url', {})
+                    if isinstance(image_url_data, dict):
+                        url_str = image_url_data.get('url', '')
+                        logger.info(f"[AI Summary] content[{i}] 是图片，base64长度: {len(url_str)}")
+                else:
+                    logger.info(f"[AI Summary] content[{i}] 是文本，长度: {len(item.get('text', ''))}")
+
             # Call LLM
             import httpx
             client = AsyncOpenAI(
