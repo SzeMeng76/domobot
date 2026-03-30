@@ -404,15 +404,16 @@ async def handle_inline_parse_query(
             logger.info(f"[Inline Parse] 构建视频结果: title={title[:30]}, thumb={thumb_url}, is_article={is_article}, caption_len={len(caption_text)}")
 
             if not is_article:
-                # 有有效缩略图 → 使用 InlineQueryResultPhoto
+                # 有有效缩略图 → 使用 InlineQueryResultArticle（更可靠）
                 return [
-                    InlineQueryResultPhoto(
+                    InlineQueryResultArticle(
                         id=result_id,
-                        photo_url=thumb_url,
-                        thumbnail_url=thumb_url,
                         title=f"🎬 视频 {title}",
                         description=description,
-                        caption=caption_text,
+                        thumbnail_url=thumb_url,
+                        input_message_content=InputTextMessageContent(
+                            message_text=caption_text or "⏳ 下载中..."
+                        ),
                         reply_markup=keyboard,
                     )
                 ]
@@ -664,14 +665,16 @@ async def handle_inline_parse_query(
                     _cache_timestamps[result_id] = time.time()
 
                     if valid_thumb:
+                        # 使用 Article 类型更可靠（Photo 类型 Telegram 可能无法验证缩略图）
                         results.append(
-                            InlineQueryResultPhoto(
+                            InlineQueryResultArticle(
                                 id=result_id,
-                                photo_url=valid_thumb,
-                                thumbnail_url=valid_thumb,
                                 title=f"🎬 视频 {index + 1}/{len(media_list)} - {title}",
                                 description=description,
-                                caption=caption_text,
+                                thumbnail_url=valid_thumb,
+                                input_message_content=InputTextMessageContent(
+                                    message_text=caption_text or "⏳ 下载中..."
+                                ),
                                 reply_markup=keyboard,
                             )
                         )
