@@ -185,7 +185,7 @@ async def _auto_parse_single(url: str, user_id: int, group_id: int, message, con
                         'type': type(parse_result).__name__,
                         'title': getattr(parse_result, 'title', ''),
                         'content': getattr(parse_result, 'content', ''),
-                        'platform': getattr(parse_result, 'platform', platform),
+                        'platform': str(getattr(parse_result, 'platform', platform)),  # 转换为字符串
                     }
                     # 保存媒体URL（图片/视频）
                     if hasattr(parse_result, 'media') and parse_result.media:
