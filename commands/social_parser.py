@@ -15,7 +15,7 @@ from telegram.ext import ContextTypes
 from PIL import Image as PILImage
 import pillow_heif
 
-from parsehub.types import VideoFile, ImageFile, VideoParseResult, ImageParseResult, MultimediaParseResult, RichTextParseResult
+from parsehub.types import VideoFile, ImageFile, AniFile, LivePhotoFile, VideoParseResult, ImageParseResult, MultimediaParseResult, RichTextParseResult
 from utils.command_factory import command_factory
 from utils.converter import clean_article_html
 from utils.error_handling import with_error_handling, with_telegram_retry
@@ -1452,10 +1452,16 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
     elif count == 1:
         # 单个媒体文件，直接发送
         media = media_list[0]
-        if isinstance(media, VideoFile):
+        if isinstance(media, (VideoFile, AniFile, LivePhotoFile)):
             # 检查视频文件大小（Telegram限制50MB）
             from utils.video_splitter import ensure_h264
-            video_path = Path(await ensure_h264(str(media.path)))
+
+            # AniFile 和 LivePhotoFile 通常是小动画，不需要 ensure_h264
+            if isinstance(media, (AniFile, LivePhotoFile)):
+                video_path = Path(media.path)
+            else:
+                video_path = Path(await ensure_h264(str(media.path)))
+
             video_size_mb = video_path.stat().st_size / (1024 * 1024)
 
             if video_size_mb > 50:
@@ -1474,24 +1480,49 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
                 msg = await _send_video_too_large()
                 return [msg]
 
-            @with_telegram_retry(max_retries=5)
-            async def _send_video():
-                with open(str(video_path), 'rb') as video_file:
-                    return await context.bot.send_video(
-                        chat_id=chat_id,
-                        video=video_file,
-                        caption=caption,
-                        parse_mode="MarkdownV2",
-                        reply_parameters=reply_parameters,
-                        supports_streaming=True,
-                        reply_markup=reply_markup,
-                        read_timeout=300,
-                        write_timeout=300,
-                        connect_timeout=30
-                    )
+            # 根据类型选择发送方法
+            if isinstance(media, (AniFile, LivePhotoFile)):
+                # AniFile 和 LivePhotoFile 用 send_animation 发送（支持 GIF/MP4 动画）
+                @with_telegram_retry(max_retries=5)
+                async def _send_animation():
+                    with open(str(video_path), 'rb') as animation_file:
+                        return await context.bot.send_animation(
+                            chat_id=chat_id,
+                            animation=animation_file,
+                            caption=caption,
+                            parse_mode="MarkdownV2",
+                            reply_parameters=reply_parameters,
+                            reply_markup=reply_markup,
+                            width=media.width or 0,
+                            height=media.height or 0,
+                            duration=media.duration or 0,
+                            read_timeout=300,
+                            write_timeout=300,
+                            connect_timeout=30
+                        )
 
-            msg = await _send_video()
-            return [msg]
+                msg = await _send_animation()
+                return [msg]
+            else:
+                # VideoFile 用 send_video 发送
+                @with_telegram_retry(max_retries=5)
+                async def _send_video():
+                    with open(str(video_path), 'rb') as video_file:
+                        return await context.bot.send_video(
+                            chat_id=chat_id,
+                            video=video_file,
+                            caption=caption,
+                            parse_mode="MarkdownV2",
+                            reply_parameters=reply_parameters,
+                            supports_streaming=True,
+                            reply_markup=reply_markup,
+                            read_timeout=300,
+                            write_timeout=300,
+                            connect_timeout=30
+                        )
+
+                msg = await _send_video()
+                return [msg]
         elif isinstance(media, ImageFile):
             intermediates: list[Path] = []  # 收集生成的中间文件
             original_path = Path(media.path)
@@ -1560,16 +1591,31 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
             media_group = []
             for media in batch:
                 try:
-                    if isinstance(media, VideoFile):
+                    if isinstance(media, (VideoFile, AniFile, LivePhotoFile)):
                         from utils.video_splitter import ensure_h264
-                        v_path = await ensure_h264(str(media.path))
-                        media_group.append(InputMediaVideo(
-                            media=open(v_path, 'rb'),
-                            width=media.width or 0,
-                            height=media.height or 0,
-                            duration=media.duration or 0,
-                            supports_streaming=True
-                        ))
+                        # AniFile 和 LivePhotoFile 不需要 ensure_h264
+                        if isinstance(media, (AniFile, LivePhotoFile)):
+                            v_path = str(media.path)
+                        else:
+                            v_path = await ensure_h264(str(media.path))
+
+                        # AniFile 和 LivePhotoFile 用 InputMediaAnimation，VideoFile 用 InputMediaVideo
+                        if isinstance(media, (AniFile, LivePhotoFile)):
+                            from telegram import InputMediaAnimation
+                            media_group.append(InputMediaAnimation(
+                                media=open(v_path, 'rb'),
+                                width=media.width or 0,
+                                height=media.height or 0,
+                                duration=media.duration or 0
+                            ))
+                        else:
+                            media_group.append(InputMediaVideo(
+                                media=open(v_path, 'rb'),
+                                width=media.width or 0,
+                                height=media.height or 0,
+                                duration=media.duration or 0,
+                                supports_streaming=True
+                            ))
                     elif isinstance(media, ImageFile):
                         media_group.append(InputMediaPhoto(media=open(str(media.path), 'rb')))
                 except Exception as e:
