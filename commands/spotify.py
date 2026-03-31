@@ -503,11 +503,13 @@ class SpotifyPriceBot(PriceQueryService):
         plan_names = {
             # 月付套餐
             "Premium Individual": "个人版 (Premium Individual)",
-            "Premium Student": "学生版 (Premium Student)", 
+            "Premium Student": "学生版 (Premium Student)",
             "Premium Duo": "双人版 (Premium Duo)",
             "Premium Family": "家庭版 (Premium Family)",
             "Premium Basic": "基础版 (Premium Basic)",
             "Premium Lite": "轻量版 (Premium Lite)",
+            "Premium Standard": "标准版 (Premium Standard)",
+            "Premium Platinum": "白金版 (Premium Platinum)",
             
             # 预付费套餐 - Individual (使用标准化后的英文格式)
             "Premium Individual 1 Year Prepaid": "个人版 [1年预付费]",
@@ -532,6 +534,22 @@ class SpotifyPriceBot(PriceQueryService):
             "Premium Student 6 Months Prepaid": "学生版 [6个月预付费]",
             "Premium Student 3 Months Prepaid": "学生版 [3个月预付费]",
             "Premium Student 1 Month Prepaid": "学生版 [1个月预付费]",
+
+            # 预付费套餐 - Standard
+            "Premium Standard 1 Year Prepaid": "标准版 [1年预付费]",
+            "Premium Standard 6 Months Prepaid": "标准版 [6个月预付费]",
+            "Premium Standard 3 Months Prepaid": "标准版 [3个月预付费]",
+            "Premium Standard 1 Month Prepaid": "标准版 [1个月预付费]",
+            "Premium Standard (1 Year Prepaid) 1 Year Prepaid": "标准版 [1年预付费]",
+            "Premium Standard (6 Months Prepaid) 6 Months Prepaid": "标准版 [6个月预付费]",
+            "Premium Standard (3 Months Prepaid) 3 Months Prepaid": "标准版 [3个月预付费]",
+            "Premium Standard (1 Month Prepaid) 1 Month Prepaid": "标准版 [1个月预付费]",
+
+            # 预付费套餐 - Lite
+            "Premium Lite 1 Year Prepaid": "轻量版 [1年预付费]",
+            "Premium Lite 6 Months Prepaid": "轻量版 [6个月预付费]",
+            "Premium Lite 3 Months Prepaid": "轻量版 [3个月预付费]",
+            "Premium Lite 1 Month Prepaid": "轻量版 [1个月预付费]",
         }
 
         for i, plan in enumerate(plans):
