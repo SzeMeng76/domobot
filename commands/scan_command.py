@@ -1031,7 +1031,7 @@ async def _handle_ip_query_with_ipdata(update: Update, context: ContextTypes.DEF
                     if comment:
                         # 限制评论长度
                         comment_short = comment[:50] + "..." if len(comment) > 50 else comment
-                        result_text += f"   _{escape_markdown(comment_short)}_\n"
+                        result_text += f"   {escape_markdown(comment_short)}\n"
 
     await status_msg.edit_text(
         result_text,
