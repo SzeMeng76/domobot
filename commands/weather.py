@@ -1413,11 +1413,15 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
 
                         if chart_bytes:
                             # 发送图片
-                            await context.bot.send_photo(
+                            photo_msg = await context.bot.send_photo(
                                 chat_id=query.message.chat_id,
                                 photo=InputFile(io.BytesIO(chart_bytes), filename=f"{location}_temp.png"),
                                 caption=f"📈 {location_name} 未来24小时温度趋势"
                             )
+                            # 设置自动删除
+                            from utils.message_manager import _schedule_deletion
+                            config = get_config()
+                            await _schedule_deletion(context, query.message.chat_id, photo_msg.message_id, config.auto_delete_delay)
                             await query.answer("✅ 图表已发送")
                             return
                         else:
@@ -1436,11 +1440,15 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
 
                         if chart_bytes:
                             # 发送图片
-                            await context.bot.send_photo(
+                            photo_msg = await context.bot.send_photo(
                                 chat_id=query.message.chat_id,
                                 photo=InputFile(io.BytesIO(chart_bytes), filename=f"{location}_rain.png"),
                                 caption=f"🌧️ {location_name} 未来24小时降水趋势"
                             )
+                            # 设置自动删除
+                            from utils.message_manager import _schedule_deletion
+                            config = get_config()
+                            await _schedule_deletion(context, query.message.chat_id, photo_msg.message_id, config.auto_delete_delay)
                             await query.answer("✅ 图表已发送")
                             return
                         else:
