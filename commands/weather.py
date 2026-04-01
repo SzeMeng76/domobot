@@ -1113,8 +1113,8 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
             )
             return
 
-        # 解析回调数据 - 格式: weather_action_location
-        parts = data.split('_', 2)
+        # 解析回调数据 - 格式: weather_action_location 或 weather_action_subaction_location
+        parts = data.split('_', 3)
         if len(parts) < 3:
             await query.edit_message_text(
                 "❌ 无效的请求",
@@ -1127,8 +1127,13 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
             await _schedule_deletion(context, query.message.chat_id, query.message.message_id, 10)
             return
 
-        action = parts[1]
-        location = parts[2]
+        # 处理 weather_chart_temp_location 格式
+        if len(parts) == 4:
+            action = f"{parts[1]}_{parts[2]}"  # chart_temp 或 chart_rain
+            location = parts[3]
+        else:
+            action = parts[1]
+            location = parts[2]
 
         # 显示加载状态
         safe_location = escape_markdown(location, version=2)
@@ -1730,6 +1735,17 @@ async def weather_inline_execute(args: str, use_ai_report: bool = True) -> dict:
                 lon = float(location_data['lon'])
                 alerts_data = await get_weather_alerts(lat, lon)
 
+                # 获取彩云天气智能摘要
+                caiyun_summary = None
+                if caiyun_adapter:
+                    try:
+                        coords = f"{lon},{lat}"
+                        caiyun_data = await caiyun_adapter.get_weather(coords)
+                        if caiyun_data:
+                            caiyun_summary = caiyun_adapter.extract_summary(caiyun_data)
+                    except Exception as e:
+                        logging.warning(f"获取彩云天气摘要失败: {e}")
+
                 if realtime_data and daily_data and hourly_data and indices_data:
                     ai_report = await generate_ai_weather_report(
                         location_name,
@@ -1738,7 +1754,8 @@ async def weather_inline_execute(args: str, use_ai_report: bool = True) -> dict:
                         hourly_data,
                         indices_data,
                         air_data,
-                        alerts_data
+                        alerts_data,
+                        caiyun_summary
                     )
             except Exception as e:
                 logging.warning(f"AI 日报生成失败: {e}")
