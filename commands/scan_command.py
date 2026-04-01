@@ -24,6 +24,13 @@ httpx_client = None
 _api_key_index = 0  # AbuseIPDB API Key 轮询索引
 _ipdata_key_index = 0  # ipdata.co API Key 轮询索引
 
+def escape_markdown(text: str) -> str:
+    """转义 Telegram Markdown 特殊字符"""
+    if not text:
+        return ""
+    special_chars = r"_*[]()~`>#+-=|{}.!\\"
+    return re.sub(f'([{re.escape(special_chars)}])', r'\\\1', str(text))
+
 def set_dependencies(c_manager, h_client):
     """设置依赖注入"""
     global cache_manager, httpx_client
@@ -919,9 +926,9 @@ async def _handle_ip_query_with_ipdata(update: Update, context: ContextTypes.DEF
     result_text = f"📊 *IP 信息检测结果*\n\n"
 
     if domain:
-        result_text += f"🌐 域名: `{domain}`\n"
+        result_text += f"🌐 域名: `{escape_markdown(domain)}`\n"
 
-    result_text += f"🌐 IP: `{ip}`\n\n"
+    result_text += f"🌐 IP: `{escape_markdown(ip)}`\n\n"
 
     # 显示风险分数
     result_text += f"🎯 *风险分数*: {risk_emoji} *{risk_score}/100* ({risk_level})\n"
@@ -1019,11 +1026,11 @@ async def _handle_ip_query_with_ipdata(update: Update, context: ContextTypes.DEF
                     category_names = [category_map.get(cat, f"类别{cat}") for cat in categories]
                     category_str = ", ".join(category_names) if category_names else "未分类"
 
-                    result_text += f"{i}. `{date_str}` - {category_str}\n"
+                    result_text += f"{i}. `{escape_markdown(date_str)}` - {category_str}\n"
                     if comment:
                         # 限制评论长度
                         comment_short = comment[:50] + "..." if len(comment) > 50 else comment
-                        result_text += f"   _{comment_short}_\n"
+                        result_text += f"   _{escape_markdown(comment_short)}_\n"
 
     await status_msg.edit_text(
         result_text,
