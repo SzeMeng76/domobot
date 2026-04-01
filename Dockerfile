@@ -20,6 +20,7 @@ FROM python:3.12-slim
 # 安装系统依赖（ParseHub 需要的图形库和 FFmpeg）
 # 参考: ParseHub README.md - Ubuntu 24 依赖
 # 添加 Deno 用于 yt-dlp JavaScript runtime (YouTube解析需要，yt-dlp默认支持deno)
+# 添加中文字体支持（用于天气图表可视化）
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglx-mesa0 \
@@ -34,6 +35,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     unzip \
     ca-certificates \
+    fonts-noto-cjk \
     && curl -fsSL https://deno.land/install.sh | sh \
     && rm -rf /var/lib/apt/lists/*
 
@@ -54,6 +56,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends git \
     && pip install --no-cache-dir --find-links=/app/wheels -r requirements.txt \
     && apt-get purge -y git && apt-get autoremove -y && rm -rf /var/lib/apt/lists/* \
     && rm -rf /app/wheels
+
+# 重建 matplotlib 字体缓存（识别 Noto CJK 字体）
+RUN python -c "import matplotlib.font_manager as fm; fm._load_fontmanager(try_read_cache=False)"
 
 # 复制应用代码
 COPY . .

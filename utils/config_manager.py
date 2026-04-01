@@ -17,8 +17,9 @@ class BotConfig:
     """机器人配置类"""
 
     def __init__(self):
-        # 新增和风天气配置
+        # 天气API配置
         self.qweather_api_key: str = ""
+        self.caiyun_api_token: str = ""
 
         self.cmc_api_key: str = ""
         self.bin_api_key: str = ""
@@ -462,8 +463,9 @@ class ConfigManager:
         self.config.redis_max_connections = get_int_env("REDIS_MAX_CONNECTIONS", "50")
         self.config.redis_health_check_interval = get_int_env("REDIS_HEALTH_CHECK_INTERVAL", "30")
 
-        # 和风天气 API 配置
+        # 天气 API 配置
         self.config.qweather_api_key = os.getenv("QWEATHER_API_KEY", "")
+        self.config.caiyun_api_token = os.getenv("CAIYUN_API_TOKEN", "")
 
         self.config.cmc_api_key = os.getenv("CMC_API_KEY", "")
         self.config.bin_api_key = os.getenv("BIN_API_KEY", "")

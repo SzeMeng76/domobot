@@ -1,11 +1,14 @@
 import datetime
 import urllib.parse
 import logging
+import asyncio
+import io
+import hashlib
 from typing import Optional, Tuple, Dict, List
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
 from telegram.ext import ContextTypes
-from telegram.constants import ParseMode
+from telegram.constants import ParseMode, ChatAction
 from telegram.helpers import escape_markdown
 
 from utils.command_factory import command_factory
@@ -22,14 +25,57 @@ except ImportError:
     OPENAI_AVAILABLE = False
     logging.warning("OpenAI library not available, AI weather report will be disabled")
 
+# Import Caiyun Adapter
+try:
+    from utils.caiyun_adapter import CaiyunAdapter
+    CAIYUN_AVAILABLE = True
+except ImportError:
+    CAIYUN_AVAILABLE = False
+    logging.warning("Caiyun adapter not available")
+
+# Import Weather Visualizer
+try:
+    from utils.weather_visualizer import WeatherVisualizer
+    VISUALIZER_AVAILABLE = True
+except ImportError:
+    VISUALIZER_AVAILABLE = False
+    logging.warning("Weather visualizer not available, chart features will be disabled")
+
+# Import Weather Subscription Manager
+try:
+    from utils.weather_subscription import WeatherSubscriptionManager
+    SUBSCRIPTION_AVAILABLE = True
+except ImportError:
+    SUBSCRIPTION_AVAILABLE = False
+    logging.warning("Weather subscription manager not available")
+
 # 全局变量
 cache_manager = None
 httpx_client = None
+caiyun_adapter = None
+weather_visualizer = None
+subscription_manager = None
 
 def set_dependencies(c_manager, h_client):
-    global cache_manager, httpx_client
+    global cache_manager, httpx_client, caiyun_adapter, weather_visualizer, subscription_manager
     cache_manager = c_manager
     httpx_client = h_client
+
+    # 初始化彩云天气适配器
+    config = get_config()
+    if CAIYUN_AVAILABLE and hasattr(config, 'caiyun_api_token') and config.caiyun_api_token:
+        caiyun_adapter = CaiyunAdapter(config.caiyun_api_token, httpx_client, cache_manager)
+        logging.info("彩云天气适配器已初始化（含缓存）")
+
+    # 初始化天气可视化工具
+    if VISUALIZER_AVAILABLE:
+        weather_visualizer = WeatherVisualizer()
+        logging.info("天气可视化工具已初始化")
+
+    # 初始化订阅管理器
+    if SUBSCRIPTION_AVAILABLE:
+        subscription_manager = WeatherSubscriptionManager(cache_manager)
+        logging.info("天气订阅管理器已初始化")
 
 WEATHER_ICONS = {
     '100': '☀️', '101': '🌤️', '102': '☁️', '103': '🌥️', '104': '⛅',
@@ -565,7 +611,7 @@ def create_weather_main_keyboard(location: str) -> InlineKeyboardMarkup:
     ]
     return InlineKeyboardMarkup(keyboard)
 
-async def generate_ai_weather_report(location_name: str, realtime_data: dict, daily_data: dict, hourly_data: dict, indices_data: dict, air_data: dict = None, alerts_data: dict = None) -> Optional[str]:
+async def generate_ai_weather_report(location_name: str, realtime_data: dict, daily_data: dict, hourly_data: dict, indices_data: dict, air_data: dict = None, alerts_data: dict = None, caiyun_summary: str = None) -> Optional[str]:
     """使用 AI 生成个性化天气日报"""
     if not OPENAI_AVAILABLE:
         logging.warning("OpenAI not available, cannot generate AI weather report")
@@ -657,6 +703,10 @@ async def generate_ai_weather_report(location_name: str, realtime_data: dict, da
 运动指数：{sport_index.get('category', 'N/A')} - {sport_index.get('text', '')}
 洗车指数：{carwash_index.get('category', 'N/A')} - {carwash_index.get('text', '')}
 """
+
+        # 如果有彩云天气的智能摘要，添加到数据中
+        if caiyun_summary:
+            weather_data_summary += f"\n【彩云天气智能摘要】\n{caiyun_summary}\n"
 
         # AI prompt - 参考最佳实践，使用清晰直接的指令
         system_prompt = """你是敏敏，一个可爱活泼的天气播报助手！🌈
@@ -857,6 +907,10 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             [
                 InlineKeyboardButton("🌧️ 分钟降水", callback_data=f"weather_rain_{location}"),
                 InlineKeyboardButton("📋 生活指数", callback_data=f"weather_indices_{location}")
+            ],
+            [
+                InlineKeyboardButton("📈 温度图表", callback_data=f"weather_chart_temp_{location}"),
+                InlineKeyboardButton("🌧️ 降水图表", callback_data=f"weather_chart_rain_{location}")
             ],
             [
                 InlineKeyboardButton("⚠️ 天气预警", callback_data=f"weather_alert_{location}"),
@@ -1243,26 +1297,59 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
                 if not realtime_data or not daily_data or not hourly_data or not indices_data:
                     result_text = f"❌ 获取 *{safe_location_name}* 的天气数据失败，无法生成 AI 日报。"
                 else:
-                    # 生成 AI 日报
+                    # 生成 AI 日报 - 使用真正的 TYPING 状态
                     await query.edit_message_text(
                         f"🤖 正在生成 *{safe_location_name}* 的 AI 天气日报\\.\\.\\.\n\n⏳ 敏敏正在努力整理天气信息中\\.\\.\\.请稍候～",
                         parse_mode=ParseMode.MARKDOWN_V2
                     )
 
-                    ai_report = await generate_ai_weather_report(
-                        location_name,
-                        realtime_data,
-                        daily_data,
-                        hourly_data,
-                        indices_data,
-                        air_data,
-                        alerts_data
-                    )
+                    # 保持 typing 状态的后台任务
+                    async def keep_typing():
+                        while True:
+                            try:
+                                await context.bot.send_chat_action(
+                                    chat_id=query.message.chat_id,
+                                    action=ChatAction.TYPING
+                                )
+                                await asyncio.sleep(4)
+                            except:
+                                break
 
-                    if ai_report:
-                        result_text = ai_report
-                    else:
-                        result_text = f"❌ AI 日报生成失败，请稍后重试。"
+                    typing_task = asyncio.create_task(keep_typing())
+
+                    try:
+                        # 尝试获取彩云天气的智能摘要
+                        caiyun_summary = None
+                        if caiyun_adapter:
+                            try:
+                                coords = f"{location_data['lon']},{location_data['lat']}"
+                                caiyun_data = await caiyun_adapter.get_weather(coords)
+                                if caiyun_data:
+                                    caiyun_summary = caiyun_adapter.extract_summary(caiyun_data)
+                            except Exception as e:
+                                logging.warning(f"获取彩云天气摘要失败: {e}")
+
+                        ai_report = await generate_ai_weather_report(
+                            location_name,
+                            realtime_data,
+                            daily_data,
+                            hourly_data,
+                            indices_data,
+                            air_data,
+                            alerts_data,
+                            caiyun_summary  # 传入彩云摘要
+                        )
+
+                        if ai_report:
+                            result_text = ai_report
+                        else:
+                            result_text = f"❌ AI 日报生成失败，请稍后重试。"
+                    finally:
+                        typing_task.cancel()
+                        try:
+                            await typing_task
+                        except asyncio.CancelledError:
+                            pass
 
             keyboard = [
                 [
@@ -1288,6 +1375,73 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
                     InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
                 ]
             ]
+
+        elif action.startswith("chart_"):
+            # 图表可视化
+            if not weather_visualizer:
+                result_text = "❌ 图表功能未启用，请安装 matplotlib 库。"
+                keyboard = [
+                    [
+                        InlineKeyboardButton("🔙 返回实时", callback_data=f"weather_now_{location}"),
+                        InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
+                    ]
+                ]
+            else:
+                chart_type = action.replace("chart_", "")  # temp 或 rain
+
+                # 获取数据
+                if chart_type == "temp":
+                    hourly_data = await _get_api_response("weather/24h", {"location": location_id})
+                    if hourly_data and hourly_data.get("hourly"):
+                        # 生成图表
+                        chart_bytes = weather_visualizer.draw_hourly_temp_chart(
+                            hourly_data["hourly"],
+                            location_name
+                        )
+
+                        if chart_bytes:
+                            # 发送图片
+                            await context.bot.send_photo(
+                                chat_id=query.message.chat_id,
+                                photo=InputFile(io.BytesIO(chart_bytes), filename=f"{location}_temp.png"),
+                                caption=f"📈 {location_name} 未来24小时温度趋势"
+                            )
+                            await query.answer("✅ 图表已发送")
+                            return
+                        else:
+                            result_text = "❌ 生成温度图表失败"
+                    else:
+                        result_text = "❌ 获取温度数据失败"
+
+                elif chart_type == "rain":
+                    hourly_data = await _get_api_response("weather/24h", {"location": location_id})
+                    if hourly_data and hourly_data.get("hourly"):
+                        # 生成图表
+                        chart_bytes = weather_visualizer.draw_precipitation_chart(
+                            hourly_data["hourly"],
+                            location_name
+                        )
+
+                        if chart_bytes:
+                            # 发送图片
+                            await context.bot.send_photo(
+                                chat_id=query.message.chat_id,
+                                photo=InputFile(io.BytesIO(chart_bytes), filename=f"{location}_rain.png"),
+                                caption=f"🌧️ {location_name} 未来24小时降水趋势"
+                            )
+                            await query.answer("✅ 图表已发送")
+                            return
+                        else:
+                            result_text = "❌ 生成降水图表失败"
+                    else:
+                        result_text = "❌ 获取降水数据失败"
+
+                keyboard = [
+                    [
+                        InlineKeyboardButton("🔙 返回实时", callback_data=f"weather_now_{location}"),
+                        InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
+                    ]
+                ]
 
         else:
             await query.edit_message_text(
@@ -1625,3 +1779,193 @@ async def weather_inline_execute(args: str, use_ai_report: bool = True) -> dict:
             "description": "查询失败",
             "error": str(e)
         }
+
+
+# =============================================================================
+# 订阅功能命令
+# =============================================================================
+
+async def weather_subscribe_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理 /tq_sub 命令 - 订阅每日天气简报"""
+    if not update.message or not update.effective_chat:
+        return
+
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+
+    if not subscription_manager:
+        await send_error(
+            context,
+            update.effective_chat.id,
+            "❌ 订阅功能未启用",
+            parse_mode="Markdown"
+        )
+        return
+
+    if not context.args:
+        help_text = """📮 *天气订阅帮助*
+
+*订阅每日简报：*
+`/tq_sub 城市名`
+
+*示例：*
+• `/tq_sub 北京` \\- 订阅北京每日天气
+• `/tq_sub 上海` \\- 订阅上海每日天气
+
+*查看订阅：* `/tq_mysub`
+*取消订阅：* `/tq_unsub 城市名`
+
+每天早上 8:00 自动推送天气简报"""
+
+        await send_message_with_auto_delete(
+            context,
+            update.effective_chat.id,
+            help_text,
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+        return
+
+    location = context.args[0]
+
+    # 验证城市是否存在
+    location_data = await get_location_id(location)
+    if not location_data:
+        await send_error(
+            context,
+            update.effective_chat.id,
+            f"❌ 找不到城市 *{escape_markdown(location, version=2)}*",
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+        return
+
+    # 订阅
+    success = await subscription_manager.subscribe(
+        update.effective_chat.id,
+        location,
+        "daily"
+    )
+
+    if success:
+        await send_success(
+            context,
+            update.effective_chat.id,
+            f"✅ 成功订阅 *{escape_markdown(location, version=2)}* 的每日天气简报\\!\n\n每天早上 8:00 自动推送",
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+    else:
+        await send_error(
+            context,
+            update.effective_chat.id,
+            f"ℹ️ 你已经订阅过 *{escape_markdown(location, version=2)}* 了",
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+
+
+async def weather_unsubscribe_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理 /tq_unsub 命令 - 取消订阅"""
+    if not update.message or not update.effective_chat:
+        return
+
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+
+    if not subscription_manager:
+        await send_error(
+            context,
+            update.effective_chat.id,
+            "❌ 订阅功能未启用",
+            parse_mode="Markdown"
+        )
+        return
+
+    if not context.args:
+        await send_error(
+            context,
+            update.effective_chat.id,
+            "请提供城市名称，例如：`/tq_unsub 北京`",
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+        return
+
+    location = context.args[0]
+
+    # 取消订阅
+    success = await subscription_manager.unsubscribe(
+        update.effective_chat.id,
+        location,
+        "daily"
+    )
+
+    if success:
+        await send_success(
+            context,
+            update.effective_chat.id,
+            f"✅ 已取消订阅 *{escape_markdown(location, version=2)}*",
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+    else:
+        await send_error(
+            context,
+            update.effective_chat.id,
+            f"ℹ️ 你没有订阅 *{escape_markdown(location, version=2)}*",
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+
+
+async def weather_my_subscriptions_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理 /tq_mysub 命令 - 查看我的订阅"""
+    if not update.message or not update.effective_chat:
+        return
+
+    await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+
+    if not subscription_manager:
+        await send_error(
+            context,
+            update.effective_chat.id,
+            "❌ 订阅功能未启用",
+            parse_mode="Markdown"
+        )
+        return
+
+    # 获取订阅列表
+    subscriptions = await subscription_manager.get_subscriptions(
+        update.effective_chat.id,
+        "daily"
+    )
+
+    if not subscriptions:
+        message = "📭 *你还没有订阅任何天气简报*\n\n使用 `/tq_sub 城市名` 订阅"
+    else:
+        message = "📮 *我的天气订阅*\n\n"
+        for location in subscriptions:
+            message += f"• {escape_markdown(location, version=2)}\n"
+        message += f"\n共 {len(subscriptions)} 个订阅"
+
+    await send_message_with_auto_delete(
+        context,
+        update.effective_chat.id,
+        message,
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+
+
+# 注册订阅命令
+command_factory.register_command(
+    "tq_sub",
+    weather_subscribe_command,
+    permission=Permission.USER,
+    description="订阅每日天气简报"
+)
+
+command_factory.register_command(
+    "tq_unsub",
+    weather_unsubscribe_command,
+    permission=Permission.USER,
+    description="取消订阅天气简报"
+)
+
+command_factory.register_command(
+    "tq_mysub",
+    weather_my_subscriptions_command,
+    permission=Permission.USER,
+    description="查看我的天气订阅"
+)

@@ -66,7 +66,8 @@ async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
                         # 特殊处理weather的复杂缓存结构
                         prefixes = [
                             "weather_location_", "weather_realtime_", "weather_forecast_",
-                            "weather_hourly_", "weather_air_", "weather_indices_", "weather_minutely_"
+                            "weather_hourly_", "weather_air_", "weather_indices_", "weather_minutely_",
+                            "caiyun_weather_"  # 彩云天气缓存
                         ]
                         for prefix in prefixes:
                             await cache_manager.clear_cache(subdirectory="weather", key_prefix=prefix)
@@ -131,7 +132,8 @@ async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
                 # 特殊处理weather的复杂缓存结构
                 prefixes = [
                     "weather_location_", "weather_realtime_", "weather_forecast_",
-                    "weather_hourly_", "weather_air_", "weather_indices_", "weather_minutely_"
+                    "weather_hourly_", "weather_air_", "weather_indices_", "weather_minutely_",
+                    "caiyun_weather_"  # 彩云天气缓存
                 ]
                 for prefix in prefixes:
                     await cache_manager.clear_cache(subdirectory="weather", key_prefix=prefix)

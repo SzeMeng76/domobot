@@ -91,3 +91,6 @@ aiofiles>=25.1.0  # 异步文件读取（图片base64转换）
 # Reddit API (使用 httpx，原生支持 SOCKS5 代理)
 # curl-cffi for TLS fingerprinting (JSON endpoint bypass)
 curl-cffi==0.14.0  # Use latest version with yfinance fork
+
+# Weather Visualization (天气图表可视化)
+matplotlib>=3.10.0  # 图表绘制库
