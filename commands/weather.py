@@ -1328,11 +1328,18 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
                         if caiyun_adapter:
                             try:
                                 coords = f"{location_data['lon']},{location_data['lat']}"
+                                logging.info(f"[Caiyun Weather] 正在获取 {location_name} 的智能摘要...")
                                 caiyun_data = await caiyun_adapter.get_weather(coords)
                                 if caiyun_data:
                                     caiyun_summary = caiyun_adapter.extract_summary(caiyun_data)
+                                    if caiyun_summary:
+                                        logging.info(f"[Caiyun Weather] ✅ 成功获取智能摘要: {caiyun_summary[:50]}...")
+                                    else:
+                                        logging.warning(f"[Caiyun Weather] ⚠️ 数据中无智能摘要")
+                                else:
+                                    logging.warning(f"[Caiyun Weather] ⚠️ 未获取到数据")
                             except Exception as e:
-                                logging.warning(f"获取彩云天气摘要失败: {e}")
+                                logging.warning(f"[Caiyun Weather] ❌ 获取智能摘要失败: {e}")
 
                         ai_report = await generate_ai_weather_report(
                             location_name,
@@ -1740,11 +1747,18 @@ async def weather_inline_execute(args: str, use_ai_report: bool = True) -> dict:
                 if caiyun_adapter:
                     try:
                         coords = f"{lon},{lat}"
+                        logging.info(f"[Caiyun Weather] 正在获取 {location_name} 的智能摘要...")
                         caiyun_data = await caiyun_adapter.get_weather(coords)
                         if caiyun_data:
                             caiyun_summary = caiyun_adapter.extract_summary(caiyun_data)
+                            if caiyun_summary:
+                                logging.info(f"[Caiyun Weather] ✅ 成功获取智能摘要: {caiyun_summary[:50]}...")
+                            else:
+                                logging.warning(f"[Caiyun Weather] ⚠️ 数据中无智能摘要")
+                        else:
+                            logging.warning(f"[Caiyun Weather] ⚠️ 未获取到数据")
                     except Exception as e:
-                        logging.warning(f"获取彩云天气摘要失败: {e}")
+                        logging.warning(f"[Caiyun Weather] ❌ 获取智能摘要失败: {e}")
 
                 if realtime_data and daily_data and hourly_data and indices_data:
                     ai_report = await generate_ai_weather_report(
