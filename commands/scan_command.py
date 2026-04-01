@@ -25,10 +25,11 @@ _api_key_index = 0  # AbuseIPDB API Key 轮询索引
 _ipdata_key_index = 0  # ipdata.co API Key 轮询索引
 
 def escape_markdown(text: str) -> str:
-    """转义 Telegram Markdown 特殊字符"""
+    """转义 Telegram Markdown 特殊字符（仅转义基础 Markdown 模式需要的字符）"""
     if not text:
         return ""
-    special_chars = r"_*[]()~`>#+-=|{}.!\\"
+    # Telegram 基础 Markdown 模式只需要转义: _ * [ ]
+    special_chars = r"_*[]"
     return re.sub(f'([{re.escape(special_chars)}])', r'\\\1', str(text))
 
 def set_dependencies(c_manager, h_client):
