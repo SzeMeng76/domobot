@@ -249,7 +249,7 @@ async def handle_inline_parse_query(
         from parsehub.types import VideoParseResult, ImageParseResult, RichTextParseResult, MultimediaParseResult
 
         title = ((parse_result.title or "").strip() or "无标题")[:60]  # Telegram限制64字符
-        description = ((parse_result.content or "").strip() or "点击下载")[:100]
+        description = ((parse_result.content or "").strip() or "点击下载")[:100]  # description字段限制
 
         # 获取缩略图
         thumb_url = None
@@ -563,13 +563,19 @@ async def handle_inline_parse_query(
                         )
                     ]
 
-            # 构建 caption
+            # 构建 caption（限制1024字节）
             caption_parts = []
             if parse_result.title:
                 caption_parts.append(parse_result.title)
             if parse_result.content:
-                caption_parts.append(parse_result.content[:100])
+                caption_parts.append(parse_result.content)
+
+            # 拼接并按字节截断（Telegram限制1024字节）
             caption_text = "\n\n".join(caption_parts) if caption_parts else ""
+            caption_bytes = caption_text.encode('utf-8')
+            if len(caption_bytes) > 1020:  # 留出安全边界
+                # 截断到安全长度，避免截断多字节字符
+                caption_text = caption_bytes[:1000].decode('utf-8', errors='ignore') + "..."
 
             # 添加原链接按钮 + AI总结按钮（如果启用）
             buttons = [[InlineKeyboardButton("🔗 原链接", url=display_url)]]
