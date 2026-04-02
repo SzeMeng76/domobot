@@ -856,7 +856,7 @@ async def map_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     
     await delete_user_command(context, update.message.chat_id, update.message.message_id)
 
-async def _execute_nearby_search(update: Update, context: ContextTypes.DEFAULT_TYPE, lat: float, lng: float, place_type: str, callback_query: CallbackQuery = None, language: str = None, location_json: str = None) -> None:
+async def _execute_nearby_search(update: Update, context: ContextTypes.DEFAULT_TYPE, lat: float, lng: float, place_type: str, callback_query: CallbackQuery = None, language: str = None, location_b64: str = None) -> None:
     """执行附近服务搜索"""
     # 如果没有传递语言参数，则进行检测
     if language is None:
@@ -904,15 +904,15 @@ async def _execute_nearby_search(update: Update, context: ContextTypes.DEFAULT_T
             result_text = format_nearby_results(nearby_places, service_type, place_type)
 
             # 创建返回按钮
-            if location_json:
-                # 有location_json，返回地点详情
-                back_data = f"back_to_location:{location_json}:{language}"
+            if location_b64:
+                # 有location_b64，返回地点详情
+                back_data = f"back_to_location:{location_b64}:{language}"
                 back_short_id = get_short_map_id(back_data)
                 keyboard = [
                     [InlineKeyboardButton("🔙 返回地点详情", callback_data=f"map_short:{back_short_id}")]
                 ]
             else:
-                # 没有location_json，返回主菜单
+                # 没有location_b64，返回主菜单
                 keyboard = [
                     [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
                 ]
@@ -1136,9 +1136,12 @@ async def _execute_location_search(update: Update, context: ContextTypes.DEFAULT
             # 生成短ID用于callback_data
             # 保存完整的location_data以便返回
             import json
+            import base64
             location_json = json.dumps(location_data)
-            nearby_data = f"{lat},{lng}:{language}:{location_json}"
-            route_data = f"{lat},{lng}:{location_data['name']}:{language}"
+            # 使用base64编码避免JSON中的特殊字符问题
+            location_b64 = base64.b64encode(location_json.encode()).decode()
+            nearby_data = f"{lat},{lng}:{language}:{location_b64}"
+            route_data = f"{lat},{lng}:{location_data['name']}:{language}:{location_b64}"
             nearby_short_id = get_short_map_id(f"nearby_here:{nearby_data}")
             route_short_id = get_short_map_id(f"route_to_coords:{route_data}")
 
@@ -1146,7 +1149,7 @@ async def _execute_location_search(update: Update, context: ContextTypes.DEFAULT
             has_reviews = location_data.get('reviews') and len(location_data['reviews']) > 0
             reviews_short_id = None
             if has_reviews:
-                reviews_data = f"{location_data['place_id']}:{location_data['name']}:{language}:{location_json}"
+                reviews_data = f"{location_data['place_id']}:{location_data['name']}:{language}:{location_b64}"
                 reviews_short_id = get_short_map_id(f"reviews:{reviews_data}")
 
             keyboard = [
@@ -1305,7 +1308,8 @@ async def map_text_handler_core(update: Update, context: ContextTypes.DEFAULT_TY
             destination_name = session_data.get("destination_name")
             destination_coords = session_data.get("destination_coords")
             destination_language = session_data.get("destination_language", "en")
-            await _execute_route_planning_with_coords(update, context, text, destination_name, destination_coords, destination_language)
+            location_b64 = session_data.get("location_json")  # 保持key名称不变，避免破坏现有session
+            await _execute_route_planning_with_coords(update, context, text, destination_name, destination_coords, destination_language, location_b64)
             map_session_manager.remove_session(user_id)
             
         elif action == "directions" and waiting_for == "route":
@@ -1336,7 +1340,7 @@ async def map_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     """处理地图功能的文本输入 - 向后兼容的包装器"""
     await map_text_handler_core(update, context)
 
-async def _execute_route_planning_with_coords(update: Update, context: ContextTypes.DEFAULT_TYPE, origin: str, destination_name: str, destination_coords: Tuple[float, float], destination_language: str) -> None:
+async def _execute_route_planning_with_coords(update: Update, context: ContextTypes.DEFAULT_TYPE, origin: str, destination_name: str, destination_coords: Tuple[float, float], destination_language: str, location_b64: str = None) -> None:
     """执行使用精确坐标的路线规划"""
     dest_lat, dest_lng = destination_coords
     
@@ -1417,18 +1421,26 @@ async def _execute_route_planning_with_coords(update: Update, context: ContextTy
                 route_title = f"路线规划: {origin_data.get('address', origin)} → {destination_name}"
                 telegraph_content = format_directions_for_telegraph(directions_data, service_type)
                 telegraph_url = await create_telegraph_page(route_title, telegraph_content)
-                
+
                 # 生成带Telegraph链接的简短结果
                 result_text = format_directions(directions_data, service_type)
-                
+
                 if telegraph_url:
                     result_text += f"\n\n🔗 **完整路线指引**: [查看详细步骤]({telegraph_url})"
-                
-                keyboard = [
-                    [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
-                ]
+
+                # 创建返回按钮
+                if location_b64:
+                    back_data = f"back_to_location:{location_b64}:{primary_language}"
+                    back_short_id = get_short_map_id(back_data)
+                    keyboard = [
+                        [InlineKeyboardButton("🔙 返回地点详情", callback_data=f"map_short:{back_short_id}")]
+                    ]
+                else:
+                    keyboard = [
+                        [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
+                    ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
-                
+
                 await message.edit_text(
                     text=foldable_text_with_markdown_v2(result_text),
                     parse_mode="MarkdownV2",
@@ -1437,10 +1449,18 @@ async def _execute_route_planning_with_coords(update: Update, context: ContextTy
             else:
                 # 步骤不多，直接显示
                 result_text = format_directions(directions_data, service_type)
-                
-                keyboard = [
-                    [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
-                ]
+
+                # 创建返回按钮
+                if location_b64:
+                    back_data = f"back_to_location:{location_b64}:{primary_language}"
+                    back_short_id = get_short_map_id(back_data)
+                    keyboard = [
+                        [InlineKeyboardButton("🔙 返回地点详情", callback_data=f"map_short:{back_short_id}")]
+                    ]
+                else:
+                    keyboard = [
+                        [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
+                    ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 
                 await message.edit_text(
@@ -2042,31 +2062,31 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         parts = data.split(":", 3)
         coords = parts[1]
         language = parts[2] if len(parts) > 2 else "en"
-        location_json = parts[3] if len(parts) > 3 else None
+        location_b64 = parts[3] if len(parts) > 3 else None
         lat, lng = map(float, coords.split(","))
 
         # 显示附近服务类型选择
         keyboard = [
             [
-                InlineKeyboardButton("🍽️ 餐厅", callback_data=f"map_search_nearby:{lat},{lng}:restaurant:{language}:{location_json if location_json else ''}"),
-                InlineKeyboardButton("🏥 医院", callback_data=f"map_search_nearby:{lat},{lng}:hospital:{language}:{location_json if location_json else ''}")
+                InlineKeyboardButton("🍽️ 餐厅", callback_data=f"map_search_nearby:{lat},{lng}:restaurant:{language}:{location_b64 if location_b64 else ''}"),
+                InlineKeyboardButton("🏥 医院", callback_data=f"map_search_nearby:{lat},{lng}:hospital:{language}:{location_b64 if location_b64 else ''}")
             ],
             [
-                InlineKeyboardButton("🏦 银行", callback_data=f"map_search_nearby:{lat},{lng}:bank:{language}:{location_json if location_json else ''}"),
-                InlineKeyboardButton("⛽ 加油站", callback_data=f"map_search_nearby:{lat},{lng}:gas_station:{language}:{location_json if location_json else ''}")
+                InlineKeyboardButton("🏦 银行", callback_data=f"map_search_nearby:{lat},{lng}:bank:{language}:{location_b64 if location_b64 else ''}"),
+                InlineKeyboardButton("⛽ 加油站", callback_data=f"map_search_nearby:{lat},{lng}:gas_station:{language}:{location_b64 if location_b64 else ''}")
             ],
             [
-                InlineKeyboardButton("🛒 超市", callback_data=f"map_search_nearby:{lat},{lng}:supermarket:{language}:{location_json if location_json else ''}"),
-                InlineKeyboardButton("🏫 学校", callback_data=f"map_search_nearby:{lat},{lng}:school:{language}:{location_json if location_json else ''}")
+                InlineKeyboardButton("🛒 超市", callback_data=f"map_search_nearby:{lat},{lng}:supermarket:{language}:{location_b64 if location_b64 else ''}"),
+                InlineKeyboardButton("🏫 学校", callback_data=f"map_search_nearby:{lat},{lng}:school:{language}:{location_b64 if location_b64 else ''}")
             ],
             [
-                InlineKeyboardButton("🏨 酒店", callback_data=f"map_search_nearby:{lat},{lng}:hotel:{language}:{location_json if location_json else ''}")
+                InlineKeyboardButton("🏨 酒店", callback_data=f"map_search_nearby:{lat},{lng}:hotel:{language}:{location_b64 if location_b64 else ''}")
             ]
         ]
 
-        # 如果有location_json，添加返回地点详情按钮
-        if location_json:
-            back_data = f"back_to_location:{location_json}:{language}"
+        # 如果有location_b64，添加返回地点详情按钮
+        if location_b64:
+            back_data = f"back_to_location:{location_b64}:{language}"
             back_short_id = get_short_map_id(back_data)
             keyboard.append([
                 InlineKeyboardButton("🔙 返回地点详情", callback_data=f"map_short:{back_short_id}")
@@ -2087,11 +2107,11 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         coords = parts[1]
         place_type = parts[2]
         language = parts[3] if len(parts) > 3 else "en"
-        location_json = parts[4] if len(parts) > 4 and parts[4] else None
+        location_b64 = parts[4] if len(parts) > 4 and parts[4] else None
         lat, lng = map(float, coords.split(","))
 
-        # 执行附近搜索，传递location_json
-        await _execute_nearby_search(update, context, lat, lng, place_type, query, language, location_json)
+        # 执行附近搜索，传递location_b64
+        await _execute_nearby_search(update, context, lat, lng, place_type, query, language, location_b64)
     
     elif data.startswith("map_short:"):
         # 处理短ID映射的callback
@@ -2110,31 +2130,31 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             parts = nearby_data.split(":", 2)
             coords = parts[0]
             language = parts[1] if len(parts) > 1 else "en"
-            location_json = parts[2] if len(parts) > 2 else None
+            location_b64 = parts[2] if len(parts) > 2 else None
             lat, lng = map(float, coords.split(","))
 
             # 显示附近服务类型选择
             keyboard = [
                 [
-                    InlineKeyboardButton("🍽️ 餐厅", callback_data=f"map_search_nearby:{lat},{lng}:restaurant:{language}:{location_json if location_json else ''}"),
-                    InlineKeyboardButton("🏥 医院", callback_data=f"map_search_nearby:{lat},{lng}:hospital:{language}:{location_json if location_json else ''}")
+                    InlineKeyboardButton("🍽️ 餐厅", callback_data=f"map_search_nearby:{lat},{lng}:restaurant:{language}:{location_b64 if location_b64 else ''}"),
+                    InlineKeyboardButton("🏥 医院", callback_data=f"map_search_nearby:{lat},{lng}:hospital:{language}:{location_b64 if location_b64 else ''}")
                 ],
                 [
-                    InlineKeyboardButton("🏦 银行", callback_data=f"map_search_nearby:{lat},{lng}:bank:{language}:{location_json if location_json else ''}"),
-                    InlineKeyboardButton("⛽ 加油站", callback_data=f"map_search_nearby:{lat},{lng}:gas_station:{language}:{location_json if location_json else ''}")
+                    InlineKeyboardButton("🏦 银行", callback_data=f"map_search_nearby:{lat},{lng}:bank:{language}:{location_b64 if location_b64 else ''}"),
+                    InlineKeyboardButton("⛽ 加油站", callback_data=f"map_search_nearby:{lat},{lng}:gas_station:{language}:{location_b64 if location_b64 else ''}")
                 ],
                 [
-                    InlineKeyboardButton("🛒 超市", callback_data=f"map_search_nearby:{lat},{lng}:supermarket:{language}:{location_json if location_json else ''}"),
-                    InlineKeyboardButton("🏫 学校", callback_data=f"map_search_nearby:{lat},{lng}:school:{language}:{location_json if location_json else ''}")
+                    InlineKeyboardButton("🛒 超市", callback_data=f"map_search_nearby:{lat},{lng}:supermarket:{language}:{location_b64 if location_b64 else ''}"),
+                    InlineKeyboardButton("🏫 学校", callback_data=f"map_search_nearby:{lat},{lng}:school:{language}:{location_b64 if location_b64 else ''}")
                 ],
                 [
-                    InlineKeyboardButton("🏨 酒店", callback_data=f"map_search_nearby:{lat},{lng}:hotel:{language}:{location_json if location_json else ''}")
+                    InlineKeyboardButton("🏨 酒店", callback_data=f"map_search_nearby:{lat},{lng}:hotel:{language}:{location_b64 if location_b64 else ''}")
                 ]
             ]
 
-            # 如果有location_json，添加返回地点详情按钮
-            if location_json:
-                back_data = f"back_to_location:{location_json}:{language}"
+            # 如果有location_b64，添加返回地点详情按钮
+            if location_b64:
+                back_data = f"back_to_location:{location_b64}:{language}"
                 back_short_id = get_short_map_id(back_data)
                 keyboard.append([
                     InlineKeyboardButton("🔙 返回地点详情", callback_data=f"map_short:{back_short_id}")
@@ -2152,29 +2172,41 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             
         elif full_data.startswith("route_to_coords:"):
             route_data = full_data.replace("route_to_coords:", "")
-            parts = route_data.split(":", 2)
+            parts = route_data.split(":", 3)
             coords = parts[0]
             destination_name = parts[1]
             language = parts[2] if len(parts) > 2 else "en"
+            location_b64 = parts[3] if len(parts) > 3 else None
             dest_lat, dest_lng = map(float, coords.split(","))
 
             user_id = update.effective_user.id
 
-            # 设置会话状态，包含目标地点的精确坐标
+            # 设置会话状态，包含目标地点的精确坐标和location_b64
             map_session_manager.set_session(user_id, {
                 "action": "route_planning_coords",
                 "destination_name": destination_name,
                 "destination_coords": (dest_lat, dest_lng),
                 "destination_language": language,
+                "location_json": location_b64,  # 保持key名称不变
                 "waiting_for": "origin"
             })
+
+            # 创建返回按钮
+            if location_b64:
+                back_data = f"back_to_location:{location_b64}:{language}"
+                back_short_id = get_short_map_id(back_data)
+                keyboard = [
+                    [InlineKeyboardButton("🔙 返回地点详情", callback_data=f"map_short:{back_short_id}")]
+                ]
+            else:
+                keyboard = [
+                    [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
+                ]
 
             await _safe_edit_message(
                 query,
                 text=f"🛣️ 路线规划到: {destination_name}\n\n请输入起点地址或发送位置信息",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
-                ])
+                reply_markup=InlineKeyboardMarkup(keyboard)
             )
 
         elif full_data.startswith("reviews:"):
@@ -2184,7 +2216,7 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             place_id = parts[0]
             place_name = parts[1]
             language = parts[2] if len(parts) > 2 else "en"
-            location_json = parts[3] if len(parts) > 3 else None
+            location_b64 = parts[3] if len(parts) > 3 else None
 
             # 显示加载消息
             await _safe_edit_message(
@@ -2230,10 +2262,10 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 total_count = data.get('userRatingCount', 0)
                 result_text = format_reviews(reviews, place_name, total_count)
 
-                # 创建返回按钮 - 如果有location_json就返回地点详情，否则返回主菜单
-                if location_json:
+                # 创建返回按钮 - 如果有location_b64就返回地点详情，否则返回主菜单
+                if location_b64:
                     # 保存location_data以便返回
-                    back_data = f"back_to_location:{location_json}:{language}"
+                    back_data = f"back_to_location:{location_b64}:{language}"
                     back_short_id = get_short_map_id(back_data)
                     keyboard = [
                         [InlineKeyboardButton("🔙 返回地点详情", callback_data=f"map_short:{back_short_id}")]
@@ -2265,11 +2297,14 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             # 返回地点详情
             back_data = full_data.replace("back_to_location:", "")
             parts = back_data.split(":", 1)
-            location_json = parts[0]
+            location_b64 = parts[0]
             language = parts[1] if len(parts) > 1 else "en"
 
             try:
                 import json
+                import base64
+                # 解码base64
+                location_json = base64.b64decode(location_b64.encode()).decode()
                 location_data = json.loads(location_json)
 
                 # 重新显示地点详情
@@ -2295,7 +2330,7 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 has_reviews = location_data.get('reviews') and len(location_data['reviews']) > 0
                 reviews_short_id = None
                 if has_reviews:
-                    reviews_data = f"{location_data['place_id']}:{location_data['name']}:{language}:{location_json}"
+                    reviews_data = f"{location_data['place_id']}:{location_data['name']}:{language}:{location_b64}"
                     reviews_short_id = get_short_map_id(f"reviews:{reviews_data}")
 
                 keyboard = [
