@@ -2100,17 +2100,23 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         # 如果原消息有照片，删除并重新发送纯文本消息
         if query.message.photo:
             await query.message.delete()
-            await query.message.get_bot().send_message(
+            sent_msg = await query.message.get_bot().send_message(
                 chat_id=query.message.chat_id,
                 text=f"📍 请选择要搜索的服务类型:\n\n位置: {lat:.6f}, {lng:.6f}",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
+            # 为新消息添加自动删除
+            config = get_config()
+            await _schedule_auto_delete(context, sent_msg.chat_id, sent_msg.message_id, config.auto_delete_delay)
         else:
             await _safe_edit_message(
                 query,
                 text=f"📍 请选择要搜索的服务类型:\n\n位置: {lat:.6f}, {lng:.6f}",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
+            # 为编辑后的消息添加自动删除
+            config = get_config()
+            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
     
     elif data.startswith("map_search_nearby:"):
         parts = data.split(":", 4)
@@ -2178,17 +2184,23 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             # 如果原消息有照片，删除并重新发送纯文本消息
             if query.message.photo:
                 await query.message.delete()
-                await query.message.get_bot().send_message(
+                sent_msg = await query.message.get_bot().send_message(
                     chat_id=query.message.chat_id,
                     text=f"📍 请选择要搜索的服务类型:\n\n位置: {lat:.6f}, {lng:.6f}",
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
+                # 为新消息添加自动删除
+                config = get_config()
+                await _schedule_auto_delete(context, sent_msg.chat_id, sent_msg.message_id, config.auto_delete_delay)
             else:
                 await _safe_edit_message(
                     query,
                     text=f"📍 请选择要搜索的服务类型:\n\n位置: {lat:.6f}, {lng:.6f}",
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
+                # 为编辑后的消息添加自动删除
+                config = get_config()
+                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
             
         elif full_data.startswith("route_to_coords:"):
             route_data = full_data.replace("route_to_coords:", "")
@@ -2226,17 +2238,23 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             # 如果原消息有照片，删除并重新发送纯文本消息
             if query.message.photo:
                 await query.message.delete()
-                await query.message.get_bot().send_message(
+                sent_msg = await query.message.get_bot().send_message(
                     chat_id=query.message.chat_id,
                     text=f"🛣️ 路线规划到: {destination_name}\n\n请输入起点地址或发送位置信息",
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
+                # 为新消息添加自动删除
+                config = get_config()
+                await _schedule_auto_delete(context, sent_msg.chat_id, sent_msg.message_id, config.auto_delete_delay)
             else:
                 await _safe_edit_message(
                     query,
                     text=f"🛣️ 路线规划到: {destination_name}\n\n请输入起点地址或发送位置信息",
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
+                # 为编辑后的消息添加自动删除
+                config = get_config()
+                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
 
         elif full_data.startswith("search_nearby:"):
             # 处理附近搜索（从短ID解析）
@@ -2324,6 +2342,9 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                     parse_mode="MarkdownV2",
                     reply_markup=reply_markup
                 )
+                # 为编辑后的消息添加自动删除
+                config = get_config()
+                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
 
             except Exception as e:
                 logger.error(f"获取评价失败: {e}")
@@ -2407,30 +2428,39 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 if has_photo:
                     photo_url = location_data['photos'][0]
                     try:
-                        await query.message.get_bot().send_photo(
+                        sent_msg = await query.message.get_bot().send_photo(
                             chat_id=query.message.chat_id,
                             photo=photo_url,
                             caption=foldable_text_with_markdown_v2(result_text),
                             parse_mode="MarkdownV2",
                             reply_markup=reply_markup
                         )
+                        # 为新消息添加自动删除
+                        config = get_config()
+                        await _schedule_auto_delete(context, sent_msg.chat_id, sent_msg.message_id, config.auto_delete_delay)
                     except Exception as e:
                         logger.warning(f"发送照片失败，fallback 到纯文本: {e}")
                         # 照片发送失败，fallback 到纯文本
-                        await query.message.get_bot().send_message(
+                        sent_msg = await query.message.get_bot().send_message(
                             chat_id=query.message.chat_id,
                             text=foldable_text_with_markdown_v2(result_text),
                             parse_mode="MarkdownV2",
                             reply_markup=reply_markup
                         )
+                        # 为新消息添加自动删除
+                        config = get_config()
+                        await _schedule_auto_delete(context, sent_msg.chat_id, sent_msg.message_id, config.auto_delete_delay)
                 else:
                     # 没有照片，发送纯文本
-                    await query.message.get_bot().send_message(
+                    sent_msg = await query.message.get_bot().send_message(
                         chat_id=query.message.chat_id,
                         text=foldable_text_with_markdown_v2(result_text),
                         parse_mode="MarkdownV2",
                         reply_markup=reply_markup
                     )
+                    # 为新消息添加自动删除
+                    config = get_config()
+                    await _schedule_auto_delete(context, sent_msg.chat_id, sent_msg.message_id, config.auto_delete_delay)
 
             except Exception as e:
                 logger.error(f"返回地点详情失败: {e}")
