@@ -2152,6 +2152,9 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                     return
 
                 # 使用Place Details API获取评价
+                # Place ID 可能已经包含 'places/' 前缀，需要检查
+                if not place_id.startswith('places/'):
+                    place_id = f"places/{place_id}"
                 url = f"https://places.googleapis.com/v1/{place_id}"
                 headers = {
                     'Content-Type': 'application/json',
