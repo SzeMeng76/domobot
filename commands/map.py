@@ -2095,12 +2095,21 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             keyboard.append([
                 InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")
             ])
-        
-        await _safe_edit_message(
-            query,
-            text=f"📍 请选择要搜索的服务类型:\n\n位置: {lat:.6f}, {lng:.6f}",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+
+        # 如果原消息有照片，删除并重新发送纯文本消息
+        if query.message.photo:
+            await query.message.delete()
+            await query.message.get_bot().send_message(
+                chat_id=query.message.chat_id,
+                text=f"📍 请选择要搜索的服务类型:\n\n位置: {lat:.6f}, {lng:.6f}",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+        else:
+            await _safe_edit_message(
+                query,
+                text=f"📍 请选择要搜索的服务类型:\n\n位置: {lat:.6f}, {lng:.6f}",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
     
     elif data.startswith("map_search_nearby:"):
         parts = data.split(":", 4)
@@ -2163,12 +2172,21 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 keyboard.append([
                     InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")
                 ])
-            
-            await _safe_edit_message(
-                query,
-                text=f"📍 请选择要搜索的服务类型:\n\n位置: {lat:.6f}, {lng:.6f}",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
+
+            # 如果原消息有照片，删除并重新发送纯文本消息
+            if query.message.photo:
+                await query.message.delete()
+                await query.message.get_bot().send_message(
+                    chat_id=query.message.chat_id,
+                    text=f"📍 请选择要搜索的服务类型:\n\n位置: {lat:.6f}, {lng:.6f}",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+            else:
+                await _safe_edit_message(
+                    query,
+                    text=f"📍 请选择要搜索的服务类型:\n\n位置: {lat:.6f}, {lng:.6f}",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
             
         elif full_data.startswith("route_to_coords:"):
             route_data = full_data.replace("route_to_coords:", "")
@@ -2203,11 +2221,20 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                     [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
                 ]
 
-            await _safe_edit_message(
-                query,
-                text=f"🛣️ 路线规划到: {destination_name}\n\n请输入起点地址或发送位置信息",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
+            # 如果原消息有照片，删除并重新发送纯文本消息
+            if query.message.photo:
+                await query.message.delete()
+                await query.message.get_bot().send_message(
+                    chat_id=query.message.chat_id,
+                    text=f"🛣️ 路线规划到: {destination_name}\n\n请输入起点地址或发送位置信息",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+            else:
+                await _safe_edit_message(
+                    query,
+                    text=f"🛣️ 路线规划到: {destination_name}\n\n请输入起点地址或发送位置信息",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
 
         elif full_data.startswith("reviews:"):
             # 处理评价查看
@@ -2292,6 +2319,7 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                         [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
                     ])
                 )
+                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
 
         elif full_data.startswith("back_to_location:"):
             # 返回地点详情
@@ -2398,6 +2426,7 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                         [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
                     ])
                 )
+                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
     
     elif data.startswith("map_route_to:"):
         destination = data.split(":", 1)[1]
