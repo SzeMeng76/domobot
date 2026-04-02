@@ -903,13 +903,13 @@ async def _execute_nearby_search(update: Update, context: ContextTypes.DEFAULT_T
             # 找到附近服务
             result_text = format_nearby_results(nearby_places, service_type, place_type)
 
-            # 创建返回按钮
+            # 创建返回按钮 - 返回到服务类型选择页面
             if location_b64:
-                # 有location_b64，返回地点详情
-                back_data = f"back_to_location:{location_b64}:{language}"
-                back_short_id = get_short_map_id(back_data)
+                # 有location_b64，返回服务类型选择页面
+                nearby_data = f"{lat},{lng}:{language}:{location_b64}"
+                nearby_short_id = get_short_map_id(f"nearby_here:{nearby_data}")
                 keyboard = [
-                    [InlineKeyboardButton("🔙 返回地点详情", callback_data=f"map_short:{back_short_id}")]
+                    [InlineKeyboardButton("🔙 返回服务选择", callback_data=f"map_short:{nearby_short_id}")]
                 ]
             else:
                 # 没有location_b64，返回主菜单
@@ -2140,7 +2140,7 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             parts = nearby_data.split(":", 2)
             coords = parts[0]
             language = parts[1] if len(parts) > 1 else "en"
-            location_b64 = parts[2] if len(parts) > 2 else None
+            location_b64 = parts[2] if len(parts) > 2 and parts[2] else None
             lat, lng = map(float, coords.split(","))
 
             # 显示附近服务类型选择，使用短ID避免callback_data过长
