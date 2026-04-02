@@ -2065,24 +2065,25 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         location_b64 = parts[3] if len(parts) > 3 else None
         lat, lng = map(float, coords.split(","))
 
-        # 显示附近服务类型选择
-        keyboard = [
-            [
-                InlineKeyboardButton("🍽️ 餐厅", callback_data=f"map_search_nearby:{lat},{lng}:restaurant:{language}:{location_b64 if location_b64 else ''}"),
-                InlineKeyboardButton("🏥 医院", callback_data=f"map_search_nearby:{lat},{lng}:hospital:{language}:{location_b64 if location_b64 else ''}")
-            ],
-            [
-                InlineKeyboardButton("🏦 银行", callback_data=f"map_search_nearby:{lat},{lng}:bank:{language}:{location_b64 if location_b64 else ''}"),
-                InlineKeyboardButton("⛽ 加油站", callback_data=f"map_search_nearby:{lat},{lng}:gas_station:{language}:{location_b64 if location_b64 else ''}")
-            ],
-            [
-                InlineKeyboardButton("🛒 超市", callback_data=f"map_search_nearby:{lat},{lng}:supermarket:{language}:{location_b64 if location_b64 else ''}"),
-                InlineKeyboardButton("🏫 学校", callback_data=f"map_search_nearby:{lat},{lng}:school:{language}:{location_b64 if location_b64 else ''}")
-            ],
-            [
-                InlineKeyboardButton("🏨 酒店", callback_data=f"map_search_nearby:{lat},{lng}:hotel:{language}:{location_b64 if location_b64 else ''}")
-            ]
+        # 显示附近服务类型选择，使用短ID避免callback_data过长
+        place_types = [
+            ("🍽️ 餐厅", "restaurant"), ("🏥 医院", "hospital"),
+            ("🏦 银行", "bank"), ("⛽ 加油站", "gas_station"),
+            ("🛒 超市", "supermarket"), ("🏫 学校", "school"),
+            ("🏨 酒店", "hotel")
         ]
+
+        keyboard = []
+        row = []
+        for i, (label, place_type) in enumerate(place_types):
+            search_data = f"search_nearby:{lat},{lng}:{place_type}:{language}:{location_b64 if location_b64 else ''}"
+            short_id = get_short_map_id(search_data)
+            row.append(InlineKeyboardButton(label, callback_data=f"map_short:{short_id}"))
+
+            # 每两个按钮一行，酒店单独一行
+            if len(row) == 2 or place_type == "hotel":
+                keyboard.append(row)
+                row = []
 
         # 如果有location_b64，添加返回地点详情按钮
         if location_b64:
@@ -2142,24 +2143,25 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             location_b64 = parts[2] if len(parts) > 2 else None
             lat, lng = map(float, coords.split(","))
 
-            # 显示附近服务类型选择
-            keyboard = [
-                [
-                    InlineKeyboardButton("🍽️ 餐厅", callback_data=f"map_search_nearby:{lat},{lng}:restaurant:{language}:{location_b64 if location_b64 else ''}"),
-                    InlineKeyboardButton("🏥 医院", callback_data=f"map_search_nearby:{lat},{lng}:hospital:{language}:{location_b64 if location_b64 else ''}")
-                ],
-                [
-                    InlineKeyboardButton("🏦 银行", callback_data=f"map_search_nearby:{lat},{lng}:bank:{language}:{location_b64 if location_b64 else ''}"),
-                    InlineKeyboardButton("⛽ 加油站", callback_data=f"map_search_nearby:{lat},{lng}:gas_station:{language}:{location_b64 if location_b64 else ''}")
-                ],
-                [
-                    InlineKeyboardButton("🛒 超市", callback_data=f"map_search_nearby:{lat},{lng}:supermarket:{language}:{location_b64 if location_b64 else ''}"),
-                    InlineKeyboardButton("🏫 学校", callback_data=f"map_search_nearby:{lat},{lng}:school:{language}:{location_b64 if location_b64 else ''}")
-                ],
-                [
-                    InlineKeyboardButton("🏨 酒店", callback_data=f"map_search_nearby:{lat},{lng}:hotel:{language}:{location_b64 if location_b64 else ''}")
-                ]
+            # 显示附近服务类型选择，使用短ID避免callback_data过长
+            place_types = [
+                ("🍽️ 餐厅", "restaurant"), ("🏥 医院", "hospital"),
+                ("🏦 银行", "bank"), ("⛽ 加油站", "gas_station"),
+                ("🛒 超市", "supermarket"), ("🏫 学校", "school"),
+                ("🏨 酒店", "hotel")
             ]
+
+            keyboard = []
+            row = []
+            for i, (label, place_type) in enumerate(place_types):
+                search_data = f"search_nearby:{lat},{lng}:{place_type}:{language}:{location_b64 if location_b64 else ''}"
+                short_id = get_short_map_id(search_data)
+                row.append(InlineKeyboardButton(label, callback_data=f"map_short:{short_id}"))
+
+                # 每两个按钮一行，酒店单独一行
+                if len(row) == 2 or place_type == "hotel":
+                    keyboard.append(row)
+                    row = []
 
             # 如果有location_b64，添加返回地点详情按钮
             if location_b64:
@@ -2235,6 +2237,19 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                     text=f"🛣️ 路线规划到: {destination_name}\n\n请输入起点地址或发送位置信息",
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
+
+        elif full_data.startswith("search_nearby:"):
+            # 处理附近搜索（从短ID解析）
+            search_data = full_data.replace("search_nearby:", "")
+            parts = search_data.split(":", 4)
+            coords = parts[0]
+            place_type = parts[1]
+            language = parts[2] if len(parts) > 2 else "en"
+            location_b64 = parts[3] if len(parts) > 3 and parts[3] else None
+            lat, lng = map(float, coords.split(","))
+
+            # 执行附近搜索
+            await _execute_nearby_search(update, context, lat, lng, place_type, query, language, location_b64)
 
         elif full_data.startswith("reviews:"):
             # 处理评价查看
