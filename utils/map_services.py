@@ -77,8 +77,8 @@ class GoogleMapsService(MapService):
             headers = {
                 'Content-Type': 'application/json',
                 'X-Goog-Api-Key': self.api_key,
-                # 请求所有有用的字段
-                'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.types,places.priceLevel,places.businessStatus,places.currentOpeningHours,places.photos,places.websiteUri,places.internationalPhoneNumber,places.editorialSummary'
+                # 请求所有有用的字段，包括评价
+                'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.types,places.priceLevel,places.businessStatus,places.currentOpeningHours,places.photos,places.websiteUri,places.internationalPhoneNumber,places.editorialSummary,places.reviews'
             }
 
             response = await httpx_client.post(url, json=request_body, headers=headers, timeout=20)
@@ -139,6 +139,19 @@ class GoogleMapsService(MapService):
                     if isinstance(summary_data, dict):
                         editorial_summary = summary_data.get('text')
 
+                # 提取评价
+                reviews = []
+                if 'reviews' in place and place['reviews']:
+                    for review in place['reviews'][:5]:  # 最多5条评价
+                        review_data = {
+                            'author': review.get('authorAttribution', {}).get('displayName', 'Anonymous'),
+                            'rating': review.get('rating'),
+                            'text': review.get('text', {}).get('text', ''),
+                            'time': review.get('relativePublishTimeDescription', ''),
+                            'language': review.get('text', {}).get('languageCode', 'en')
+                        }
+                        reviews.append(review_data)
+
                 return {
                     'name': name,
                     'address': place.get('formattedAddress', ''),
@@ -155,6 +168,7 @@ class GoogleMapsService(MapService):
                     'website': place.get('websiteUri'),
                     'phone': place.get('internationalPhoneNumber'),
                     'editorial_summary': editorial_summary,
+                    'reviews': reviews,
                     'api_version': 'places_new'
                 }
 

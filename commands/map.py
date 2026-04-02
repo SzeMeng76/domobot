@@ -1111,6 +1111,16 @@ async def _execute_location_search(update: Update, context: ContextTypes.DEFAULT
             nearby_short_id = get_short_map_id(f"nearby_here:{nearby_data}")
             route_short_id = get_short_map_id(f"route_to_coords:{route_data}")
 
+            # 检查是否有评价
+            has_reviews = location_data.get('reviews') and len(location_data['reviews']) > 0
+            reviews_short_id = None
+            if has_reviews:
+                # 保存完整的location_data以便返回
+                import json
+                location_json = json.dumps(location_data)
+                reviews_data = f"{location_data['place_id']}:{location_data['name']}:{language}:{location_json}"
+                reviews_short_id = get_short_map_id(f"reviews:{reviews_data}")
+
             keyboard = [
                 [
                     InlineKeyboardButton("🗺️ 查看地图", url=map_url),
@@ -1119,11 +1129,18 @@ async def _execute_location_search(update: Update, context: ContextTypes.DEFAULT
                 [
                     InlineKeyboardButton("📍 附近服务", callback_data=f"map_short:{nearby_short_id}"),
                     InlineKeyboardButton("🛣️ 路线规划", callback_data=f"map_short:{route_short_id}")
-                ],
-                [
-                    InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")
                 ]
             ]
+
+            # 如果有评价，添加评价按钮
+            if has_reviews and reviews_short_id:
+                keyboard.append([
+                    InlineKeyboardButton(f"💬 用户评价 ({location_data['user_ratings_total']})", callback_data=f"map_short:{reviews_short_id}")
+                ])
+
+            keyboard.append([
+                InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")
+            ])
             reply_markup = InlineKeyboardMarkup(keyboard)
 
             # 检查是否有照片
@@ -1719,11 +1736,11 @@ def format_geocoding_result(geocode_data: Dict, service_type: str) -> str:
 def format_reverse_geocoding_result(reverse_data: Dict, service_type: str, lat: float, lng: float) -> str:
     """格式化逆地理编码结果"""
     address = reverse_data.get('address', '')
-    
+
     result = f"🌐 *逆地理编码结果*\n\n"
     result += f"📍 坐标: `{lat:.6f}, {lng:.6f}`\n"
     result += f"📮 地址: {address}\n"
-    
+
     # 添加地区信息
     if 'province' in reverse_data:
         result += f"🏛️ 省份: {reverse_data['province']}\n"
@@ -1731,11 +1748,48 @@ def format_reverse_geocoding_result(reverse_data: Dict, service_type: str, lat: 
         result += f"🏙️ 城市: {reverse_data['city']}\n"
     if 'district' in reverse_data:
         result += f"🏙️ 区县: {reverse_data['district']}\n"
-    
+
     service_name = "Google Maps" if service_type == "google_maps" else "高德地图"
     result += f"\n_数据来源: {service_name}_"
     result += f"\n_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
-    
+
+    return result
+
+def format_reviews(reviews: List[Dict], place_name: str, total_count: int) -> str:
+    """格式化评价列表"""
+    if not reviews:
+        return f"❌ {place_name} 暂无评价"
+
+    result = f"💬 *{place_name}*\n"
+    result += f"📊 总评价数: {total_count:,} 条\n"
+    result += f"📝 显示最新 {len(reviews)} 条评价\n\n"
+
+    for i, review in enumerate(reviews, 1):
+        author = review.get('author', 'Anonymous')
+        rating = review.get('rating', 0)
+        text = review.get('text', '')
+        time = review.get('time', '')
+
+        # 星级显示
+        stars = "⭐" * int(rating) if rating else ""
+
+        result += f"`{i}.` *{author}* {stars} `{rating}`\n"
+        if time:
+            result += f"   🕐 {time}\n"
+
+        # 评价文本 - 如果太长则截断
+        if text:
+            if len(text) > 200:
+                text = text[:200] + "..."
+            # 转义特殊字符
+            text = text.replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace('`', '\\`')
+            result += f"   _{text}_\n"
+
+        result += "\n"
+
+    result += f"_数据来源: Google Maps (Places API New)_\n"
+    result += f"_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
+
     return result
 
 async def _safe_edit_message(query, text, reply_markup=None, parse_mode=None):
@@ -2054,9 +2108,9 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             destination_name = parts[1]
             language = parts[2] if len(parts) > 2 else "en"
             dest_lat, dest_lng = map(float, coords.split(","))
-            
+
             user_id = update.effective_user.id
-            
+
             # 设置会话状态，包含目标地点的精确坐标
             map_session_manager.set_session(user_id, {
                 "action": "route_planning_coords",
@@ -2065,7 +2119,7 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 "destination_language": language,
                 "waiting_for": "origin"
             })
-            
+
             await _safe_edit_message(
                 query,
                 text=f"🛣️ 路线规划到: {destination_name}\n\n请输入起点地址或发送位置信息",
@@ -2073,6 +2127,162 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                     [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
                 ])
             )
+
+        elif full_data.startswith("reviews:"):
+            # 处理评价查看
+            reviews_data = full_data.replace("reviews:", "")
+            parts = reviews_data.split(":", 3)
+            place_id = parts[0]
+            place_name = parts[1]
+            language = parts[2] if len(parts) > 2 else "en"
+            location_json = parts[3] if len(parts) > 3 else None
+
+            # 显示加载消息
+            await _safe_edit_message(
+                query,
+                text=f"🔍 正在加载 {place_name} 的评价... ⏳",
+                parse_mode=None
+            )
+
+            try:
+                # 重新获取地点详情以获取评价
+                service = map_service_manager.get_service(language)
+                if not service:
+                    await _safe_edit_message(query, "❌ 地图服务暂不可用")
+                    return
+
+                # 使用Place Details API获取评价
+                url = f"https://places.googleapis.com/v1/{place_id}"
+                headers = {
+                    'Content-Type': 'application/json',
+                    'X-Goog-Api-Key': service.api_key,
+                    'X-Goog-FieldMask': 'id,displayName,rating,userRatingCount,reviews'
+                }
+
+                response = await httpx_client.get(url, headers=headers, timeout=20)
+                response.raise_for_status()
+                data = response.json()
+
+                reviews = []
+                if 'reviews' in data and data['reviews']:
+                    for review in data['reviews'][:5]:
+                        review_data = {
+                            'author': review.get('authorAttribution', {}).get('displayName', 'Anonymous'),
+                            'rating': review.get('rating'),
+                            'text': review.get('text', {}).get('text', ''),
+                            'time': review.get('relativePublishTimeDescription', ''),
+                            'language': review.get('text', {}).get('languageCode', 'en')
+                        }
+                        reviews.append(review_data)
+
+                total_count = data.get('userRatingCount', 0)
+                result_text = format_reviews(reviews, place_name, total_count)
+
+                # 创建返回按钮 - 如果有location_json就返回地点详情，否则返回主菜单
+                if location_json:
+                    # 保存location_data以便返回
+                    back_data = f"back_to_location:{location_json}:{language}"
+                    back_short_id = get_short_map_id(back_data)
+                    keyboard = [
+                        [InlineKeyboardButton("🔙 返回地点详情", callback_data=f"map_short:{back_short_id}")]
+                    ]
+                else:
+                    keyboard = [
+                        [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
+                    ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
+                await _safe_edit_message(
+                    query,
+                    text=foldable_text_with_markdown_v2(result_text),
+                    parse_mode="MarkdownV2",
+                    reply_markup=reply_markup
+                )
+
+            except Exception as e:
+                logger.error(f"获取评价失败: {e}")
+                await _safe_edit_message(
+                    query,
+                    text=f"❌ 获取评价失败: {str(e)}",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
+                    ])
+                )
+
+        elif full_data.startswith("back_to_location:"):
+            # 返回地点详情
+            back_data = full_data.replace("back_to_location:", "")
+            parts = back_data.split(":", 1)
+            location_json = parts[0]
+            language = parts[1] if len(parts) > 1 else "en"
+
+            try:
+                import json
+                location_data = json.loads(location_json)
+
+                # 重新显示地点详情
+                service = map_service_manager.get_service(language)
+                if not service:
+                    await _safe_edit_message(query, "❌ 地图服务暂不可用")
+                    return
+
+                service_type = "amap" if language == "zh" else "google_maps"
+                result_text = format_location_info(location_data, service_type)
+
+                # 生成地图和导航链接
+                lat, lng = location_data['lat'], location_data['lng']
+                map_url = service.get_map_url(lat, lng)
+                nav_url = service.get_navigation_url(location_data['name'])
+
+                # 重新生成按钮
+                nearby_data = f"{lat},{lng}:{language}"
+                route_data = f"{lat},{lng}:{location_data['name']}:{language}"
+                nearby_short_id = get_short_map_id(f"nearby_here:{nearby_data}")
+                route_short_id = get_short_map_id(f"route_to_coords:{route_data}")
+
+                has_reviews = location_data.get('reviews') and len(location_data['reviews']) > 0
+                reviews_short_id = None
+                if has_reviews:
+                    reviews_data = f"{location_data['place_id']}:{location_data['name']}:{language}:{location_json}"
+                    reviews_short_id = get_short_map_id(f"reviews:{reviews_data}")
+
+                keyboard = [
+                    [
+                        InlineKeyboardButton("🗺️ 查看地图", url=map_url),
+                        InlineKeyboardButton("🧭 开始导航", url=nav_url)
+                    ],
+                    [
+                        InlineKeyboardButton("📍 附近服务", callback_data=f"map_short:{nearby_short_id}"),
+                        InlineKeyboardButton("🛣️ 路线规划", callback_data=f"map_short:{route_short_id}")
+                    ]
+                ]
+
+                if has_reviews and reviews_short_id:
+                    keyboard.append([
+                        InlineKeyboardButton(f"💬 用户评价 ({location_data['user_ratings_total']})", callback_data=f"map_short:{reviews_short_id}")
+                    ])
+
+                keyboard.append([
+                    InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")
+                ])
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
+                await _safe_edit_message(
+                    query,
+                    text=foldable_text_with_markdown_v2(result_text),
+                    parse_mode="MarkdownV2",
+                    reply_markup=reply_markup
+                )
+
+            except Exception as e:
+                logger.error(f"返回地点详情失败: {e}")
+                await _safe_edit_message(
+                    query,
+                    text=f"❌ 返回失败: {str(e)}",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
+                    ])
+                )
     
     elif data.startswith("map_route_to:"):
         destination = data.split(":", 1)[1]
