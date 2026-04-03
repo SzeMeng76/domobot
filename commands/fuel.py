@@ -435,7 +435,7 @@ def format_global_country(country_data: dict, all_data: dict = None, country_cod
                     text += f"  💚 比平均低 `{abs(diff):.2f}` CNY\\/L\n"
 
     # LPG
-    lpg = data.get('lpg')
+    lpg = country_data.get('lpg')
     if lpg:
         price = lpg.get('price', 0)
         currency = lpg.get('currency', 'USD')
