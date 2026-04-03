@@ -24,8 +24,12 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-# 可用的浏览器指纹列表（curl-cffi 0.14+ 支持，优先使用最新版本）
+# 可用的浏览器指纹列表（curl-cffi 0.15+ 支持，优先使用最新版本）
+# 注：chrome145/chrome146/firefox147 支持 HTTP/3
 BROWSER_POOL = [
+    # Chrome (最新版本优先)
+    'chrome146',  # HTTP/3 支持
+    'chrome145',  # HTTP/3 支持
     'chrome142',
     'chrome136',
     'chrome133a',
@@ -33,12 +37,25 @@ BROWSER_POOL = [
     'chrome124',
     'chrome123',
     'chrome120',
+    # Chrome Android
+    'chrome131_android',
+    # Safari (桌面)
     'safari260',
-    'safari2601',
     'safari184',
+    'safari180',
+    'safari170',
+    # Safari iOS
+    'safari260_ios',
+    'safari184_ios',
+    'safari180_ios',
+    # Firefox
+    'firefox147',  # HTTP/3 支持
     'firefox144',
     'firefox135',
+    'firefox133',
+    # Edge
     'edge101',
+    'edge99',
 ]
 
 # Cooldown 配置
@@ -106,6 +123,11 @@ class RedditJsonClient:
         # Circuit breaker 状态
         self.cooldown_until: float = 0.0  # 冷却结束时间（monotonic time）
         self.semaphore = asyncio.Semaphore(concurrency)  # 并发控制
+
+        # HTTP/3 支持检测（自动降级机制）
+        self.http3_available: bool = True  # 默认尝试 HTTP/3
+        self.http3_failed_count: int = 0  # HTTP/3 失败计数
+        self.http3_disable_threshold: int = 3  # 连续失败 3 次后禁用 HTTP/3
 
     def is_available(self) -> bool:
         """检查是否可用（未在冷却期）"""
@@ -182,7 +204,7 @@ class RedditJsonClient:
         logger.info(f"🔄 切换浏览器指纹: {self.current_browser}")
 
     async def _make_request(self, url: str, retry_on_403: bool = True) -> Dict[str, Any]:
-        """发送 HTTP 请求（带 circuit breaker 和并发控制）"""
+        """发送 HTTP 请求（带 circuit breaker 和并发控制，HTTP/3 优先自动降级）"""
         # 检查是否在冷却期
         if not self.is_available():
             remaining = self.cooldown_remaining()
@@ -207,7 +229,31 @@ class RedditJsonClient:
                     'Sec-Fetch-User': '?1',
                 }
 
-                response = await session.get(url, headers=headers, timeout=15)
+                # 智能协议选择：优先 HTTP/3，失败自动降级
+                http_version = None
+                if self.http3_available:
+                    http_version = "v3"
+                    try:
+                        response = await session.get(url, headers=headers, timeout=15, http_version=http_version)
+                        # HTTP/3 成功，重置失败计数
+                        if self.http3_failed_count > 0:
+                            logger.info(f"✅ HTTP/3 恢复正常，重置失败计数")
+                            self.http3_failed_count = 0
+                    except Exception as e:
+                        # HTTP/3 失败，尝试降级到 HTTP/2
+                        self.http3_failed_count += 1
+                        logger.warning(f"⚠️ HTTP/3 请求失败 ({self.http3_failed_count}/{self.http3_disable_threshold}): {e}")
+
+                        if self.http3_failed_count >= self.http3_disable_threshold:
+                            self.http3_available = False
+                            logger.warning(f"🚫 HTTP/3 连续失败 {self.http3_disable_threshold} 次，切换到 HTTP/2")
+
+                        # 降级到 HTTP/2 重试
+                        logger.info(f"🔄 降级到 HTTP/2 重试...")
+                        response = await session.get(url, headers=headers, timeout=15)
+                else:
+                    # 直接使用 HTTP/2
+                    response = await session.get(url, headers=headers, timeout=15)
 
                 # Circuit breaker: 处理 429/403
                 if response.status_code in (429, 403):
