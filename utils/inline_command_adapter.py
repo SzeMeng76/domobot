@@ -62,6 +62,8 @@ class InlineCommandAdapter:
             "chart": self._handle_chart,
             "netease": self._handle_music,
             "fuel": self._handle_fuel,
+            "electricity": self._handle_electricity,
+            "elec": self._handle_electricity,
         }
 
         handler = command_handlers.get(command)
@@ -540,6 +542,19 @@ class InlineCommandAdapter:
         from utils.formatter import foldable_text_with_markdown_v2
 
         result = await fuel_inline_execute(args)
+
+        if result["success"]:
+            return (result["message"], ParseMode.MARKDOWN_V2, None)
+        else:
+            error_message = f"❌ *{result['title']}*\n\n{result['message']}"
+            return (foldable_text_with_markdown_v2(error_message), ParseMode.MARKDOWN_V2, None)
+
+    async def _handle_electricity(self, args: str) -> Tuple[str, ParseMode, None]:
+        """处理 electricity 电价查询 - 调用完整的 electricity 功能"""
+        from commands.electricity import electricity_inline_execute
+        from utils.formatter import foldable_text_with_markdown_v2
+
+        result = await electricity_inline_execute(args)
 
         if result["success"]:
             return (result["message"], ParseMode.MARKDOWN_V2, None)

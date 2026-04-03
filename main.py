@@ -89,6 +89,7 @@ from commands import (
     cooking,
     crypto,
     disney_plus,
+    electricity,
     finance,
     flight,
     fuel,
@@ -400,6 +401,7 @@ async def setup_application(application: Application, config) -> None:
     flight.set_dependencies(cache_manager, httpx_client)
     hotel.set_dependencies(cache_manager, httpx_client)
     fuel.set_dependencies(cache_manager, httpx_client)
+    electricity.set_dependencies(cache_manager, httpx_client)
 
     # 注入社交媒体解析依赖
     from commands import social_parser

@@ -31,6 +31,7 @@ CACHE_SERVICES = {
     'app_store': 'App Store缓存',
     'netflix': 'Netflix缓存',
     'fuel': '燃油价格缓存',
+    'electricity': '电价缓存',
     'spotify': 'Spotify缓存',
     'disney_plus': 'Disney+缓存',
     'max': 'HBO Max缓存',
