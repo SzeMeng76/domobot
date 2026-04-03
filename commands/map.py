@@ -858,6 +858,8 @@ async def map_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 async def _execute_nearby_search(update: Update, context: ContextTypes.DEFAULT_TYPE, lat: float, lng: float, place_type: str, callback_query: CallbackQuery = None, language: str = None, location_b64: str = None) -> None:
     """执行附近服务搜索"""
+    logger.debug(f"_execute_nearby_search 调用: lat={lat}, lng={lng}, place_type={place_type}, language={language}, location_b64={'存在' if location_b64 else '不存在'}")
+
     # 如果没有传递语言参数，则进行检测
     if language is None:
         user_locale = update.effective_user.language_code if update.effective_user else None
@@ -2062,7 +2064,7 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         parts = data.split(":", 3)
         coords = parts[1]
         language = parts[2] if len(parts) > 2 else "en"
-        location_b64 = parts[3] if len(parts) > 3 else None
+        location_b64 = parts[3] if len(parts) > 3 and parts[3] else None
         lat, lng = map(float, coords.split(","))
 
         # 显示附近服务类型选择，使用短ID避免callback_data过长
@@ -2142,6 +2144,8 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             language = parts[1] if len(parts) > 1 else "en"
             location_b64 = parts[2] if len(parts) > 2 and parts[2] else None
             lat, lng = map(float, coords.split(","))
+
+            logger.debug(f"nearby_here 解析: coords={coords}, language={language}, location_b64={'存在' if location_b64 else '不存在'}")
 
             # 显示附近服务类型选择，使用短ID避免callback_data过长
             place_types = [
@@ -2247,6 +2251,8 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             language = parts[2] if len(parts) > 2 else "en"
             location_b64 = parts[3] if len(parts) > 3 and parts[3] else None
             lat, lng = map(float, coords.split(","))
+
+            logger.debug(f"search_nearby 解析: coords={coords}, place_type={place_type}, language={language}, location_b64={'存在' if location_b64 else '不存在'}")
 
             # 执行附近搜索
             await _execute_nearby_search(update, context, lat, lng, place_type, query, language, location_b64)
