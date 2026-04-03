@@ -434,7 +434,44 @@ def format_global_country(country_data: dict, all_data: dict = None, country_cod
                 elif diff < 0:
                     text += f"  💚 比平均低 `{abs(diff):.2f}` CNY\\/L\n"
 
-    if not gasoline and not diesel:
+    # LPG
+    lpg = data.get('lpg')
+    if lpg:
+        price = lpg.get('price', 0)
+        currency = lpg.get('currency', 'USD')
+        price_cny = lpg.get('price_cny', 0)
+        local_price = lpg.get('local_price')
+        local_currency = lpg.get('local_currency')
+
+        text += f"\n⛽ *LPG:*\n"
+
+        # Show local price if available
+        if local_price and local_currency:
+            text += f"  本地价格: `{local_price:.2f}` {local_currency}\\/L\n"
+
+        text += f"  USD价格: `{price:.2f}` {currency}\\/L\n"
+        text += f"  折合CNY: `{price_cny:.2f}` CNY\\/L\n"
+
+        # Add ranking for LPG
+        if all_data and price_cny > 0:
+            lpg_data = [(code, info) for code, info in all_data.items()
+                       if info.get('lpg') and info['lpg'].get('price_cny', 0) > 0]
+            sorted_countries = sorted(lpg_data, key=lambda x: x[1]['lpg']['price_cny'])
+            prices = [info['lpg']['price_cny'] for _, info in sorted_countries]
+            avg_price = sum(prices) / len(prices) if prices else 0
+
+            rank = next((i + 1 for i, (code, info) in enumerate(sorted_countries)
+                        if info.get('country') == country), None)
+
+            if rank:
+                text += f"  📊 全球排名: 第 {rank}\\/{len(sorted_countries)} 位\n"
+                diff = price_cny - avg_price
+                if diff > 0:
+                    text += f"  💸 比平均高 `{diff:.2f}` CNY\\/L\n"
+                elif diff < 0:
+                    text += f"  💚 比平均低 `{abs(diff):.2f}` CNY\\/L\n"
+
+    if not gasoline and not diesel and not lpg:
         text += "暂无数据\n"
 
     # Add data source and price date
@@ -444,6 +481,8 @@ def format_global_country(country_data: dict, all_data: dict = None, country_cod
         price_date = gasoline.get('price_date')
     elif diesel and diesel.get('price_date'):
         price_date = diesel.get('price_date')
+    elif lpg and lpg.get('price_date'):
+        price_date = lpg.get('price_date')
 
     if price_date:
         # Escape hyphens in date
