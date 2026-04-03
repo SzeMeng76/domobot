@@ -232,24 +232,30 @@ class RedditJsonClient:
                 # 智能协议选择：优先 HTTP/3，失败自动降级
                 http_version = None
                 if self.http3_available:
-                    http_version = "v3"
-                    try:
-                        response = await session.get(url, headers=headers, timeout=15, http_version=http_version)
-                        # HTTP/3 成功，重置失败计数
-                        if self.http3_failed_count > 0:
-                            logger.info(f"✅ HTTP/3 恢复正常，重置失败计数")
-                            self.http3_failed_count = 0
-                    except Exception as e:
-                        # HTTP/3 失败，尝试降级到 HTTP/2
-                        self.http3_failed_count += 1
-                        logger.warning(f"⚠️ HTTP/3 请求失败 ({self.http3_failed_count}/{self.http3_disable_threshold}): {e}")
+                    # 只有支持 HTTP/3 的浏览器才尝试 HTTP/3
+                    http3_browsers = ['chrome146', 'chrome145', 'firefox147']
+                    if self.current_browser in http3_browsers:
+                        http_version = "v3"
+                        try:
+                            response = await session.get(url, headers=headers, timeout=15, http_version=http_version)
+                            # HTTP/3 成功，重置失败计数
+                            if self.http3_failed_count > 0:
+                                logger.info(f"✅ HTTP/3 恢复正常，重置失败计数")
+                                self.http3_failed_count = 0
+                        except Exception as e:
+                            # HTTP/3 失败，尝试降级到 HTTP/2
+                            self.http3_failed_count += 1
+                            logger.warning(f"⚠️ HTTP/3 请求失败 ({self.http3_failed_count}/{self.http3_disable_threshold}): {e}")
 
-                        if self.http3_failed_count >= self.http3_disable_threshold:
-                            self.http3_available = False
-                            logger.warning(f"🚫 HTTP/3 连续失败 {self.http3_disable_threshold} 次，切换到 HTTP/2")
+                            if self.http3_failed_count >= self.http3_disable_threshold:
+                                self.http3_available = False
+                                logger.warning(f"🚫 HTTP/3 连续失败 {self.http3_disable_threshold} 次，切换到 HTTP/2")
 
-                        # 降级到 HTTP/2 重试
-                        logger.info(f"🔄 降级到 HTTP/2 重试...")
+                            # 降级到 HTTP/2 重试
+                            logger.info(f"🔄 降级到 HTTP/2 重试...")
+                            response = await session.get(url, headers=headers, timeout=15)
+                    else:
+                        # 当前浏览器不支持 HTTP/3，直接使用 HTTP/2
                         response = await session.get(url, headers=headers, timeout=15)
                 else:
                     # 直接使用 HTTP/2
