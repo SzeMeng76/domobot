@@ -519,13 +519,17 @@ async def fuel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_rankings(update, context, fuel_type)
         return
 
-    # Handle direct fuel type queries (diesel, gasoline, 柴油, 汽油)
+    # Handle direct fuel type queries (diesel, gasoline, lpg, 柴油, 汽油, 液化石油气)
     if query in ["diesel", "柴油"]:
         await show_rankings(update, context, "diesel")
         return
 
     if query in ["gasoline", "gas", "汽油"]:
         await show_rankings(update, context, "gasoline")
+        return
+
+    if query in ["lpg", "液化石油气"]:
+        await show_rankings(update, context, "lpg")
         return
 
     if query.startswith("china") or query.startswith("中国") or query == "cn":
@@ -558,6 +562,8 @@ async def show_rankings(update: Update, context: ContextTypes.DEFAULT_TYPE, fuel
         "汽油": ("gasoline", "🚗 汽油"),
         "diesel": ("diesel", "🚛 柴油"),
         "柴油": ("diesel", "🚛 柴油"),
+        "lpg": ("lpg", "⛽ LPG"),
+        "液化石油气": ("lpg", "⛽ LPG"),
     }
 
     fuel_key, fuel_name = fuel_map.get(fuel_type.lower(), ("gasoline", "🚗 汽油"))
@@ -634,9 +640,12 @@ async def show_rankings(update: Update, context: ContextTypes.DEFAULT_TYPE, fuel
     text += f"🌍 *覆盖国家:* {len(valid_data)} 个\n"
 
     # Add usage hint
-    other_fuel = "diesel" if fuel_key == "gasoline" else "gasoline"
-    other_name = "柴油" if fuel_key == "gasoline" else "汽油"
-    text += f"\n💡 *提示:* 使用 `/fuel rankings {other_fuel}` 查看{other_name}排行\n"
+    if fuel_key == "gasoline":
+        text += f"\n💡 *提示:* 使用 `/fuel rankings diesel` 查看柴油排行，`/fuel rankings lpg` 查看LPG排行\n"
+    elif fuel_key == "diesel":
+        text += f"\n💡 *提示:* 使用 `/fuel rankings gasoline` 查看汽油排行，`/fuel rankings lpg` 查看LPG排行\n"
+    else:  # lpg
+        text += f"\n💡 *提示:* 使用 `/fuel rankings gasoline` 查看汽油排行，`/fuel rankings diesel` 查看柴油排行\n"
 
     await send_search_result(context, update.message.chat_id, text, parse_mode="MarkdownV2")
     await delete_user_command(context, update.message.chat_id, update.message.message_id)
@@ -978,6 +987,7 @@ async def _format_rankings_text(data: dict, fuel_type: str) -> str:
     fuel_map = {
         "gasoline": ("gasoline", "🚗 汽油"),
         "diesel": ("diesel", "🚛 柴油"),
+        "lpg": ("lpg", "⛽ LPG"),
     }
 
     fuel_key, fuel_name = fuel_map.get(fuel_type, ("gasoline", "🚗 汽油"))
