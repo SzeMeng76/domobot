@@ -907,8 +907,17 @@ async def fuel_inline_execute(args: str) -> dict:
                 }
 
             # Handle global rankings
-            if query_list[0] in ["diesel", "柴油", "rankings"]:
-                fuel_type = "diesel" if query_list[0] in ["diesel", "柴油"] else (query_list[1] if len(query_list) > 1 else "gasoline")
+            if query_list[0] in ["diesel", "柴油", "lpg", "液化石油气", "rankings"]:
+                # Determine fuel type
+                if query_list[0] in ["diesel", "柴油"]:
+                    fuel_type = "diesel"
+                elif query_list[0] in ["lpg", "液化石油气"]:
+                    fuel_type = "lpg"
+                elif query_list[0] == "rankings" and len(query_list) > 1:
+                    fuel_type = query_list[1]
+                else:
+                    fuel_type = "gasoline"
+
                 data = await fetch_fuel_data(GLOBAL_DATA_URL)
                 if not data:
                     return {
@@ -920,7 +929,8 @@ async def fuel_inline_execute(args: str) -> dict:
                     }
 
                 result = await _format_rankings_text(data, fuel_type)
-                fuel_name = "柴油" if fuel_type == "diesel" else "汽油"
+                fuel_name_map = {"diesel": "柴油", "gasoline": "汽油", "lpg": "LPG"}
+                fuel_name = fuel_name_map.get(fuel_type, "汽油")
                 return {
                     "success": True,
                     "title": f"🛢️ 全球{fuel_name}价格排行榜",
