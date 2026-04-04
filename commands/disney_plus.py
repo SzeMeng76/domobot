@@ -20,7 +20,7 @@ from utils.rate_converter import RateConverter
 logger = logging.getLogger(__name__)
 
 # Data source URL
-DATA_URL = "https://git.domob.org/https://github.com/domoxiaojun/disneyplus-prices/raw/refs/heads/main/disneyplus_prices_processed.json"
+DATA_URL = "https://raw.githubusercontent.com/SzeMeng76/disneyplus-prices/refs/heads/main/disneyplus_prices_processed.json"
 
 
 class DisneyPriceBot(PriceQueryService):
