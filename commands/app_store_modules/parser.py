@@ -139,8 +139,16 @@ class AppStoreParser:
             name = spans[0].text.strip()
             price_str = spans[1].text.strip()
 
-            # 基本验证
+            # 基本验证：必须包含价格符号（过滤掉非内购项目）
+            # 常见货币符号：$, €, £, ¥, ₹, R$, etc.
             if not name or not price_str:
+                continue
+
+            # 检查是否包含价格符号或数字（排除纯文本项如开发者名称、分类等）
+            has_currency = any(symbol in price_str for symbol in ['$', '€', '£', '¥', '₹', 'R$', 'Rp', '₺', 'RM'])
+            has_number = any(char.isdigit() for char in price_str)
+
+            if not (has_currency or has_number):
                 continue
 
             # 去重

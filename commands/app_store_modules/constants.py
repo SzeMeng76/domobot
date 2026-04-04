@@ -57,11 +57,13 @@ WEB_SEARCH_LIMIT = 200  # 网页搜索单次最大结果数
 CACHE_SUBDIRECTORY = "app_store"
 
 # CSS 选择器（适配 Apple 新的 Svelte 框架结构）
+# 注意：Apple 会定期更新 Svelte 组件的 hash 值，需要定期检查更新
 SELECTORS = {
-    # 新选择器（当前 Apple 使用的 Svelte 组件）
-    "in_app_items": "li.svelte-1a9curd",
-    "in_app_container": "div.text-pair.svelte-1a9curd",
-    # 旧选择器（已失效，保留作为参考）
+    # 最新选择器（2026-04 更新）
+    "in_app_items": "li.svelte-3iiar9",
+    "in_app_container": "div.text-pair.svelte-3iiar9",
+    # 历史选择器（已失效，保留作为参考）
+    "in_app_items_2024": "li.svelte-1a9curd",
     "in_app_items_legacy": "li.list-with-numbers__item",
     "in_app_name_legacy": "span.truncate-single-line.truncate-single-line--block",
     "in_app_price_legacy": "span.list-with-numbers__item__price.medium-show-tablecell",
