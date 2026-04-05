@@ -5,7 +5,6 @@ App Store 应用搜索和价格查询
 支持 iOS/iPadOS/macOS/tvOS/watchOS/visionOS 全平台
 """
 
-import asyncio
 import logging
 import shlex
 import time
@@ -19,15 +18,13 @@ from commands.app_store_modules import (
     DEFAULT_COUNTRIES,
     PLATFORM_FLAGS,
     PLATFORM_INFO,
-    AppStoreWebAPI,
-    AppStoreParser,
 )
 from utils.command_factory import command_factory
-from utils.config_manager import config_manager
-from utils.country_data import (
-    COUNTRY_NAME_TO_CODE,
-    SUPPORTED_COUNTRIES,
-    get_country_flag,
+from utils.constants import (
+    APP_STORE_MAX_PAGES,
+    APP_STORE_RESULTS_PER_PAGE,
+    APP_STORE_SEARCH_LIMIT,
+    DEFAULT_APP_STORE_PLATFORM,
 )
 from utils.formatter import foldable_text_v2, foldable_text_with_markdown_v2
 from utils.message_manager import (
@@ -41,33 +38,16 @@ from utils.message_manager import (
     send_success,
 )
 from utils.permissions import Permission
-from utils.price_parser import extract_currency_and_price
 from utils.session_manager import app_search_sessions as user_search_sessions
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 搜索配置常量
-RESULTS_PER_PAGE = 5  # 每页显示的应用数量
-MAX_TOTAL_PAGES = 10  # 最大页数
-SEARCH_RESULT_LIMIT = 200  # 搜索结果限制
-
-# Global variables (will be set by main.py)
-rate_converter = None
-cache_manager = None
-
-
-def set_rate_converter(converter):
-    """设置汇率转换器"""
-    global rate_converter
-    rate_converter = converter
-
-
-def set_cache_manager(manager):
-    """设置缓存管理器"""
-    global cache_manager
-    cache_manager = manager
+# 使用 constants.py 中定义的常量
+RESULTS_PER_PAGE = APP_STORE_RESULTS_PER_PAGE
+MAX_TOTAL_PAGES = APP_STORE_MAX_PAGES
+SEARCH_RESULT_LIMIT = APP_STORE_SEARCH_LIMIT
 
 
 # ======= 辅助函数 =======
@@ -100,7 +80,7 @@ def extract_platform_flag(args_str: str) -> tuple[str, str]:
     Returns:
         tuple[str, str]: (平台类型, 清理后的参数字符串)
     """
-    platform = "iphone"  # 默认平台
+    platform = DEFAULT_APP_STORE_PLATFORM  # 默认平台
     cleaned_args = args_str
 
     for flag, platform_type in PLATFORM_FLAGS.items():
@@ -115,13 +95,20 @@ def extract_platform_flag(args_str: str) -> tuple[str, str]:
 def is_valid_country(param: str) -> bool:
     """检查参数是否为有效的国家代码或名称
 
+    支持输入:
+    - 国家代码: US, TR, CN
+    - 中文名称: 美国, 土耳其, 中国
+    - 英文全名: USA, Turkey, China
+
     Args:
         param: 待检查的参数
 
     Returns:
         bool: 是否为有效国家
     """
-    return param.upper() in SUPPORTED_COUNTRIES or param in COUNTRY_NAME_TO_CODE
+    from utils.country_mapper import is_valid_country_input
+
+    return is_valid_country_input(param)
 
 
 def parse_countries(params: list[str]) -> list[str]:
@@ -133,12 +120,13 @@ def parse_countries(params: list[str]) -> list[str]:
     Returns:
         list[str]: 解析出的国家代码列表（已去重）
     """
+    from utils.country_mapper import get_country_code
+
     countries = []
     for param in params:
-        if is_valid_country(param):
-            resolved_code = COUNTRY_NAME_TO_CODE.get(param, param.upper())
-            if resolved_code in SUPPORTED_COUNTRIES and resolved_code not in countries:
-                countries.append(resolved_code)
+        resolved_code = get_country_code(param)
+        if resolved_code and resolved_code not in countries:
+            countries.append(resolved_code)
     return countries
 
 
@@ -218,58 +206,6 @@ def build_search_session_data(
     }
 
 
-async def load_or_fetch_search_results(
-    query: str, country_code: str, platform: str
-) -> list[dict]:
-    """加载缓存或执行新搜索
-
-    Args:
-        query: 搜索关键词
-        country_code: 国家代码
-        platform: 平台类型
-
-    Returns:
-        list[dict]: 搜索结果列表
-    """
-    search_cache_key = CacheKeyBuilder.search(query, country_code, platform)
-
-    # 尝试从缓存加载
-    cached_data = await cache_manager.load_cache(
-        search_cache_key,
-        max_age_seconds=config_manager.config.app_store_search_cache_duration,
-        subdirectory="app_store",
-    )
-
-    if cached_data:
-        logger.info(f"使用缓存的搜索结果: {query} in {country_code}")
-        return cached_data.get("results", [])
-
-    # 执行网页搜索
-    logger.info(f"网页搜索: {query} in {country_code}, platform: {platform}")
-    raw_data = await AppStoreWebAPI.search_apps_by_web(
-        query, country=country_code, platform=platform, limit=SEARCH_RESULT_LIMIT
-    )
-    all_results = raw_data.get("results", [])
-    logger.info(f"✅ 网页搜索完成: 找到 {len(all_results)} 个应用")
-
-    # 保存缓存
-    cache_data = {
-        "query": query,
-        "country": country_code,
-        "platform": platform,
-        "results": all_results,
-        "timestamp": time.time(),
-    }
-    await cache_manager.save_cache(
-        search_cache_key, cache_data, subdirectory="app_store"
-    )
-    logger.info(
-        f"缓存搜索结果: {query} in {country_code}, 找到 {len(all_results)} 个结果"
-    )
-
-    return all_results
-
-
 def calculate_effective_price(
     price_data: dict, target_plan: str = None
 ) -> tuple[float, float]:
@@ -290,9 +226,7 @@ def calculate_effective_price(
     if price_data.get("status") != "ok":
         return (float("inf"), float("inf"))
 
-    app_price = price_data.get("app_price_cny")
-    if app_price is None:
-        app_price = float("inf")
+    app_price = price_data.get("app_price_cny", float("inf"))
     target_plan_price = float("inf")
     min_in_app_price = float("inf")
 
@@ -341,10 +275,10 @@ def format_help_message() -> str:
 def format_search_results(search_data: dict) -> str:
     """格式化搜索结果消息"""
     if search_data.get("error"):
-        return f"❌ 搜索失败: {search_data['error']}"
+        return f"❌ {search_data['error']}"
 
     results = search_data["results"]
-    platform = search_data.get("platform", "iphone")
+    platform = search_data.get("platform", DEFAULT_APP_STORE_PLATFORM)
 
     # 获取平台显示信息
     platform_info = PLATFORM_INFO.get(platform, {"name": "iOS"})
@@ -362,67 +296,59 @@ def format_search_results(search_data: dict) -> str:
 
 def create_search_keyboard(search_data: dict) -> InlineKeyboardMarkup:
     """创建搜索结果的内联键盘"""
-    keyboard = []
     results = search_data["results"]
-    platform = search_data.get("platform", "iphone")
-
-    # 获取平台图标
-    platform_icon = PLATFORM_INFO.get(platform, {"icon": "📱"})["icon"]
-
-    # 每页最多显示 RESULTS_PER_PAGE 个应用
-    for i in range(min(len(results), RESULTS_PER_PAGE)):
-        app = results[i]
-        track_name = app.get("trackName", "未知应用")
-        app_kind = app.get("kind", "")
-
-        # 根据实际应用类型确定图标
-        if app_kind == "mac-software":
-            icon = "💻"
-        elif any("iPad" in device for device in app.get("supportedDevices", [])):
-            icon = "📱"  # iPad 应用
-        else:
-            icon = platform_icon  # 使用平台默认图标
-
-        button_text = f"{icon} {i + 1}. {track_name}"
-        callback_data = f"app_select_{i}_{search_data.get('current_page', 1)}"
-        keyboard.append(
-            [InlineKeyboardButton(button_text, callback_data=callback_data)]
-        )
-
-    # 分页导航
     current_page = search_data.get("current_page", 1)
     total_pages = search_data.get("total_pages", 1)
 
-    nav_row = []
+    keyboard = []
+
+    # 添加应用列表按钮
+    for idx, app in enumerate(results[:RESULTS_PER_PAGE]):
+        app_kind = app.get("kind", "")
+        # 根据应用类型确定图标
+        icon = "💻" if app_kind == "mac-software" else "📱"
+        app_name = app.get("trackName", "未知应用")[:35]
+
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    f"{icon} {app_name}", callback_data=f"app_select_{idx}"
+                )
+            ]
+        )
+
+    # 添加分页按钮
+    page_buttons = []
     if current_page > 1:
-        nav_row.append(
+        page_buttons.append(
             InlineKeyboardButton(
-                "⬅️ 上一页", callback_data=f"app_page_{current_page - 1}"
+                "◀️ 上一页", callback_data=f"app_page_{current_page - 1}"
             )
         )
 
-    nav_row.append(
+    page_buttons.append(
         InlineKeyboardButton(
             f"📄 {current_page}/{total_pages}", callback_data="app_page_info"
         )
     )
 
     if current_page < total_pages:
-        nav_row.append(
+        page_buttons.append(
             InlineKeyboardButton(
-                "下一页 ➡️", callback_data=f"app_page_{current_page + 1}"
+                "下一页 ▶️", callback_data=f"app_page_{current_page + 1}"
             )
         )
 
-    if nav_row:
-        keyboard.append(nav_row)
+    if page_buttons:
+        keyboard.append(page_buttons)
 
-    # 操作按钮
-    action_row = [
-        InlineKeyboardButton("🌍 更改搜索地区", callback_data="app_change_region"),
-        InlineKeyboardButton("❌ 关闭", callback_data="app_close"),
-    ]
-    keyboard.append(action_row)
+    # 添加功能按钮
+    keyboard.append(
+        [
+            InlineKeyboardButton("🌍 切换地区", callback_data="app_change_region"),
+            InlineKeyboardButton("❌ 关闭", callback_data="app_close"),
+        ]
+    )
 
     return InlineKeyboardMarkup(keyboard)
 
@@ -450,188 +376,6 @@ def find_common_plan(price_results: list[dict]) -> str | None:
                 return plan
 
     return common_plans[0] if common_plans else None
-
-
-async def get_app_prices(
-    app_name: str, country_code: str, app_id: int, platform: str
-) -> dict:
-    """获取指定国家的应用价格信息"""
-    global cache_manager, rate_converter
-
-    cache_key = CacheKeyBuilder.app_prices(app_id, country_code, platform)
-
-    # 尝试从缓存加载
-    cached_data = await cache_manager.load_cache(
-        cache_key,
-        max_age_seconds=config_manager.config.app_store_cache_duration,
-        subdirectory="app_store",
-    )
-
-    if cached_data:
-        cache_timestamp = await cache_manager.get_cache_timestamp(
-            cache_key, subdirectory="app_store"
-        )
-        cache_info = (
-            f"*(缓存于: {datetime.fromtimestamp(cache_timestamp).strftime('%Y-%m-%d %H:%M')})*"
-            if cache_timestamp
-            else ""
-        )
-        return {
-            "country_code": country_code,
-            "country_name": SUPPORTED_COUNTRIES.get(country_code, {}).get(
-                "name", country_code
-            ),
-            "flag_emoji": get_country_flag(country_code),
-            "status": "ok",
-            "app_price_str": cached_data.get("app_price_str"),
-            "app_price_cny": cached_data.get("app_price_cny"),
-            "in_app_purchases": cached_data.get("in_app_purchases", []),
-            "cache_info": cache_info,
-            "real_app_name": cached_data.get("real_app_name"),
-        }
-
-    country_info = SUPPORTED_COUNTRIES.get(country_code, {})
-    country_name = country_info.get("name", country_code)
-    flag_emoji = get_country_flag(country_code)
-
-    # 获取应用页面 HTML
-    html_content = await AppStoreWebAPI.fetch_app_page(app_id, country_code)
-
-    if not html_content:
-        return {
-            "country_code": country_code,
-            "country_name": country_name,
-            "flag_emoji": flag_emoji,
-            "status": "not_listed",
-            "error_message": "未上架",
-        }
-
-    try:
-        # 使用 JSON-LD 解析器
-        offers_data = AppStoreParser.parse_json_ld_offers(html_content, country_code)
-
-        if not offers_data:
-            logger.warning(f"无法解析 App {app_id} 在 {country_code} 的价格数据")
-            return {
-                "country_code": country_code,
-                "country_name": country_name,
-                "flag_emoji": flag_emoji,
-                "status": "error",
-                "error_message": "解析失败",
-            }
-
-        real_app_name = offers_data.get("app_name", "")
-        currency = offers_data.get("currency", "USD")
-        price = offers_data.get("price", 0)
-
-        # 格式化应用价格（只根据价格判断，不依赖 category 字段）
-        if price == 0:
-            app_price_str = "免费"
-            app_price_cny = 0.0
-        else:
-            app_price_str = f"{price} {currency}"
-            if country_code != "CN":
-                # 使用统一的降级转换函数
-                from commands.rate_command import convert_currency_with_fallback
-                cny_price = await convert_currency_with_fallback(
-                    float(price), currency.upper(), "CNY"
-                )
-                app_price_cny = cny_price  # None if conversion failed
-            else:
-                # CN 区域直接使用价格
-                app_price_cny = float(price)
-
-        # 解析内购项目
-        in_app_purchases_raw = AppStoreParser.parse_in_app_purchases_html(html_content)
-
-        # 转换内购项目的货币 - 使用 utils/price_parser.py
-        in_app_purchases = []
-        for iap in in_app_purchases_raw:
-            price_str = iap["price_str"]
-
-            # 使用 utils/price_parser.py 的价格解析函数
-            detected_currency, price_value = extract_currency_and_price(
-                price_str, country_code
-            )
-
-            # 如果检测到的货币与国家本地货币不同，重新用正确的 locale 解析
-            # 例如：阿根廷区显示 USD 价格时，应该用 US locale 解析，而不是 AR locale
-            if detected_currency and detected_currency != SUPPORTED_COUNTRIES.get(country_code, {}).get("currency"):
-                # 找到使用该货币的国家作为 locale
-                currency_to_country = {
-                    "USD": "US",
-                    "EUR": "DE",
-                    "GBP": "GB",
-                    "JPY": "JP",
-                    "AUD": "AU",
-                    "CAD": "CA",
-                }
-                correct_country = currency_to_country.get(detected_currency, "US")
-                # 重新解析
-                _, price_value = extract_currency_and_price(price_str, correct_country)
-                logger.info(f"[IAP Debug] Re-parsed with {correct_country} locale: {price_value}")
-
-            # 调试日志
-            logger.info(f"[IAP Debug] price_str='{price_str}', detected_currency='{detected_currency}', price_value={price_value}, main_currency='{currency}'")
-
-            if price_value is None:
-                price_value = 0
-
-            # 使用检测到的货币代码（而非主应用货币）进行转换
-            cny_price = None
-            if price_value > 0 and country_code != "CN":
-                # 使用统一的降级转换函数
-                from commands.rate_command import convert_currency_with_fallback
-                actual_currency = detected_currency if detected_currency else currency
-                logger.info(f"[IAP Debug] Converting {price_value} {actual_currency} to CNY")
-                cny_price = await convert_currency_with_fallback(
-                    price_value, actual_currency.upper(), "CNY"
-                )
-                if cny_price:
-                    logger.info(f"[IAP Debug] Conversion result: {cny_price} CNY")
-
-            in_app_purchases.append(
-                {"name": iap["name"], "price_str": price_str, "cny_price": cny_price}
-            )
-
-        result_data = {
-            "country_code": country_code,
-            "country_name": country_name,
-            "flag_emoji": flag_emoji,
-            "status": "ok",
-            "app_price_str": app_price_str,
-            "app_price_cny": app_price_cny,
-            "in_app_purchases": in_app_purchases,
-            "real_app_name": real_app_name,
-        }
-
-        # 保存到缓存
-        await cache_manager.save_cache(cache_key, result_data, subdirectory="app_store")
-
-        return result_data
-
-    except Exception as e:
-        logger.error(
-            f"解析 App {app_id} 在 {country_code} 的价格时出错: {e}", exc_info=True
-        )
-        return {
-            "country_code": country_code,
-            "country_name": country_name,
-            "flag_emoji": flag_emoji,
-            "status": "error",
-            "error_message": "解析失败",
-        }
-
-
-async def get_multi_country_prices(
-    app_name: str, app_id: int, platform: str, countries: list[str]
-) -> list[dict]:
-    """获取多个国家的应用价格"""
-    tasks = [
-        get_app_prices(app_name, country, app_id, platform) for country in countries
-    ]
-    price_results = await asyncio.gather(*tasks)
-    return price_results
 
 
 def format_app_details(
@@ -674,9 +418,7 @@ def format_app_details(
             price_details_lines.append(f"🌍 国家/地区: {country_name}")
             price_details_lines.append(f"💰 应用价格 : {app_price_str}")
 
-            # 只有非 CNY 货币才显示 CNY 换算
-            country_code = res.get("country_code", "").upper()
-            if country_code != "CN" and res["app_price_cny"] is not None and res["app_price_cny"] > 0:
+            if res["app_price_cny"] is not None and res["app_price_cny"] > 0:
                 price_details_lines[-1] += f" (约 ¥{res['app_price_cny']:.2f} CNY)"
 
             # 内购项目
@@ -685,8 +427,9 @@ def format_app_details(
                     iap_name = iap["name"]
                     iap_price = iap["price_str"]
                     iap_line = f"  •   {iap_name}: {iap_price}"
-                    # 只有非 CNY 货币才显示 CNY 换算
-                    if country_code != "CN" and iap["cny_price"] is not None and iap["cny_price"] != float("inf"):
+                    if iap["cny_price"] is not None and iap["cny_price"] != float(
+                        "inf"
+                    ):
                         iap_line += f" (约 ¥{iap['cny_price']:.2f} CNY)"
                     price_details_lines.append(iap_line)
 
@@ -702,6 +445,19 @@ def format_app_details(
 
 async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理 /app 命令，使用新的模块化架构"""
+    # 从 context.bot_data 获取 AppStorePriceBot 实例
+    bot = context.bot_data.get("app_store_price_bot")
+    if not bot:
+        error_message = "❌ 错误：App Store 查询服务未初始化。"
+        if update.effective_chat:
+            await send_error(
+                context,
+                update.effective_chat.id,
+                foldable_text_v2(error_message),
+                parse_mode="MarkdownV2",
+            )
+        return
+
     if not update.message:
         return
 
@@ -796,6 +552,18 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         # 生成唯一的会话ID
         session_id = f"app_search_{user_id}_{int(time.time())}"
 
+        # 如果用户已经有活跃的搜索会话，取消旧的删除任务
+        if user_id in user_search_sessions:
+            old_session = user_search_sessions[user_id]
+            old_session_id = old_session.get("session_id")
+            if old_session_id:
+                cancelled_count = await cancel_session_deletions(
+                    old_session_id, context
+                )
+                logger.info(
+                    f"🔄 用户 {user_id} 有现有搜索会话，已取消 {cancelled_count} 个旧的删除任务"
+                )
+
         # For search, we only use the first specified country.
         country_code = (
             final_countries_to_search[0] if final_countries_to_search else "US"
@@ -812,7 +580,7 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         )
 
         # 使用新的搜索缓存加载函数
-        all_results = await load_or_fetch_search_results(
+        all_results = await bot.load_or_fetch_search_results(
             final_query, country_code, platform
         )
 
@@ -883,6 +651,18 @@ async def handle_app_id_query(
     update: Update, context: ContextTypes.DEFAULT_TYPE, args_str_full: str
 ) -> None:
     """处理 App ID 直接查询"""
+    # 从 context.bot_data 获取 AppStorePriceBot 实例
+    bot = context.bot_data.get("app_store_price_bot")
+    if not bot:
+        if update.effective_chat:
+            await send_error(
+                context,
+                update.effective_chat.id,
+                foldable_text_v2("❌ 错误：App Store 查询服务未初始化。"),
+                parse_mode="MarkdownV2",
+            )
+        return
+
     if not update.effective_chat:
         return
 
@@ -939,9 +719,9 @@ async def handle_app_id_query(
         )
 
         # 尝试从缓存加载完整的格式化结果
-        cached_detail = await cache_manager.load_cache(
+        cached_detail = await bot.cache_manager.load_cache(
             detail_cache_key,
-            max_age_seconds=config_manager.config.app_store_cache_duration,
+            max_age_seconds=bot.redis_cache_duration,
             subdirectory="app_store",
         )
 
@@ -968,7 +748,7 @@ async def handle_app_id_query(
         )
 
         # 获取多国价格信息
-        price_results_raw = await get_multi_country_prices(
+        price_results_raw = await bot.get_multi_country_prices(
             app_name=app_name,
             app_id=int(app_id),
             platform=platform,
@@ -1019,7 +799,7 @@ async def handle_app_id_query(
             "formatted_message": formatted_message,
             "timestamp": time.time(),
         }
-        await cache_manager.save_cache(
+        await bot.cache_manager.save_cache(
             detail_cache_key, cache_data, subdirectory="app_store"
         )
         logger.info(
@@ -1062,6 +842,14 @@ async def handle_app_search_callback(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
     """处理App搜索相关的回调查询"""
+    # 从 context.bot_data 获取 AppStorePriceBot 实例
+    bot = context.bot_data.get("app_store_price_bot")
+    if not bot:
+        query = update.callback_query
+        if query:
+            await query.answer("❌ 服务未初始化")
+        return
+
     query = update.callback_query
     await query.answer()
 
@@ -1181,7 +969,7 @@ async def handle_app_search_callback(
             )
 
             # 使用新的搜索缓存加载函数
-            all_results = await load_or_fetch_search_results(
+            all_results = await bot.load_or_fetch_search_results(
                 final_query, country_code.lower(), platform
             )
 
@@ -1271,6 +1059,15 @@ async def show_app_details(
     session: dict,
 ) -> None:
     """显示应用详情"""
+    # 从 context.bot_data 获取 AppStorePriceBot 实例
+    bot = context.bot_data.get("app_store_price_bot")
+    if not bot:
+        await query.edit_message_text(
+            foldable_text_v2("❌ 错误：App Store 查询服务未初始化。"),
+            parse_mode="MarkdownV2",
+        )
+        return
+
     try:
         user_specified_countries = session.get("user_specified_countries")
         countries_to_check = user_specified_countries or DEFAULT_COUNTRIES
@@ -1279,7 +1076,7 @@ async def show_app_details(
         platform = session.get("search_data", {}).get("platform", "iphone")
 
         # 获取多国价格信息
-        price_results_raw = await get_multi_country_prices(
+        price_results_raw = await bot.get_multi_country_prices(
             app_name=app_name,
             app_id=int(app_id),
             platform=platform,
@@ -1311,6 +1108,68 @@ async def show_app_details(
         )
 
 
+async def app_store_clean_cache_command(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """清理App Store缓存"""
+    # 从 context.bot_data 获取 AppStorePriceBot 实例
+    bot = context.bot_data.get("app_store_price_bot")
+    if not bot:
+        if update.effective_chat:
+            await send_error(
+                context,
+                update.effective_chat.id,
+                "❌ 错误：App Store 查询服务未初始化。",
+            )
+        return
+
+    if not update.effective_user or not update.effective_chat or not update.message:
+        return
+
+    user_id = update.effective_user.id
+
+    # 删除用户命令消息
+    await delete_user_command(
+        context, update.message.chat_id, update.message.message_id
+    )
+
+    # 使用 MySQL 用户管理器进行权限检查
+    user_manager = context.bot_data.get("user_cache_manager")
+    if not user_manager:
+        await send_error(context, update.effective_chat.id, "❌ 用户管理器未初始化。")
+        return
+
+    if not (
+        await user_manager.is_super_admin(user_id)
+        or await user_manager.is_admin(user_id)
+    ):
+        await send_error(context, update.effective_chat.id, "❌ 你没有缓存管理权限。")
+        return
+
+    try:
+        cache_manager_obj = context.bot_data.get("cache_manager")
+        if not cache_manager_obj:
+            await send_error(
+                context, update.effective_chat.id, "❌ 缓存管理器未初始化。"
+            )
+            return
+
+        await cache_manager_obj.clear_cache(subdirectory="app_store")
+
+        result_text = "✅ App Store 相关的所有缓存已清理完成。\n\n包括：搜索结果、应用详情和价格信息。"
+
+        await send_success(
+            context,
+            update.effective_chat.id,
+            foldable_text_v2(result_text),
+            parse_mode="MarkdownV2",
+        )
+
+    except Exception as e:
+        logger.error(f"App Store缓存清理失败: {e}")
+        await send_error(context, update.effective_chat.id, f"❌ 缓存清理失败: {e!s}")
+
+
 # Register commands
 command_factory.register_command(
     "app",
@@ -1318,319 +1177,126 @@ command_factory.register_command(
     permission=Permission.USER,
     description="App Store应用搜索（支持iOS/iPadOS/macOS/tvOS/watchOS/visionOS）",
 )
+command_factory.register_command(
+    "app_cleancache",
+    app_store_clean_cache_command,
+    permission=Permission.ADMIN,
+    description="清理App Store缓存",
+)
+
+
+async def app_store_clear_item_command(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """清理指定 App ID 的所有缓存（Redis + MySQL），可选按国家限定。"""
+    # 从 context.bot_data 获取组件
+    cache_manager_obj = context.bot_data.get("cache_manager")
+    db_manager = context.bot_data.get("price_history_manager")
+
+    if not update.effective_chat or not update.effective_user or not update.message:
+        return
+
+    # 删除用户命令消息
+    await delete_user_command(
+        context, update.message.chat_id, update.message.message_id
+    )
+
+    # 管理员校验（与 /app_cleancache 一致）
+    user_manager = context.bot_data.get("user_cache_manager")
+    if not user_manager:
+        await send_error(context, update.effective_chat.id, "❌ 用户管理器未初始化。")
+        return
+
+    user_id = update.effective_user.id
+    if not (
+        await user_manager.is_super_admin(user_id)
+        or await user_manager.is_admin(user_id)
+    ):
+        await send_error(context, update.effective_chat.id, "❌ 你没有缓存管理权限。")
+        return
+
+    # 解析参数: /app_clearitem <id或idXXXX> [国家...]
+    if not context.args:
+        await send_error(context, update.effective_chat.id, "❌ 用法: /app_clearitem <AppID或idXXXX> [国家...]")
+        return
+
+    raw_id = context.args[0].strip().lower()
+    app_id_str = raw_id[2:] if raw_id.startswith("id") else raw_id
+    if not app_id_str.isdigit():
+        await send_error(context, update.effective_chat.id, "❌ App ID 格式不正确。示例: 932747118 或 id932747118")
+        return
+
+    app_id = app_id_str
+
+    # 解析可选国家参数
+    extra_params = context.args[1:] if len(context.args) > 1 else []
+    countries = parse_countries(extra_params) if extra_params else []
+
+    # 清理 Redis: app 价格缓存键前缀
+    cleared_redis = 0
+    if cache_manager_obj:
+        try:
+            if countries:
+                for c in countries:
+                    # 匹配所有平台，目标国家
+                    prefix = f"app_store:prices:*:{app_id}:{c.upper()}"
+                    await cache_manager_obj.clear_cache(
+                        key_prefix=prefix, subdirectory="app_store"
+                    )
+            else:
+                # 所有平台、所有国家
+                prefix = f"app_store:prices:*:{app_id}:"
+                await cache_manager_obj.clear_cache(
+                    key_prefix=prefix, subdirectory="app_store"
+                )
+        except Exception as e:
+            await send_error(context, update.effective_chat.id, f"❌ 清理 Redis 失败: {e!s}")
+            return
+
+    # 清理 MySQL: price_history
+    deleted_db = 0
+    if db_manager:
+        try:
+            if countries:
+                for c in countries:
+                    deleted_db += await db_manager.delete_item(
+                        service="app_store", item_id=str(app_id), country_code=c
+                    )
+            else:
+                deleted_db += await db_manager.delete_item(
+                    service="app_store", item_id=str(app_id)
+                )
+        except Exception as e:
+            await send_error(context, update.effective_chat.id, f"❌ 清理 MySQL 失败: {e!s}")
+            return
+
+    # 成功反馈
+    scope_text = (
+        ", ".join([c.upper() for c in countries]) if countries else "所有国家"
+    )
+    result_text = (
+        f"✅ 已清理 App Store 缓存\n"
+        f"• App ID: {app_id}\n"
+        f"• 范围: {scope_text}\n"
+        f"• MySQL 删除记录: {deleted_db}"
+    )
+    await send_success(
+        context,
+        update.effective_chat.id,
+        foldable_text_v2(result_text),
+        parse_mode="MarkdownV2",
+    )
+
+
+command_factory.register_command(
+    "app_clearitem",
+    app_store_clear_item_command,
+    permission=Permission.ADMIN,
+    description="清理指定 App ID 的缓存（Redis+MySQL）",
+)
 command_factory.register_callback(
     "^app_",
     handle_app_search_callback,
     permission=Permission.USER,
     description="App搜索回调处理",
 )
-
-
-# =============================================================================
-# Inline 执行入口
-# =============================================================================
-
-async def appstore_inline_execute(args: str) -> dict:
-    """
-    Inline Query 执行入口 - 通过 App ID 查询 App Store 价格
-
-    Args:
-        args: App ID + 可选国家代码，格式为 "id363590051 US CN JP" 或 "363590051"
-
-    Returns:
-        dict: {
-            "success": bool,
-            "title": str,
-            "message": str,
-            "description": str,
-            "error": str | None
-        }
-    """
-    if not args or not args.strip():
-        return {
-            "success": False,
-            "title": "❌ 请输入 App ID",
-            "message": "请提供 App ID\\n\\n*使用方法:*\\n• `appstore id363590051` \\\\- 默认地区\\n• `appstore id363590051 US CN JP` \\\\- 指定地区\\n• `appstore 363590051` \\\\- 也可省略 id 前缀\\n\\n💡 App ID 可在 App Store 链接中找到",
-            "description": "请提供 App ID，如 id363590051",
-            "error": "未提供 App ID"
-        }
-
-    # 解析参数
-    parts = args.strip().split()
-    app_id_param = parts[0]
-
-    # 支持 "id363590051" 或 "363590051" 格式
-    if app_id_param.lower().startswith("id"):
-        app_id = app_id_param[2:]
-    else:
-        app_id = app_id_param
-
-    if not app_id.isdigit():
-        return {
-            "success": False,
-            "title": "❌ 无效的 App ID",
-            "message": f"无效的 App ID: `{app_id_param}`\\n\\nApp ID 必须是数字，如 `id363590051`",
-            "description": "App ID 格式错误",
-            "error": "App ID 必须是数字"
-        }
-
-    try:
-        # 解析国家参数
-        if len(parts) > 1:
-            countries_parsed = parse_countries(parts[1:])
-            countries_to_check = countries_parsed if countries_parsed else DEFAULT_COUNTRIES
-        else:
-            countries_to_check = DEFAULT_COUNTRIES
-
-        platform = "ios"  # 默认 iOS 平台
-
-        # 获取多国价格信息
-        price_results_raw = await get_multi_country_prices(
-            app_name=f"App ID {app_id}",
-            app_id=int(app_id),
-            platform=platform,
-            countries=countries_to_check,
-        )
-
-        # 过滤成功结果
-        successful_results = [res for res in price_results_raw if res["status"] == "ok"]
-
-        if not successful_results:
-            return {
-                "success": False,
-                "title": f"❌ 未找到 App {app_id}",
-                "message": f"在默认区域中未找到 App ID `{app_id}`\\n\\n请检查 ID 是否正确",
-                "description": f"未找到 App ID {app_id}",
-                "error": "App 不存在"
-            }
-
-        # 获取真实应用名称
-        real_app_name = None
-        for res in successful_results:
-            if res.get("real_app_name"):
-                real_app_name = res["real_app_name"]
-                break
-
-        app_name = real_app_name or f"App ID {app_id}"
-
-        # 格式化结果
-        target_plan = find_common_plan(price_results_raw)
-        formatted_result = format_app_details(
-            app_name=app_name,
-            app_id=app_id,
-            platform=platform,
-            price_results=price_results_raw,
-            target_plan=target_plan,
-        )
-
-        # 构建简短描述
-        first_result = successful_results[0]
-        first_price = first_result.get("app_price_str", "免费")
-        short_desc = f"{app_name} | {first_price}"
-
-        return {
-            "success": True,
-            "title": f"📱 {app_name}",
-            "message": foldable_text_with_markdown_v2(formatted_result),
-            "description": short_desc,
-            "error": None
-        }
-
-    except Exception as e:
-        logger.error(f"Inline App Store query failed: {e}")
-        return {
-            "success": False,
-            "title": "❌ 查询失败",
-            "message": f"查询 App Store 失败: {str(e)}",
-            "description": "查询失败",
-            "error": str(e)
-        }
-
-
-# =============================================================================
-# Inline 搜索入口（返回多个结果）
-# =============================================================================
-
-async def handle_inline_appstore_search(
-    keyword: str,
-    context: ContextTypes.DEFAULT_TYPE,
-) -> list:
-    """
-    Inline 搜索 App Store 应用（参考 netease 的 handle_inline_music_search）
-    返回多个搜索结果供用户选择
-
-    Args:
-        keyword: 搜索关键词，格式为 "应用名称" 或 "应用名称 -平台标志" 或 "应用名称 HK TW JP"
-        context: Telegram context
-
-    Returns:
-        list: InlineQueryResult 列表
-    """
-    from telegram import InlineQueryResultArticle, InputTextMessageContent
-    from uuid import uuid4
-
-    if not keyword.strip():
-        return [
-            InlineQueryResultArticle(
-                id=str(uuid4()),
-                title="🔍 请输入搜索关键词",
-                description="例如: appstore 微信$ 或 appstore 微信 hk tw jp$",
-                input_message_content=InputTextMessageContent(
-                    message_text="🔍 请输入应用名称搜索 App Store\n\n"
-                    "支持格式:\n"
-                    "• appstore 微信$\n"
-                    "• appstore 微信 hk tw jp$\n"
-                    "• appstore Photoshop -mac$"
-                ),
-            )
-        ]
-
-    try:
-        # 解析平台参数
-        platform, cleaned_keyword = extract_platform_flag(keyword)
-
-        if not cleaned_keyword.strip():
-            return [
-                InlineQueryResultArticle(
-                    id=str(uuid4()),
-                    title="❌ 请输入应用名称",
-                    description="搜索关键词不能为空",
-                    input_message_content=InputTextMessageContent(
-                        message_text="❌ 请输入应用名称"
-                    ),
-                )
-            ]
-
-        # 解析应用名称和国家参数
-        try:
-            all_params_list = parse_command_args(cleaned_keyword)
-        except ValueError:
-            all_params_list = cleaned_keyword.split()
-
-        # 分离应用名称和国家代码
-        app_name_parts = []
-        countries_parsed = []
-        for param in all_params_list:
-            if is_valid_country(param):
-                countries_parsed = parse_countries(all_params_list[all_params_list.index(param):])
-                break
-            app_name_parts.append(param)
-
-        if not app_name_parts:
-            return [
-                InlineQueryResultArticle(
-                    id=str(uuid4()),
-                    title="❌ 请输入应用名称",
-                    description="搜索关键词不能为空",
-                    input_message_content=InputTextMessageContent(
-                        message_text="❌ 请输入应用名称"
-                    ),
-                )
-            ]
-
-        app_name_to_search = " ".join(app_name_parts)
-
-        # 确定要查询的国家列表
-        countries_to_check = countries_parsed if countries_parsed else DEFAULT_COUNTRIES
-
-        # 默认在美区搜索（搜索本身只在一个区域进行）
-        country_code = "us"
-
-        # 获取平台信息
-        platform_info = PLATFORM_INFO.get(platform, {"icon": "📱", "name": "iOS"})
-
-        # 执行搜索
-        logger.info(f"Inline App Store 搜索: '{app_name_to_search}' in {country_code}, platform: {platform}, countries: {countries_to_check}")
-        all_results = await load_or_fetch_search_results(
-            app_name_to_search, country_code, platform
-        )
-
-        if not all_results:
-            return [
-                InlineQueryResultArticle(
-                    id=str(uuid4()),
-                    title="❌ 未找到结果",
-                    description=f"关键词: {app_name_to_search} ({platform_info['name']})",
-                    input_message_content=InputTextMessageContent(
-                        message_text=f"❌ 未找到与 \"{app_name_to_search}\" 相关的 {platform_info['name']} 应用"
-                    ),
-                )
-            ]
-
-        # 构建搜索结果列表（最多10个）
-        results = []
-        for i, app in enumerate(all_results[:10]):
-            app_name = app.get("trackName", "未知应用")
-            app_id = app.get("trackId")
-            artist_name = app.get("artistName", "")
-
-            if not app_id:
-                continue
-
-            # 构建描述
-            description_parts = []
-            if artist_name:
-                description_parts.append(artist_name)
-
-            # 获取价格信息（如果有）
-            price = app.get("formattedPrice", "")
-            if price:
-                description_parts.append(price)
-
-            description = " | ".join(description_parts) if description_parts else "点击查看多国价格"
-
-            # 获取多国价格信息（使用用户指定的国家列表或默认列表）
-            try:
-                price_results_raw = await get_multi_country_prices(
-                    app_name=app_name,
-                    app_id=int(app_id),
-                    platform=platform,
-                    countries=countries_to_check,
-                )
-
-                # 格式化价格信息
-                target_plan = find_common_plan(price_results_raw)
-                formatted_result = format_app_details(
-                    app_name=app_name,
-                    app_id=str(app_id),
-                    platform=platform,
-                    price_results=price_results_raw,
-                    target_plan=target_plan,
-                )
-
-                # 使用 MarkdownV2 格式
-                message_text = foldable_text_with_markdown_v2(formatted_result)
-                parse_mode = "MarkdownV2"
-
-            except Exception as e:
-                logger.warning(f"获取应用 {app_id} 价格失败: {e}")
-                # 降级：只显示基本信息
-                message_text = f"📱 *{app_name}*\n\n❌ 获取价格信息失败\n\n💡 请使用 `/app id{app_id}` 重试"
-                parse_mode = "Markdown"
-
-            results.append(
-                InlineQueryResultArticle(
-                    id=str(uuid4()),
-                    title=f"{platform_info['icon']} {app_name}",
-                    description=description,
-                    input_message_content=InputTextMessageContent(
-                        message_text=message_text,
-                        parse_mode=parse_mode,
-                    ),
-                )
-            )
-
-        return results
-
-    except Exception as e:
-        logger.error(f"Inline App Store 搜索失败: {e}", exc_info=True)
-        return [
-            InlineQueryResultArticle(
-                id=str(uuid4()),
-                title="❌ 搜索失败",
-                description=str(e)[:100],
-                input_message_content=InputTextMessageContent(
-                    message_text=f"❌ 搜索失败: {str(e)}"
-                ),
-            )
-        ]

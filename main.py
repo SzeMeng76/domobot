@@ -279,6 +279,28 @@ async def setup_application(application: Application, config) -> None:
     # 初始化汇率转换器
     rate_converter = RateConverter(config.exchange_rate_api_keys, cache_manager)
 
+    # 初始化价格历史管理器（MySQL 持久化层）
+    from utils.price_history_manager import PriceHistoryManager
+
+    price_history_manager = PriceHistoryManager(
+        host=config.db_host,
+        port=config.db_port,
+        database=config.db_name,
+        user=config.db_user,
+        password=config.db_password,
+    )
+    await price_history_manager.connect()
+    logger.info("✅ 价格历史管理器初始化完成")
+
+    # 初始化智能缓存管理器（Redis + MySQL 分层缓存）
+    from utils.smart_cache_manager import SmartCacheManager
+
+    smart_cache_manager = SmartCacheManager(
+        redis_cache_manager=cache_manager,
+        price_history_manager=price_history_manager,
+    )
+    logger.info("✅ 智能缓存管理器初始化完成")
+
     # 初始化优化的 HTTP 客户端
     from utils.http_client import get_http_client
 
@@ -349,6 +371,8 @@ async def setup_application(application: Application, config) -> None:
     application.bot_data["httpx_client"] = httpx_client
     application.bot_data["user_cache_manager"] = user_cache_manager
     application.bot_data["stats_manager"] = stats_manager
+    application.bot_data["price_history_manager"] = price_history_manager
+    application.bot_data["smart_cache_manager"] = smart_cache_manager
     application.bot_data["anti_spam_handler"] = anti_spam_handler  # 存储反垃圾处理器
     application.bot_data["parse_adapter"] = parse_adapter  # 存储社交解析适配器
     application.bot_data["pyrogram_helper"] = pyrogram_helper  # 存储Pyrogram helper（用于DC ID查询）
@@ -357,7 +381,21 @@ async def setup_application(application: Application, config) -> None:
     # ========================================
     # 第二步：为命令模块注入依赖
     # ========================================
-    logger.info(" 注入命令模块依赖...")
+    logger.info("📦 注入命令模块依赖...")
+
+    # 初始化 App Store 价格查询机器人（使用新的模块化架构）
+    try:
+        from commands.app_store_modules import init_app_store_bot
+        init_app_store_bot(
+            application=application,
+            cache_manager=cache_manager,
+            rate_converter=rate_converter,
+            smart_cache_manager=smart_cache_manager,
+        )
+    except Exception as e:
+        logger.error(f"❌ App Store 机器人初始化失败: {e}")
+
+    # 为其他命令模块注入依赖（旧方式，逐步迁移）
     set_rate_converter(rate_converter)
     steam.set_rate_converter(rate_converter)
     steam.set_cache_manager(cache_manager)
@@ -366,8 +404,8 @@ async def setup_application(application: Application, config) -> None:
     disney_plus.set_dependencies(cache_manager, rate_converter)
     spotify.set_dependencies(cache_manager, rate_converter)
     max.set_dependencies(cache_manager, rate_converter)
-    app_store.set_rate_converter(rate_converter)
-    app_store.set_cache_manager(cache_manager)
+    # app_store.set_rate_converter(rate_converter)  # 已改用 init_app_store_bot
+    # app_store.set_cache_manager(cache_manager)    # 已改用 init_app_store_bot
     google_play.set_rate_converter(rate_converter)
     google_play.set_cache_manager(cache_manager)
     apple_services.set_rate_converter(rate_converter)
