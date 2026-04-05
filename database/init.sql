@@ -217,3 +217,29 @@ CREATE TABLE IF NOT EXISTS social_parser_stats (
     INDEX idx_created_at (created_at),
     INDEX idx_parse_success (parse_success)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='社交媒体解析统计表';
+
+-- ============================================================================
+-- 价格历史功能相关表
+-- ============================================================================
+
+-- 价格历史表（支持智能缓存系统）
+CREATE TABLE IF NOT EXISTS price_history (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '自增主键',
+    service VARCHAR(50) NOT NULL COMMENT '服务名称（steam/app_store/google_play等）',
+    item_id VARCHAR(255) NOT NULL COMMENT '商品ID',
+    item_name VARCHAR(500) COMMENT '商品名称',
+    country_code VARCHAR(10) NOT NULL COMMENT '国家代码',
+    currency VARCHAR(10) COMMENT '货币代码',
+    original_price DECIMAL(10, 2) COMMENT '原价',
+    current_price DECIMAL(10, 2) COMMENT '当前价格',
+    discount_percent INT DEFAULT 0 COMMENT '折扣百分比',
+    price_cny DECIMAL(10, 2) COMMENT 'CNY等值价格',
+    extra_data JSON COMMENT '额外数据（JSON格式）',
+    recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '记录时间',
+    UNIQUE KEY unique_service_item_country_time (service, item_id, country_code, recorded_at),
+    INDEX idx_service (service),
+    INDEX idx_item_id (item_id),
+    INDEX idx_country_code (country_code),
+    INDEX idx_recorded_at (recorded_at),
+    INDEX idx_service_item_country (service, item_id, country_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='价格历史表';
