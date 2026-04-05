@@ -44,3 +44,83 @@ command_factory.register_command(
 )
 
 logger.info("Netflix 命令已注册")
+
+
+# =============================================================================
+# Inline 执行入口
+# =============================================================================
+
+async def netflix_inline_execute(args: str) -> dict:
+    """
+    Inline Query 执行入口 - 提供完整的 Netflix 价格查询功能
+
+    Args:
+        args: 用户输入的参数字符串，如 "US" 或 "美国"，为空则返回 Top 10
+
+    Returns:
+        dict: {
+            "success": bool,
+            "title": str,
+            "message": str,
+            "description": str,
+            "error": str | None
+        }
+    """
+    # 从全局获取 netflix_price_bot（通过 init_netflix_bot 初始化后存储在 bot_data）
+    # 注意：inline 模式下需要特殊处理，因为没有 context
+    netflix_price_bot = None
+    
+    # 尝试从某个全局位置获取（具体实现取决于你的架构）
+    # 这里需要你的 inline handler 传递 application 或 bot_data
+    
+    if not netflix_price_bot:
+        return {
+            "success": False,
+            "title": "❌ 服务未初始化",
+            "message": "Netflix 查询服务未初始化，请联系管理员",
+            "description": "服务未初始化",
+            "error": "Netflix 服务未初始化"
+        }
+
+    try:
+        # 加载数据
+        await netflix_price_bot.load_or_fetch_data(None)
+
+        if not args or not args.strip():
+            # 无参数：返回 Top 10 最便宜的国家
+            result = await netflix_price_bot.get_top_cheapest()
+            return {
+                "success": True,
+                "title": "🎬 Netflix 全球最低价排名",
+                "message": result,
+                "description": "Netflix Premium 套餐全球最低价 Top 10",
+                "error": None
+            }
+        else:
+            # 有参数：查询指定国家
+            query_list = args.strip().split()
+            result = await netflix_price_bot.query_prices(query_list)
+
+            # 构建简短描述
+            if len(query_list) == 1:
+                short_desc = f"Netflix {query_list[0]} 订阅价格"
+            else:
+                short_desc = f"Netflix {', '.join(query_list[:3])} 等地区价格"
+
+            return {
+                "success": True,
+                "title": f"🎬 Netflix 价格查询",
+                "message": result,
+                "description": short_desc,
+                "error": None
+            }
+
+    except Exception as e:
+        logger.error(f"Inline Netflix query failed: {e}")
+        return {
+            "success": False,
+            "title": "❌ 查询失败",
+            "message": f"查询 Netflix 价格失败: {str(e)}",
+            "description": "查询失败",
+            "error": str(e)
+        }
