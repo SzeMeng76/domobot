@@ -1265,12 +1265,47 @@ def _format_country_inline(country_data: dict, country_code: str, all_data: dict
                 elif diff < 0:
                     raw_parts.append(f"  💚 比平均低 ¥{abs(diff):.2f}/L")
 
+    # LPG
+    lpg = country_data.get('lpg')
+    if lpg:
+        local_price = lpg.get('local_price')
+        local_currency = lpg.get('local_currency')
+        price = lpg.get('price', 0)
+        price_cny = lpg.get('price_cny', 0)
+
+        raw_parts.append("")
+        raw_parts.append("⛽ *LPG:*")
+        if local_price and local_currency:
+            raw_parts.append(f"  本地: {local_currency} {local_price:.2f}/L")
+        raw_parts.append(f"  USD: ${price:.2f}/L")
+        raw_parts.append(f"  CNY: ¥{price_cny:.2f}/L")
+
+        if all_data and price_cny > 0:
+            lpg_data = [(code, info) for code, info in all_data.items()
+                       if info.get('lpg') and info['lpg'].get('price_cny', 0) > 0]
+            sorted_countries = sorted(lpg_data, key=lambda x: x[1]['lpg']['price_cny'])
+            prices = [info['lpg']['price_cny'] for _, info in sorted_countries]
+            avg_price = sum(prices) / len(prices) if prices else 0
+
+            rank = next((i + 1 for i, (code, info) in enumerate(sorted_countries)
+                        if info.get('country') == country), None)
+
+            if rank:
+                raw_parts.append(f"  📊 全球排名: 第 {rank}/{len(sorted_countries)} 位")
+                diff = price_cny - avg_price
+                if diff > 0:
+                    raw_parts.append(f"  💸 比平均高 ¥{diff:.2f}/L")
+                elif diff < 0:
+                    raw_parts.append(f"  💚 比平均低 ¥{abs(diff):.2f}/L")
+
     # Price date
     price_date = None
     if gasoline and gasoline.get('price_date'):
         price_date = gasoline.get('price_date')
     elif diesel and diesel.get('price_date'):
         price_date = diesel.get('price_date')
+    elif lpg and lpg.get('price_date'):
+        price_date = lpg.get('price_date')
 
     if price_date:
         raw_parts.append("")

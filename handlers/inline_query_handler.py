@@ -444,6 +444,11 @@ class InlineQueryHandler:
 • `fuel my$` - 马来西亚油价
 • `fuel china$` - 中国油价排名
 • `fuel diesel$` - 全球柴油价格排名
+• `fuel lpg$` - 全球LPG价格排名
+
+**⚡ 电价查询:**
+• `elec$` - 全球电价排名
+• `elec my$` - 马来西亚电价
 
 **🎬 影视查询:**
 • `movie Inception$` - 电影搜索（模糊搜索，返回10个结果）
@@ -534,6 +539,8 @@ class InlineQueryHandler:
             "appstore": "📱 App Store - 添加 $ 执行查询",
             "app": "📱 App Store - 添加 $ 执行查询",
             "fuel": "🛢️ 油价查询 - 添加 $ 执行查询",
+            "elec": "⚡ 电价查询 - 添加 $ 执行查询",
+            "electricity": "⚡ 电价查询 - 添加 $ 执行查询",
             "weather": "🌤️ 天气查询 - 添加 $ 执行查询（点按钮生成AI日报）",
             "tq": "🌤️ 天气查询 - 添加 $ 执行查询（点按钮生成AI日报）",
             "time": "🕐 时区查询 - 添加 $ 执行查询",
@@ -588,6 +595,8 @@ class InlineQueryHandler:
             "appleservices": {"icon": "🍎", "title": "Apple服务", "desc": "订阅价格"},
             "appstore": {"icon": "📱", "title": "App Store", "desc": "应用价格"},
             "fuel": {"icon": "🛢️", "title": "油价查询", "desc": "全球油价"},
+            "elec": {"icon": "⚡", "title": "电价查询", "desc": "全球电价"},
+            "electricity": {"icon": "⚡", "title": "电价查询", "desc": "全球电价"},
             "weather": {"icon": "🌤️", "title": "天气查询", "desc": "天气预报和预警"},
             "time": {"icon": "🕐", "title": "时区查询", "desc": "世界时间"},
             "news": {"icon": "📰", "title": "新闻", "desc": "最新资讯"},
