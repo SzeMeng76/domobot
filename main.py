@@ -419,6 +419,30 @@ async def setup_application(application: Application, config) -> None:
     except Exception as e:
         logger.error(f"❌ Spotify 机器人初始化失败: {e}")
 
+    # 初始化 Google Play 查询机器人（使用新的模块化架构）
+    try:
+        from commands.google_play_modules import init_google_play_bot
+        init_google_play_bot(
+            application=application,
+            cache_manager=cache_manager,
+            rate_converter=rate_converter,
+            smart_cache_manager=smart_cache_manager,
+        )
+    except Exception as e:
+        logger.error(f"❌ Google Play 机器人初始化失败: {e}")
+
+    # 初始化 Steam 价格查询机器人（使用新的模块化架构）
+    try:
+        from commands.steam import init_steam_bot
+        init_steam_bot(
+            application=application,
+            cache_manager=cache_manager,
+            rate_converter=rate_converter,
+            smart_cache_manager=smart_cache_manager,
+        )
+    except Exception as e:
+        logger.error(f"❌ Steam 机器人初始化失败: {e}")
+
     # 初始化 Disney+ 价格查询机器人（使用新的模块化架构）
     try:
         from commands.disney_modules import init_disney_bot
@@ -445,17 +469,17 @@ async def setup_application(application: Application, config) -> None:
 
     # 为其他命令模块注入依赖（旧方式，逐步迁移）
     set_rate_converter(rate_converter)
-    steam.set_rate_converter(rate_converter)
-    steam.set_cache_manager(cache_manager)
-    steam.set_steam_checker(cache_manager, rate_converter)
+    # steam.set_rate_converter(rate_converter)  # 已改用 init_steam_bot
+    # steam.set_cache_manager(cache_manager)    # 已改用 init_steam_bot
+    # steam.set_steam_checker(cache_manager, rate_converter)  # 已改用 init_steam_bot
     # netflix.set_dependencies(cache_manager, rate_converter)  # 已改用 init_netflix_bot
     # spotify.set_dependencies(cache_manager, rate_converter)  # 已改用 init_spotify_bot
     # disney_plus.set_dependencies(cache_manager, rate_converter)  # 已改用 init_disney_bot
     # max_command.set_dependencies(cache_manager, rate_converter)  # 已改用 init_max_bot
     # app_store.set_rate_converter(rate_converter)  # 已改用 init_app_store_bot
     # app_store.set_cache_manager(cache_manager)    # 已改用 init_app_store_bot
-    google_play.set_rate_converter(rate_converter)
-    google_play.set_cache_manager(cache_manager)
+    # google_play.set_rate_converter(rate_converter)  # 已改用 init_google_play_bot
+    # google_play.set_cache_manager(cache_manager)    # 已改用 init_google_play_bot
     apple_services.set_rate_converter(rate_converter)
     weather.set_dependencies(cache_manager, httpx_client)
     crypto.set_dependencies(cache_manager, httpx_client)
