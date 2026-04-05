@@ -1,0 +1,267 @@
+"""
+Netflix 价格查询机器人类
+
+提供 Netflix 订阅价格查询功能
+数据源: https://raw.githubusercontent.com/SzeMeng76/netflix-pricing-scraper
+"""
+
+import logging
+from datetime import datetime
+from typing import Any
+
+import httpx
+from telegram.ext import ContextTypes
+
+from utils.country_data import SUPPORTED_COUNTRIES, get_country_flag
+from utils.formatter import foldable_text_v2, foldable_text_with_markdown_v2
+from utils.price_formatter import get_rank_emoji, format_cache_timestamp
+from utils.price_query_service import PriceQueryService
+
+logger = logging.getLogger(__name__)
+
+
+class NetflixPriceBot(PriceQueryService):
+    PRICE_URL = "https://raw.githubusercontent.com/SzeMeng76/netflix-pricing-scraper/refs/heads/main/netflix_prices_processed.json"
+
+    async def _fetch_data(self, context: ContextTypes.DEFAULT_TYPE) -> dict[str, Any] | None:
+        """Fetches Netflix price data from the specified URL."""
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+        try:
+            from utils.http_client import create_custom_client
+
+            async with create_custom_client(headers=headers) as client:
+                response = await client.get(self.PRICE_URL, timeout=20.0)
+                response.raise_for_status()
+                return response.json()
+        except httpx.RequestError as e:
+            logger.error(f"Failed to fetch Netflix price data: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"An unexpected error occurred while fetching Netflix data: {e}")
+            return None
+
+    def _init_country_mapping(self) -> dict[str, Any]:
+        """Initializes country name and code to data mapping."""
+        mapping = {}
+        if not self.data:
+            return mapping
+
+        for country_code, country_data in self.data.items():
+            if country_code.startswith("_"):
+                continue
+
+            code_upper = country_code.upper()
+            mapping[code_upper] = {
+                "code": code_upper,
+                "name_cn": country_data.get("name_cn", ""),
+                "plans": country_data.get("plans", [])
+            }
+
+            if code_upper in SUPPORTED_COUNTRIES and "name" in SUPPORTED_COUNTRIES[code_upper]:
+                mapping[SUPPORTED_COUNTRIES[code_upper]["name"]] = mapping[code_upper]
+
+            if country_data.get("name_cn"):
+                mapping[country_data["name_cn"]] = mapping[code_upper]
+
+        return mapping
+
+    async def _format_price_message(self, country_code: str, price_info: dict) -> str:
+        """Formats the price information for a single country as raw text."""
+        country_info = SUPPORTED_COUNTRIES.get(country_code.upper(), {})
+        country_name = price_info.get("name_cn", country_code)
+        country_flag = get_country_flag(country_code)
+
+        lines = [f"📍 国家/地区: {country_name} ({country_code.upper()}) {country_flag}"]
+
+        plans = price_info.get("plans", [])
+
+        # 按价格从低到高排序套餐
+        def get_sort_price(plan):
+            cny_price_str = plan.get("monthly_price_cny", "")
+            if cny_price_str and cny_price_str.startswith("CNY "):
+                try:
+                    return float(cny_price_str.replace("CNY ", ""))
+                except (ValueError, TypeError):
+                    pass
+            return float('inf')
+
+        plans = sorted(plans, key=get_sort_price)
+
+        plan_name_mapping = {
+            "Mobile": "移动版",
+            "Standard with ads": "标准广告版",
+            "Basic": "基础版",
+            "Standard": "标准版",
+            "Premium": "高级版"
+        }
+
+        for plan in plans:
+            plan_name = plan.get("plan_name", "")
+            chinese_name = plan_name_mapping.get(plan_name, plan_name)
+            original_price = plan.get("monthly_price_original", "")
+            cny_price = plan.get("monthly_price_cny", "")
+            extra_slots = plan.get("extra_member_slots", "")
+
+            if original_price and cny_price:
+                price_display = f"{original_price} ≈ {cny_price}"
+            elif original_price:
+                price_display = original_price
+            else:
+                continue
+
+            if extra_slots:
+                price_display += f" (额外成员位: {extra_slots})"
+
+            lines.append(f"  • {chinese_name}：{price_display}")
+
+        return "\n".join(lines)
+
+    def _extract_comparison_price(self, item: dict) -> float | None:
+        """Extracts the Premium plan's CNY price for ranking."""
+        plans = item.get("plans", [])
+        for plan in plans:
+            if plan.get("plan_name") == "Premium":
+                cny_price_str = plan.get("monthly_price_cny", "")
+                if cny_price_str and cny_price_str.startswith("CNY "):
+                    try:
+                        return float(cny_price_str.replace("CNY ", ""))
+                    except (ValueError, TypeError):
+                        pass
+        return None
+
+    async def query_prices(self, query_list: list[str]) -> str:
+        """Queries prices for a list of specified countries."""
+        if not self.data:
+            error_message = f"❌ 错误：未能加载 {self.service_name} 价格数据。请稍后再试或检查日志。"
+            return foldable_text_v2(error_message)
+
+        result_data = []
+        not_found = []
+
+        for query in query_list:
+            price_info = self.country_mapping.get(query.upper()) or self.country_mapping.get(query)
+
+            if not price_info:
+                not_found.append(query)
+                continue
+
+            country_code = price_info.get("code")
+            if country_code:
+                premium_price = self._extract_comparison_price(price_info)
+                if premium_price is not None:
+                    result_data.append({
+                        "country_code": country_code,
+                        "price_info": price_info,
+                        "sort_price": premium_price
+                    })
+                else:
+                    min_price = float('inf')
+                    plans = price_info.get("plans", [])
+                    for plan in plans:
+                        cny_price_str = plan.get("monthly_price_cny", "")
+                        if cny_price_str and cny_price_str.startswith("CNY "):
+                            try:
+                                price_val = float(cny_price_str.replace("CNY ", ""))
+                                min_price = min(min_price, price_val)
+                            except (ValueError, TypeError):
+                                pass
+                    result_data.append({
+                        "country_code": country_code,
+                        "price_info": price_info,
+                        "sort_price": min_price if min_price != float('inf') else 0
+                    })
+            else:
+                not_found.append(query)
+
+        result_data.sort(key=lambda x: x["sort_price"])
+
+        result_messages = []
+        for item in result_data:
+            formatted_message = await self._format_price_message(item["country_code"], item["price_info"])
+            if formatted_message:
+                result_messages.append(formatted_message)
+
+        raw_message_parts = []
+        raw_message_parts.append(f"*🎬 {self.service_name} 订阅价格查询*")
+        raw_message_parts.append("")
+
+        if result_messages:
+            for i, msg in enumerate(result_messages):
+                raw_message_parts.append(msg)
+                if i < len(result_messages) - 1:
+                    raw_message_parts.append("")
+        elif query_list:
+            raw_message_parts.append("未能查询到您指定的国家/地区的价格信息。")
+
+        if not_found:
+            raw_message_parts.append("")
+            not_found_str = ", ".join(not_found)
+            raw_message_parts.append(f"❌ 未找到以下地区的价格信息：{not_found_str}")
+
+        if self.cache_timestamp:
+            update_time_str = datetime.fromtimestamp(self.cache_timestamp).strftime("%Y-%m-%d %H:%M:%S")
+            raw_message_parts.append("")
+            raw_message_parts.append(f"\n⏱ 数据更新时间 (缓存)：{update_time_str}")
+
+        raw_final_message = "\n".join(raw_message_parts).strip()
+        return foldable_text_with_markdown_v2(raw_final_message)
+
+    async def get_top_cheapest(self, top_n: int = 10) -> str:
+        """Gets the top 10 cheapest countries for the Premium plan."""
+        if not self.data:
+            error_message = f"❌ 错误：未能加载 {self.service_name} 价格数据。"
+            return foldable_text_v2(error_message)
+
+        countries_with_prices = []
+        for country_code, country_data in self.data.items():
+            if country_code.startswith("_"):
+                continue
+
+            premium_cny = self._extract_comparison_price(country_data)
+            if premium_cny is not None:
+                countries_with_prices.append({
+                    "data": {
+                        "code": country_code.upper(),
+                        "name_cn": country_data.get("name_cn", country_code),
+                        "plans": country_data.get("plans", [])
+                    },
+                    "price": premium_cny
+                })
+
+        countries_with_prices.sort(key=lambda x: x["price"])
+        top_countries = countries_with_prices[:top_n]
+
+        raw_message_parts = []
+        raw_message_parts.append(f"*🏆 {self.service_name} 全球最低价格排名 (高级版)*")
+        raw_message_parts.append("")
+
+        for idx, country_data in enumerate(top_countries, 1):
+            item = country_data["data"]
+            country_code = item.get("code", "N/A")
+            country_info = SUPPORTED_COUNTRIES.get(country_code, {})
+            country_name = item.get("name_cn", country_code)
+            country_flag = get_country_flag(country_code)
+            premium_cny = country_data["price"]
+
+            premium_original = ""
+            for plan in item.get("plans", []):
+                if plan.get("plan_name") == "Premium":
+                    premium_original = plan.get("monthly_price_original", "")
+                    break
+
+            rank_emoji = get_rank_emoji(idx)
+
+            country_block = f"{rank_emoji} {country_name} ({country_code}) {country_flag}\n💰 高级版: {premium_original} ≈ ¥{premium_cny:.2f}"
+            raw_message_parts.append(country_block)
+
+            if idx < len(top_countries):
+                raw_message_parts.append("")
+
+        if self.cache_timestamp:
+            update_time_str = datetime.fromtimestamp(self.cache_timestamp).strftime("%Y-%m-%d %H:%M:%S")
+            raw_message_parts.append(f"⏱ 数据更新时间 (缓存)：{update_time_str}")
+
+        raw_final_message = "\n".join(raw_message_parts).strip()
+        return foldable_text_with_markdown_v2(raw_final_message)
