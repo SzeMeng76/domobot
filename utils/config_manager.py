@@ -60,7 +60,9 @@ class BotConfig:
 
         # 基础配置
         self.bot_token = ""
-        self.super_admin_id = 0
+        self.bot_id: int = 0  # 从 BOT_TOKEN 提取的 Bot ID，用于多 Bot 隔离
+        self.super_admin_ids: list[int] = []  # 支持多个超级管理员
+        self.whitelisted_groups: list[int] = []  # 静态配置的白名单群组
         self.debug = False
 
         # 数据库配置（已统一使用 MySQL）
@@ -338,10 +340,36 @@ class ConfigManager:
         # 辅助方法：读取整数环境变量
         def get_int_env(key: str, default: str) -> int:
             return int(os.getenv(key, default))
-                
+
+        # 辅助方法：解析超级管理员ID列表
+        def parse_super_admin_ids() -> list[int]:
+            """
+            解析超级管理员ID列表
+            支持格式:
+            - 单个ID: SUPER_ADMIN_ID=123456
+            - 多个ID: SUPER_ADMIN_ID=123456,789012,345678
+            """
+            ids_str = os.getenv("SUPER_ADMIN_ID", "").strip()
+            if not ids_str:
+                return []
+
+            # 按逗号分隔并解析为整数列表
+            ids = []
+            for id_str in ids_str.split(","):
+                id_str = id_str.strip()
+                if id_str:
+                    try:
+                        admin_id = int(id_str)
+                        if admin_id > 0:
+                            ids.append(admin_id)
+                    except ValueError:
+                        logger.warning(f"⚠️ 无效的超级管理员ID: {id_str}")
+
+            return ids
+
         # 基础配置
         self.config.bot_token = os.getenv("BOT_TOKEN", "")
-        self.config.super_admin_id = get_int_env("SUPER_ADMIN_ID", "0")
+        self.config.super_admin_ids = parse_super_admin_ids()
         self.config.debug = get_bool_env("DEBUG")
 
         # 缓存配置
@@ -579,8 +607,11 @@ class ConfigManager:
         if not self.config.bot_token:
             raise ValueError("BOT_TOKEN is required")
 
-        if self.config.super_admin_id <= 0:
-            raise ValueError("SUPER_ADMIN_ID must be a valid positive integer")
+        if not self.config.super_admin_ids:
+            raise ValueError(
+                "SUPER_ADMIN_ID is required. "
+                "支持多个ID（逗号分隔）: SUPER_ADMIN_ID=123456,789012"
+            )
 
         # 创建必要的目录
         Path(self.config.cache_dir).mkdir(parents=True, exist_ok=True)

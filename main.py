@@ -794,12 +794,12 @@ async def setup_application(application: Application, config) -> None:
                 # 为白名单用户设置用户级命令菜单
                 whitelist_users = await user_manager.get_whitelisted_users()
                 for user_id in whitelist_users:
-                    if user_id != config.super_admin_id:  # 超级管理员后面单独设置
+                    if user_id not in config.super_admin_ids:  # 超级管理员后面单独设置
                         await application.bot.set_my_commands(
                             user_bot_commands,
                             scope=BotCommandScopeChat(chat_id=user_id)
                         )
-                
+
                 # 为管理员设置完整命令菜单
                 admin_list = await user_manager.get_all_admins()
                 for admin_id in admin_list:
@@ -807,12 +807,12 @@ async def setup_application(application: Application, config) -> None:
                         full_bot_commands,
                         scope=BotCommandScopeChat(chat_id=admin_id)
                     )
-                
+
                 # 为超级管理员设置完整命令菜单
-                if config.super_admin_id:
+                for super_admin_id in config.super_admin_ids:
                     await application.bot.set_my_commands(
                         full_bot_commands,
-                        scope=BotCommandScopeChat(chat_id=config.super_admin_id)
+                        scope=BotCommandScopeChat(chat_id=super_admin_id)
                     )
                 
                 # 为白名单群组设置群组级命令菜单
@@ -826,7 +826,7 @@ async def setup_application(application: Application, config) -> None:
                 
                 logger.info(f"👥 已为 {len(whitelist_users)} 位白名单用户设置用户级命令菜单")
                 logger.info(f"👥 已为 {len(whitelist_groups)} 个白名单群组设置群组级命令菜单")
-                logger.info(f"🔧 已为 {len(admin_list) + (1 if config.super_admin_id else 0)} 位管理员设置完整命令菜单")
+                logger.info(f"🔧 已为 {len(admin_list) + len(config.super_admin_ids)} 位管理员设置完整命令菜单")
                 
             except Exception as e:
                 logger.warning(f"⚠️ 为用户设置命令菜单时出错: {e}")
@@ -962,17 +962,13 @@ def main() -> None:
         return
 
     # 验证超级管理员ID
-    super_admin_id = config.super_admin_id
-    if not super_admin_id:
+    super_admin_ids = config.super_admin_ids
+    if not super_admin_ids:
         logger.error("❌ 未设置 SUPER_ADMIN_ID 环境变量")
+        logger.error("   支持多个ID（逗号分隔）: SUPER_ADMIN_ID=123456,789012")
         return
 
-    try:
-        int(super_admin_id)
-        logger.info(f"✅ 超级管理员ID: {super_admin_id}")
-    except ValueError:
-        logger.error("❌ SUPER_ADMIN_ID 必须是数字")
-        return
+    logger.info(f"✅ 超级管理员ID: {', '.join(map(str, super_admin_ids))}")
 
     # 验证数据库配置
     if not config.db_host or not config.db_user or not config.db_name:

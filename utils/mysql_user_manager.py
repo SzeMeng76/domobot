@@ -76,18 +76,20 @@ class MySQLUserManager:
 
         config = get_config()
 
-        if config.super_admin_id:
+        if config.super_admin_ids:
             try:
                 async with self.get_cursor() as cursor:
-                    # 先确保用户存在
-                    await cursor.execute("INSERT IGNORE INTO users (user_id) VALUES (%s)", (config.super_admin_id,))
+                    # 为每个超级管理员初始化
+                    for super_admin_id in config.super_admin_ids:
+                        # 先确保用户存在
+                        await cursor.execute("INSERT IGNORE INTO users (user_id) VALUES (%s)", (super_admin_id,))
 
-                    # 添加到超级管理员表
-                    await cursor.execute(
-                        "INSERT IGNORE INTO super_admins (user_id) VALUES (%s)", (config.super_admin_id,)
-                    )
+                        # 添加到超级管理员表
+                        await cursor.execute(
+                            "INSERT IGNORE INTO super_admins (user_id) VALUES (%s)", (super_admin_id,)
+                        )
 
-                logger.info(f"超级管理员已初始化: {config.super_admin_id}")
+                logger.info(f"超级管理员已初始化: {', '.join(map(str, config.super_admin_ids))}")
             except Exception as e:
                 logger.error(f"初始化超级管理员失败: {e}")
 

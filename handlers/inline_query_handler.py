@@ -126,7 +126,7 @@ class InlineQueryHandler:
 
                     from utils.config_manager import get_config
                     config = get_config()
-                    is_super_admin = user_id == config.super_admin_id
+                    is_super_admin = user_id in config.super_admin_ids
 
                     if not (is_whitelisted or is_admin or is_super_admin):
                         logger.warning(f"⚠️ Inline Parse 被拒绝：用户 {user_id} 不在白名单中")
@@ -186,7 +186,7 @@ class InlineQueryHandler:
 
                 from utils.config_manager import get_config
                 config = get_config()
-                is_super_admin = user_id == config.super_admin_id
+                is_super_admin = user_id in config.super_admin_ids
 
                 if not (is_whitelisted or is_admin or is_super_admin):
                     logger.warning(f"⚠️ Inline Query 被拒绝：用户 {user_id} 不在白名单中")

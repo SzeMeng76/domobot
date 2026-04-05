@@ -77,12 +77,12 @@ def require_permission(permission: Permission):
 
             try:
                 if permission == Permission.SUPER_ADMIN:
-                    has_permission = user_id == config.super_admin_id
+                    has_permission = user_id in config.super_admin_ids
                 elif permission == Permission.ADMIN:
                     # 检查是否为超级管理员或普通管理员
-                    has_permission = user_id == config.super_admin_id or await user_manager.is_admin(user_id)
+                    has_permission = user_id in config.super_admin_ids or await user_manager.is_admin(user_id)
                 # 管理员在任何地方都有权限
-                elif user_id == config.super_admin_id or await user_manager.is_admin(user_id):
+                elif user_id in config.super_admin_ids or await user_manager.is_admin(user_id):
                     has_permission = True
                 elif chat_type in ["group", "supergroup"]:
                     chat_id = update.effective_chat.id
@@ -192,7 +192,7 @@ def permission_required(require_admin=False):
             try:
                 # 检查管理员权限
                 if require_admin:
-                    is_admin = user_id == config.super_admin_id or await user_manager.is_admin(user_id)
+                    is_admin = user_id in config.super_admin_ids or await user_manager.is_admin(user_id)
                     if not is_admin:
                         await send_error(
                             context=context,
@@ -213,7 +213,7 @@ def permission_required(require_admin=False):
                     has_permission = False
 
                     # 管理员在任何地方都有权限
-                    if user_id == config.super_admin_id or await user_manager.is_admin(user_id):
+                    if user_id in config.super_admin_ids or await user_manager.is_admin(user_id):
                         has_permission = True
                     # 私聊检查用户白名单
                     elif chat_type == "private":
@@ -278,7 +278,7 @@ async def check_user_permissions(update: Update, context: ContextTypes.DEFAULT_T
     result = {
         "user_id": user_id,
         "chat_type": chat_type,
-        "is_super_admin": user_id == config.super_admin_id,
+        "is_super_admin": user_id in config.super_admin_ids,
         "is_admin": False,
         "is_whitelisted": False,
         "group_whitelisted": False,
@@ -335,7 +335,7 @@ async def get_user_permission(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     try:
         # 检查超级管理员
-        if user_id == config.super_admin_id:
+        if user_id in config.super_admin_ids:
             return Permission.SUPER_ADMIN
 
         # 检查管理员

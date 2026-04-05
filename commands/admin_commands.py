@@ -43,7 +43,7 @@ async def update_user_command_menu(user_id: int, context: ContextTypes.DEFAULT_T
         admin_commands = command_factory.get_command_list(Permission.ADMIN)
         super_admin_commands = command_factory.get_command_list(Permission.SUPER_ADMIN)
         
-        if is_admin or user_id == config.super_admin_id:
+        if is_admin or user_id in config.super_admin_ids:
             # 管理员：显示所有命令
             all_commands = {}
             all_commands.update(none_commands)
@@ -120,7 +120,7 @@ def get_user_manager(context: ContextTypes.DEFAULT_TYPE):
 
 async def is_super_admin(user_id: int) -> bool:
     """检查是否为超级管理员"""
-    return user_id == config.super_admin_id
+    return user_id in config.super_admin_ids
 
 
 async def is_admin(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
