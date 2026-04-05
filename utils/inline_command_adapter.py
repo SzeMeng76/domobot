@@ -354,7 +354,8 @@ class InlineCommandAdapter:
         from commands.apple_services import appleservices_inline_execute
         from utils.formatter import foldable_text_with_markdown_v2
 
-        result = await appleservices_inline_execute(args)
+        bot_instance = self.context.bot_data.get("apple_services_service")
+        result = await appleservices_inline_execute(args, bot_instance=bot_instance)
 
         if result["success"]:
             return (result["message"], ParseMode.MARKDOWN_V2, None)

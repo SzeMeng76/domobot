@@ -467,6 +467,17 @@ async def setup_application(application: Application, config) -> None:
     except Exception as e:
         logger.error(f"❌ Max 机器人初始化失败: {e}")
 
+    try:
+        from commands.apple_services_modules import init_apple_services_bot
+        init_apple_services_bot(
+            application=application,
+            cache_manager=cache_manager,
+            rate_converter=rate_converter,
+            smart_cache_manager=smart_cache_manager,
+        )
+    except Exception as e:
+        logger.error(f"❌ Apple Services 机器人初始化失败: {e}")
+
     # 为其他命令模块注入依赖（旧方式，逐步迁移）
     set_rate_converter(rate_converter)
     # steam.set_rate_converter(rate_converter)  # 已改用 init_steam_bot
@@ -480,7 +491,7 @@ async def setup_application(application: Application, config) -> None:
     # app_store.set_cache_manager(cache_manager)    # 已改用 init_app_store_bot
     # google_play.set_rate_converter(rate_converter)  # 已改用 init_google_play_bot
     # google_play.set_cache_manager(cache_manager)    # 已改用 init_google_play_bot
-    apple_services.set_rate_converter(rate_converter)
+    # apple_services.set_rate_converter(rate_converter)  # 已改用 init_apple_services_bot
     weather.set_dependencies(cache_manager, httpx_client)
     crypto.set_dependencies(cache_manager, httpx_client)
     bin.set_dependencies(cache_manager, httpx_client)

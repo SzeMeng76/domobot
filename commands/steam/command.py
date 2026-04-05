@@ -3,23 +3,38 @@
 
 import logging
 
-from telegram import Update
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 
 from utils.command_factory import command_factory
+from utils.country_data import SUPPORTED_COUNTRIES, get_country_flag
 from utils.formatter import foldable_text_v2, foldable_text_with_markdown_v2
 from utils.message_manager import (
+    MessageType,
     delete_user_command,
     send_error,
     send_help,
+    send_message_with_auto_delete,
     send_success,
 )
 from utils.permissions import Permission
-from utils.session_manager import steam_search_sessions
+from utils.session_manager import steam_bundle_sessions as bundle_search_sessions
+from utils.session_manager import steam_search_sessions as user_search_sessions
 
+from .formatter import (
+    format_bundle_info,
+    format_game_info,
+    search_multiple_countries,
+)
 from .models import Config, ErrorHandler
 from .parser import get_country_code
-from .search import search_game
+from .search import (
+    get_bundle_details,
+    get_game_details,
+    search_bundle,
+    search_bundle_by_id,
+    search_game,
+)
 from .ui import (
     create_steam_search_keyboard,
     format_steam_search_results,
@@ -160,50 +175,6 @@ async def steam_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
         await delete_user_command(
             context, update.effective_chat.id, update.message.message_id
-        )
-
-
-async def steam_clean_cache_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """处理 /steamcc 命令清理 Steam 缓存"""
-    if not update.message:
-        return
-
-    try:
-        cache_mgr = context.bot_data.get("cache_manager")
-        if cache_mgr is not None:
-            await cache_mgr.clear_cache(subdirectory="steam")
-            success_message = "✅ Steam 缓存已清理。"
-            await send_success(
-                context,
-                update.message.chat_id,
-                foldable_text_v2(success_message),
-                parse_mode="MarkdownV2",
-            )
-            await delete_user_command(
-                context, update.message.chat_id, update.message.message_id
-            )
-        else:
-            error_message = "❌ 缓存管理器未初始化。"
-            await send_error(
-                context,
-                update.message.chat_id,
-                foldable_text_v2(error_message),
-                parse_mode="MarkdownV2",
-            )
-            await delete_user_command(
-                context, update.message.chat_id, update.message.message_id
-            )
-    except Exception as e:
-        logger.error(f"Error clearing Steam cache: {e}")
-        error_msg = f"❌ 清理 Steam 缓存时发生错误: {e}"
-        await send_error(
-            context,
-            update.message.chat_id,
-            foldable_text_v2(error_msg),
-            parse_mode="MarkdownV2",
-        )
-        await delete_user_command(
-            context, update.message.chat_id, update.message.message_id
         )
 
 
@@ -361,45 +332,10 @@ async def steam_clear_item_command(
     )
 
 
-# 注册命令
-command_factory.register_command(
-    "steam", steam_command, permission=Permission.USER, description="Steam游戏价格查询"
-)
-command_factory.register_command(
-    "steamcc",
-    steam_clean_cache_command,
-    permission=Permission.ADMIN,
-    description="清理Steam缓存",
-)
-command_factory.register_command(
-    "steam_clearitem",
-    steam_clear_item_command,
-    permission=Permission.ADMIN,
-    description="清理Steam指定条目缓存（Redis+MySQL）",
-)
 async def steam_bundle_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handles the /steamb command for bundle price lookup with interactive search."""
     # 检查update.message是否存在
     if not update.message:
-        return
-
-    # 检查steam_checker是否已初始化
-    if steam_checker is None:
-        error_message = "❌ Steam功能未初始化，请稍后重试。"
-        # 生成会话ID用于消息管理
-        import time
-        user_id = update.effective_user.id
-        session_id = f"steam_init_error_{user_id}_{int(time.time())}"
-        
-        await send_message_with_auto_delete(
-            context,
-            update.message.chat_id,
-            foldable_text_v2(error_message),
-            MessageType.ERROR,
-            session_id=session_id,
-            parse_mode="MarkdownV2"
-        )
-        await delete_user_command(context, update.message.chat_id, update.message.message_id, session_id=session_id)
         return
 
     if not context.args:
@@ -430,12 +366,12 @@ async def steam_bundle_command(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
     args = context.args
-    if len(args) >= 2 and steam_checker.get_country_code(args[-1]):
+    if len(args) >= 2 and get_country_code(args[-1]):
         query = ' '.join(args[:-1])
-        cc = steam_checker.get_country_code(args[-1]) or steam_checker.config.DEFAULT_CC
+        cc = get_country_code(args[-1]) or config.DEFAULT_CC
     else:
         query = ' '.join(args)
-        cc = steam_checker.config.DEFAULT_CC
+        cc = config.DEFAULT_CC
 
     try:
         # 搜索捆绑包
@@ -443,7 +379,7 @@ async def steam_bundle_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
         if query.isdigit():
             # 通过ID搜索
-            bundle_details = await steam_checker.search_bundle_by_id(query, cc)
+            bundle_details = await search_bundle_by_id(query, cc)
             if bundle_details:
                 search_results = [{
                     'id': query,
@@ -453,7 +389,7 @@ async def steam_bundle_command(update: Update, context: ContextTypes.DEFAULT_TYP
                 }]
         else:
             # 通过名称搜索
-            search_results = await steam_checker.search_bundle(query, cc)
+            search_results = await search_bundle(query, cc)
 
         if not search_results:
             error_lines = [
@@ -550,25 +486,6 @@ async def steam_search_command(update: Update, context: ContextTypes.DEFAULT_TYP
     if not update.message:
         return
 
-    # 检查steam_checker是否已初始化
-    if steam_checker is None:
-        error_message = "❌ Steam功能未初始化，请稍后重试。"
-        # 生成会话ID用于消息管理
-        import time
-        user_id = update.effective_user.id
-        session_id = f"steam_init_error_{user_id}_{int(time.time())}"
-        
-        await send_message_with_auto_delete(
-            context,
-            update.message.chat_id,
-            foldable_text_v2(error_message),
-            MessageType.ERROR,
-            session_id=session_id,
-            parse_mode="MarkdownV2"
-        )
-        await delete_user_command(context, update.message.chat_id, update.message.message_id, session_id=session_id)
-        return
-
     if not context.args:
         error_message = "请提供搜索关键词。"
         # 生成会话ID用于消息管理
@@ -595,15 +512,15 @@ async def steam_search_command(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
     query = ' '.join(context.args)
-    cc = steam_checker.config.DEFAULT_CC
-    
+    cc = config.DEFAULT_CC
+
     # 生成会话ID用于消息管理
     import time
     user_id = update.effective_user.id
     session_id = f"steam_search_all_{user_id}_{int(time.time())}"
-    
+
     try:
-        result = await steam_checker.search_and_format_all(query, cc)
+        result = await search_multiple_countries(query, [cc])
         await message.delete()
         
         # 使用统一的消息发送API
@@ -637,24 +554,6 @@ async def steam_search_command(update: Update, context: ContextTypes.DEFAULT_TYP
 async def steam_clean_cache_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles the /steamcc command to clear Steam cache."""
     if not update.message:
-        return
-
-    if steam_checker is None:
-        error_message = "❌ Steam功能未初始化，请稍后重试。"
-        # 生成会话ID用于消息管理
-        import time
-        user_id = update.effective_user.id
-        session_id = f"steamcc_init_error_{user_id}_{int(time.time())}"
-        
-        await send_message_with_auto_delete(
-            context,
-            update.message.chat_id,
-            foldable_text_v2(error_message),
-            MessageType.ERROR,
-            session_id=session_id,
-            parse_mode="MarkdownV2"
-        )
-        await delete_user_command(context, update.message.chat_id, update.message.message_id, session_id=session_id)
         return
 
     try:
@@ -758,17 +657,17 @@ async def steam_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                     if item_type == 'bundle':
                         # 处理捆绑包
                         country_inputs = session["country_inputs"]
-                        cc = steam_checker.get_country_code(country_inputs[0]) or steam_checker.config.DEFAULT_CC
-                        bundle_details = await steam_checker.get_bundle_details(str(item_id), cc)
+                        cc = get_country_code(country_inputs[0]) or config.DEFAULT_CC
+                        bundle_details = await get_bundle_details(str(item_id), cc)
 
                         if bundle_details:
-                            result = await steam_checker.format_bundle_info(bundle_details, cc)
+                            result = await format_bundle_info(bundle_details, cc)
                         else:
                             result = "❌ 无法获取捆绑包信息"
                     else:
                         # 处理游戏和DLC
                         country_inputs = session["country_inputs"]
-                        result = await steam_checker.search_multiple_countries(str(item_id), country_inputs)
+                        result = await search_multiple_countries(str(item_id), country_inputs)
 
                     await query.edit_message_text(
                         foldable_text_with_markdown_v2(result),
@@ -872,7 +771,7 @@ async def steam_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 
             # 重新搜索游戏
             try:
-                search_results = await steam_checker.search_game(query_text, country_code, use_cache=False)
+                search_results = await search_game(query_text, country_code, use_cache=False)
 
                 if not search_results:
                     error_message = f"🔍 在 {country_code.upper()} 区域没有找到关键词 '{query_text}' 的相关内容"
@@ -1029,9 +928,9 @@ async def steamb_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                         foldable_text_v2("🔍 正在获取捆绑包详细信息... ⏳"),
                         parse_mode="MarkdownV2"
                     )
-                    bundle_details = await steam_checker.get_bundle_details(str(bundle_id), cc)
+                    bundle_details = await get_bundle_details(str(bundle_id), cc)
                     if bundle_details:
-                        result = await steam_checker.format_bundle_info(bundle_details, cc)
+                        result = await format_bundle_info(bundle_details, cc)
                     else:
                         result = "❌ 无法获取捆绑包信息"
                     await query.edit_message_text(
@@ -1121,7 +1020,7 @@ async def steamb_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             try:
                 if query_text.isdigit():
                     # 通过ID搜索
-                    bundle_details = await steam_checker.search_bundle_by_id(query_text, country_code)
+                    bundle_details = await search_bundle_by_id(query_text, country_code)
                     if bundle_details:
                         search_results = [{
                             'id': query_text,
@@ -1133,7 +1032,7 @@ async def steamb_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                         search_results = []
                 else:
                     # 通过名称搜索
-                    search_results = await steam_checker.search_bundle(query_text, country_code)
+                    search_results = await search_bundle(query_text, country_code)
 
                 if not search_results:
                     error_message = f"🔍 在 {country_code.upper()} 区域没有找到关键词 '{query_text}' 的相关捆绑包"
@@ -1203,8 +1102,7 @@ command_factory.register_callback("^steamb_", steamb_callback_handler, permissio
 # Register commands
 command_factory.register_command("steam", steam_command, permission=Permission.USER, description="Steam游戏价格查询")
 command_factory.register_command("steamb", steam_bundle_command, permission=Permission.USER, description="查询捆绑包价格")
-# 已迁移到统一缓存管理命令 /cleancache
-# command_factory.register_command("steamcc", steam_clean_cache_command, permission=Permission.ADMIN, description="清理Steam缓存")
+command_factory.register_command("steam_clearitem", steam_clear_item_command, permission=Permission.ADMIN, description="清理Steam指定条目缓存（Redis+MySQL）")
 command_factory.register_command("steams", steam_search_command, permission=Permission.USER, description="综合搜索游戏和捆绑包")
 
 
@@ -1246,18 +1144,6 @@ async def handle_inline_steam_search(
             )
         ]
 
-    if not steam_checker:
-        return [
-            InlineQueryResultArticle(
-                id=str(uuid4()),
-                title="❌ Steam功能未初始化",
-                description="请稍后重试",
-                input_message_content=InputTextMessageContent(
-                    message_text="❌ Steam功能未初始化，请稍后重试"
-                ),
-            )
-        ]
-
     try:
         # 解析游戏名称和国家参数
         all_params = keyword.strip().split()
@@ -1267,7 +1153,7 @@ async def handle_inline_steam_search(
         country_inputs = []
 
         for param in all_params:
-            country_code = steam_checker.get_country_code(param)
+            country_code = get_country_code(param)
             if country_code:
                 country_inputs.append(param)
             else:
@@ -1296,11 +1182,11 @@ async def handle_inline_steam_search(
             country_inputs = ["CN"]
 
         # 默认在第一个国家搜索
-        search_country = steam_checker.get_country_code(country_inputs[0]) or "CN"
+        search_country = get_country_code(country_inputs[0]) or "CN"
 
         # 执行搜索
         logger.info(f"Inline Steam 搜索: '{game_query}' in {search_country}, countries: {country_inputs}")
-        search_results = await steam_checker.search_game(game_query, search_country, use_cache=False)
+        search_results = await search_game(game_query, search_country, use_cache=False)
 
         if not search_results:
             return [
@@ -1336,9 +1222,9 @@ async def handle_inline_steam_search(
             try:
                 if game_type == "bundle":
                     # 捆绑包：只查询第一个国家
-                    bundle_details = await steam_checker.get_bundle_details(str(game_id), search_country)
+                    bundle_details = await get_bundle_details(str(game_id), search_country)
                     if bundle_details:
-                        result_text = await steam_checker.format_bundle_info(bundle_details, search_country)
+                        result_text = await format_bundle_info(bundle_details, search_country)
                         message_text = foldable_text_with_markdown_v2(result_text)
                         parse_mode = "MarkdownV2"
 
@@ -1353,7 +1239,7 @@ async def handle_inline_steam_search(
                     # 游戏和DLC：支持多国价格查询
                     if len(country_inputs) > 1:
                         # 多国价格查询
-                        result_text = await steam_checker.search_multiple_countries(str(game_id), country_inputs)
+                        result_text = await search_multiple_countries(str(game_id), country_inputs)
                         message_text = foldable_text_with_markdown_v2(result_text)
                         parse_mode = "MarkdownV2"
 
@@ -1364,9 +1250,9 @@ async def handle_inline_steam_search(
                         description = f"多国价格: {countries_str}"
                     else:
                         # 单国价格查询
-                        game_details = await steam_checker.get_game_details(str(game_id), search_country)
+                        game_details = await get_game_details(str(game_id), search_country)
                         if game_details and game_details.get('success'):
-                            result_text = await steam_checker.format_game_info(game_details, search_country)
+                            result_text = await format_game_info(game_details, search_country)
                             message_text = foldable_text_with_markdown_v2(result_text)
                             parse_mode = "MarkdownV2"
 
