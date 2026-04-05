@@ -96,8 +96,8 @@ from commands import (
     google_play,
     help_command,
     hotel,
-    map,
-    max,
+    map as map_command,
+    max as max_command,
     memes,
     movie,
     music,
@@ -427,7 +427,7 @@ async def setup_application(application: Application, config) -> None:
     # netflix.set_dependencies(cache_manager, rate_converter)  # 已改用 init_netflix_bot
     # spotify.set_dependencies(cache_manager, rate_converter)  # 已改用 init_spotify_bot
     disney_plus.set_dependencies(cache_manager, rate_converter)
-    max.set_dependencies(cache_manager, rate_converter)
+    max_command.set_dependencies(cache_manager, rate_converter)
     # app_store.set_rate_converter(rate_converter)  # 已改用 init_app_store_bot
     # app_store.set_cache_manager(cache_manager)    # 已改用 init_app_store_bot
     google_play.set_rate_converter(rate_converter)
@@ -445,7 +445,7 @@ async def setup_application(application: Application, config) -> None:
     cooking.set_dependencies(cache_manager, httpx_client)
     memes.set_dependencies(cache_manager, httpx_client)
     finance.set_dependencies(cache_manager, httpx_client)
-    map.set_dependencies(cache_manager, httpx_client)
+    map_command.set_dependencies(cache_manager, httpx_client)
     system_commands.set_dependencies(cache_manager)
 
     # 设置 Map Nearby callback handler 依赖
