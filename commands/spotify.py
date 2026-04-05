@@ -44,7 +44,7 @@ command_factory.register_command(
 )
 
 logger.info("Spotify 命令已注册")
-async def spotify_inline_execute(args: str) -> dict:
+async def spotify_inline_execute(args: str, bot_instance=None) -> dict:
     """
     Inline Query 执行入口 - 提供完整的 Spotify 价格查询功能
 
@@ -60,6 +60,7 @@ async def spotify_inline_execute(args: str) -> dict:
             "error": str | None
         }
     """
+    spotify_price_bot = bot_instance
     if not spotify_price_bot:
         return {
             "success": False,

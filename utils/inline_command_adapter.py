@@ -178,7 +178,8 @@ class InlineCommandAdapter:
         from commands.netflix import netflix_inline_execute
         from utils.formatter import foldable_text_with_markdown_v2
 
-        result = await netflix_inline_execute(args)
+        bot_instance = self.context.bot_data.get("netflix_price_bot")
+        result = await netflix_inline_execute(args, bot_instance=bot_instance)
 
         if result["success"]:
             return (result["message"], ParseMode.MARKDOWN_V2, None)
@@ -191,7 +192,8 @@ class InlineCommandAdapter:
         from commands.disney_plus import disney_inline_execute
         from utils.formatter import foldable_text_with_markdown_v2
 
-        result = await disney_inline_execute(args)
+        bot_instance = self.context.bot_data.get("disney_price_bot")
+        result = await disney_inline_execute(args, bot_instance=bot_instance)
 
         if result["success"]:
             return (result["message"], ParseMode.MARKDOWN_V2, None)
@@ -204,7 +206,8 @@ class InlineCommandAdapter:
         from commands.spotify import spotify_inline_execute
         from utils.formatter import foldable_text_with_markdown_v2
 
-        result = await spotify_inline_execute(args)
+        bot_instance = self.context.bot_data.get("spotify_price_bot")
+        result = await spotify_inline_execute(args, bot_instance=bot_instance)
 
         if result["success"]:
             return (result["message"], ParseMode.MARKDOWN_V2, None)
@@ -217,7 +220,8 @@ class InlineCommandAdapter:
         from commands.max import max_inline_execute
         from utils.formatter import foldable_text_with_markdown_v2
 
-        result = await max_inline_execute(args)
+        bot_instance = self.context.bot_data.get("max_price_bot")
+        result = await max_inline_execute(args, bot_instance=bot_instance)
 
         if result["success"]:
             return (result["message"], ParseMode.MARKDOWN_V2, None)
@@ -314,7 +318,8 @@ class InlineCommandAdapter:
         from commands.app_store import appstore_inline_execute
         from utils.formatter import foldable_text_with_markdown_v2
 
-        result = await appstore_inline_execute(args)
+        bot_instance = self.context.bot_data.get("app_store_price_bot")
+        result = await appstore_inline_execute(args, bot_instance=bot_instance)
 
         if result["success"]:
             return (result["message"], ParseMode.MARKDOWN_V2, None)

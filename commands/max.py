@@ -46,7 +46,7 @@ logger.info("Max 命令已注册")
 # Inline 执行入口
 # =============================================================================
 
-async def max_inline_execute(args: str) -> dict:
+async def max_inline_execute(args: str, bot_instance=None) -> dict:
     """
     Inline Query 执行入口 - 提供完整的 HBO Max 价格查询功能
 
@@ -62,6 +62,7 @@ async def max_inline_execute(args: str) -> dict:
             "error": str | None
         }
     """
+    max_price_bot = bot_instance
     if not max_price_bot:
         return {
             "success": False,

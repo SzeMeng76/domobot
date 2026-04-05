@@ -1304,7 +1304,7 @@ command_factory.register_callback(
 # Inline 执行入口
 # =============================================================================
 
-async def appstore_inline_execute(args: str) -> dict:
+async def appstore_inline_execute(args: str, bot_instance=None) -> dict:
     """
     Inline Query 执行入口 - 通过 App ID 查询 App Store 价格
 
@@ -1348,6 +1348,15 @@ async def appstore_inline_execute(args: str) -> dict:
             "error": "App ID 必须是数字"
         }
 
+    if not bot_instance:
+        return {
+            "success": False,
+            "title": "❌ 服务未初始化",
+            "message": "App Store 查询服务未初始化，请联系管理员",
+            "description": "服务未初始化",
+            "error": "App Store 服务未初始化"
+        }
+
     try:
         # 解析国家参数
         if len(parts) > 1:
@@ -1359,7 +1368,7 @@ async def appstore_inline_execute(args: str) -> dict:
         platform = "ios"  # 默认 iOS 平台
 
         # 获取多国价格信息
-        price_results_raw = await get_multi_country_prices(
+        price_results_raw = await bot_instance.get_multi_country_prices(
             app_name=f"App ID {app_id}",
             app_id=int(app_id),
             platform=platform,
@@ -1515,7 +1524,19 @@ async def handle_inline_appstore_search(
 
         # 执行搜索
         logger.info(f"Inline App Store 搜索: '{app_name_to_search}' in {country_code}, platform: {platform}, countries: {countries_to_check}")
-        all_results = await load_or_fetch_search_results(
+        bot = context.bot_data.get("app_store_price_bot")
+        if not bot:
+            return [
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title="❌ 服务未初始化",
+                    description="App Store 查询服务未初始化",
+                    input_message_content=InputTextMessageContent(
+                        message_text="❌ App Store 查询服务未初始化，请联系管理员"
+                    ),
+                )
+            ]
+        all_results = await bot.load_or_fetch_search_results(
             app_name_to_search, country_code, platform
         )
 
@@ -1555,7 +1576,7 @@ async def handle_inline_appstore_search(
 
             # 获取多国价格信息（使用用户指定的国家列表或默认列表）
             try:
-                price_results_raw = await get_multi_country_prices(
+                price_results_raw = await bot.get_multi_country_prices(
                     app_name=app_name,
                     app_id=int(app_id),
                     platform=platform,

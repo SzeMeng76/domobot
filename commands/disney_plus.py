@@ -49,7 +49,7 @@ logger.info("Disney+ 命令已注册")
 # Inline 执行入口
 # =============================================================================
 
-async def disney_inline_execute(args: str) -> dict:
+async def disney_inline_execute(args: str, bot_instance=None) -> dict:
     """
     Inline Query 执行入口 - 提供完整的 Disney+ 价格查询功能
 
@@ -65,6 +65,7 @@ async def disney_inline_execute(args: str) -> dict:
             "error": str | None
         }
     """
+    disney_price_bot = bot_instance
     if not disney_price_bot:
         return {
             "success": False,

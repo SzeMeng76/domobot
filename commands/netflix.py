@@ -50,7 +50,7 @@ logger.info("Netflix 命令已注册")
 # Inline 执行入口
 # =============================================================================
 
-async def netflix_inline_execute(args: str) -> dict:
+async def netflix_inline_execute(args: str, bot_instance=None) -> dict:
     """
     Inline Query 执行入口 - 提供完整的 Netflix 价格查询功能
 
@@ -66,13 +66,7 @@ async def netflix_inline_execute(args: str) -> dict:
             "error": str | None
         }
     """
-    # 从全局获取 netflix_price_bot（通过 init_netflix_bot 初始化后存储在 bot_data）
-    # 注意：inline 模式下需要特殊处理，因为没有 context
-    netflix_price_bot = None
-    
-    # 尝试从某个全局位置获取（具体实现取决于你的架构）
-    # 这里需要你的 inline handler 传递 application 或 bot_data
-    
+    netflix_price_bot = bot_instance
     if not netflix_price_bot:
         return {
             "success": False,
