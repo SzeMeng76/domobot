@@ -1502,3 +1502,108 @@ async def handle_inline_appstore_search(
                 )
             ]
 
+        app_name_to_search = " ".join(app_name_parts)
+
+        # 确定要查询的国家列表
+        countries_to_check = countries_parsed if countries_parsed else DEFAULT_COUNTRIES
+
+        # 默认在美区搜索（搜索本身只在一个区域进行）
+        country_code = "us"
+
+        # 获取平台信息
+        platform_info = PLATFORM_INFO.get(platform, {"icon": "📱", "name": "iOS"})
+
+        # 执行搜索
+        logger.info(f"Inline App Store 搜索: '{app_name_to_search}' in {country_code}, platform: {platform}, countries: {countries_to_check}")
+        all_results = await load_or_fetch_search_results(
+            app_name_to_search, country_code, platform
+        )
+
+        if not all_results:
+            return [
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title="❌ 未找到结果",
+                    description=f"关键词: {app_name_to_search} ({platform_info['name']})",
+                    input_message_content=InputTextMessageContent(
+                        message_text=f"❌ 未找到与 \"{app_name_to_search}\" 相关的 {platform_info['name']} 应用"
+                    ),
+                )
+            ]
+
+        # 构建搜索结果列表（最多10个）
+        results = []
+        for i, app in enumerate(all_results[:10]):
+            app_name = app.get("trackName", "未知应用")
+            app_id = app.get("trackId")
+            artist_name = app.get("artistName", "")
+
+            if not app_id:
+                continue
+
+            # 构建描述
+            description_parts = []
+            if artist_name:
+                description_parts.append(artist_name)
+
+            # 获取价格信息（如果有）
+            price = app.get("formattedPrice", "")
+            if price:
+                description_parts.append(price)
+
+            description = " | ".join(description_parts) if description_parts else "点击查看多国价格"
+
+            # 获取多国价格信息（使用用户指定的国家列表或默认列表）
+            try:
+                price_results_raw = await get_multi_country_prices(
+                    app_name=app_name,
+                    app_id=int(app_id),
+                    platform=platform,
+                    countries=countries_to_check,
+                )
+
+                # 格式化价格信息
+                target_plan = find_common_plan(price_results_raw)
+                formatted_result = format_app_details(
+                    app_name=app_name,
+                    app_id=str(app_id),
+                    platform=platform,
+                    price_results=price_results_raw,
+                    target_plan=target_plan,
+                )
+
+                # 使用 MarkdownV2 格式
+                message_text = foldable_text_with_markdown_v2(formatted_result)
+                parse_mode = "MarkdownV2"
+
+            except Exception as e:
+                logger.warning(f"获取应用 {app_id} 价格失败: {e}")
+                message_text = f"📱 *{app_name}*\n\n❌ 获取价格信息失败\n\n💡 请使用 `/app id{app_id}` 重试"
+                parse_mode = "Markdown"
+
+            results.append(
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title=f"{platform_info['icon']} {app_name}",
+                    description=description,
+                    input_message_content=InputTextMessageContent(
+                        message_text=message_text,
+                        parse_mode=parse_mode,
+                    ),
+                )
+            )
+
+        return results
+
+    except Exception as e:
+        logger.error(f"Inline App Store 搜索失败: {e}", exc_info=True)
+        return [
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title="❌ 搜索失败",
+                description=str(e)[:100],
+                input_message_content=InputTextMessageContent(
+                    message_text=f"❌ 搜索失败: {str(e)}"
+                ),
+            )
+        ]
