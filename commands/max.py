@@ -3,7 +3,7 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from utils.cache_commands import delegate_to_cache_cleaner, delegate_to_service_handler
+from utils.cache_commands import delegate_to_service_handler
 from utils.command_factory import command_factory
 from utils.permissions import Permission
 
@@ -20,26 +20,8 @@ async def max_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     )
 
 
-async def max_clean_cache_command(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-):
-    """Handles the /max_cleancache command."""
-    await delegate_to_cache_cleaner(
-        update,
-        context,
-        service_key="max_price_bot",
-        service_display_name="HBO Max",
-    )
-
-
 # Register commands
 command_factory.register_command("max", max_command, permission=Permission.USER, description="HBO Max订阅价格查询")
-command_factory.register_command(
-    "max_cleancache",
-    max_clean_cache_command,
-    permission=Permission.ADMIN,
-    description="清理HBO Max缓存",
-)
 
 logger.info("Max 命令已注册")
 # =============================================================================

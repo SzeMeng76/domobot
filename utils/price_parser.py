@@ -121,7 +121,7 @@ def detect_currency_from_context(currency_symbol: str, price_str: str, country_c
     return CURRENCY_SYMBOL_TO_CODE.get(currency_symbol, "USD")
 
 
-def extract_currency_and_price(price_str: str, country_code: str | None = None) -> tuple[str, float | None]:
+def extract_currency_and_price(price_str: str, country_code: str | None = None, service: str | None = None) -> tuple[str, float | None]:
     """
     Extracts currency code and numerical price from a price string.
     Uses babel for robust parsing with a fallback to regex for safety.

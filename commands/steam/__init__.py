@@ -30,7 +30,6 @@ from .price_bot import SteamPriceBot
 # 导出命令处理器（通过导入自动注册）
 from .callbacks import steam_callback_handler
 from .command import (
-    steam_clean_cache_command,
     steam_command,
     steam_bundle_command,
     steam_search_command,
@@ -44,7 +43,6 @@ logger = logging.getLogger(__name__)
 __all__ = [
     # 命令处理器
     "steam_command",
-    "steam_clean_cache_command",
     "steam_bundle_command",
     "steam_search_command",
     # 回调处理器

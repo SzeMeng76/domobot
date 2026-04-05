@@ -551,65 +551,6 @@ async def steam_search_command(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         await delete_user_command(context, update.effective_chat.id, update.message.message_id, session_id=session_id)
 
-async def steam_clean_cache_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles the /steamcc command to clear Steam cache."""
-    if not update.message:
-        return
-
-    try:
-        # 从 context 获取缓存管理器
-        cache_mgr = context.bot_data.get("cache_manager")
-        if cache_mgr is not None:
-            await cache_mgr.clear_cache(subdirectory="steam")
-            success_message = "✅ Steam 缓存已清理。"
-            # 生成会话ID用于消息管理
-            import time
-            user_id = update.effective_user.id
-            session_id = f"steamcc_success_{user_id}_{int(time.time())}"
-            
-            await send_message_with_auto_delete(
-                context,
-                update.message.chat_id,
-                foldable_text_v2(success_message),
-                MessageType.SUCCESS,
-                session_id=session_id,
-                parse_mode="MarkdownV2"
-            )
-            await delete_user_command(context, update.message.chat_id, update.message.message_id, session_id=session_id)
-        else:
-            error_message = "❌ 缓存管理器未初始化。"
-            # 生成会话ID用于消息管理
-            import time
-            user_id = update.effective_user.id
-            session_id = f"steamcc_error_{user_id}_{int(time.time())}"
-            
-            await send_message_with_auto_delete(
-                context,
-                update.message.chat_id,
-                foldable_text_v2(error_message),
-                MessageType.ERROR,
-                session_id=session_id,
-                parse_mode="MarkdownV2"
-            )
-            await delete_user_command(context, update.message.chat_id, update.message.message_id, session_id=session_id)
-    except Exception as e:
-        logger.error(f"Error clearing Steam cache: {e}")
-        error_msg = f"❌ 清理 Steam 缓存时发生错误: {e}"
-        # 生成会话ID用于消息管理
-        import time
-        user_id = update.effective_user.id
-        session_id = f"steamcc_error_{user_id}_{int(time.time())}"
-        
-        await send_message_with_auto_delete(
-            context,
-            update.message.chat_id,
-            foldable_text_v2(error_msg),
-            MessageType.ERROR,
-            session_id=session_id,
-            parse_mode="MarkdownV2"
-        )
-        await delete_user_command(context, update.message.chat_id, update.message.message_id, session_id=session_id)
-
 async def steam_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理Steam搜索结果的内联键盘回调"""
     query = update.callback_query

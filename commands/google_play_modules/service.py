@@ -275,8 +275,9 @@ class GooglePlayService:
         logger.info(f"🔄 Google Play缓存未命中，开始爬取: {app_id}/{country}")
         try:
             # google_play_scraper is not async, so run in executor
-            app_details = await asyncio.to_thread(
-                gp_app, app_id, lang=lang_code, country=country
+            app_details = await asyncio.wait_for(
+                asyncio.to_thread(gp_app, app_id, lang=lang_code, country=country),
+                timeout=15,
             )
 
             # 保存到Redis热缓存
@@ -298,6 +299,9 @@ class GooglePlayService:
                 )
 
             return country, app_details, None
+        except asyncio.TimeoutError:
+            logger.warning(f"Google Play request timed out for {app_id}/{country}")
+            return country, None, f"请求超时 ({country})"
         except gp_exceptions.NotFoundError:
             return country, None, f"在该区域 ({country}) 未找到应用"
         except Exception as e:

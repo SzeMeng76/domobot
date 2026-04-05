@@ -232,74 +232,12 @@ async def googleplay_callback_handler(
     )
 
 
-async def google_play_clean_cache_command(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-):
-    """Handles the /gp_cleancache command to clear Google Play caches."""
-    if not update.message:
-        return
-
-    # 从 context.bot_data 获取服务实例
-    service: GooglePlayService = context.bot_data.get("google_play_service")
-    if not service:
-        await send_help(
-            context,
-            update.message.chat_id,
-            foldable_text_v2("❌ 错误：Google Play 查询服务未初始化。"),
-            parse_mode="MarkdownV2",
-        )
-        return
-
-    try:
-        # 清理 Google Play 相关的 Redis 缓存
-        from utils.message_manager import send_success
-
-        redis_client = service.cache_manager.redis_client
-        pattern = "*google_play*"
-        deleted_count = 0
-
-        async for key in redis_client.scan_iter(match=pattern):
-            await redis_client.delete(key)
-            deleted_count += 1
-
-        success_message = f"✅ 已清理 {deleted_count} 个 Google Play 缓存键"
-        await send_success(
-            context,
-            update.message.chat_id,
-            foldable_text_v2(success_message),
-            parse_mode="MarkdownV2",
-        )
-        await delete_user_command(
-            context, update.message.chat_id, update.message.message_id
-        )
-
-        logger.info(f"管理员 {update.effective_user.id} 清理了 Google Play 缓存")
-
-    except Exception as e:
-        error_message = f"❌ 清理缓存失败: {type(e).__name__}"
-        logger.error(f"清理 Google Play 缓存失败: {e}")
-        from utils.message_manager import send_error
-
-        await send_error(
-            context,
-            update.message.chat_id,
-            foldable_text_v2(error_message),
-            parse_mode="MarkdownV2",
-        )
-
-
 # Register commands
 command_factory.register_command(
     "gp",
     googleplay_command,
     permission=Permission.USER,
     description="Google Play应用价格查询",
-)
-command_factory.register_command(
-    "gp_cleancache",
-    google_play_clean_cache_command,
-    permission=Permission.ADMIN,
-    description="清理Google Play缓存",
 )
 
 
