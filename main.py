@@ -228,6 +228,12 @@ def setup_handlers(application: Application):
     application.add_handler(get_map_nearby_handler())
     logger.info("✅ Map Nearby callback处理器已注册")
 
+    # 注册 Google Play callback handler
+    from telegram.ext import CallbackQueryHandler as CQHandler
+    from commands.google_play import googleplay_callback_handler
+    application.add_handler(CQHandler(googleplay_callback_handler, pattern="^gp_"))
+    logger.info("✅ Google Play callback处理器已注册")
+
     # 使用命令工厂设置处理器（包括 UnifiedTextHandler）
     command_factory.setup_handlers(application)
 
