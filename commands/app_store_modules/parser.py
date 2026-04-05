@@ -13,7 +13,7 @@ from bs4 import BeautifulSoup
 
 from utils.country_data import SUPPORTED_COUNTRIES
 
-from .constants import JSON_LD_SCRIPT_TYPE, JSON_LD_SOFTWARE_TYPE, SELECTORS
+from .constants import JSON_LD_SCRIPT_TYPE, JSON_LD_SOFTWARE_TYPE, IAP_TEXT_PAIR_CLASS
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +100,11 @@ class AppStoreParser:
     @staticmethod
     def parse_in_app_purchases_html(html_content: str) -> List[Dict]:
         """
-        从 HTML 中提取内购项目（适配 Apple 新的 Svelte 组件结构）
+        从 HTML 中提取内购项目
+
+        通过 Information 网格的 <dt>/<dd> 结构特征定位 IAP 区域：
+        IAP 是唯一在 <dd> 内含 li > div.text-pair 结构的项。
+        不依赖任何 Svelte 哈希类名或多语言关键词。
 
         Args:
             html_content: HTML 内容
@@ -113,50 +117,44 @@ class AppStoreParser:
         except Exception:
             soup = BeautifulSoup(html_content, "html.parser")
 
-        # 使用新的 Svelte 选择器
-        in_app_items = soup.select(SELECTORS["in_app_items"])
+        # 遍历 Information 网格中所有 <dt>/<dd> 对，
+        # 找到 <dd> 内含 div.text-pair 的项（IAP 区域独有特征）
+        iap_dd = None
+        for dt in soup.find_all("dt"):
+            dd = dt.find_next_sibling("dd")
+            if dd and dd.find("div", class_=IAP_TEXT_PAIR_CLASS):
+                iap_dd = dd
+                break
+
+        if not iap_dd:
+            logger.info("未找到内购区域（应用无内购或页面结构不匹配）")
+            return []
+
+        # 在 IAP <dd> 内提取含 text-pair 的 <li> 元素
         unique_items = set()
         in_app_purchases = []
 
-        if not in_app_items:
-            logger.info("未找到内购项目（可能是免费应用或无内购）")
-            return []
-
-        for item in in_app_items:
-            # 查找 text-pair 容器
-            text_pair = item.find("div", class_="text-pair")
-
+        for li in iap_dd.find_all("li"):
+            text_pair = li.find("div", class_=IAP_TEXT_PAIR_CLASS)
             if not text_pair:
                 continue
 
-            # 提取所有 span 标签
             spans = text_pair.find_all("span")
-
             if len(spans) < 2:
                 continue
 
-            # 第一个 span 是名称，第二个 span 是价格
-            name = spans[0].text.strip()
-            price_str = spans[1].text.strip()
+            name = spans[0].get_text(strip=True)
+            price_str = spans[1].get_text(strip=True)
 
-            # 基本验证：必须包含价格符号（过滤掉非内购项目）
-            # 常见货币符号：$, €, £, ¥, ₹, R$, etc.
             if not name or not price_str:
                 continue
 
-            # 检查是否包含价格符号或数字（排除纯文本项如开发者名称、分类等）
-            has_currency = any(symbol in price_str for symbol in ['$', '€', '£', '¥', '₹', 'R$', 'Rp', '₺', 'RM'])
-            has_number = any(char.isdigit() for char in price_str)
-
-            if not (has_currency or has_number):
+            # 去重（Apple 页面会渲染多份响应式副本）
+            item_key = (name, price_str)
+            if item_key in unique_items:
                 continue
 
-            # 去重
-            item_tuple = (name, price_str)
-            if item_tuple in unique_items:
-                continue
-
-            unique_items.add(item_tuple)
+            unique_items.add(item_key)
             in_app_purchases.append({"name": name, "price_str": price_str})
 
         logger.info(f"解析到 {len(in_app_purchases)} 个内购项目")
