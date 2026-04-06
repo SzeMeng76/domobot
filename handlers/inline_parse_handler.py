@@ -152,6 +152,8 @@ async def handle_inline_parse_query(
     Returns:
         InlineQueryResult 列表
     """
+    logger.info(f"收到 inline 解析请求: query={query[:80]}, from_user={update.inline_query.from_user.id}")
+
     # 获取 parse_adapter
     parse_adapter = context.bot_data.get("parse_adapter")
     if not parse_adapter:
