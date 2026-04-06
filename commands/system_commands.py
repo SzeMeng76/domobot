@@ -511,27 +511,8 @@ def estimate_account_creation_date(user_id):
         # ID太小，返回Telegram启动时间
         return datetime(2013, 8, 14)
     else:
-        # 超出范围，根据趋势估算
-        # 使用最后两个点的斜率推断
-        id1, date1 = known_points[-2]
-        id2, date2 = known_points[-1]
-        
-        # 计算每个ID对应的时间增长率
-        id_diff = id2 - id1
-        time_diff = (date2 - date1).total_seconds()
-        rate = time_diff / id_diff  # 每个ID对应的秒数
-        
-        # 基于趋势推算
-        id_beyond = user_id - id2
-        estimated_seconds = rate * id_beyond
-        estimated_date = date2 + timedelta(seconds=estimated_seconds)
-        
-        # 限制在合理范围内
-        max_date = datetime.now() + timedelta(days=30)
-        if estimated_date > max_date:
-            estimated_date = max_date
-            
-        return estimated_date
+        # 超出最大锚点，当作今天注册
+        return datetime.now()
 
 
 def get_user_level_by_date(creation_date):
@@ -805,25 +786,28 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 计算账号年龄
         from datetime import datetime
         now = datetime.now()
-        
-        # 计算年月差
-        years = now.year - estimated_date.year
-        months = now.month - estimated_date.month
-        
-        # 如果当前日期小于注册日期，月份需要减1
-        if now.day < estimated_date.day:
-            months -= 1
-        
-        # 如果月份为负，从年份借位
-        if months < 0:
-            years -= 1
-            months += 12
-        
-        # 格式化年龄显示
-        if years > 0:
-            age_str = f"{years}年{months}月"
+
+        if estimated_date > now:
+            age_str = "刚注册"
         else:
-            age_str = f"{months}月"
+            # 计算年月差
+            years = now.year - estimated_date.year
+            months = now.month - estimated_date.month
+
+            # 如果当前日期小于注册日期，月份需要减1
+            if now.day < estimated_date.day:
+                months -= 1
+
+            # 如果月份为负，从年份借位
+            if months < 0:
+                years -= 1
+                months += 12
+
+            # 格式化年龄显示
+            if years > 0:
+                age_str = f"{years}年{months}月"
+            else:
+                age_str = f"{months}月"
 
         # 确定级别
         level = get_user_level_by_date(estimated_date)
