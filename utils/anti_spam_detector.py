@@ -153,6 +153,7 @@ class AntiSpamDetector:
 6. **尼日利亚相关服务广告**（NIGERIAN BANKS, NIN, BVN, ESIM, PASSPORT, GMAIL, SUBSCRIPTIONS等）
 7. 全大写、大量emoji、24/7 ACTIVE等典型广告特征
 8. 高风险用户（无头像、无bio、无用户名）发送的商业信息
+9. **加密货币喊单广告**：包含币种代码（如BTC、ETH、ZEC、BNB等）加上进场价/止盈/止损/限价/做多/做空等交易指令组合，这类消息是典型的付费喊单群引流广告，即使格式简短也应判定为垃圾广告
 
 请以JSON格式返回结果：
 {{
