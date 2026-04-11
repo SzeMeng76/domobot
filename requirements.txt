@@ -2,7 +2,7 @@
 python-telegram-bot[all]==22.7
 
 # Kurigram (actively maintained Pyrogram fork, for MTProto API: DC ID detection, large file upload, inline media edit)
-kurigram>=2.2.19
+kurigram>=2.2.21
 tgcrypto>=1.2.5  # Speeds up Kurigram
 
 # Environment Configuration
