@@ -360,62 +360,81 @@ class FinanceService:
             logger.error(f"获取拆股日历失败: {e}", exc_info=True)
             return None
         
-    async def get_stock_info(self, symbol: str) -> Optional[Dict]:
-        """获取单只股票信息"""
-        cache_key = f"stock_info_{symbol.upper()}"
-        
+    async def get_stock_info(self, symbol: str, repair: bool = False) -> Optional[Dict]:
+        """获取单只股票信息 - 支持数据修复和元数据获取
+
+        Args:
+            symbol: 股票代码
+            repair: 是否启用数据修复（修复价格异常和货币转换）
+        """
+        cache_key = f"stock_info_{symbol.upper()}_r{int(repair)}"
+
         if cache_manager:
             config = get_config()
             cached_data = await cache_manager.load_cache(
-                cache_key, 
+                cache_key,
                 max_age_seconds=config.finance_cache_duration,
                 subdirectory="finance"
             )
             if cached_data:
                 logger.info(f"使用缓存的股票数据: {symbol}")
                 return cached_data
-        
+
         try:
             ticker = yf.Ticker(symbol)
+
+            # 增强错误处理：检查info是否有效
             info = ticker.info
-            # 利用0.2.66修复的actions数据，明确包含分红和拆股信息
-            history = ticker.history(period="1d", actions=True)
-            
-            if info:
-                # 获取最新价格 - 优先使用历史数据，其次使用info数据
-                if not history.empty:
-                    current_price = history['Close'].iloc[-1]
-                    previous_close = info.get('previousClose', current_price)
-                else:
-                    # 历史数据为空时，从info获取价格信息
-                    current_price = info.get('currentPrice') or info.get('regularMarketPrice', 0)
-                    previous_close = info.get('previousClose') or info.get('regularMarketPreviousClose', current_price)
-                
-                # 如果仍然没有价格信息，跳过这只股票
-                if current_price == 0:
-                    logger.warning(f"股票 {symbol} 没有有效的价格数据 - 可能已退市或暂停交易")
-                    return None
-                
-                data = {
-                    'symbol': symbol.upper(),
-                    'name': info.get('longName', info.get('shortName', symbol.upper())),
-                    'current_price': float(current_price),
-                    'previous_close': float(previous_close),
-                    'change': float(current_price - previous_close),
-                    'change_percent': float((current_price - previous_close) / previous_close * 100) if previous_close != 0 else 0,
-                    'volume': int(info.get('volume', 0)),
-                    'market_cap': info.get('marketCap', 0),
-                    'pe_ratio': info.get('trailingPE', 0),
-                    'dividend_yield': info.get('dividendYield', 0),
-                    'currency': info.get('currency', 'USD'),
-                    'exchange': info.get('exchange', ''),
-                    'timestamp': datetime.now().isoformat()
-                }
-                
-                if cache_manager:
-                    await cache_manager.save_cache(cache_key, data, subdirectory="finance")
-                
-                return data
+            if not info or not isinstance(info, dict):
+                logger.warning(f"股票 {symbol} 返回空的info数据")
+                return None
+
+            # 使用repair参数修复数据质量
+            history = ticker.history(period="1d", actions=True, repair=repair)
+
+            # 获取历史元数据（包含时区、交易时段等信息）
+            try:
+                metadata = ticker.get_history_metadata()
+            except Exception as e:
+                logger.debug(f"获取历史元数据失败 {symbol}: {e}")
+                metadata = {}
+
+            # 获取最新价格 - 优先使用历史数据，其次使用info数据
+            if not history.empty:
+                current_price = history['Close'].iloc[-1]
+                previous_close = info.get('previousClose', current_price)
+            else:
+                # 历史数据为空时，从info获取价格信息
+                current_price = info.get('currentPrice') or info.get('regularMarketPrice') or 0
+                previous_close = info.get('previousClose') or info.get('regularMarketPreviousClose', current_price)
+
+            # 如果仍然没有价格信息，跳过这只股票
+            if current_price == 0:
+                logger.warning(f"股票 {symbol} 没有有效的价格数据 - 可能已退市或暂停交易")
+                return None
+
+            data = {
+                'symbol': symbol.upper(),
+                'name': info.get('longName', info.get('shortName', symbol.upper())),
+                'current_price': float(current_price),
+                'previous_close': float(previous_close),
+                'change': float(current_price - previous_close),
+                'change_percent': float((current_price - previous_close) / previous_close * 100) if previous_close != 0 else 0,
+                'volume': int(info.get('volume', 0)),
+                'market_cap': info.get('marketCap', 0),
+                'pe_ratio': info.get('trailingPE', 0),
+                'dividend_yield': info.get('dividendYield', 0),
+                'currency': info.get('currency', 'USD'),
+                'exchange': info.get('exchange', ''),
+                'timezone': metadata.get('timezone'),
+                'exchange_timezone': metadata.get('exchangeTimezoneName'),
+                'timestamp': datetime.now().isoformat()
+            }
+
+            if cache_manager:
+                await cache_manager.save_cache(cache_key, data, subdirectory="finance")
+
+            return data
                 
         except Exception as e:
             logger.error(f"获取股票信息失败 {symbol}: {e}", exc_info=True)
@@ -539,30 +558,40 @@ class FinanceService:
             return []
     
     async def get_analyst_recommendations(self, symbol: str) -> Optional[Dict]:
-        """获取分析师评级"""
+        """获取分析师评级 - 支持货币信息和评级变化"""
         cache_key = f"analyst_{symbol.upper()}"
-        
+
         if cache_manager:
             config = get_config()
             cached_data = await cache_manager.load_cache(
-                cache_key, 
+                cache_key,
                 max_age_seconds=config.finance_cache_duration * 2,  # 分析师数据缓存10分钟
                 subdirectory="finance"
             )
             if cached_data:
                 return cached_data
-        
+
         try:
             ticker = yf.Ticker(symbol)
-            
+
             # 获取分析师评级汇总
             recommendations_summary = ticker.recommendations_summary
             # 获取目标价
             price_targets = ticker.analyst_price_targets
-            
+
+            # 获取earnings_estimate（现在包含currency列）
+            try:
+                earnings_estimate = ticker.earnings_estimate
+                estimate_currency = None
+                if earnings_estimate is not None and not earnings_estimate.empty and 'currency' in earnings_estimate.columns:
+                    estimate_currency = earnings_estimate['currency'].iloc[0] if len(earnings_estimate) > 0 else None
+            except Exception as e:
+                logger.debug(f"获取earnings_estimate失败 {symbol}: {e}")
+                estimate_currency = None
+
             if recommendations_summary is not None and not recommendations_summary.empty:
                 latest_summary = recommendations_summary.iloc[0]  # 最新的评级汇总
-                
+
                 data = {
                     'symbol': symbol.upper(),
                     'strong_buy': int(latest_summary.get('strongBuy', 0)),
@@ -571,9 +600,10 @@ class FinanceService:
                     'sell': int(latest_summary.get('sell', 0)),
                     'strong_sell': int(latest_summary.get('strongSell', 0)),
                     'period': latest_summary.name.strftime('%Y-%m-%d') if hasattr(latest_summary.name, 'strftime') else str(latest_summary.name),
+                    'estimate_currency': estimate_currency,  # 新增：估值货币
                     'timestamp': datetime.now().isoformat()
                 }
-                
+
                 # 添加目标价信息
                 if price_targets and len(price_targets) > 0:
                     data.update({
@@ -582,16 +612,16 @@ class FinanceService:
                         'target_price_low': float(price_targets.get('targetLowPrice', 0)),
                         'num_analysts': int(price_targets.get('numberOfAnalystOpinions', 0))
                     })
-                
+
                 if cache_manager:
                     await cache_manager.save_cache(cache_key, data, subdirectory="finance")
-                
+
                 return data
-                
+
         except Exception as e:
             logger.error(f"获取分析师评级失败 {symbol}: {e}")
             return None
-        
+
         return None
 
     async def get_earnings_dates(self, symbol: str) -> Optional[Dict]:
@@ -677,9 +707,14 @@ class FinanceService:
 
         return None
 
-    async def get_dividends_splits(self, symbol: str) -> Optional[Dict]:
-        """获取分红和拆股信息 - 利用0.2.66修复的actions数据"""
-        cache_key = f"dividends_splits_{symbol.upper()}"
+    async def get_dividends_splits(self, symbol: str, repair: bool = False) -> Optional[Dict]:
+        """获取分红和拆股信息 - 支持外汇信息和数据修复
+
+        Args:
+            symbol: 股票代码
+            repair: 是否启用数据修复（自动进行货币转换）
+        """
+        cache_key = f"dividends_splits_{symbol.upper()}_r{int(repair)}"
 
         if cache_manager:
             config = get_config()
@@ -695,8 +730,42 @@ class FinanceService:
         try:
             ticker = yf.Ticker(symbol)
 
-            # 获取分红数据
-            dividends = ticker.dividends
+            # 使用get_actions()获取完整的分红信息（包括货币）
+            actions = None
+            dividend_fx = None
+            try:
+                actions = ticker.get_actions()
+                # 检查是否有Dividends FX列（跨币种分红）
+                if actions is not None and 'Dividends FX' in actions.columns:
+                    fx_values = actions['Dividends FX'].dropna()
+                    if not fx_values.empty:
+                        dividend_fx = fx_values.iloc[0]  # 第一个非空的货币代码
+                        logger.info(f"检测到 {symbol} 的分红外汇信息: {dividend_fx}")
+            except Exception as e:
+                logger.debug(f"获取actions失败 {symbol}: {e}")
+
+            # 使用repair参数，自动进行货币转换
+            dividends = ticker.get_dividends(period="max", repair=repair)
+            splits = ticker.get_splits(period="max", repair=repair)
+
+            # 获取货币信息
+            info = ticker.info
+            if not info or not isinstance(info, dict):
+                logger.warning(f"股票 {symbol} 返回空的info数据")
+                currency = 'USD'
+            else:
+                currency = info.get('currency', 'USD')
+
+            data = {
+                'symbol': symbol.upper(),
+                'currency': currency,
+                'dividend_currency': dividend_fx,  # 新增：分红货币（如果不同）
+                'recent_dividends': [],
+                'recent_splits': [],
+                'dividend_yield': 0,
+                'annual_dividend': 0,
+                'timestamp': datetime.now().isoformat()
+            }
             # 获取拆股数据
             splits = ticker.splits
 
@@ -772,6 +841,96 @@ class FinanceService:
 
         except Exception as e:
             logger.error(f"获取分红拆股信息失败 {symbol}: {e}", exc_info=True)
+            return None
+
+        return None
+
+    async def get_stock_quick_info(self, symbol: str) -> Optional[Dict]:
+        """快速获取股票基本信息（性能优化版本）- 使用fast_info"""
+        cache_key = f"stock_quick_{symbol.upper()}"
+
+        if cache_manager:
+            config = get_config()
+            cached_data = await cache_manager.load_cache(
+                cache_key,
+                max_age_seconds=config.finance_cache_duration // 2,  # 快速信息缓存更短
+                subdirectory="finance"
+            )
+            if cached_data:
+                logger.info(f"使用缓存的快速股票数据: {symbol}")
+                return cached_data
+
+        try:
+            ticker = yf.Ticker(symbol)
+            fast_info = ticker.fast_info
+
+            data = {
+                'symbol': symbol.upper(),
+                'current_price': float(fast_info.last_price) if hasattr(fast_info, 'last_price') else 0,
+                'previous_close': float(fast_info.previous_close) if hasattr(fast_info, 'previous_close') else 0,
+                'market_cap': int(fast_info.market_cap) if hasattr(fast_info, 'market_cap') else 0,
+                'currency': fast_info.currency if hasattr(fast_info, 'currency') else 'USD',
+                'timezone': fast_info.timezone if hasattr(fast_info, 'timezone') else None,
+                'timestamp': datetime.now().isoformat()
+            }
+
+            # 计算涨跌
+            if data['current_price'] and data['previous_close']:
+                data['change'] = data['current_price'] - data['previous_close']
+                data['change_percent'] = (data['change'] / data['previous_close'] * 100) if data['previous_close'] != 0 else 0
+
+            if cache_manager:
+                await cache_manager.save_cache(cache_key, data, subdirectory="finance")
+
+            return data
+
+        except Exception as e:
+            logger.error(f"快速获取股票信息失败 {symbol}: {e}")
+            return None
+
+    async def get_analyst_upgrades_downgrades(self, symbol: str) -> Optional[Dict]:
+        """获取分析师评级变化（升级/降级）"""
+        cache_key = f"upgrades_downgrades_{symbol.upper()}"
+
+        if cache_manager:
+            config = get_config()
+            cached_data = await cache_manager.load_cache(
+                cache_key,
+                max_age_seconds=config.finance_cache_duration * 6,  # 评级变化缓存30分钟
+                subdirectory="finance"
+            )
+            if cached_data:
+                return cached_data
+
+        try:
+            ticker = yf.Ticker(symbol)
+            upgrades_downgrades = ticker.get_upgrades_downgrades()
+
+            if upgrades_downgrades is not None and not upgrades_downgrades.empty:
+                recent = upgrades_downgrades.head(15)  # 最近15条
+                data = {
+                    'symbol': symbol.upper(),
+                    'changes': [],
+                    'timestamp': datetime.now().isoformat()
+                }
+
+                for date, row in recent.iterrows():
+                    change_info = {
+                        'date': date.strftime('%Y-%m-%d') if hasattr(date, 'strftime') else str(date),
+                        'firm': str(row.get('firm', '')) if pd.notna(row.get('firm')) else '',
+                        'to_grade': str(row.get('toGrade', '')) if pd.notna(row.get('toGrade')) else '',
+                        'from_grade': str(row.get('fromGrade', '')) if pd.notna(row.get('fromGrade')) else '',
+                        'action': str(row.get('action', '')) if pd.notna(row.get('action')) else ''
+                    }
+                    data['changes'].append(change_info)
+
+                if cache_manager:
+                    await cache_manager.save_cache(cache_key, data, subdirectory="finance")
+
+                return data
+
+        except Exception as e:
+            logger.error(f"获取评级变化失败 {symbol}: {e}")
             return None
 
         return None
@@ -1073,23 +1232,68 @@ def format_earnings_dates(earnings_data: Dict) -> str:
         for i, earning in enumerate(recent_earnings, 1):
             result += f"`{i}.` {earning['date']}"
             if earning.get('reported_eps'):
-                result += f" (实际EPS: {currency_symbol}{earning['reported_eps']:.2f}"
-                if earning.get('surprise') is not None:
-                    surprise_emoji = "🎯" if earning['surprise'] >= 0 else "❌"
-                    result += f", 超预期: {surprise_emoji}{earning['surprise']:+.1f}%"
-                result += ")"
+                result += f" - EPS: {currency_symbol}{earning['reported_eps']:.2f}"
+            if earning.get('surprise'):
+                surprise = earning['surprise']
+                emoji = "📈" if surprise > 0 else "📉" if surprise < 0 else "➡️"
+                result += f" {emoji} ({surprise:+.1f}%)"
             result += "\n"
+        result += "\n"
 
     if not next_earnings and not upcoming_earnings and not recent_earnings:
         result += "❌ 暂无财报日期数据"
 
-    result += f"\n_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
+    result += f"_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
+    return result
+
+def format_analyst_upgrades_downgrades(upgrades_data: Dict) -> str:
+    """格式化分析师评级变化"""
+    symbol = upgrades_data['symbol']
+    changes = upgrades_data.get('changes', [])
+
+    result = f"📊 *{symbol} 分析师评级变化*\n\n"
+
+    if changes:
+        result += f"共 `{len(changes)}` 条评级变化记录\n\n"
+
+        for i, change in enumerate(changes[:10], 1):  # 显示最近10条
+            date = change.get('date', '')
+            firm = change.get('firm', '')
+            action = change.get('action', '')
+            from_grade = change.get('from_grade', '')
+            to_grade = change.get('to_grade', '')
+
+            # 根据action类型选择emoji
+            if action.lower() in ['up', 'upgrade', 'init']:
+                emoji = "📈"
+            elif action.lower() in ['down', 'downgrade']:
+                emoji = "📉"
+            elif action.lower() in ['main', 'reit']:
+                emoji = "➡️"
+            else:
+                emoji = "🔄"
+
+            result += f"`{i:2d}.` {emoji} *{date}*\n"
+            if firm:
+                result += f"     🏢 {firm}\n"
+            if action:
+                result += f"     🎯 {action}"
+            if from_grade and to_grade:
+                result += f": {from_grade} → {to_grade}"
+            elif to_grade:
+                result += f": {to_grade}"
+            result += "\n\n"
+    else:
+        result += "❌ 暂无评级变化数据"
+
+    result += f"_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
     return result
 
 def format_dividends_splits(dividends_data: Dict) -> str:
-    """格式化分红拆股信息"""
+    """格式化分红拆股信息 - 支持外汇信息显示"""
     symbol = dividends_data['symbol']
     currency = dividends_data.get('currency', 'USD')
+    dividend_currency = dividends_data.get('dividend_currency')  # 新增：分红货币
     currency_symbol = get_currency_symbol(currency)
     recent_dividends = dividends_data.get('recent_dividends', [])
     recent_splits = dividends_data.get('recent_splits', [])
@@ -1101,6 +1305,12 @@ def format_dividends_splits(dividends_data: Dict) -> str:
     # 分红信息
     if recent_dividends:
         result += "💵 *分红信息:*\n"
+
+        # 如果分红货币与股价货币不同，显示警告
+        if dividend_currency and dividend_currency != currency:
+            div_currency_symbol = get_currency_symbol(dividend_currency)
+            result += f"⚠️ 分红货币: `{dividend_currency}` {div_currency_symbol} (不同于股价货币 {currency})\n"
+
         if annual_dividend > 0:
             result += f"📊 年度分红: `{currency_symbol}{annual_dividend:.2f}`\n"
         if dividend_yield > 0:
