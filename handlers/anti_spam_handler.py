@@ -31,18 +31,20 @@ class AntiSpamHandler:
         if pyrogram_helper:
             logger.info("DC ID detection enabled via Pyrogram")
 
-    async def _calculate_user_risk_score(self, user, context: ContextTypes.DEFAULT_TYPE) -> tuple[int, list[str]]:
+    async def _calculate_user_risk_score(self, user, context: ContextTypes.DEFAULT_TYPE) -> tuple[int, list[str], str | None]:
         """
         计算用户风险评分
         注意：DC ID 需要 MTProto API (Pyrogram/Telethon)，Bot API 不提供
 
         Returns:
-            (risk_score, risk_factors)
+            (risk_score, risk_factors, bio_text)
             risk_score: 0-100
             risk_factors: 风险因素列表
+            bio_text: 用户简介文本（可能为None）
         """
         risk_score = 0
         risk_factors = []
+        bio_text = None
 
         try:
             # 1. 检查头像（Bot API 支持）
@@ -53,9 +55,11 @@ class AntiSpamHandler:
                 logger.debug(f"User {user.id} has no profile photo")
 
             # 2. 检查 Bio（通过 get_chat 获取）
+            bio_text = None
             try:
                 chat_info = await context.bot.get_chat(user.id)
-                if not chat_info.bio:
+                bio_text = chat_info.bio
+                if not bio_text:
                     risk_score += 25
                     risk_factors.append("无个人简介")
                     logger.debug(f"User {user.id} has no bio")
@@ -98,7 +102,7 @@ class AntiSpamHandler:
         except Exception as e:
             logger.error(f"Failed to calculate risk score for user {user.id}: {e}")
 
-        return min(risk_score, 100), risk_factors
+        return min(risk_score, 100), risk_factors, bio_text
 
     async def is_admin(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
         """检查用户是否为管理员"""
@@ -158,11 +162,12 @@ class AntiSpamHandler:
             )
 
             # 计算用户风险评分
-            risk_score, risk_factors = await self._calculate_user_risk_score(
+            risk_score, risk_factors, bio_text = await self._calculate_user_risk_score(
                 update.effective_user, context
             )
             user_info['risk_score'] = risk_score
             user_info['risk_factors'] = risk_factors
+            user_info['bio'] = bio_text  # 保存bio用于检测
 
             if risk_score > 50:
                 logger.info(f"High risk user {user_id}: score={risk_score}, factors={risk_factors}")

@@ -34,7 +34,7 @@ class SpamDetectionResult:
 class AntiSpamDetector:
     """AI反垃圾检测器"""
 
-    def __init__(self, api_key: str, model: str = "gpt-4o-mini", base_url: str = None):
+    def __init__(self, api_key: str, model: str = "gpt-4o-mini", base_url: str | None = None):
         """
         初始化检测器
 
@@ -102,7 +102,7 @@ class AntiSpamDetector:
         raise ValueError(f"Could not extract valid JSON from response")
 
     def _build_user_info_prompt(self, user_info: Dict) -> str:
-        """构建用户信息提示词（包含风险评分）"""
+        """构建用户信息提示词（包含风险评分和bio）"""
         joined_time = user_info.get('joined_time')
         days_since_join = (datetime.now() - joined_time).days if joined_time else 0
         speech_count = user_info.get('number_of_speeches', 0)
@@ -110,6 +110,7 @@ class AntiSpamDetector:
         # 计算风险评分
         risk_score = user_info.get('risk_score', 0)
         risk_factors = user_info.get('risk_factors', [])
+        bio = user_info.get('bio')
 
         user_profile = f"""用户信息：
 - 入群天数：{days_since_join}天
@@ -117,6 +118,10 @@ class AntiSpamDetector:
 - 用户名：{user_info.get('username', '未知')}
 - 昵称：{user_info.get('first_name', '未知')}
 - 风险评分：{risk_score}/100"""
+
+        if bio:
+            user_profile += f"\n- 个人简介：{bio}"
+            user_profile += "\n  ⚠️ 重要：如果简介包含广告内容，即使消息本身很短也应判定为垃圾"
 
         if risk_factors:
             user_profile += f"\n- 风险因素：{', '.join(risk_factors)}"
@@ -146,14 +151,20 @@ class AntiSpamDetector:
 
 垃圾广告特征包括：
 1. 虚假支付机构、银行卡信息
-2. 诱导加入群组的链接
+2. 诱导加入群组的链接（@username、t.me链接等）
 3. 非法支付、赌博、禁止物品贩卖
-4. 非法服务（飞机会员、刷单、赌台、网赚等）
+4. 非法服务（飞机会员、刷单、赌台、网赚、日入千金等）
 5. 使用谐音、错别字、特殊符号混淆的变体
 6. **尼日利亚相关服务广告**（NIGERIAN BANKS, NIN, BVN, ESIM, PASSPORT, GMAIL, SUBSCRIPTIONS等）
 7. 全大写、大量emoji、24/7 ACTIVE等典型广告特征
 8. 高风险用户（无头像、无bio、无用户名）发送的商业信息
 9. **加密货币喊单广告**：包含币种代码（如BTC、ETH、ZEC、BNB等）加上进场价/止盈/止损/限价/做多/做空等交易指令组合，这类消息是典型的付费喊单群引流广告，即使格式简短也应判定为垃圾广告
+10. **赌博平台推广**：包含"PG平台"、"赌博"、"赌资"、"赌台"、"官方直推"、"风口"、"日入"、"稳定收益"等关键词
+11. **零宽字符和特殊符号混淆**：消息中包含零宽字符（如\u200b、\u200c、\u200d、\ufeff）或大量特殊Unicode字符（如͇‌͇等组合变音符）来规避检测，这是典型的垃圾广告技巧
+
+**重要判定规则**：
+- 如果用户简介（bio）包含明显广告内容（赌博、网赚、引流等），即使消息本身很短或看似无害，也应结合简介判定为垃圾广告
+- 如果消息使用零宽字符或大量特殊符号混淆关键词（如"风.口"、"快.来"），应视为高度可疑，结合用户信息综合判断
 
 请以JSON格式返回结果：
 {{
@@ -208,7 +219,7 @@ class AntiSpamDetector:
             return None, detection_time
 
     async def detect_photo(self, photo_url: str, user_info: Dict,
-                          caption: str = None) -> Tuple[Optional[SpamDetectionResult], int]:
+                          caption: str | None = None) -> Tuple[Optional[SpamDetectionResult], int]:
         """
         检测图片消息
 
