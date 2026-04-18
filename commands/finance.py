@@ -1224,7 +1224,7 @@ def format_valuation_measures(valuation_data: Dict) -> str:
 
     result = f"📊 *{symbol} 估值指标*\n\n"
 
-    if not measures or measures.empty:
+    if measures is None or measures.empty:
         return result + "❌ 暂无估值数据"
 
     # 获取当前列（第一列通常是最新数据）
@@ -1248,7 +1248,7 @@ def format_valuation_measures(valuation_data: Dict) -> str:
         for metric_name, display_name in key_metrics.items():
             if metric_name in measures.index:
                 value = measures.loc[metric_name, current_col]
-                if value and value != 'N/A':
+                if pd.notna(value) and str(value) != 'N/A':
                     result += f"{display_name}: `{value}`\n"
 
     result += f"\n_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
