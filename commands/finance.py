@@ -640,12 +640,12 @@ class FinanceService:
 
         try:
             ticker = yf.Ticker(symbol)
-            valuation_measures = ticker.valuation_measures
+            valuation_data = ticker.valuation
 
-            if valuation_measures is not None and not valuation_measures.empty:
+            if valuation_data is not None and not valuation_data.empty:
                 data = {
                     'symbol': symbol.upper(),
-                    'measures': valuation_measures,
+                    'measures': valuation_data,
                     'timestamp': datetime.now().isoformat()
                 }
 
