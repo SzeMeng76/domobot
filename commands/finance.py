@@ -624,6 +624,42 @@ class FinanceService:
 
         return None
 
+    async def get_valuation_measures(self, symbol: str) -> Optional[Dict]:
+        """获取估值指标"""
+        cache_key = f"valuation_{symbol.upper()}"
+
+        if cache_manager:
+            config = get_config()
+            cached_data = await cache_manager.load_cache(
+                cache_key,
+                max_age_seconds=config.finance_cache_duration * 2,
+                subdirectory="finance"
+            )
+            if cached_data:
+                return cached_data
+
+        try:
+            ticker = yf.Ticker(symbol)
+            valuation_measures = ticker.valuation_measures
+
+            if valuation_measures is not None and not valuation_measures.empty:
+                data = {
+                    'symbol': symbol.upper(),
+                    'measures': valuation_measures,
+                    'timestamp': datetime.now().isoformat()
+                }
+
+                if cache_manager:
+                    await cache_manager.save_cache(cache_key, data, subdirectory="finance")
+
+                return data
+
+        except Exception as e:
+            logger.error(f"获取估值指标失败 {symbol}: {e}")
+            return None
+
+        return None
+
     async def get_earnings_dates(self, symbol: str) -> Optional[Dict]:
         """获取财报日期 - 利用0.2.66修复的earnings_dates功能"""
         cache_key = f"earnings_dates_{symbol.upper()}"
@@ -760,22 +796,6 @@ class FinanceService:
                 'symbol': symbol.upper(),
                 'currency': currency,
                 'dividend_currency': dividend_fx,  # 新增：分红货币（如果不同）
-                'recent_dividends': [],
-                'recent_splits': [],
-                'dividend_yield': 0,
-                'annual_dividend': 0,
-                'timestamp': datetime.now().isoformat()
-            }
-            # 获取拆股数据
-            splits = ticker.splits
-
-            # 获取货币信息
-            info = ticker.info
-            currency = info.get('currency', 'USD') if info else 'USD'
-
-            data = {
-                'symbol': symbol.upper(),
-                'currency': currency,
                 'recent_dividends': [],
                 'recent_splits': [],
                 'dividend_yield': 0,
@@ -1194,6 +1214,43 @@ def format_financial_statement(financial_data: Dict) -> str:
         if 'Free Cash Flow' in data:
             result += f"💎 自由现金流: `{currency_symbol}{data['Free Cash Flow']:,.0f}`\n"
     
+    result += f"\n_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
+    return result
+
+def format_valuation_measures(valuation_data: Dict) -> str:
+    """格式化估值指标"""
+    symbol = valuation_data['symbol']
+    measures = valuation_data.get('measures')
+
+    result = f"📊 *{symbol} 估值指标*\n\n"
+
+    if not measures or measures.empty:
+        return result + "❌ 暂无估值数据"
+
+    # 获取当前列（第一列通常是最新数据）
+    if len(measures.columns) > 0:
+        current_col = measures.columns[0]
+        result += f"📅 数据时间: `{current_col}`\n\n"
+
+        # 关键估值指标
+        key_metrics = {
+            'Market Cap': '💎 市值',
+            'Enterprise Value': '🏢 企业价值',
+            'Trailing P/E': '📈 市盈率(TTM)',
+            'Forward P/E': '📊 预期市盈率',
+            'PEG Ratio (5yr expected)': '📉 PEG比率',
+            'Price/Sales': '💰 市销率',
+            'Price/Book': '📚 市净率',
+            'Enterprise Value/Revenue': '🏭 EV/收入',
+            'Enterprise Value/EBITDA': '⚡ EV/EBITDA'
+        }
+
+        for metric_name, display_name in key_metrics.items():
+            if metric_name in measures.index:
+                value = measures.loc[metric_name, current_col]
+                if value and value != 'N/A':
+                    result += f"{display_name}: `{value}`\n"
+
     result += f"\n_更新时间: {datetime.now().strftime('%H:%M:%S')}_"
     return result
 
@@ -1647,17 +1704,18 @@ async def _execute_stock_search(update: Update, context: ContextTypes.DEFAULT_TY
             keyboard = [
                 [
                     InlineKeyboardButton("🎯 分析师评级", callback_data=f"finance_analyst:{short_id}"),
-                    InlineKeyboardButton("📋 损益表", callback_data=f"finance_income:{short_id}")
+                    InlineKeyboardButton("📊 估值指标", callback_data=f"finance_valuation:{short_id}")
                 ],
                 [
-                    InlineKeyboardButton("🏛️资产负债表", callback_data=f"finance_balance:{short_id}"),
-                    InlineKeyboardButton("💰 现金流量表", callback_data=f"finance_cashflow:{short_id}")
+                    InlineKeyboardButton("📋 损益表", callback_data=f"finance_income:{short_id}"),
+                    InlineKeyboardButton("🏛️资产负债表", callback_data=f"finance_balance:{short_id}")
                 ],
                 [
-                    InlineKeyboardButton("📅 财报日期", callback_data=f"finance_earnings:{short_id}"),
-                    InlineKeyboardButton("💰 分红拆股", callback_data=f"finance_dividends:{short_id}")
+                    InlineKeyboardButton("💰 现金流量表", callback_data=f"finance_cashflow:{short_id}"),
+                    InlineKeyboardButton("📅 财报日期", callback_data=f"finance_earnings:{short_id}")
                 ],
                 [
+                    InlineKeyboardButton("💰 分红拆股", callback_data=f"finance_dividends:{short_id}"),
                     InlineKeyboardButton("🔙 返回主菜单", callback_data="finance_main_menu")
                 ]
             ]
@@ -1915,6 +1973,7 @@ async def finance_main_menu_callback(update: Update, context: ContextTypes.DEFAU
             InlineKeyboardButton("💰 基金排行榜", callback_data="finance_fund_rankings")
         ],
         [
+            InlineKeyboardButton("🎯 ETF排行榜", callback_data="finance_etf_rankings"),
             InlineKeyboardButton("📆 金融日历", callback_data="finance_calendars_menu")
         ],
         [
@@ -2207,6 +2266,61 @@ async def finance_top_mutual_funds_callback(update: Update, context: ContextType
     await query.answer("正在获取顶级共同基金...")
     await _execute_ranking(update, context, "top_mutual_funds", "顶级共同基金", query)
 
+async def finance_etf_rankings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """显示ETF排行榜菜单"""
+    query = update.callback_query
+    await query.answer()
+
+    keyboard = [
+        [
+            InlineKeyboardButton("🇺🇸 美国顶级ETF", callback_data="finance_top_etfs_us"),
+            InlineKeyboardButton("📈 高表现ETF", callback_data="finance_top_performing_etfs")
+        ],
+        [
+            InlineKeyboardButton("💻 科技ETF", callback_data="finance_technology_etfs"),
+            InlineKeyboardButton("💰 债券ETF", callback_data="finance_bond_etfs")
+        ],
+        [
+            InlineKeyboardButton("🔙 返回主菜单", callback_data="finance_main_menu")
+        ]
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    help_text = """🎯 ETF排行榜
+
+选择你要查看的ETF排行榜类型:"""
+
+    await query.edit_message_text(
+        text=foldable_text_with_markdown_v2(help_text),
+        parse_mode="MarkdownV2",
+        reply_markup=reply_markup
+    )
+
+async def finance_top_etfs_us_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """美国顶级ETF"""
+    query = update.callback_query
+    await query.answer("正在获取美国顶级ETF...")
+    await _execute_ranking(update, context, "top_etfs_us", "美国顶级ETF", query)
+
+async def finance_top_performing_etfs_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """高表现ETF"""
+    query = update.callback_query
+    await query.answer("正在获取高表现ETF...")
+    await _execute_ranking(update, context, "top_performing_etfs", "高表现ETF", query)
+
+async def finance_technology_etfs_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """科技ETF"""
+    query = update.callback_query
+    await query.answer("正在获取科技ETF...")
+    await _execute_ranking(update, context, "technology_etfs", "科技ETF", query)
+
+async def finance_bond_etfs_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """债券ETF"""
+    query = update.callback_query
+    await query.answer("正在获取债券ETF...")
+    await _execute_ranking(update, context, "bond_etfs", "债券ETF", query)
+
 # 分析师评级和财务报表回调处理器
 async def finance_analyst_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理分析师评级按钮点击"""
@@ -2265,6 +2379,71 @@ async def finance_analyst_callback(update: Update, context: ContextTypes.DEFAULT
             
     except Exception as e:
         logger.error(f"处理分析师评级回调时发生错误: {e}", exc_info=True)
+        try:
+            await query.edit_message_text(
+                foldable_text_v2(f"❌ 处理请求时发生错误: {str(e)}"),
+                parse_mode="MarkdownV2"
+            )
+        except:
+            pass
+
+async def finance_valuation_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """处理估值指标按钮点击"""
+    query = update.callback_query
+    await query.answer("正在获取估值指标...")
+
+    if not query or not query.data:
+        return
+
+    try:
+        callback_data = query.data
+        if callback_data.startswith("finance_valuation:"):
+            short_id = callback_data.replace("finance_valuation:", "")
+            symbol = get_full_stock_id(short_id)
+            if not symbol:
+                await query.edit_message_text(
+                    foldable_text_v2("❌ 股票信息已过期，请重新查询"),
+                    parse_mode="MarkdownV2"
+                )
+                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+                return
+
+            # 获取估值指标数据
+            valuation_data = await finance_service.get_valuation_measures(symbol)
+
+            if valuation_data:
+                result_text = format_valuation_measures(valuation_data)
+
+                keyboard = [
+                    [
+                        InlineKeyboardButton("📊 股票信息", callback_data=f"finance_stock_detail:{short_id}"),
+                        InlineKeyboardButton("🎯 分析师评级", callback_data=f"finance_analyst:{short_id}")
+                    ],
+                    [
+                        InlineKeyboardButton("🔙 返回主菜单", callback_data="finance_main_menu")
+                    ]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
+                await query.edit_message_text(
+                    text=foldable_text_with_markdown_v2(result_text),
+                    parse_mode="MarkdownV2",
+                    reply_markup=reply_markup
+                )
+            else:
+                error_text = f"❌ 暂无 {symbol} 的估值指标数据"
+                keyboard = [[InlineKeyboardButton("🔙 返回主菜单", callback_data="finance_main_menu")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+
+                await query.edit_message_text(
+                    text=foldable_text_v2(error_text),
+                    parse_mode="MarkdownV2",
+                    reply_markup=reply_markup
+                )
+                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+
+    except Exception as e:
+        logger.error(f"处理估值指标回调时发生错误: {e}", exc_info=True)
         try:
             await query.edit_message_text(
                 foldable_text_v2(f"❌ 处理请求时发生错误: {str(e)}"),
@@ -2818,8 +2997,16 @@ command_factory.register_callback(r"^finance_large_growth_funds$", finance_large
 command_factory.register_callback(r"^finance_midcap_growth_funds$", finance_midcap_growth_funds_callback, permission=Permission.NONE, description="优质中盘成长基金")
 command_factory.register_callback(r"^finance_top_mutual_funds$", finance_top_mutual_funds_callback, permission=Permission.NONE, description="顶级共同基金")
 
+# ETF排行榜
+command_factory.register_callback(r"^finance_etf_rankings$", finance_etf_rankings_callback, permission=Permission.NONE, description="ETF排行榜菜单")
+command_factory.register_callback(r"^finance_top_etfs_us$", finance_top_etfs_us_callback, permission=Permission.NONE, description="美国顶级ETF")
+command_factory.register_callback(r"^finance_top_performing_etfs$", finance_top_performing_etfs_callback, permission=Permission.NONE, description="高表现ETF")
+command_factory.register_callback(r"^finance_technology_etfs$", finance_technology_etfs_callback, permission=Permission.NONE, description="科技ETF")
+command_factory.register_callback(r"^finance_bond_etfs$", finance_bond_etfs_callback, permission=Permission.NONE, description="债券ETF")
+
 # 分析师评级和财务报表
 command_factory.register_callback(r"^finance_analyst:", finance_analyst_callback, permission=Permission.NONE, description="分析师评级")
+command_factory.register_callback(r"^finance_valuation:", finance_valuation_callback, permission=Permission.NONE, description="估值指标")
 command_factory.register_callback(r"^finance_income:", finance_financial_callback, permission=Permission.NONE, description="损益表")
 command_factory.register_callback(r"^finance_balance:", finance_financial_callback, permission=Permission.NONE, description="资产负债表")
 command_factory.register_callback(r"^finance_cashflow:", finance_financial_callback, permission=Permission.NONE, description="现金流量表")
