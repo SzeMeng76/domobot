@@ -8049,13 +8049,16 @@ async def execute_tv_videos(query, context, tv_id: int):
 
 async def execute_tv_reviews(query, context, tv_id: int):
     """执行TV评价 - 完全按照movieold的tv_reviews_command逻辑"""
+    from utils.message_manager import _schedule_deletion
+    from utils.config_manager import get_config
+
     if not movie_service:
         await safe_query_edit(query, "❌ TV查询服务未初始化")
         return
-        
+
     message = query.message
     await safe_edit_message(message,f"🔍 正在获取电视剧评价 \(ID: {tv_id}\)\.\.\.", parse_mode=ParseMode.MARKDOWN_V2)
-    
+
     try:
         # 获取电视剧基本信息
         detail_data = await movie_service.get_tv_details(tv_id)
@@ -8065,8 +8068,6 @@ async def execute_tv_reviews(query, context, tv_id: int):
             ])
             await safe_edit_message(message,f"❌ 未找到ID为 {tv_id} 的电视剧", reply_markup=return_keyboard)
             # 调度删除机器人回复消息
-            from utils.message_manager import _schedule_deletion
-            from utils.config_manager import get_config
             config = get_config()
             await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
             return
@@ -8081,7 +8082,6 @@ async def execute_tv_reviews(query, context, tv_id: int):
             ])
             await safe_query_edit(query, f"❌ 未找到电视剧《{tv_title}》的评价信息", reply_markup=return_keyboard)
             # 调度删除机器人回复消息
-            from utils.message_manager import _schedule_deletion
             config = get_config()
             await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
             return
@@ -8187,10 +8187,8 @@ async def execute_tv_reviews(query, context, tv_id: int):
     except Exception as e:
         logger.error(f"获取电视剧评价失败: {e}")
         await safe_edit_message(message,"❌ 获取电视剧评价时发生错误")
-    
+
     # 调度删除机器人回复消息
-    from utils.message_manager import _schedule_deletion
-    from utils.config_manager import get_config
     config = get_config()
     await _schedule_deletion(context, query.message.chat_id, message.message_id, config.auto_delete_delay)
 
