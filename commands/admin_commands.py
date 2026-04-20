@@ -969,25 +969,33 @@ class AdminPanelHandler:
             paid_reqs = day.get("paid_request_per_day", 0)
             last_req = (day.get("last_requests_time") or "N/A")[:19].replace("T", " ")
 
+            # 转义MarkdownV2特殊字符的辅助函数
+            def escape_md(text):
+                """转义MarkdownV2特殊字符"""
+                special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+                for char in special_chars:
+                    text = text.replace(char, f'\\{char}')
+                return text
+
             uri_counts: dict = day.get("uri_counts", {})
             top_uris = sorted(uri_counts.items(), key=lambda x: x[1], reverse=True)[:5]
-            uri_lines = "\n".join(f"  • `{uri.split('/')[-1]}`: {cnt}次" for uri, cnt in top_uris) or "  暂无记录"
+            uri_lines = "\n".join(f"  • `{escape_md(uri.split('/')[-1])}`: {cnt}次" for uri, cnt in top_uris) or "  暂无记录"
 
             text = (
                 f"🎬 *TikHub API 用量*\n"
                 f"{'─' * 28}\n\n"
                 f"👤 *账户信息*\n"
                 f"  邮箱: `{email}`\n"
-                f"  Key名称: `{key_name}`\n"
+                f"  Key名称: `{escape_md(key_name)}`\n"
                 f"  状态: {status_icon} {'正常' if key_data.get('api_key_status') == 1 else '异常'}\n"
-                f"  创建: `{created}`  到期: `{expires}`\n\n"
+                f"  创建: `{created}`  到期: `{escape_md(expires)}`\n\n"
                 f"💰 *余额*\n"
                 f"  账户余额: `${balance:.4f}`\n"
                 f"  免费额度: `${free_credit:.4f}`\n\n"
-                f"📅 *今日用量* ({date})\n"
-                f"  总费用: `${today_cost:.4f}` (余额 ${balance_cost:.4f} \\+ 免费 ${free_cost:.4f})\n"
+                f"📅 *今日用量* ({escape_md(date)})\n"
+                f"  总费用: `${today_cost:.4f}` \\(余额 `${balance_cost:.4f}` \\+ 免费 `${free_cost:.4f}`\\)\n"
                 f"  总请求: `{total_reqs}次`  付费: `{paid_reqs}次`\n"
-                f"  最后请求: `{last_req}`\n\n"
+                f"  最后请求: `{escape_md(last_req)}`\n\n"
                 f"🔥 *今日热门端点*\n{uri_lines}\n"
             )
 
@@ -1045,6 +1053,14 @@ class AdminPanelHandler:
             this_hour = d.get("this_hour_searches", 0)
             rate_limit = d.get("account_rate_limit_per_hour", 0)
 
+            # 转义MarkdownV2特殊字符的辅助函数
+            def escape_md(text):
+                """转义MarkdownV2特殊字符"""
+                special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+                for char in special_chars:
+                    text = text.replace(char, f'\\{char}')
+                return text
+
             # 本月使用进度条
             if searches_per_month > 0:
                 pct = this_month_usage / searches_per_month
@@ -1061,8 +1077,8 @@ class AdminPanelHandler:
                 f"  邮箱: `{email}`\n"
                 f"  状态: {status_icon} `{status}`\n\n"
                 f"📋 *套餐*\n"
-                f"  套餐: `{plan_name}`"
-                f"{'  ($' + str(plan_price) + '/月)' if plan_price > 0 else ''}\n"
+                f"  套餐: `{escape_md(plan_name)}`"
+                f"{'  \\($' + str(plan_price) + '/月\\)' if plan_price > 0 else ''}\n"
                 f"  月配额: `{searches_per_month}次`\n\n"
                 f"📊 *本月用量*\n"
                 f"  已用: `{this_month_usage}次` / `{searches_per_month}次`\n"
