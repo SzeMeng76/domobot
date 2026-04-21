@@ -488,7 +488,7 @@ class AppleServicesService:
             parse_mode="MarkdownV2",
         )
 
-        service_type = args[0].lower()
+        service_type = args[0].lower().replace(" ", "")
         if service_type not in ["icloud", "appleone", "applemusic"]:
             invalid_service_message = (
                 "无效的服务类型，请使用 iCloud, Apple One 或 AppleMusic"

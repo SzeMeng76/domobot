@@ -80,7 +80,7 @@ async def appleservices_inline_execute(args: str, bot_instance=None) -> dict:
 
     try:
         parts = args.strip().split()
-        service = parts[0].lower()
+        service = parts[0].lower().replace(" ", "")
 
         if service not in ["icloud", "appleone", "applemusic"]:
             return {
