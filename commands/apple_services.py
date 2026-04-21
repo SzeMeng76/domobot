@@ -81,6 +81,14 @@ async def appleservices_inline_execute(args: str, bot_instance=None) -> dict:
     try:
         parts = args.strip().split()
         service = parts[0].lower().replace(" ", "")
+        country_parts_start = 1
+
+        # Check if first two parts form a valid service name
+        if len(parts) > 1:
+            combined = (parts[0] + parts[1]).lower().replace(" ", "")
+            if combined in ["appleone", "applemusic"]:
+                service = combined
+                country_parts_start = 2
 
         if service not in ["icloud", "appleone", "applemusic"]:
             return {
@@ -93,7 +101,7 @@ async def appleservices_inline_execute(args: str, bot_instance=None) -> dict:
 
         # 解析国家参数
         from commands.apple_services_modules import DEFAULT_COUNTRIES
-        countries = bot_instance.parse_countries_from_args(parts[1:]) if len(parts) > 1 else DEFAULT_COUNTRIES
+        countries = bot_instance.parse_countries_from_args(parts[country_parts_start:]) if len(parts) > country_parts_start else DEFAULT_COUNTRIES
 
         display_name = {"icloud": "iCloud", "appleone": "Apple One", "applemusic": "Apple Music"}.get(service, service)
 

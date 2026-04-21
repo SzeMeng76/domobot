@@ -488,7 +488,17 @@ class AppleServicesService:
             parse_mode="MarkdownV2",
         )
 
+        # Try to parse service type, handling multi-word names like "apple one"
         service_type = args[0].lower().replace(" ", "")
+        country_args_start = 1
+
+        # Check if first two args form a valid service name
+        if len(args) > 1:
+            combined = (args[0] + args[1]).lower().replace(" ", "")
+            if combined in ["appleone", "applemusic"]:
+                service_type = combined
+                country_args_start = 2
+
         if service_type not in ["icloud", "appleone", "applemusic"]:
             invalid_service_message = (
                 "无效的服务类型，请使用 iCloud, Apple One 或 AppleMusic"
@@ -506,7 +516,7 @@ class AppleServicesService:
             return
 
         try:
-            countries = self.parse_countries_from_args(args[1:])
+            countries = self.parse_countries_from_args(args[country_args_start:])
 
             display_name = ""
             if service_type == "icloud":
