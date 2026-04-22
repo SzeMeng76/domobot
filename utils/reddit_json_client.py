@@ -347,7 +347,13 @@ class RedditJsonClient:
     async def get_post_by_url(self, url: str) -> Optional[RedditPost]:
         """通过 URL 获取帖子"""
         try:
-            if not url.endswith('.json'):
+            # 处理 URL：确保 .json 在查询参数之前
+            if '?' in url:
+                base_url, query = url.split('?', 1)
+                if not base_url.endswith('.json'):
+                    base_url = base_url.rstrip('/') + '.json'
+                url = f"{base_url}?{query}"
+            elif not url.endswith('.json'):
                 url = url.rstrip('/') + '.json'
 
             data = await self._make_request(url)
