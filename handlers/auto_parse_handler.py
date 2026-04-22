@@ -276,8 +276,8 @@ async def _auto_parse_reddit(url: str, user_id: int, group_id: int, message, con
 
         caption_parts = []
         caption_parts.append(f"*{_escape_markdown(post.title)}*")
-        caption_parts.append(f"👤 u/{_escape_markdown(post.author)} | 📊 {post.score} ⬆️ | 💬 {post.num_comments}")
-        caption_parts.append(f"📍 r/{_escape_markdown(post.subreddit)} | 🕐 {_escape_markdown(_format_timestamp(post.created_utc))}")
+        caption_parts.append(f"👤 u/{_escape_markdown(post.author)} \\| 📊 {post.score} ⬆️ \\| 💬 {post.num_comments}")
+        caption_parts.append(f"📍 r/{_escape_markdown(post.subreddit)} \\| 🕐 {_escape_markdown(_format_timestamp(post.created_utc))}")
 
         # 添加文本内容（如果是自发帖）
         if post.is_self and post.selftext:
