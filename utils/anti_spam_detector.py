@@ -128,6 +128,9 @@ class AntiSpamDetector:
             # 特别标注高风险 DC
             if any('DC4' in factor or 'DC5' in factor for factor in risk_factors):
                 user_profile += "\n  ⚠️ 注意：用户来自高风险数据中心"
+            # 特别标注货币相关昵称
+            if any('货币' in factor or '昵称包含货币关键词' in factor for factor in risk_factors):
+                user_profile += "\n  ⚠️ 警告：昵称包含货币兑换关键词，极高疑似广告商，应提高评分"
 
         return user_profile
 
@@ -161,11 +164,14 @@ class AntiSpamDetector:
 9. 赌博平台推广（PG平台、赌台、官方直推、风口、日入、稳定收益）
 10. 零宽字符/特殊Unicode混淆（\u200b、\u200c、\u200d、\ufeff等）
 11. 货币兑换广告（主动提供exchange服务，多种货币代码BTC/TON/NGN/SAR/KWD/OMR，大量emoji，格式混乱）
+12. 订阅服务推广（subscription, VIP, premium, membership, available等付费订阅推广）
 
 判定规则：
 - 区分推销和询问：主动"出售XX"是广告，询问"有人卖XX吗"是正常提问
 - 区分引流和分享：简介中"频道: t.me/xxx"是自我介绍，包含商业推广内容才是广告
 - 货币兑换：主动提供exchange服务是广告，询问"有人能换汇吗"是正常
+- 订阅服务：任何主动推广subscription/VIP/premium/membership/available的消息都是广告，评分>=85
+- 昵称包含货币关键词（USDT/BTC/NAIRA/EXCHANGE/CONVERT等）的用户发推广消息，直接+25分
 - 新用户正常提问不封禁，只封主动推销/引流
 - 老用户（>7天且>10次发言）短消息更宽容
 - emoji超过30%且含商业关键词，提高评分

@@ -74,12 +74,27 @@ class AntiSpamHandler:
                 risk_factors.append("无用户名")
                 logger.debug(f"User {user.id} has no username")
 
-            # 4. 检查是否为 Premium 用户（Premium 用户风险较低）
+            # 4. 检查 display name 中的货币关键词
+            currency_keywords = [
+                'USDT', 'BTC', 'ETH', 'TON', 'NAIRA', 'NGN', 'EXCHANGE', 'CONVERT',
+                'CRYPTO', 'BITCOIN', 'ETHEREUM', 'TETHER', 'SWAP', 'TRADE',
+                'BUY', 'SELL', 'CURRENCY', 'FOREX', 'SAR', 'KWD', 'OMR', 'AED'
+            ]
+            display_name = (user.first_name or '') + ' ' + (user.last_name or '')
+            display_name_upper = display_name.upper()
+
+            matched_keywords = [kw for kw in currency_keywords if kw in display_name_upper]
+            if matched_keywords:
+                risk_score += 35  # 高风险
+                risk_factors.append(f"昵称包含货币关键词: {', '.join(matched_keywords)}")
+                logger.info(f"User {user.id} has currency keywords in display name: {matched_keywords}")
+
+            # 5. 检查是否为 Premium 用户（Premium 用户风险较低）
             if user.is_premium:
                 risk_score = max(0, risk_score - 25)  # 降低风险
                 logger.debug(f"User {user.id} is Premium - reduced risk")
 
-            # 5. 检查 DC ID（如果 Pyrogram 可用）
+            # 6. 检查 DC ID（如果 Pyrogram 可用）
             if self.pyrogram_helper:
                 dc_id = await self.pyrogram_helper.get_user_dc_id(user.id)
                 if dc_id is not None:
