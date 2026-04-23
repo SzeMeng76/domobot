@@ -36,12 +36,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 💱 `/rate USD 100` - 汇率换算 | 🪙 `/crypto btc` - 币价查询
 💳 `/bin 123456` - BIN信息 | 🌦️ `/tq 北京` - 天气预报
 🎬 `/movie 复仇者` - 影视信息 | 📺 `/nf` - 流媒体价格
-🎮 `/steam 赛博朋克` - 游戏价格 | 👤 `/when 123` - 用户信息
-⏰ `/time 北京` - 时间查询 | 📰 `/news` - 新闻聚合
-🌐 `/whois google.com` - WHOIS查询 | 🔍 `/dns domain.com` - DNS记录
-🍳 `/recipe` - 菜谱助手 | 🎭 `/meme 3` - 表情包
-📊 `/finance AAPL` - 股票查询 | 🗺️ `/map 天安门` - 地图服务
-🛢️ `/fuel my` - 油价查询 | `/fuel china` - 中国油价排行
+🎮 `/steam 赛博朋克` - 游戏价格 | 🎮 `/xbox` - Xbox订阅价格
+👤 `/when 123` - 用户信息 | ⏰ `/time 北京` - 时间查询
+📰 `/news` - 新闻聚合 | 🌐 `/whois google.com` - WHOIS查询
+🔍 `/dns domain.com` - DNS记录 | 🍳 `/recipe` - 菜谱助手
+🎭 `/meme 3` - 表情包 | 📊 `/finance AAPL` - 股票查询
+🗺️ `/map 天安门` - 地图服务 | 🛢️ `/fuel my` - 油价查询
 ✈️ `/flight 北京 洛杉矶 2024-12-25` - 智能航班搜索
 🏨 `/hotel 东京 2024-12-25 2024-12-28` - 智能酒店搜索
 📱 `/parse <链接>` - 社交媒体解析 | `/platforms` - 支持平台
@@ -82,7 +82,8 @@ Inline: `@bot netease 关键词$` - Inline搜索(有缓存直接发音频)
 平台: TMDB+JustWatch+Trakt 三源整合
 
 🎮 *Steam* `/steam <游戏> [国家]` | `/steamb <包名>`
-📺 *流媒体* `/nf` `/ds` `/sp` `/max` - Netflix/Disney+/Spotify/HBO
+📺 *流媒体* `/nf` `/ds` `/sp` `/max` `/xbox` - Netflix/Disney+/Spotify/HBO/Xbox
+🎮 *Xbox Game Pass* `/xbox` - PC套餐全球Top 10 | `/xbox ultimate` - Ultimate套餐Top 10 | `/xbox <国家>` - 指定地区查询 | 支持多国查询(如 `/xbox US TR IN`)
 📱 *应用商店* `/app <名称>` - 详细内购项目 | `/gp <名称>` - 内购价格范围 | `/aps <服务>`
 🔴 *Reddit* `/reddit <链接>` - 解析帖子(图片/视频/图集/AI总结) | `/reddit hot/top/new [subreddit] [时间]` - 列表 | Inline: `@bot reddit <链接>$`
 🔍 *网络诊断* `/scan <IP/MAC/域名/URL>` - IP信誉/MAC厂商/网站检测 | `/scan latency <目标>` - 全球延迟 | `/scan mtr <目标>` - 路由追踪 | `/scan warp` - WARP出口IP
@@ -93,7 +94,7 @@ Inline: `@bot netease 关键词$` - Inline搜索(有缓存直接发音频)
 🌍 *支持地区* US CN TR IN MY JP GB DE 等40+国家
 💡 *特色* 支持中文地名 | 自动CNY转换 | 智能缓存 | 表达式计算
 
-⚡ 快速试用: `/nf` `/crypto btc` `/tq 北京` `/movie 复仇者` `/tv 权力的游戏` `/chart` `/news` `/time 北京` `/whois google.com` `/dns github.com` `/recipe` `/meme 3` `/finance AAPL` `/map 天安门` `/fuel my` `/flight 北京 洛杉矶 2024-12-25` `/hotel 东京 2024-12-25 2024-12-28` `/netease 晴天` `/yt chart` `/reddit hot python` `/scan 8.8.8.8` `/scan warp`"""
+⚡ 快速试用: `/nf` `/crypto btc` `/tq 北京` `/movie 复仇者` `/tv 权力的游戏` `/chart` `/news` `/time 北京` `/whois google.com` `/dns github.com` `/recipe` `/meme 3` `/finance AAPL` `/map 天安门` `/fuel my` `/flight 北京 洛杉矶 2024-12-25` `/hotel 东京 2024-12-25 2024-12-28` `/netease 晴天` `/yt chart` `/reddit hot python` `/scan 8.8.8.8` `/scan warp` `/xbox`"""
 
     admin_help_text = """
 
@@ -115,7 +116,7 @@ Inline: `@bot netease 关键词$` - Inline搜索(有缓存直接发音频)
         help_text = """🤖 *多功能价格查询机器人*
 
 🎆 *公开功能*
-📺 *流媒体价格* `/nf` `/ds` `/sp` `/max` - Netflix/Disney+/Spotify/HBO
+📺 *流媒体价格* `/nf` `/ds` `/sp` `/max` `/xbox` - Netflix/Disney+/Spotify/HBO/Xbox
 👤 *用户信息* `/when <ID/@用户>` `/id` - 注册时间&ID查询
 ⏰ *时间查询* `/time <时区>` `/convert_time` `/timezone` - 时区转换
 📰 *新闻聚合* `/news` `/newslist` `/hotnews` - 40+源实时资讯
@@ -139,7 +140,7 @@ Inline: `@bot netease 关键词$` - Inline搜索(有缓存直接发音频)
 🌍 *支持地区* US CN TR IN MY JP GB DE 等40+国家 | 163国燃油价格
 💡 *特色* 支持中文地名 | 自动CNY转换 | 时区智能识别 | 新闻分类 | 1000+中文菜谱 | 多市场股票 | 全球油价
 
-⚡ *快速试用* `/nf` `/ds` `/sp` `/max` `/when` `/id` `/time 北京` `/news` `/recipe` `/meme 3` `/finance AAPL` `/fuel my`
+⚡ *快速试用* `/nf` `/ds` `/sp` `/max` `/xbox` `/when` `/id` `/time 北京` `/news` `/recipe` `/meme 3` `/finance AAPL` `/fuel my`
 
 🔧 *命令问题?* 如果新功能不显示，请使用 `/refresh` 刷新命令列表
 
@@ -191,7 +192,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         welcome_text = f"""👋 *欢迎 {user.first_name}! 多功能价格查询机器人*
 
 🎯 *公开功能*
-📺 流媒体价格 `/nf` `/ds` `/sp` `/max`
+📺 流媒体价格 `/nf` `/ds` `/sp` `/max` `/xbox`
 👤 用户信息 `/when` `/id`
 ⏰ 时间查询 `/time` `/convert_time` `/timezone`
 📰 新闻聚合 `/news` `/newslist` `/hotnews`
@@ -206,6 +207,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 `/ds` - Disney+全球价格
 `/sp` - Spotify全球价格
 `/max` - HBO Max全球价格
+`/xbox` - Xbox Game Pass全球价格
 `/meme 3` - 获取3个表情包
 `/time 北京` - 北京时间
 `/news` - 交互式新闻界面
@@ -238,7 +240,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 🚀 *快速开始*
 `/rate USD 100` `/crypto btc` `/tq 北京` `/movie 复仇者` `/tv 权力的游戏` `/chart`
-`/steam 赛博朋克` `/nf` `/time 北京` `/whois google.com` `/dns github.com` `/news` `/recipe` `/meme 3` `/finance AAPL` `/map 天安门` `/flight 北京 洛杉矶 2024-12-25` `/hotel 东京 2024-12-25 2024-12-28` `/netease 晴天` `/yt chart` `/reddit hot python` `/scan 8.8.8.8` `/scan warp` `/help`
+`/steam 赛博朋克` `/nf` `/xbox` `/time 北京` `/whois google.com` `/dns github.com` `/news` `/recipe` `/meme 3` `/finance AAPL` `/map 天安门` `/flight 北京 洛杉矶 2024-12-25` `/hotel 东京 2024-12-25 2024-12-28` `/netease 晴天` `/yt chart` `/reddit hot python` `/scan 8.8.8.8` `/scan warp` `/help`
 
 🌟 40+国家 | CNY转换 | 智能缓存 | 表达式计算 | 时区转换 | 新闻聚合 | 1000+中文菜谱 | 股市数据 | 163国燃油价格"""
 

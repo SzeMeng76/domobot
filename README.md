@@ -14,7 +14,7 @@ Read this in other languages: [简体中文](./README.zh-CN.md)
 **🎉 Free for Everyone - Add to Any Group!**
 
 **Public features available to all users and groups:**
-- 📺 **Streaming Prices:** Netflix, Disney+, Spotify, HBO Max pricing across global regions
+- 📺 **Streaming Prices:** Netflix, Disney+, Spotify, HBO Max, Xbox Game Pass pricing across global regions
 - 👤 **User Information:** Telegram registration dates, account age, and ID lookup
 - ⏰ **Time & Timezone:** Current time queries, timezone conversion, and timezone lists
 - 📰 **News Aggregation:** Real-time news from 40+ sources including tech, social, finance, and general news
@@ -24,7 +24,7 @@ Read this in other languages: [简体中文](./README.zh-CN.md)
 - 📊 **Finance & Stocks:** Real-time stock prices, 15 ranking categories (gainers/losers, tech stocks, funds), analyst recommendations, financial statements, multi-market support (US/HK/CN/MY), intelligent search by symbol or company name
 - 🛢️ **Fuel Prices:** Global fuel prices for 163 countries (gasoline + diesel), China provincial rankings (92/95/98/diesel), multi-country queries, automatic CNY conversion, data from GlobalPetrolPrices.com with actual price dates
 - 📱 **Social Media Platforms:** View supported platforms list with `/platforms` command
-- 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`, `/dns`, `/recipe`, `/meme`, `/finance`, `/fuel`, `/platforms`
+- 🆔 **Quick Commands:** `/nf`, `/ds`, `/sp`, `/max`, `/xbox`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`, `/dns`, `/recipe`, `/meme`, `/finance`, `/fuel`, `/platforms`
 - 👥 **Group Friendly:** Works in any Telegram group without requiring whitelist approval
 - 🔧 **Self-Service:** Use `/refresh` if new commands don't appear in your input suggestions
 
@@ -43,6 +43,7 @@ This is a Python-based, multi-functional Telegram bot with the following feature
 ### ✨ Features
 
 -   📺 **Public Streaming Prices:** Available to all users - query subscription prices for Netflix, Disney+, Spotify, and HBO Max across global regions.
+-   🎮 **Public Xbox Game Pass Prices:** Available to all users - comprehensive Xbox Game Pass subscription pricing across global regions. Features **PC Game Pass and Ultimate plans** with monthly pricing, **multi-region price comparison** supporting 40+ countries/regions, **top 10 cheapest regions ranking** for both PC and Ultimate plans, **multi-country queries** supporting formats like `/xbox US TR IN`, **local currency display** with automatic CNY conversion, **inline mode support** for quick price checks in any chat, intelligent caching system, and comprehensive error handling. Supports country codes (US, TR, IN), Chinese names (美国, 土耳其, 印度), and English names with flexible input formats. Commands: `/xbox` (PC top 10), `/xbox ultimate` (Ultimate top 10), `/xbox <countries>` (specific regions).
 -   👤 **Public User Information:** Available to all users - check Telegram user registration dates, account age, and get user/group IDs.
 -   ⏰ **Public Time & Timezone:** Available to all users - query current time in any timezone, convert time between zones, and view supported timezone lists with IANA integration.
 -   📰 **Public News Aggregation:** Available to all users - access real-time news from 40+ sources including GitHub trending, Zhihu hot topics, Weibo trending, tech news (IT Home, Hacker News), financial news (JinShi Data, Wallstreet CN), and general news sources with smart caching and categorized interface.
@@ -154,6 +155,13 @@ Configuration is managed by the `BotConfig` class in `utils/config_manager.py`, 
 /ds US       # Disney+ pricing in US
 /sp          # Spotify global pricing
 /max         # HBO Max global pricing
+/xbox        # Xbox Game Pass global pricing (PC Game Pass top 10)
+/xbox US     # Xbox Game Pass pricing in US
+/xbox ultimate  # Xbox Game Pass Ultimate global top 10
+/xbox US TR IN  # Multi-country query (US, Turkey, India)
+# Inline mode: @bot xbox$ - PC Game Pass top 10
+# Inline mode: @bot xbox ultimate$ - Ultimate top 10
+# Inline mode: @bot xbox US TR$ - Specific regions
 
 # User information lookup
 /when 123456789           # Query by user ID
@@ -710,6 +718,7 @@ This project leverages several open source projects for data collection and proc
 - **Disney+ Pricing:** [disneyplus-prices](https://github.com/SzeMeng76/disneyplus-prices) - Disney+ subscription pricing data
 - **Spotify Pricing:** [spotify-prices](https://github.com/SzeMeng76/spotify-prices) - Spotify subscription pricing information
 - **HBO Max Pricing:** [hbo-max-global-prices](https://github.com/SzeMeng76/hbo-max-global-prices) - HBO Max global pricing data
+- **Xbox Game Pass Pricing:** [xbox-game-pass-prices](https://github.com/SzeMeng76/xbox-game-pass-prices) - Xbox Game Pass global subscription pricing (PC and Ultimate plans)
 - **Fuel Prices:** [fuel-price-tracker](https://github.com/SzeMeng76/fuel-price-tracker) - Global fuel prices for 163 countries and China provinces
 - **NetEase Music API:** [Music163Api-Go](https://github.com/XiaoMengXinX/Music163Api-Go) - NetEase Cloud Music API reference implementation
 - **NetEase Music Bot:** [Music163bot-Go](https://github.com/XiaoMengXinX/Music163bot-Go) - NetEase Cloud Music Telegram bot reference

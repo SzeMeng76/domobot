@@ -14,7 +14,7 @@
 **🎉 全部免费 - 可添加到任意群组！**
 
 **所有用户和群组可用的公开功能:**
-- 📺 **流媒体价格:** Netflix、Disney+、Spotify、HBO Max全球各地区订阅价格查询
+- 📺 **流媒体价格:** Netflix、Disney+、Spotify、HBO Max、Xbox Game Pass全球各地区订阅价格查询
 - 👤 **用户信息:** Telegram注册日期、账号年龄和ID查询
 - ⏰ **时间和时区:** 当前时间查询、时区转换和时区列表
 - 📰 **新闻聚合:** 来自40+源的实时新闻，包括科技、社交、财经和综合新闻
@@ -24,7 +24,7 @@
 - 📊 **股票金融:** 实时股票价格查询、15类排行榜（涨跌幅、科技股、基金）、分析师评级、财务报表、多市场支持（美/港/沪/马），智能搜索支持股票代码和公司名称
 - 🛢️ **燃油价格:** 全球163国燃油价格查询（汽油+柴油）、中国31省油价排行（92/95/98/柴油）、支持多国查询、自动CNY转换、数据来源GlobalPetrolPrices.com并显示实际价格日期
 - 📱 **社交媒体解析:** 支持20+平台（抖音、快手、B站、YouTube、TikTok、小红书、Twitter/X、Instagram、Facebook、微博等）的视频、图片、图文解析，支持命令模式和群组自动监听模式
-- 🆔 **快速命令:** `/nf`, `/ds`, `/sp`, `/max`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`, `/dns`, `/recipe`, `/meme`, `/finance`, `/fuel`, `/platforms`
+- 🆔 **快速命令:** `/nf`, `/ds`, `/sp`, `/max`, `/xbox`, `/when`, `/id`, `/time`, `/timezone`, `/news`, `/newslist`, `/whois`, `/dns`, `/recipe`, `/meme`, `/finance`, `/fuel`, `/platforms`
 - 👥 **群组友好:** 在任意 Telegram 群组中都可使用，无需白名单申请
 - 🔧 **自助服务:** 如果新命令不在输入建议中显示，请使用 `/refresh` 刷新
 
@@ -43,6 +43,7 @@
 ### ✨ 功能特性
 
 -   📺 **公开流媒体价格:** 所有用户可用 - 查询Netflix、Disney+、Spotify、HBO Max等流媒体服务在全球各地区的订阅价格。
+-   🎮 **公开Xbox Game Pass价格:** 所有用户可用 - 全面的Xbox Game Pass订阅价格查询，覆盖全球各地区。功能包括**PC Game Pass和Ultimate套餐**月度价格、**多地区价格对比**支持40+国家/地区、**最便宜地区Top 10排行榜**（PC和Ultimate套餐）、**多国查询**支持格式如`/xbox US TR IN`、**本地货币显示**并自动CNY转换、**inline模式支持**在任意聊天中快速查价、智能缓存系统和全面错误处理。支持国家代码（US、TR、IN）、中文名称（美国、土耳其、印度）和英文名称，输入格式灵活。命令：`/xbox`（PC套餐Top 10）、`/xbox ultimate`（Ultimate套餐Top 10）、`/xbox <国家>`（指定地区）。
 -   👤 **公开用户信息查询:** 所有用户可用 - 查询Telegram用户注册日期、账号年龄，以及获取用户/群组ID。
 -   ⏰ **公开时间和时区查询:** 所有用户可用 - 查询任意时区的当前时间，时区间时间转换，以及查看支持的时区列表和IANA数据库集成。
 -   📰 **公开新闻聚合:** 所有用户可用 - 接入40+新闻源的实时资讯，包括GitHub趋势、知乎热榜、微博热搜、科技新闻（IT之家、Hacker News）、财经新闻（金十数据、华尔街见闻）等，支持智能缓存和分类界面。
@@ -154,6 +155,13 @@ docker-compose down
 /ds US       # 美国Disney+价格
 /sp          # Spotify全球价格
 /max         # HBO Max全球价格
+/xbox        # Xbox Game Pass全球价格（PC Game Pass套餐Top 10）
+/xbox US     # 美国Xbox Game Pass价格
+/xbox ultimate  # Xbox Game Pass Ultimate套餐全球Top 10
+/xbox US TR IN  # 多国查询（美国、土耳其、印度）
+# Inline模式: @bot xbox$ - PC Game Pass套餐Top 10
+# Inline模式: @bot xbox ultimate$ - Ultimate套餐Top 10
+# Inline模式: @bot xbox US TR$ - 指定地区查询
 
 # 用户信息查询
 /when 123456789           # 通过用户ID查询
@@ -705,6 +713,7 @@ docker-compose down
 - **Disney+价格:** [disneyplus-prices](https://github.com/SzeMeng76/disneyplus-prices) - Disney+订阅价格数据
 - **Spotify价格:** [spotify-prices](https://github.com/SzeMeng76/spotify-prices) - Spotify订阅价格信息
 - **HBO Max价格:** [hbo-max-global-prices](https://github.com/SzeMeng76/hbo-max-global-prices) - HBO Max全球价格数据
+- **Xbox Game Pass价格:** [xbox-game-pass-prices](https://github.com/SzeMeng76/xbox-game-pass-prices) - Xbox Game Pass全球订阅价格（PC和Ultimate套餐）
 - **燃油价格:** [fuel-price-tracker](https://github.com/SzeMeng76/fuel-price-tracker) - 全球163国和中国31省燃油价格
 - **网易云音乐API:** [Music163Api-Go](https://github.com/XiaoMengXinX/Music163Api-Go) - 网易云音乐API参考实现
 - **网易云音乐Bot:** [Music163bot-Go](https://github.com/XiaoMengXinX/Music163bot-Go) - 网易云音乐Telegram Bot参考
