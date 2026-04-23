@@ -75,9 +75,9 @@ class XboxPriceBot(PriceQueryService):
         currency = region_data.get("currency", "")
         for plan in region_data["plans"]:
             plan_name = PLAN_DISPLAY.get(plan.get("plan", ""), plan.get("plan", ""))
-            regular = plan.get("regular_price")
             intro = plan.get("intro_price")
-            regular_cny = plan.get("regular_price_cny")
+            regular = plan.get("auto_renew_price") or plan.get("regular_price")
+            regular_cny = plan.get("auto_renew_price_cny") or plan.get("regular_price_cny")
 
             if regular is None:
                 continue
