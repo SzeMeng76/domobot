@@ -34,6 +34,7 @@ CACHE_SERVICES = {
     'electricity': '电价缓存',
     'spotify': 'Spotify缓存',
     'disney_plus': 'Disney+缓存',
+    'xbox': 'Xbox Game Pass缓存',
     'max': 'HBO Max缓存',
     'rate': '汇率缓存',
     'bin': 'BIN查询缓存',

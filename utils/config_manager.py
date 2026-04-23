@@ -88,6 +88,7 @@ class BotConfig:
         self.coingecko_single_cache_duration = 60  # 1分钟 (CoinGecko单币查询)
         self.spotify_cache_duration = 86400 * 8  # 8天，配合周日清理
         self.disney_cache_duration = 86400 * 8  # 8天，配合周日清理
+        self.xbox_cache_duration = 86400 * 8  # 8天，配合周日清理
         self.max_cache_duration = 86400 * 8  # 8天，配合周日清理
         self.movie_cache_duration = 7200   # 2小时，电影和电视剧缓存
         self.news_cache_duration = 300  # 5分钟，新闻缓存
@@ -123,6 +124,7 @@ class BotConfig:
         # 定时清理配置
         self.spotify_weekly_cleanup = True  # 默认启用
         self.disney_weekly_cleanup = True  # 默认启用
+        self.xbox_weekly_cleanup = True  # 默认启用
         self.max_weekly_cleanup = True  # 默认启用
         self.movie_weekly_cleanup = True  # 默认启用，电影和电视剧缓存
         self.news_weekly_cleanup = True  # 默认启用，新闻缓存
@@ -408,6 +410,7 @@ class ConfigManager:
         # 定时清理配置
         self.config.spotify_weekly_cleanup = get_bool_env("SPOTIFY_WEEKLY_CLEANUP")
         self.config.disney_weekly_cleanup = get_bool_env("DISNEY_WEEKLY_CLEANUP")
+        self.config.xbox_weekly_cleanup = get_bool_env("XBOX_WEEKLY_CLEANUP")
         self.config.movie_weekly_cleanup = get_bool_env("MOVIE_WEEKLY_CLEANUP", "True")
         self.config.news_weekly_cleanup = get_bool_env("NEWS_WEEKLY_CLEANUP", "True")
         self.config.whois_weekly_cleanup = get_bool_env("WHOIS_WEEKLY_CLEANUP", "True")

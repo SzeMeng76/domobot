@@ -64,6 +64,7 @@ class InlineCommandAdapter:
             "fuel": self._handle_fuel,
             "electricity": self._handle_electricity,
             "elec": self._handle_electricity,
+            "xbox": self._handle_xbox,
         }
 
         handler = command_handlers.get(command)
@@ -194,6 +195,20 @@ class InlineCommandAdapter:
 
         bot_instance = self.context.bot_data.get("disney_price_bot")
         result = await disney_inline_execute(args, bot_instance=bot_instance)
+
+        if result["success"]:
+            return (result["message"], ParseMode.MARKDOWN_V2, None)
+        else:
+            error_message = f"❌ *{result['title']}*\n\n{result['message']}"
+            return (foldable_text_with_markdown_v2(error_message), ParseMode.MARKDOWN_V2, None)
+
+    async def _handle_xbox(self, args: str) -> Tuple[str, ParseMode, None]:
+        """处理 Xbox Game Pass 价格查询"""
+        from commands.xbox import xbox_inline_execute
+        from utils.formatter import foldable_text_with_markdown_v2
+
+        bot_instance = self.context.bot_data.get("xbox_price_bot")
+        result = await xbox_inline_execute(args, bot_instance=bot_instance)
 
         if result["success"]:
             return (result["message"], ParseMode.MARKDOWN_V2, None)
