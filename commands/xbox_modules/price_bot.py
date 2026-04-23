@@ -70,7 +70,7 @@ class XboxPriceBot(PriceQueryService):
         country_code = region_code.split("-")[-1].upper()
         flag = get_country_flag(country_code)
 
-        lines = [f"📍 国家/地区: {flag} {name_cn} ({region_code.upper()})"]
+        lines = [f"📍 国家/地区: {flag} {name_cn} ({country_code})"]
 
         currency = region_data.get("currency", "")
         for plan in region_data["plans"]:
@@ -132,7 +132,7 @@ class XboxPriceBot(PriceQueryService):
 
                 price_str = f"{currency} {price:,.2f}" if price % 1 else f"{currency} {price:,.0f}"
 
-                message_lines.append(f"{rank_emoji} {name_cn} ({region_code}) {flag}")
+                message_lines.append(f"{rank_emoji} {name_cn} ({country_code}) {flag}")
                 message_lines.append(f"💰 {plan_label}: {price_str} ≈ ¥{price_cny:.2f}")
                 if idx < len(top_items):
                     message_lines.append("")
@@ -175,7 +175,7 @@ class XboxPriceBot(PriceQueryService):
                 currency = item["currency"]
                 price_str = f"{currency} {price_raw:,.2f}" if price_raw % 1 else f"{currency} {price_raw:,.0f}"
 
-                message_lines.append(f"{rank_emoji} {item['name_cn']} ({region_code}) {flag}")
+                message_lines.append(f"{rank_emoji} {item['name_cn']} ({country_code}) {flag}")
                 message_lines.append(f"💰 {plan_label}: {price_str} ≈ ¥{item['price']:.2f}")
                 if idx < len(top_items_raw):
                     message_lines.append("")
