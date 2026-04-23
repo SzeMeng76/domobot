@@ -48,9 +48,10 @@ class XboxPriceBot(PriceQueryService):
         if not self.data:
             return mapping
 
-        regions = self.data.get("regions", {})
-        for code, region_data in regions.items():
-            if code.startswith("_"):
+        regions = self.data.get("regions", [])
+        for region_data in regions:
+            code = region_data.get("region_code", "")
+            if not code:
                 continue
             mapping[code.upper()] = region_data
             if region_data.get("name_cn"):
@@ -136,10 +137,11 @@ class XboxPriceBot(PriceQueryService):
                     message_lines.append("")
         else:
             # 降级到自行排序
-            regions = self.data.get("regions", {})
+            regions = self.data.get("regions", [])
             rankable = []
-            for code, region_data in regions.items():
-                if code.startswith("_"):
+            for region_data in regions:
+                code = region_data.get("region_code", "")
+                if not code:
                     continue
                 plan_data = next((p for p in region_data.get("plans", []) if p.get("plan") == plan_full), None)
                 if not plan_data:
@@ -224,10 +226,10 @@ class XboxPriceBot(PriceQueryService):
                 continue
 
             found_code = None
-            regions = self.data.get("regions", {})
-            for code, data_val in regions.items():
+            regions = self.data.get("regions", [])
+            for data_val in regions:
                 if data_val is price_info:
-                    found_code = code
+                    found_code = data_val.get("region_code")
                     break
 
             if found_code:
