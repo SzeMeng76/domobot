@@ -57,6 +57,7 @@ class XboxPriceBot(PriceQueryService):
             if region_data.get("name_cn"):
                 mapping[region_data["name_cn"]] = region_data
             country_code = code.split("-")[-1].upper()
+            mapping[country_code] = region_data
             if country_code in SUPPORTED_COUNTRIES and "name" in SUPPORTED_COUNTRIES[country_code]:
                 mapping[SUPPORTED_COUNTRIES[country_code]["name"]] = region_data
         return mapping
