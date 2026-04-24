@@ -1453,77 +1453,8 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
         # 单个媒体文件，直接发送
         media = media_list[0]
         if isinstance(media, (VideoFile, AniFile, LivePhotoFile)):
-            # 检查视频文件大小（Telegram限制50MB）
-            from utils.video_splitter import ensure_h264
-
-            # AniFile 和 LivePhotoFile 通常是小动画，不需要 ensure_h264
-            if isinstance(media, (AniFile, LivePhotoFile)):
-                video_path = Path(media.path)
-            else:
-                video_path = Path(await ensure_h264(str(media.path)))
-
-            video_size_mb = video_path.stat().st_size / (1024 * 1024)
-
-            if video_size_mb > 50:
-                # 视频太大，只发送文本提示
-                @with_telegram_retry(max_retries=5)
-                async def _send_video_too_large():
-                    size_text = f"{video_size_mb:.1f}".replace(".", "\\.")
-                    return await context.bot.send_message(
-                        chat_id=chat_id,
-                        text=f"{caption}\n\n⚠️ 视频文件过大 \\({size_text}MB\\)，无法直接发送",
-                        parse_mode="MarkdownV2",
-                        reply_parameters=reply_parameters,
-                        disable_web_page_preview=True,
-                        reply_markup=reply_markup
-                    )
-
-                msg = await _send_video_too_large()
-                return [msg]
-
-            # 根据类型选择发送方法
-            if isinstance(media, (AniFile, LivePhotoFile)):
-                # AniFile 和 LivePhotoFile 用 send_animation 发送（支持 GIF/MP4 动画）
-                @with_telegram_retry(max_retries=5)
-                async def _send_animation():
-                    with open(str(video_path), 'rb') as animation_file:
-                        return await context.bot.send_animation(
-                            chat_id=chat_id,
-                            animation=animation_file,
-                            caption=caption,
-                            parse_mode="MarkdownV2",
-                            reply_parameters=reply_parameters,
-                            reply_markup=reply_markup,
-                            width=media.width or 0,
-                            height=media.height or 0,
-                            duration=media.duration or 0,
-                            read_timeout=300,
-                            write_timeout=300,
-                            connect_timeout=30
-                        )
-
-                msg = await _send_animation()
-                return [msg]
-            else:
-                # VideoFile 用 send_video 发送
-                @with_telegram_retry(max_retries=5)
-                async def _send_video():
-                    with open(str(video_path), 'rb') as video_file:
-                        return await context.bot.send_video(
-                            chat_id=chat_id,
-                            video=video_file,
-                            caption=caption,
-                            parse_mode="MarkdownV2",
-                            reply_parameters=reply_parameters,
-                            supports_streaming=True,
-                            reply_markup=reply_markup,
-                            read_timeout=300,
-                            write_timeout=300,
-                            connect_timeout=30
-                        )
-
-                msg = await _send_video()
-                return [msg]
+            # 对于单个视频，使用 _send_video 处理（包含大文件瀑布流逻辑）
+            return await _send_video(context, chat_id, download_result, caption, reply_parameters, reply_markup, parse_result=parse_result)
         elif isinstance(media, ImageFile):
             intermediates: list[Path] = []  # 收集生成的中间文件
             original_path = Path(media.path)
