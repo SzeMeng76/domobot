@@ -1468,9 +1468,10 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
                 # 视频太大，只发送文本提示
                 @with_telegram_retry(max_retries=5)
                 async def _send_video_too_large():
+                    size_text = f"{video_size_mb:.1f}".replace(".", "\\.")
                     return await context.bot.send_message(
                         chat_id=chat_id,
-                        text=f"{caption}\n\n⚠️ 视频文件过大 \\({video_size_mb:.1f}MB\\)，无法直接发送",
+                        text=f"{caption}\n\n⚠️ 视频文件过大 \\({size_text}MB\\)，无法直接发送",
                         parse_mode="MarkdownV2",
                         reply_parameters=reply_parameters,
                         disable_web_page_preview=True,
