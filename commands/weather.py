@@ -1952,7 +1952,12 @@ async def weather_unsubscribe_command(update: Update, context: ContextTypes.DEFA
 
     if location in user_subs:
         user_subs.remove(location)
-        subscriptions[str(user_id)] = user_subs
+
+        # 如果用户没有任何订阅了，删除整个用户
+        if user_subs:
+            subscriptions[str(user_id)] = user_subs
+        else:
+            subscriptions.pop(str(user_id), None)
 
         # 立即保存到文件
         with open(data_file, 'w', encoding='utf-8') as f:
