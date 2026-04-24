@@ -24,7 +24,7 @@ async def disney_plus_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 disney_command = disney_plus_command
 
 # Register commands
-command_factory.register_command("ds", disney_command, permission=Permission.USER, description="Disney+订阅价格查询")
+command_factory.register_command("ds", disney_command, permission=Permission.NONE, description="Disney+订阅价格查询")
 
 logger.info("Disney+ 命令已注册")
 # =============================================================================

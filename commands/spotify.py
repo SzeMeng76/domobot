@@ -22,7 +22,7 @@ async def spotify_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 # Register commands
 command_factory.register_command(
-    "sp", spotify_command, permission=Permission.USER, description="Spotify订阅价格查询"
+    "sp", spotify_command, permission=Permission.NONE, description="Spotify订阅价格查询"
 )
 
 logger.info("Spotify 命令已注册")

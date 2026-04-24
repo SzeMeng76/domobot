@@ -20,7 +20,7 @@ async def xbox_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     )
 
 
-command_factory.register_command("xbox", xbox_command, permission=Permission.USER, description="Xbox Game Pass订阅价格查询")
+command_factory.register_command("xbox", xbox_command, permission=Permission.NONE, description="Xbox Game Pass订阅价格查询")
 
 logger.info("Xbox Game Pass 命令已注册")
 

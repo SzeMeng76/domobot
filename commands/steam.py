@@ -1958,14 +1958,14 @@ async def steamb_callback_handler(update: Update, context: ContextTypes.DEFAULT_
 # Register callback handler
 command_factory.register_callback("^steam_", steam_callback_handler, permission=Permission.USER, description="Steam搜索回调处理")
 # Register callback handler
-command_factory.register_callback("^steamb_", steamb_callback_handler, permission=Permission.USER, description="Steam捆绑包搜索回调处理")
+command_factory.register_callback("^steamb_", steamb_callback_handler, permission=Permission.NONE, description="Steam捆绑包搜索回调处理")
 
 # Register commands
-command_factory.register_command("steam", steam_command, permission=Permission.USER, description="Steam游戏价格查询")
-command_factory.register_command("steamb", steam_bundle_command, permission=Permission.USER, description="查询捆绑包价格")
+command_factory.register_command("steam", steam_command, permission=Permission.NONE, description="Steam游戏价格查询")
+command_factory.register_command("steamb", steam_bundle_command, permission=Permission.NONE, description="查询捆绑包价格")
 # 已迁移到统一缓存管理命令 /cleancache
 # command_factory.register_command("steamcc", steam_clean_cache_command, permission=Permission.ADMIN, description="清理Steam缓存")
-command_factory.register_command("steams", steam_search_command, permission=Permission.USER, description="综合搜索游戏和捆绑包")
+command_factory.register_command("steams", steam_search_command, permission=Permission.NONE, description="综合搜索游戏和捆绑包")
 
 
 # =============================================================================

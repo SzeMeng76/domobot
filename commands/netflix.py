@@ -22,7 +22,7 @@ async def netflix_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 # Register commands
 command_factory.register_command(
-    "nf", netflix_command, permission=Permission.USER, description="Netflix订阅价格查询"
+    "nf", netflix_command, permission=Permission.NONE, description="Netflix订阅价格查询"
 )
 
 logger.info("Netflix 命令已注册")
