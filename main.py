@@ -1130,8 +1130,8 @@ def main() -> None:
     # ========================================
     logger.info("📱 创建 Telegram Bot 应用...")
 
-    # 配置持久化存储
-    persistence = PicklePersistence(filepath="bot_data.pkl")
+    # 配置持久化存储（保存到 data 目录以便 Docker 挂载）
+    persistence = PicklePersistence(filepath="data/bot_data.pkl")
 
     application = (
         Application.builder()
