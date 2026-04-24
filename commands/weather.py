@@ -1811,11 +1811,21 @@ async def weather_inline_execute(args: str, use_ai_report: bool = True) -> dict:
 # =============================================================================
 
 async def weather_subscribe_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """处理 /tq_sub 命令 - 订阅每日天气简报"""
+    """处理 /tq_sub 命令 - 订阅每日天气简报（仅私聊）"""
     if not update.message or not update.effective_chat:
         return
 
     await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+
+    # 只允许私聊订阅
+    if update.effective_chat.type != "private":
+        await send_error(
+            context,
+            update.effective_chat.id,
+            "⚠️ 天气订阅仅支持私聊使用\n\n请私聊机器人使用 `/tq_sub 城市名` 订阅",
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+        return
 
     if not context.args:
         help_text = """📮 *天气订阅帮助*
@@ -1874,11 +1884,21 @@ async def weather_subscribe_command(update: Update, context: ContextTypes.DEFAUL
 
 
 async def weather_unsubscribe_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """处理 /tq_unsub 命令 - 取消订阅"""
+    """处理 /tq_unsub 命令 - 取消订阅（仅私聊）"""
     if not update.message or not update.effective_chat:
         return
 
     await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+
+    # 只允许私聊取消订阅
+    if update.effective_chat.type != "private":
+        await send_error(
+            context,
+            update.effective_chat.id,
+            "⚠️ 天气订阅仅支持私聊使用\n\n请私聊机器人使用 `/tq_unsub 城市名` 取消订阅",
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+        return
 
     if not context.args:
         await send_error(
@@ -1912,11 +1932,21 @@ async def weather_unsubscribe_command(update: Update, context: ContextTypes.DEFA
 
 
 async def weather_my_subscriptions_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """处理 /tq_mysub 命令 - 查看我的订阅"""
+    """处理 /tq_mysub 命令 - 查看我的订阅（仅私聊）"""
     if not update.message or not update.effective_chat:
         return
 
     await delete_user_command(context, update.effective_chat.id, update.message.message_id)
+
+    # 只允许私聊查看订阅
+    if update.effective_chat.type != "private":
+        await send_error(
+            context,
+            update.effective_chat.id,
+            "⚠️ 天气订阅仅支持私聊使用\n\n请私聊机器人使用 `/tq_mysub` 查看订阅",
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+        return
 
     # 使用 chat_data 获取订阅列表
     daily_subs = context.chat_data.get("daily_subs", [])
