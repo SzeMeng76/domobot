@@ -1454,7 +1454,10 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
         media = media_list[0]
         if isinstance(media, (VideoFile, AniFile, LivePhotoFile)):
             # 对于单个视频，使用 _send_video 处理（包含大文件瀑布流逻辑）
-            return await _send_video(context, chat_id, download_result, caption, reply_parameters, reply_markup, parse_result=parse_result)
+            # 创建新的 download_result，将 media 从列表改为单个对象
+            from types import SimpleNamespace
+            single_video_result = SimpleNamespace(media=media)
+            return await _send_video(context, chat_id, single_video_result, caption, reply_parameters, reply_markup, parse_result=parse_result)
         elif isinstance(media, ImageFile):
             intermediates: list[Path] = []  # 收集生成的中间文件
             original_path = Path(media.path)
