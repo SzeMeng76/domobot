@@ -64,9 +64,12 @@ jobs:
             echo "是开发分支推送，使用分支名 '${BRANCH_NAME}' 作为标签"
             TAGS="$DOCKER_IMAGE_GHCR:${BRANCH_NAME}"
           fi
-          
+
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
           echo "Generated tags: ${TAGS}"
+
+          # 输出 cache ref (用于 buildx)
+          echo "cache-ref=$DOCKER_IMAGE_GHCR:buildcache" >> $GITHUB_OUTPUT
 
       # 第四步：设置 QEMU，用于多平台构建
       - name: Set up QEMU
@@ -103,5 +106,5 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           platforms: linux/amd64,linux/arm64
-          cache-from: type=registry,ref=ghcr.io/${{ toLower(github.repository) }}:buildcache
-          cache-to: type=registry,ref=ghcr.io/${{ toLower(github.repository) }}:buildcache,mode=max
+          cache-from: type=registry,ref=${{ steps.meta.outputs.cache-ref }}
+          cache-to: type=registry,ref=${{ steps.meta.outputs.cache-ref }},mode=max
