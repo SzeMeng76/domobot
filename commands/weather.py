@@ -41,23 +41,14 @@ except ImportError:
     VISUALIZER_AVAILABLE = False
     logging.warning("Weather visualizer not available, chart features will be disabled")
 
-# Import Weather Subscription Manager
-try:
-    from utils.weather_subscription import WeatherSubscriptionManager
-    SUBSCRIPTION_AVAILABLE = True
-except ImportError:
-    SUBSCRIPTION_AVAILABLE = False
-    logging.warning("Weather subscription manager not available")
-
 # 全局变量
 cache_manager = None
 httpx_client = None
 caiyun_adapter = None
 weather_visualizer = None
-subscription_manager = None
 
 def set_dependencies(c_manager, h_client):
-    global cache_manager, httpx_client, caiyun_adapter, weather_visualizer, subscription_manager
+    global cache_manager, httpx_client, caiyun_adapter, weather_visualizer
     cache_manager = c_manager
     httpx_client = h_client
 
@@ -71,11 +62,6 @@ def set_dependencies(c_manager, h_client):
     if VISUALIZER_AVAILABLE:
         weather_visualizer = WeatherVisualizer()
         logging.info("天气可视化工具已初始化")
-
-    # 初始化订阅管理器
-    if SUBSCRIPTION_AVAILABLE:
-        subscription_manager = WeatherSubscriptionManager(cache_manager)
-        logging.info("天气订阅管理器已初始化")
 
 WEATHER_ICONS = {
     '100': '☀️', '101': '🌤️', '102': '☁️', '103': '🌥️', '104': '⛅',
@@ -1831,15 +1817,6 @@ async def weather_subscribe_command(update: Update, context: ContextTypes.DEFAUL
 
     await delete_user_command(context, update.effective_chat.id, update.message.message_id)
 
-    if not subscription_manager:
-        await send_error(
-            context,
-            update.effective_chat.id,
-            "❌ 订阅功能未启用",
-            parse_mode="Markdown"
-        )
-        return
-
     if not context.args:
         help_text = """📮 *天气订阅帮助*
 
@@ -1876,25 +1853,22 @@ async def weather_subscribe_command(update: Update, context: ContextTypes.DEFAUL
         )
         return
 
-    # 订阅
-    success = await subscription_manager.subscribe(
-        update.effective_chat.id,
-        location,
-        "daily"
-    )
+    # 使用 chat_data 存储订阅
+    daily_subs = context.chat_data.setdefault("daily_subs", [])
 
-    if success:
-        await send_success(
-            context,
-            update.effective_chat.id,
-            f"✅ 成功订阅 *{escape_markdown(location, version=2)}* 的每日天气简报\\!\n\n每天早上 8:00 自动推送",
-            parse_mode=ParseMode.MARKDOWN_V2
-        )
-    else:
+    if location in daily_subs:
         await send_error(
             context,
             update.effective_chat.id,
             f"ℹ️ 你已经订阅过 *{escape_markdown(location, version=2)}* 了",
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+    else:
+        daily_subs.append(location)
+        await send_success(
+            context,
+            update.effective_chat.id,
+            f"✅ 成功订阅 *{escape_markdown(location, version=2)}* 的每日天气简报\\!\n\n每天早上 8:00 自动推送",
             parse_mode=ParseMode.MARKDOWN_V2
         )
 
@@ -1905,15 +1879,6 @@ async def weather_unsubscribe_command(update: Update, context: ContextTypes.DEFA
         return
 
     await delete_user_command(context, update.effective_chat.id, update.message.message_id)
-
-    if not subscription_manager:
-        await send_error(
-            context,
-            update.effective_chat.id,
-            "❌ 订阅功能未启用",
-            parse_mode="Markdown"
-        )
-        return
 
     if not context.args:
         await send_error(
@@ -1926,14 +1891,11 @@ async def weather_unsubscribe_command(update: Update, context: ContextTypes.DEFA
 
     location = context.args[0]
 
-    # 取消订阅
-    success = await subscription_manager.unsubscribe(
-        update.effective_chat.id,
-        location,
-        "daily"
-    )
+    # 使用 chat_data 取消订阅
+    daily_subs = context.chat_data.get("daily_subs", [])
 
-    if success:
+    if location in daily_subs:
+        daily_subs.remove(location)
         await send_success(
             context,
             update.effective_chat.id,
@@ -1956,28 +1918,16 @@ async def weather_my_subscriptions_command(update: Update, context: ContextTypes
 
     await delete_user_command(context, update.effective_chat.id, update.message.message_id)
 
-    if not subscription_manager:
-        await send_error(
-            context,
-            update.effective_chat.id,
-            "❌ 订阅功能未启用",
-            parse_mode="Markdown"
-        )
-        return
+    # 使用 chat_data 获取订阅列表
+    daily_subs = context.chat_data.get("daily_subs", [])
 
-    # 获取订阅列表
-    subscriptions = await subscription_manager.get_subscriptions(
-        update.effective_chat.id,
-        "daily"
-    )
-
-    if not subscriptions:
+    if not daily_subs:
         message = "📭 *你还没有订阅任何天气简报*\n\n使用 `/tq_sub 城市名` 订阅"
     else:
         message = "📮 *我的天气订阅*\n\n"
-        for location in subscriptions:
+        for location in daily_subs:
             message += f"• {escape_markdown(location, version=2)}\n"
-        message += f"\n共 {len(subscriptions)} 个订阅"
+        message += f"\n共 {len(daily_subs)} 个订阅"
 
     await send_message_with_auto_delete(
         context,
@@ -2008,3 +1958,101 @@ command_factory.register_command(
     permission=Permission.USER,
     description="查看我的天气订阅"
 )
+
+
+# =============================================================================
+# 定时任务：每日天气简报推送
+# =============================================================================
+
+async def send_daily_weather_brief(context: ContextTypes.DEFAULT_TYPE):
+    """
+    定时任务：每天早上 8:00 发送天气简报
+    遍历所有订阅用户并发送天气信息
+    """
+    app = context.application
+    if not hasattr(app, "chat_data") or not app.chat_data:
+        logging.info("没有 chat_data，跳过每日天气简报推送")
+        return
+
+    logging.info(f"开始每日天气简报推送，检查 {len(app.chat_data)} 个聊天...")
+
+    for chat_id, data in app.chat_data.items():
+        daily_subs = data.get("daily_subs", [])
+        if not daily_subs:
+            continue
+
+        for location in daily_subs:
+            try:
+                # 获取位置信息
+                location_data = await get_location_id(location)
+                if not location_data:
+                    logging.warning(f"找不到城市 {location}，跳过")
+                    continue
+
+                location_id = location_data['id']
+                location_name = f"{location_data['name']}, {location_data['adm1']}"
+
+                # 获取天气数据
+                realtime_data = await _get_api_response("weather/now", {"location": location_id})
+                daily_data = await _get_api_response("weather/3d", {"location": location_id})
+                hourly_data = await _get_api_response("weather/24h", {"location": location_id})
+                indices_data = await _get_api_response("indices/1d", {"location": location_id, "type": "0"})
+                air_data = await _get_api_response("air/now", {"location": location_id})
+
+                # 获取天气预警
+                lat = float(location_data['lat'])
+                lon = float(location_data['lon'])
+                alerts_data = await get_weather_alerts(lat, lon)
+
+                if not realtime_data or not daily_data or not hourly_data or not indices_data:
+                    logging.warning(f"获取 {location} 天气数据失败，跳过")
+                    continue
+
+                # 尝试获取彩云天气智能摘要
+                caiyun_summary = None
+                if caiyun_adapter:
+                    try:
+                        coords = f"{lon},{lat}"
+                        caiyun_data = await caiyun_adapter.get_weather(coords)
+                        if caiyun_data:
+                            caiyun_summary = caiyun_adapter.extract_summary(caiyun_data)
+                    except Exception as e:
+                        logging.warning(f"获取彩云天气摘要失败: {e}")
+
+                # 生成 AI 天气日报
+                ai_report = await generate_ai_weather_report(
+                    location_name,
+                    realtime_data,
+                    daily_data,
+                    hourly_data,
+                    indices_data,
+                    air_data,
+                    alerts_data,
+                    caiyun_summary
+                )
+
+                if ai_report:
+                    # 发送 AI 日报
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=ai_report,
+                        parse_mode=None  # AI 日报不使用 Markdown
+                    )
+                    logging.info(f"✅ 已向 {chat_id} 发送 {location} 的每日天气简报")
+                else:
+                    # 如果 AI 日报生成失败，发送传统格式
+                    result_text = format_realtime_weather(realtime_data, location_name)
+                    if air_data and air_data.get('now') and air_data.get('now').get('aqi'):
+                        result_text += format_air_quality(air_data)
+
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=foldable_text_with_markdown_v2(result_text),
+                        parse_mode=ParseMode.MARKDOWN_V2,
+                        disable_web_page_preview=True
+                    )
+                    logging.info(f"✅ 已向 {chat_id} 发送 {location} 的每日天气简报（传统格式）")
+
+            except Exception as e:
+                logging.error(f"向 {chat_id} 发送 {location} 天气简报失败: {e}")
+
