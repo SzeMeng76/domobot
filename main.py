@@ -23,7 +23,6 @@ from telegram import BotCommand, Update
 from telegram.ext import (
     Application,
     ContextTypes,
-    PicklePersistence,
 )
 
 
@@ -998,33 +997,8 @@ async def setup_application(application: Application, config) -> None:
         # 每天早上 8:00 发送天气简报
         job_queue.run_daily(send_daily_weather_brief, time=time(8, 0))
         logger.info("✅ 天气订阅定时任务已启动（每天 8:00）")
-
-        # 每天凌晨 3:00 清理 processed_messages
-        async def cleanup_processed_messages(context: ContextTypes.DEFAULT_TYPE):
-            """定期清理 processed_messages，只保留最近100条"""
-            app = context.application
-            if not hasattr(app, "chat_data") or not app.chat_data:
-                return
-
-            cleaned_count = 0
-            for chat_id, data in app.chat_data.items():
-                processed = data.get("processed_messages")
-                if processed and isinstance(processed, set):
-                    original_size = len(processed)
-                    if original_size > 100:
-                        # 只保留最近100条（转为列表后取后100个）
-                        recent_ids = list(processed)[-100:]
-                        data["processed_messages"] = set(recent_ids)
-                        cleaned_count += 1
-                        logger.debug(f"清理 chat {chat_id} 的 processed_messages: {original_size} -> 100")
-
-            if cleaned_count > 0:
-                logger.info(f"✅ 已清理 {cleaned_count} 个聊天的 processed_messages")
-
-        job_queue.run_daily(cleanup_processed_messages, time=time(3, 0))
-        logger.info("✅ processed_messages 清理任务已启动（每天 3:00）")
     else:
-        logger.warning("⚠️ JobQueue 不可用，定时任务未启动")
+        logger.warning("⚠️ JobQueue 不可用，天气订阅定时任务未启动")
 
     logger.info("✅ 机器人应用初始化完成！")
 
@@ -1131,12 +1105,8 @@ def main() -> None:
     logger.info("📱 创建 Telegram Bot 应用...")
 
     # 确保 data 目录存在
-    from pathlib import Path
-    data_dir = Path("data")
-    data_dir.mkdir(exist_ok=True)
-
-    # 配置持久化存储（保存到 data 目录以便 Docker 挂载）
-    persistence = PicklePersistence(filepath="data/bot_data.pkl")
+    import os
+    os.makedirs("data", exist_ok=True)
 
     application = (
         Application.builder()
@@ -1145,7 +1115,6 @@ def main() -> None:
         .write_timeout(60)  # 增加写入超时到60秒
         .media_write_timeout(120)  # 上传媒体文件（视频/图片）的写入超时120秒
         .concurrent_updates(True)  # 允许并发处理update，上传大文件时不阻塞其他命令
-        .persistence(persistence)  # 启用持久化存储
         .build()
     )
 

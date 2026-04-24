@@ -1863,10 +1863,24 @@ async def weather_subscribe_command(update: Update, context: ContextTypes.DEFAUL
         )
         return
 
-    # 使用 chat_data 存储订阅
-    daily_subs = context.chat_data.setdefault("daily_subs", [])
+    # 使用 JSON 文件存储订阅（立即保存）
+    import json
+    from pathlib import Path
 
-    if location in daily_subs:
+    user_id = update.effective_chat.id
+    data_file = Path("data/weather_subscriptions.json")
+
+    # 读取现有订阅
+    if data_file.exists():
+        with open(data_file, 'r', encoding='utf-8') as f:
+            subscriptions = json.load(f)
+    else:
+        subscriptions = {}
+
+    # 获取用户的订阅列表
+    user_subs = subscriptions.get(str(user_id), [])
+
+    if location in user_subs:
         await send_error(
             context,
             update.effective_chat.id,
@@ -1874,7 +1888,15 @@ async def weather_subscribe_command(update: Update, context: ContextTypes.DEFAUL
             parse_mode=ParseMode.MARKDOWN_V2
         )
     else:
-        daily_subs.append(location)
+        user_subs.append(location)
+        subscriptions[str(user_id)] = user_subs
+
+        # 立即保存到文件
+        with open(data_file, 'w', encoding='utf-8') as f:
+            json.dump(subscriptions, f, ensure_ascii=False, indent=2)
+
+        logging.info(f"✅ 用户 {user_id} 订阅了 {location}，已保存到文件")
+
         await send_success(
             context,
             update.effective_chat.id,
@@ -1911,11 +1933,33 @@ async def weather_unsubscribe_command(update: Update, context: ContextTypes.DEFA
 
     location = context.args[0]
 
-    # 使用 chat_data 取消订阅
-    daily_subs = context.chat_data.get("daily_subs", [])
+    # 使用 JSON 文件存储订阅（立即保存）
+    import json
+    from pathlib import Path
 
-    if location in daily_subs:
-        daily_subs.remove(location)
+    user_id = update.effective_chat.id
+    data_file = Path("data/weather_subscriptions.json")
+
+    # 读取现有订阅
+    if data_file.exists():
+        with open(data_file, 'r', encoding='utf-8') as f:
+            subscriptions = json.load(f)
+    else:
+        subscriptions = {}
+
+    # 获取用户的订阅列表
+    user_subs = subscriptions.get(str(user_id), [])
+
+    if location in user_subs:
+        user_subs.remove(location)
+        subscriptions[str(user_id)] = user_subs
+
+        # 立即保存到文件
+        with open(data_file, 'w', encoding='utf-8') as f:
+            json.dump(subscriptions, f, ensure_ascii=False, indent=2)
+
+        logging.info(f"✅ 用户 {user_id} 取消订阅了 {location}，已保存到文件")
+
         await send_success(
             context,
             update.effective_chat.id,
@@ -1948,16 +1992,30 @@ async def weather_my_subscriptions_command(update: Update, context: ContextTypes
         )
         return
 
-    # 使用 chat_data 获取订阅列表
-    daily_subs = context.chat_data.get("daily_subs", [])
+    # 使用 JSON 文件读取订阅
+    import json
+    from pathlib import Path
 
-    if not daily_subs:
+    user_id = update.effective_chat.id
+    data_file = Path("data/weather_subscriptions.json")
+
+    # 读取现有订阅
+    if data_file.exists():
+        with open(data_file, 'r', encoding='utf-8') as f:
+            subscriptions = json.load(f)
+    else:
+        subscriptions = {}
+
+    # 获取用户的订阅列表
+    user_subs = subscriptions.get(str(user_id), [])
+
+    if not user_subs:
         message = "📭 *你还没有订阅任何天气简报*\n\n使用 `/tq_sub 城市名` 订阅"
     else:
         message = "📮 *我的天气订阅*\n\n"
-        for location in daily_subs:
+        for location in user_subs:
             message += f"• {escape_markdown(location, version=2)}\n"
-        message += f"\n共 {len(daily_subs)} 个订阅"
+        message += f"\n共 {len(user_subs)} 个订阅"
 
     await send_message_with_auto_delete(
         context,
@@ -1997,21 +2055,34 @@ command_factory.register_command(
 async def send_daily_weather_brief(context: ContextTypes.DEFAULT_TYPE):
     """
     定时任务：每天早上 8:00 发送天气简报
-    遍历所有订阅用户并发送天气信息
+    从 JSON 文件读取所有订阅用户并发送天气信息
     """
-    app = context.application
-    if not hasattr(app, "chat_data") or not app.chat_data:
-        logging.info("没有 chat_data，跳过每日天气简报推送")
+    import json
+    from pathlib import Path
+
+    data_file = Path("data/weather_subscriptions.json")
+
+    # 读取订阅数据
+    if not data_file.exists():
+        logging.info("没有订阅数据文件，跳过每日天气简报推送")
         return
 
-    logging.info(f"开始每日天气简报推送，检查 {len(app.chat_data)} 个聊天...")
+    with open(data_file, 'r', encoding='utf-8') as f:
+        subscriptions = json.load(f)
 
-    for chat_id, data in app.chat_data.items():
-        daily_subs = data.get("daily_subs", [])
-        if not daily_subs:
+    if not subscriptions:
+        logging.info("没有用户订阅，跳过每日天气简报推送")
+        return
+
+    logging.info(f"开始每日天气简报推送，共 {len(subscriptions)} 个用户...")
+
+    for user_id_str, locations in subscriptions.items():
+        chat_id = int(user_id_str)
+
+        if not locations:
             continue
 
-        for location in daily_subs:
+        for location in locations:
             try:
                 # 获取位置信息
                 location_data = await get_location_id(location)
