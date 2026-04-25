@@ -121,7 +121,7 @@ class AntiSpamDetector:
 
         if bio:
             user_profile += f"\n- 个人简介：{bio}"
-            user_profile += "\n  ⚠️ 注意：简介中的链接需结合内容判断，自我介绍性质的频道链接（如'频道: https://t.me/xxx'）是正常的，但如果包含商业推广、赌博、网赚等广告内容则应判定为垃圾"
+            user_profile += "\n  ⚠️ 注意：简介中的链接需结合消息内容判断，仅当消息本身包含推广行为时才考虑简介。正常情况：自我介绍性质的频道链接（如'频道: https://t.me/xxx'）、个人网站、社交媒体链接、联盟链接（afflink/ref等）都是正常的。垃圾情况：消息主动推销+简介含商业推广、赌博、网赚等内容"
 
         if risk_factors:
             user_profile += f"\n- 风险因素：{', '.join(risk_factors)}"
@@ -139,9 +139,9 @@ class AntiSpamDetector:
         """获取文本检测提示词"""
         # 根据用户状态调整检测策略
         if days_since_join < 3 or speech_count < 3:
-            strategy_note = "注意：这是新用户，对短消息请谨慎判断，降低误封率。"
+            strategy_note = "注意：新用户，短消息谨慎判断，降低误封率。"
         else:
-            strategy_note = "注意：这是老用户，如果消息很短且无明显广告特征，强制认定不是广告。"
+            strategy_note = "注意：老用户，短消息且无明显广告特征，强制认定不是广告。"
 
         return f"""你是Telegram反垃圾机器人，分析消息是否为垃圾广告。
 
@@ -153,28 +153,24 @@ class AntiSpamDetector:
 {strategy_note}
 
 垃圾广告特征：
-1. 虚假支付/银行卡信息
-2. 恶意引流到其他群组/频道（商业推广、赌博、网赚）
-3. 非法支付、赌博、禁止物品
-4. 主动推销非法服务（飞机会员、刷单、赌台、网赚、日入千金）
-5. 谐音、错别字、特殊符号混淆
-6. 尼日利亚服务广告（NIGERIAN BANKS, NIN, BVN, ESIM, PASSPORT, GMAIL等）
-7. 全大写、大量emoji、24/7 ACTIVE等典型广告格式
-8. 加密货币喊单（币种+交易指令：进场价/止盈/止损/做多/做空）
-9. 赌博平台推广（PG平台、赌台、官方直推、风口、日入、稳定收益）
-10. 零宽字符/特殊Unicode混淆（\u200b、\u200c、\u200d、\ufeff等）
-11. 货币兑换广告（主动提供exchange服务，多种货币代码BTC/TON/NGN/SAR/KWD/OMR，大量emoji，格式混乱）
-12. 订阅服务推广（subscription, VIP, premium, membership, available等付费订阅推广）
+1. 虚假支付/银行卡、非法支付/赌博/禁止物品
+2. 恶意引流（商业推广、赌博、网赚、飞机会员、刷单）
+3. 尼日利亚服务（NIGERIAN BANKS/NIN/BVN/ESIM/PASSPORT/GMAIL）
+4. 加密货币喊单（币种+交易指令：进场价/止盈/止损/做多/做空）
+5. 赌博平台（PG平台、赌台、官方直推、风口、日入、稳定收益）
+6. 货币兑换广告（主动提供exchange服务，多种货币代码，大量emoji）
+7. 订阅服务推广（subscription/VIP/premium/membership/available）
+8. 典型广告格式（全大写、大量emoji、24/7 ACTIVE、谐音/错别字/特殊符号混淆、零宽字符）
 
 判定规则：
-- 区分推销和询问：主动"出售XX"是广告，询问"有人卖XX吗"是正常提问
-- 区分引流和分享：简介中"频道: t.me/xxx"是自我介绍，包含商业推广内容才是广告
-- 货币兑换：主动提供exchange服务是广告，询问"有人能换汇吗"是正常
-- 订阅服务：任何主动推广subscription/VIP/premium/membership/available的消息都是广告，评分>=85
-- 昵称包含货币关键词（USDT/BTC/NAIRA/EXCHANGE/CONVERT等）的用户发推广消息，直接+25分
-- 新用户正常提问不封禁，只封主动推销/引流
+- 推销vs询问：主动"出售XX"是广告，询问"有人卖XX吗"是正常
+- 简介链接不是依据：个人简介中的链接（联盟/推广/社交媒体）是正常的，除非消息本身包含主动推销
+- 货币兑换：主动提供exchange是广告，询问"有人能换汇吗"是正常
+- 订阅服务：主动推广subscription/VIP/premium，评分>=85
+- 昵称含货币关键词（USDT/BTC/NAIRA/EXCHANGE）的用户发推广消息，+25分
+- 新用户正常提问/闲聊不封，只封主动推销/引流
 - 老用户（>7天且>10次发言）短消息更宽容
-- emoji超过30%且含商业关键词，提高评分
+- 短消息（<10字）且无明显广告特征，强制认定正常（state=0, spam_score<50）
 
 返回JSON：
 {{
