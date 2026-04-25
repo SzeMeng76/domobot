@@ -1023,6 +1023,12 @@ async def steam_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     user_id = update.effective_user.id
 
+    # 生成会话ID
+    session_id = f"steam_search_{user_id}_{int(time.time())}"
+
+    # 立即删除用户命令消息
+    await delete_user_command(context, update.message.chat_id, update.message.message_id, session_id=session_id)
+
     loading_message = "🔍 正在搜索游戏... ⏳"
     message = await context.bot.send_message(
         chat_id=update.effective_chat.id,
@@ -1112,9 +1118,6 @@ async def steam_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         # 更新会话中的消息ID
         if new_message:
             user_search_sessions[user_id]["message_id"] = new_message.message_id
-
-        # 删除用户命令消息
-        await delete_user_command(context, update.effective_chat.id, update.message.message_id, session_id=session_id)
 
     except Exception as e:
         error_msg = steam_checker.error_handler.log_error(e, "搜索游戏")
@@ -1534,6 +1537,22 @@ async def steam_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                         foldable_text_with_markdown_v2(result),
                         parse_mode="MarkdownV2"
                     )
+
+                    # 调度自动删除详情消息
+                    from utils.message_manager import _schedule_deletion
+                    from utils.config_manager import get_config
+
+                    config = get_config()
+                    session_id = session.get("session_id")
+                    if session_id:
+                        # 使用配置的延迟时间
+                        await _schedule_deletion(
+                            context,
+                            query.message.chat_id,
+                            query.message.message_id,
+                            delay=config.auto_delete_delay,
+                            session_id=session_id
+                        )
 
                     # 清理用户会话
                     if user_id in user_search_sessions:

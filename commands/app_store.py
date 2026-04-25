@@ -445,6 +445,22 @@ def format_app_details(
 
 async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理 /app 命令，使用新的模块化架构"""
+    if not update.message:
+        return
+
+    user_id = update.effective_user.id if update.effective_user else None
+    if not user_id:
+        return
+
+    # 生成会话ID
+    session_id = f"app_command_{user_id}_{int(time.time())}"
+
+    # 立即删除用户命令消息
+    if update.effective_chat:
+        await delete_user_command(
+            context, update.effective_chat.id, update.message.message_id, session_id=session_id
+        )
+
     # 从 context.bot_data 获取 AppStorePriceBot 实例
     bot = context.bot_data.get("app_store_price_bot")
     if not bot:
@@ -454,11 +470,9 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                 context,
                 update.effective_chat.id,
                 foldable_text_v2(error_message),
+                session_id=session_id,
                 parse_mode="MarkdownV2",
             )
-        return
-
-    if not update.message:
         return
 
     if not context.args:
@@ -469,15 +483,9 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                 context,
                 update.effective_chat.id,
                 foldable_text_with_markdown_v2(help_message),
+                session_id=session_id,
                 parse_mode="MarkdownV2",
             )
-            await delete_user_command(
-                context, update.effective_chat.id, update.message.message_id
-            )
-        return
-
-    user_id = update.effective_user.id if update.effective_user else None
-    if not user_id:
         return
 
     args_str_full = " ".join(context.args)
@@ -625,15 +633,6 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         # 更新会话中的消息ID
         if new_message:
             user_search_sessions[user_id]["message_id"] = new_message.message_id
-
-        # 删除用户命令消息
-        if update.message:
-            await delete_user_command(
-                context,
-                update.effective_chat.id,
-                update.message.message_id,
-                session_id=session_id,
-            )
 
     except Exception as e:
         logger.error(f"Search process error: {e}")
@@ -820,15 +819,6 @@ async def handle_app_id_query(
             parse_mode="MarkdownV2",
             disable_web_page_preview=True,
         )
-
-        # 删除用户命令消息
-        if update.message:
-            await delete_user_command(
-                context,
-                update.effective_chat.id,
-                update.message.message_id,
-                session_id=session_id,
-            )
 
     except Exception as e:
         logger.error(f"App ID 查询过程出错: {e}")
@@ -1099,6 +1089,22 @@ async def show_app_details(
         await query.edit_message_text(
             formatted_message, parse_mode="MarkdownV2", disable_web_page_preview=True
         )
+
+        # 调度自动删除详情消息
+        from utils.message_manager import _schedule_deletion
+        from utils.config_manager import get_config
+
+        config = get_config()
+        session_id = session.get("session_id")
+        if session_id:
+            # 使用配置的延迟时间
+            await _schedule_deletion(
+                context,
+                query.message.chat_id,
+                query.message.message_id,
+                delay=config.auto_delete_delay,
+                session_id=session_id
+            )
 
     except Exception as e:
         logger.error(f"显示应用详情时发生错误: {e}", exc_info=True)
