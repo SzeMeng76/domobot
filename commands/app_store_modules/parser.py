@@ -7,15 +7,48 @@ App Store HTML/JSON-LD 解析器
 
 import json
 import logging
+import re
 from typing import Dict, List, Optional
 
 from bs4 import BeautifulSoup
 
 from utils.country_data import SUPPORTED_COUNTRIES
 
-from .constants import JSON_LD_SCRIPT_TYPE, JSON_LD_SOFTWARE_TYPE, IAP_TEXT_PAIR_CLASS
+from .constants import (
+    JSON_LD_SCRIPT_TYPE,
+    JSON_LD_SOFTWARE_TYPE,
+    IAP_TEXT_PAIR_CLASS,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_icon_url(url: str, size: int = 256) -> str:
+    """将 mzstatic 图标 URL 转换为 iOS 图标格式（ia crop code）
+
+    Apple JSON-LD 返回的 image 通常是 1200x630wa.png（社交分享图），
+    转为 {size}x{size}ia-75.webp 让 CDN 服务端做 iOS squircle 裁切，
+    输出无白边的圆角图标。
+
+    crop code 说明：
+      bb = bounding box（保留白边）
+      ia = icon artwork（服务端预裁切为 iOS 圆角图标）
+
+    Args:
+        url: 原始 mzstatic URL
+        size: 目标尺寸（像素）
+
+    Returns:
+        转换后的 URL
+    """
+    if not url or "mzstatic.com" not in url:
+        return url
+    # 匹配末尾的 /{数字}x{数字}{模式}.{格式} 或 /{数字}x{数字}{模式}-{质量}.{格式}
+    return re.sub(
+        r"/\d+x\d+\w+(?:-\d+)?\.\w+$",
+        f"/{size}x{size}ia-75.webp",
+        url,
+    )
 
 
 class AppStoreParser:
@@ -48,7 +81,10 @@ class AppStoreParser:
                 json_data = json.loads(script.string)
 
                 # 检查是否是 SoftwareApplication 类型
-                if not isinstance(json_data, dict) or json_data.get("@type") != JSON_LD_SOFTWARE_TYPE:
+                if (
+                    not isinstance(json_data, dict)
+                    or json_data.get("@type") != JSON_LD_SOFTWARE_TYPE
+                ):
                     continue
 
                 # 提取应用名称
@@ -57,10 +93,14 @@ class AppStoreParser:
                 # 提取 offers 信息
                 offers = json_data.get("offers", {})
                 if not offers:
-                    logger.warning(f"JSON-LD 中未找到 offers 信息 (国家: {country_code})")
+                    logger.warning(
+                        f"JSON-LD 中未找到 offers 信息 (国家: {country_code})"
+                    )
                     return {
                         "app_name": app_name,
-                        "currency": SUPPORTED_COUNTRIES.get(country_code, {}).get("currency", "USD"),
+                        "currency": SUPPORTED_COUNTRIES.get(country_code, {}).get(
+                            "currency", "USD"
+                        ),
                         "price": 0,
                         "category": "free",
                         "source": "default",
@@ -75,8 +115,15 @@ class AppStoreParser:
 
                 # 提取关键字段
                 currency = offers.get("priceCurrency", "USD")
-                price = float(offers.get("price", 0))
-                category = offers.get("category", "free").lower()
+                # 有些市场会返回字符串价格，这里稳健转换
+                try:
+                    price = float(offers.get("price", 0))
+                except (TypeError, ValueError):
+                    price = 0.0
+
+                # 仅依据价格判断是否免费；不要信任 offers.category
+                # 某些页面的 offers.category 可能为 "free" 即使为付费应用
+                category = "free" if price <= 0 else "paid"
 
                 logger.info(
                     f"✓ JSON-LD 解析成功: app='{app_name}', currency={currency}, price={price}, category={category}"
@@ -187,7 +234,10 @@ class AppStoreParser:
             try:
                 json_data = json.loads(script.string)
 
-                if not isinstance(json_data, dict) or json_data.get("@type") != JSON_LD_SOFTWARE_TYPE:
+                if (
+                    not isinstance(json_data, dict)
+                    or json_data.get("@type") != JSON_LD_SOFTWARE_TYPE
+                ):
                     continue
 
                 # 提取元数据
@@ -210,6 +260,22 @@ class AppStoreParser:
 
                 # 系统要求
                 metadata["operating_system"] = json_data.get("operatingSystem")
+
+                # 支持的设备 (如 "Apple TV, iPhone, iPad, iPod")
+                available = json_data.get("availableOnDevice")
+                if isinstance(available, str) and available.strip():
+                    metadata["supported_devices"] = [
+                        d.strip() for d in available.split(",") if d.strip()
+                    ]
+
+                # 应用图标（转换为方形图标 URL）
+                image = json_data.get("image")
+                if isinstance(image, str):
+                    metadata["icon_url"] = _normalize_icon_url(image)
+                elif isinstance(image, list) and image:
+                    raw = image[0] if isinstance(image[0], str) else image[0].get("url")
+                    if raw:
+                        metadata["icon_url"] = _normalize_icon_url(raw)
 
                 break
 

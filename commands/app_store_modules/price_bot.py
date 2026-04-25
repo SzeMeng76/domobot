@@ -308,7 +308,7 @@ class AppStorePriceBot:
             for iap in in_app_purchases_raw:
                 price_str = iap["price_str"]
                 detected_currency, price_value = extract_currency_and_price(
-                    price_str, country_code
+                    price_str, country_code, service="app_store"
                 )
 
                 if price_value is None:
