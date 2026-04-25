@@ -141,7 +141,7 @@ async def steam_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         }
 
         # 存储用户搜索会话
-        steam_search_sessions[user_id] = {
+        user_search_sessions[user_id] = {
             "query": query,
             "search_data": search_data_for_session,
             "message_id": message.message_id,
