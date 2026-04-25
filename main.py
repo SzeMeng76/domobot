@@ -990,13 +990,15 @@ async def setup_application(application: Application, config) -> None:
 
     # 启动天气订阅定时任务
     from datetime import time
+    from zoneinfo import ZoneInfo
     from commands.weather import send_daily_weather_brief
 
     job_queue = application.job_queue
     if job_queue:
-        # 每天早上 8:00 发送天气简报
-        job_queue.run_daily(send_daily_weather_brief, time=time(8, 0))
-        logger.info("✅ 天气订阅定时任务已启动（每天 8:00）")
+        # 每天早上 8:00 发送天气简报（使用马来西亚时区 UTC+8）
+        malaysia_tz = ZoneInfo("Asia/Kuala_Lumpur")
+        job_queue.run_daily(send_daily_weather_brief, time=time(8, 0, tzinfo=malaysia_tz))
+        logger.info("✅ 天气订阅定时任务已启动（每天 8:00 马来西亚时间）")
     else:
         logger.warning("⚠️ JobQueue 不可用，天气订阅定时任务未启动")
 
