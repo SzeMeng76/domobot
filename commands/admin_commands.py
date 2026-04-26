@@ -1193,11 +1193,11 @@ class AdminPanelHandler:
                         days_info = "未知"
 
                     status_icon = "✅" if status == "Active" else "❌"
-                    text += f"  {status_icon} `{escape_md(ip)}` \\| {escape_md(country)}\n"
-                    text += f"     到期: `{escape_md(date_end)}` \\({escape_md(days_info)}\\)\n"
+                    text += f"  {status_icon} `{ip}` | {country}\n"
+                    text += f"     到期: `{date_end}` ({days_info})\n"
 
                 if len(ipv4_list) > 5:
-                    text += f"  \\.\\.\\.还有 {len(ipv4_list) - 5} 个代理\n"
+                    text += f"  ...还有 {len(ipv4_list) - 5} 个代理\n"
 
         except Exception as e:
             logger.error(f"XHSImage API fetch failed: {e}")
@@ -1238,10 +1238,10 @@ class AdminPanelHandler:
             async with httpx.AsyncClient(timeout=15.0) as client:
                 for proxy_type in proxy_types:
                     try:
-                        # 使用自定义格式获取代理信息
+                        # 使用txt格式获取代理信息（格式：用户:密码@IP:端口）
                         resp = await client.get(
                             f"https://geonix.com/personal/api/v1/{xhsimage_key}/proxy/download/{proxy_type}",
-                            params={"ext": "%ip%:%port_http%:%login%:%password%"}
+                            params={"ext": "txt"}
                         )
 
                         if resp.status_code == 200 and resp.text.strip():
@@ -1249,14 +1249,21 @@ class AdminPanelHandler:
                             if proxies and proxies[0]:
                                 has_proxies = True
                                 text += f"🔹 *{proxy_type.upper()}* ({len(proxies)}个)\n"
-                                for proxy_line in proxies[:3]:  # 只显示前3个
-                                    parts = proxy_line.split(':')
-                                    if len(parts) == 4:
-                                        ip, port, login, password = parts
-                                        text += f"```\n{ip}:{port}\n用户: {login}\n密码: {password}\n```\n"
+                                for proxy_line in proxies[:6]:  # 显示前6个（每个代理有HTTP和SOCKS两个端口）
+                                    # 格式：用户:密码@IP:端口
+                                    if '@' in proxy_line and ':' in proxy_line:
+                                        auth_part, server_part = proxy_line.split('@', 1)
+                                        login, password = auth_part.split(':', 1)
+                                        ip, port = server_part.split(':', 1)
 
-                                if len(proxies) > 3:
-                                    text += f"  \\.\\.\\.还有 {len(proxies) - 3} 个\n"
+                                        # 判断端口类型
+                                        port_num = int(port)
+                                        port_type = "SOCKS5" if port_num % 2 == 1 else "HTTP"
+
+                                        text += f"```\n{port_type}: {ip}:{port}\n用户: {login}\n密码: {password}\n```\n"
+
+                                if len(proxies) > 6:
+                                    text += f"  ...还有 {len(proxies) - 6} 个端口\n"
                                 text += "\n"
                     except Exception as e:
                         logger.debug(f"获取 {proxy_type} 代理失败: {e}")
