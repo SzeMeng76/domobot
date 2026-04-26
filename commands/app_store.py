@@ -226,7 +226,8 @@ def calculate_effective_price(
     if price_data.get("status") != "ok":
         return (float("inf"), float("inf"))
 
-    app_price = price_data.get("app_price_cny", float("inf"))
+    app_price_cny = price_data.get("app_price_cny")
+    app_price = app_price_cny if app_price_cny is not None else float("inf")
     target_plan_price = float("inf")
     min_in_app_price = float("inf")
 

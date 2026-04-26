@@ -280,11 +280,10 @@ class AppStorePriceBot:
                 app_price_cny = 0.0
             else:
                 app_price_str = f"{price} {currency}"
-                if (
-                    country_code != "CN"
-                    and self.rate_converter
-                    and self.rate_converter.rates
-                ):
+                if country_code == "CN":
+                    # CN 区域价格本身就是 CNY
+                    app_price_cny = float(price)
+                elif self.rate_converter and self.rate_converter.rates:
                     if currency.upper() in self.rate_converter.rates:
                         cny_price = await self.rate_converter.convert(
                             float(price), currency.upper(), "CNY"
