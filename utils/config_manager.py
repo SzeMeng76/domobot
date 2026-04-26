@@ -222,6 +222,7 @@ class BotConfig:
         self.parser_cache_duration = 86400  # 解析缓存时间（默认24小时）
         self.douyin_api = None  # 抖音API地址
         self.tikhub_api_key = ""  # TikHub API密钥（用于YouTube直接下载）
+        self.xhsimage_api_key = ""  # XHSImage API密钥（用于小红书图片代理）
 
         # AI总结配置
         self.enable_ai_summary = False
@@ -551,6 +552,7 @@ class ConfigManager:
         self.config.parser_cache_duration = get_int_env("PARSER_CACHE_DURATION", "86400")
         self.config.douyin_api = os.getenv("DOUYIN_API", None)
         self.config.tikhub_api_key = os.getenv("TIKHUB_API_KEY", "")
+        self.config.xhsimage_api_key = os.getenv("XHSIMAGE_API_KEY", "")
 
         # AI总结配置
         self.config.enable_ai_summary = get_bool_env("ENABLE_AI_SUMMARY", "False")

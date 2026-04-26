@@ -912,6 +912,7 @@ class AdminPanelHandler:
         keyboard = [
             [InlineKeyboardButton("🎬 TikHub", callback_data="api_usage_tikhub")],
             [InlineKeyboardButton("🔍 SerpAPI", callback_data="api_usage_serp")],
+            [InlineKeyboardButton("🖼️ XHSImage Proxy", callback_data="api_usage_xhsimage")],
             [InlineKeyboardButton("🔙 返回主菜单", callback_data="back_to_main")],
         ]
         await self._show_panel(query, text, InlineKeyboardMarkup(keyboard))
@@ -1098,6 +1099,183 @@ class AdminPanelHandler:
         keyboard = [
             [InlineKeyboardButton("🔄 刷新", callback_data="api_usage_serp")],
             [InlineKeyboardButton("🔙 返回", callback_data="manage_api_usage")],
+        ]
+        await self._show_panel(query, text, InlineKeyboardMarkup(keyboard))
+        return API_USAGE_PANEL
+
+    async def _show_xhsimage_usage(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """显示XHSImage Proxy用量"""
+        import httpx
+        from datetime import datetime
+        query = update.callback_query
+        config = get_config()
+        xhsimage_key = getattr(config, 'xhsimage_api_key', '')
+
+        if not xhsimage_key:
+            await self._show_panel(
+                query,
+                "❌ XHSImage API Key 未配置\n\n请在 `.env` 中设置 `XHSIMAGE_API_KEY`",
+                InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 返回", callback_data="manage_api_usage")],
+                ]),
+            )
+            return API_USAGE_PANEL
+
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                balance_resp, proxy_resp = await asyncio.gather(
+                    client.get(f"https://geonix.com/personal/api/v1/{xhsimage_key}/balance/get"),
+                    client.get(f"https://geonix.com/personal/api/v1/{xhsimage_key}/proxy/list"),
+                )
+
+            if balance_resp.status_code != 200 or proxy_resp.status_code != 200:
+                raise ValueError(f"HTTP {balance_resp.status_code} / {proxy_resp.status_code}")
+
+            balance_data = balance_resp.json()
+            proxy_data = proxy_resp.json()
+
+            if balance_data.get("status") != "success" or proxy_data.get("status") != "success":
+                raise ValueError("API返回错误状态")
+
+            balance = balance_data.get("data", {}).get("summ", 0)
+            proxies = proxy_data.get("data", {})
+
+            # 统计各类型代理
+            ipv4_list = proxies.get("ipv4", [])
+            ipv6_list = proxies.get("ipv6", [])
+            mobile_list = proxies.get("mobile", [])
+            isp_list = proxies.get("isp", [])
+            resident_list = proxies.get("resident", [])
+
+            total_proxies = len(ipv4_list) + len(ipv6_list) + len(mobile_list) + len(isp_list) + len(resident_list)
+
+            # 转义MarkdownV2特殊字符
+            def escape_md(text):
+                special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+                for char in special_chars:
+                    text = text.replace(char, f'\\{char}')
+                return text
+
+            text = (
+                f"🖼️ *XHSImage Proxy 状态*\n"
+                f"{'─' * 28}\n\n"
+                f"💰 *账户余额*\n"
+                f"  余额: `${balance:.2f}`\n\n"
+                f"🌐 *代理统计*\n"
+                f"  总代理数: `{total_proxies}个`\n"
+                f"  • IPv4: `{len(ipv4_list)}个`\n"
+                f"  • IPv6: `{len(ipv6_list)}个`\n"
+                f"  • Mobile: `{len(mobile_list)}个`\n"
+                f"  • ISP: `{len(isp_list)}个`\n"
+                f"  • Resident: `{len(resident_list)}个`\n\n"
+            )
+
+            # 显示活跃代理详情
+            if ipv4_list:
+                text += "📋 *IPv4 代理详情*\n"
+                for proxy in ipv4_list[:5]:  # 只显示前5个
+                    ip = proxy.get("ip", "N/A")
+                    status = proxy.get("status", "N/A")
+                    date_end = proxy.get("date_end", "N/A")
+                    country = proxy.get("country", "N/A")
+
+                    # 计算剩余天数
+                    try:
+                        end_date = datetime.strptime(date_end, "%d.%m.%Y")
+                        days_left = (end_date - datetime.now()).days
+                        if days_left < 0:
+                            days_info = "⚠️ 已过期"
+                        elif days_left < 7:
+                            days_info = f"⚠️ 剩余{days_left}天"
+                        else:
+                            days_info = f"剩余{days_left}天"
+                    except:
+                        days_info = "未知"
+
+                    status_icon = "✅" if status == "Active" else "❌"
+                    text += f"  {status_icon} `{escape_md(ip)}` \\| {escape_md(country)}\n"
+                    text += f"     到期: `{escape_md(date_end)}` \\({escape_md(days_info)}\\)\n"
+
+                if len(ipv4_list) > 5:
+                    text += f"  \\.\\.\\.还有 {len(ipv4_list) - 5} 个代理\n"
+
+        except Exception as e:
+            logger.error(f"XHSImage API fetch failed: {e}")
+            text = f"❌ 获取XHSImage用量失败\n\n`{e}`"
+
+        keyboard = [
+            [InlineKeyboardButton("🔄 刷新", callback_data="api_usage_xhsimage")],
+            [InlineKeyboardButton("📥 获取代理凭证", callback_data="api_usage_xhsimage_download")],
+            [InlineKeyboardButton("🔙 返回", callback_data="manage_api_usage")],
+        ]
+        await self._show_panel(query, text, InlineKeyboardMarkup(keyboard))
+        return API_USAGE_PANEL
+
+    async def _show_xhsimage_download(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """显示XHSImage代理凭证下载"""
+        import httpx
+        query = update.callback_query
+        config = get_config()
+        xhsimage_key = getattr(config, 'xhsimage_api_key', '')
+
+        if not xhsimage_key:
+            await self._show_panel(
+                query,
+                "❌ XHSImage API Key 未配置",
+                InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 返回", callback_data="api_usage_xhsimage")],
+                ]),
+            )
+            return API_USAGE_PANEL
+
+        try:
+            # 获取所有类型的代理
+            proxy_types = ["ipv4", "ipv6", "mobile", "isp", "resident"]
+            text = "📥 *XHSImage 代理凭证*\n" + "─" * 28 + "\n\n"
+
+            has_proxies = False
+
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                for proxy_type in proxy_types:
+                    try:
+                        # 使用自定义格式获取代理信息
+                        resp = await client.get(
+                            f"https://geonix.com/personal/api/v1/{xhsimage_key}/proxy/download/{proxy_type}",
+                            params={"ext": "%ip%:%port_http%:%login%:%password%"}
+                        )
+
+                        if resp.status_code == 200 and resp.text.strip():
+                            proxies = resp.text.strip().split('\n')
+                            if proxies and proxies[0]:
+                                has_proxies = True
+                                text += f"🔹 *{proxy_type.upper()}* ({len(proxies)}个)\n"
+                                for proxy_line in proxies[:3]:  # 只显示前3个
+                                    parts = proxy_line.split(':')
+                                    if len(parts) == 4:
+                                        ip, port, login, password = parts
+                                        text += f"```\n{ip}:{port}\n用户: {login}\n密码: {password}\n```\n"
+
+                                if len(proxies) > 3:
+                                    text += f"  \\.\\.\\.还有 {len(proxies) - 3} 个\n"
+                                text += "\n"
+                    except Exception as e:
+                        logger.debug(f"获取 {proxy_type} 代理失败: {e}")
+                        continue
+
+            if not has_proxies:
+                text += "📭 暂无可用代理\n"
+            else:
+                text += "\n💡 *使用说明*\n"
+                text += "• HTTP代理格式: `http://用户:密码@IP:端口`\n"
+                text += "• SOCKS5代理格式: `socks5://用户:密码@IP:端口`\n"
+
+        except Exception as e:
+            logger.error(f"XHSImage download API failed: {e}")
+            text = f"❌ 获取代理凭证失败\n\n`{e}`"
+
+        keyboard = [
+            [InlineKeyboardButton("🔙 返回状态", callback_data="api_usage_xhsimage")],
+            [InlineKeyboardButton("🔙 返回菜单", callback_data="manage_api_usage")],
         ]
         await self._show_panel(query, text, InlineKeyboardMarkup(keyboard))
         return API_USAGE_PANEL
@@ -1765,6 +1943,8 @@ class AdminPanelHandler:
                 API_USAGE_PANEL: [
                     CallbackQueryHandler(self._show_tikhub_usage, pattern="^api_usage_tikhub$"),
                     CallbackQueryHandler(self._show_serp_usage, pattern="^api_usage_serp$"),
+                    CallbackQueryHandler(self._show_xhsimage_usage, pattern="^api_usage_xhsimage$"),
+                    CallbackQueryHandler(self._show_xhsimage_download, pattern="^api_usage_xhsimage_download$"),
                     CallbackQueryHandler(self._to_api_usage_panel, pattern="^manage_api_usage$"),
                     CallbackQueryHandler(self.show_main_panel, pattern="^back_to_main$"),
                 ],
