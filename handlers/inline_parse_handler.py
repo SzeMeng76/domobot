@@ -1455,7 +1455,13 @@ async def handle_lazy_parse_callback(update: Update, context: ContextTypes.DEFAU
             keyboard = InlineKeyboardMarkup(buttons)
 
             # 上传视频
-            video_path = download_result.media[0].path
+            # download_result.media 可能是单个对象或列表
+            media = download_result.media
+            if isinstance(media, list):
+                video_path = media[0].path
+            else:
+                video_path = media.path
+
             with open(video_path, 'rb') as video_file:
                 sent_message = await context.bot.send_video(
                     chat_id=query.message.chat_id,
