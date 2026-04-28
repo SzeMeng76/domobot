@@ -762,9 +762,11 @@ def patch_parsehub_yt_dlp():
                 aweme_id_match = re.search(r'modal_id=(\d+)', url)
                 if not aweme_id_match:
                     aweme_id_match = re.search(r'/video/(\d+)', url)
+                if not aweme_id_match:
+                    aweme_id_match = re.search(r'/note/(\d+)', url)
 
                 if not aweme_id_match:
-                    raise ParseError("无法从URL提取aweme_id")
+                    raise ParseError(f"无法从URL提取aweme_id: {url}")
 
                 aweme_id = aweme_id_match.group(1)
                 logger.info(f"🎬 [TikHub] Fetching Douyin video via TikHub: {aweme_id}")
