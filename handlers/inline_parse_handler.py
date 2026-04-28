@@ -1427,7 +1427,7 @@ async def handle_lazy_parse_callback(update: Update, context: ContextTypes.DEFAU
 
             # 下载
             await query.edit_message_text(text="📥 正在下载视频...")
-            download_result = await parsehub.download(parse_result)
+            download_result = await parsehub.download(url)
 
             if not download_result or not download_result.media:
                 await query.edit_message_text(text="❌ 下载失败")
