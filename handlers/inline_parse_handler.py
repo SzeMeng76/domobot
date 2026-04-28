@@ -1454,26 +1454,98 @@ async def handle_lazy_parse_callback(update: Update, context: ContextTypes.DEFAU
 
             keyboard = InlineKeyboardMarkup(buttons)
 
-            # 上传视频
+            # 上传视频到inline消息
             # download_result.media 可能是单个对象或列表
             media = download_result.media
             if isinstance(media, list):
                 video_path = media[0].path
+                media_obj = media[0]
             else:
                 video_path = media.path
+                media_obj = media
 
-            with open(video_path, 'rb') as video_file:
-                sent_message = await context.bot.send_video(
-                    chat_id=query.message.chat_id,
-                    video=video_file,
-                    caption=caption,
-                    parse_mode=ParseMode.MARKDOWN,
-                    reply_markup=keyboard,
-                    supports_streaming=True
+            # 获取inline_message_id
+            inline_message_id = query.inline_message_id
+            if not inline_message_id:
+                await query.edit_message_text(text="❌ 无法获取消息ID")
+                return
+
+            # 使用Pyrogram上传（支持大文件）
+            from commands.social_parser import _adapter as parse_adapter_instance
+            pyrogram_helper = getattr(parse_adapter_instance, 'pyrogram_helper', None)
+
+            sent_message = None
+            if pyrogram_helper and pyrogram_helper.is_started and pyrogram_helper.client:
+                from pyrogram.types import InputMediaVideo as PyrogramInputMediaVideo, InlineKeyboardMarkup as PyrogramInlineKeyboardMarkup, InlineKeyboardButton as PyrogramInlineKeyboardButton
+                from pyrogram.enums import ParseMode as PyrogramParseMode
+
+                # 转换按钮格式
+                pyrogram_buttons = []
+                for row in keyboard.inline_keyboard:
+                    pyrogram_row = []
+                    for button in row:
+                        if button.url:
+                            pyrogram_row.append(PyrogramInlineKeyboardButton(text=button.text, url=button.url))
+                        elif button.callback_data:
+                            pyrogram_row.append(PyrogramInlineKeyboardButton(text=button.text, callback_data=button.callback_data))
+                    if pyrogram_row:
+                        pyrogram_buttons.append(pyrogram_row)
+                pyrogram_reply_markup = PyrogramInlineKeyboardMarkup(pyrogram_buttons) if pyrogram_buttons else None
+
+                await pyrogram_helper.client.edit_inline_media(
+                    inline_message_id=inline_message_id,
+                    media=PyrogramInputMediaVideo(
+                        media=str(video_path),
+                        caption=caption,
+                        parse_mode=PyrogramParseMode.MARKDOWN,
+                        width=getattr(media_obj, 'width', 0) or 0,
+                        height=getattr(media_obj, 'height', 0) or 0,
+                        duration=getattr(media_obj, 'duration', 0) or 0,
+                        supports_streaming=True,
+                    ),
+                    reply_markup=pyrogram_reply_markup
                 )
+                logger.info(f"✅ [Lazy Parse] Pyrogram上传成功: {url[:50]}...")
+            else:
+                # Fallback: 使用临时频道
+                from telegram import InputMediaVideo
+                config_manager = ConfigManager()
+                temp_channel_id = config_manager.config.inline_parse_temp_channel
 
-            # 缓存 file_id
-            if cache_manager and sent_message.video:
+                if not temp_channel_id:
+                    await query.edit_message_text(text="❌ 配置错误：未设置临时存储频道且Pyrogram不可用")
+                    return
+
+                with open(video_path, 'rb') as video_file:
+                    sent_message = await context.bot.send_video(
+                        chat_id=temp_channel_id,
+                        video=video_file,
+                        width=getattr(media_obj, 'width', 0) or 0,
+                        height=getattr(media_obj, 'height', 0) or 0,
+                        duration=getattr(media_obj, 'duration', 0) or 0,
+                        supports_streaming=True,
+                        read_timeout=300,
+                        write_timeout=300,
+                        connect_timeout=30
+                    )
+
+                await context.bot.edit_message_media(
+                    inline_message_id=inline_message_id,
+                    media=InputMediaVideo(
+                        media=sent_message.video.file_id,
+                        caption=caption,
+                        parse_mode=ParseMode.MARKDOWN,
+                        width=getattr(media_obj, 'width', 0) or 0,
+                        height=getattr(media_obj, 'height', 0) or 0,
+                        duration=getattr(media_obj, 'duration', 0) or 0,
+                        supports_streaming=True,
+                    ),
+                    reply_markup=keyboard
+                )
+                logger.info(f"✅ [Lazy Parse] 临时频道上传成功: {url[:50]}...")
+
+            # 缓存 file_id (仅在使用临时频道时)
+            if cache_manager and sent_message and sent_message.video:
                 try:
                     await cache_manager.set(
                         url,
