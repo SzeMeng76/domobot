@@ -224,6 +224,12 @@ def setup_handlers(application: Application):
     application.add_handler(get_weather_ai_handler())
     logger.info("✅ Weather AI日报callback处理器已注册")
 
+    # 注册 Parse Lazy callback handler (TikTok/Douyin延迟加载)
+    from telegram.ext import CallbackQueryHandler as CQHandler
+    from handlers.inline_parse_handler import handle_lazy_parse_callback
+    application.add_handler(CQHandler(handle_lazy_parse_callback, pattern="^parse_lazy_"))
+    logger.info("✅ Parse Lazy callback处理器已注册")
+
     # 注册 Map Nearby callback handler
     from handlers.map_nearby_callback_handler import get_map_nearby_handler
     application.add_handler(get_map_nearby_handler())

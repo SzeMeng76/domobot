@@ -207,6 +207,44 @@ async def handle_inline_parse_query(
             )
         ]
 
+    # 检测是否是 TikTok/Douyin 链接（这些平台解析较慢）
+    is_slow_platform = any(domain in url.lower() for domain in ['douyin.com', 'tiktok.com', 'v.douyin.com'])
+
+    if is_slow_platform:
+        # TikTok/Douyin: 返回带按钮的结果，点击后才开始处理
+        logger.info(f"[Inline Parse] 检测到慢速平台，使用延迟加载: {url[:50]}...")
+
+        # 生成唯一ID并缓存URL
+        url_hash = get_url_hash(url)
+        if cache_manager:
+            try:
+                await cache_manager.set(
+                    f"parse_pending:{url_hash}",
+                    {"url": url, "query": query},
+                    ttl=300,  # 5分钟
+                    subdirectory="inline_parse"
+                )
+            except Exception as e:
+                logger.warning(f"[Inline Parse] 缓存URL失败: {e}")
+
+        # 返回带按钮的结果
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📥 点击下载", callback_data=f"parse_lazy_{url_hash}")]
+        ])
+
+        return [
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title="🎬 视频链接已识别",
+                description="点击按钮开始下载（TikTok/抖音解析较慢）",
+                thumbnail_url="https://img.icons8.com/color/96/000000/video.png",
+                input_message_content=InputTextMessageContent(
+                    message_text=f"🎬 视频链接已识别\n\n🔗 {url[:100]}...\n\n⏳ 点击下方按钮开始下载"
+                ),
+                reply_markup=keyboard
+            )
+        ]
+
     # 快速解析（只解析，不下载）
     try:
         from parsehub import ParseHub
@@ -226,8 +264,23 @@ async def handle_inline_parse_query(
                 )
             ]
 
-        # 解析（不下载）
-        parse_result = await parsehub.parse(url)
+        # 解析（不下载）- 设置4秒超时以避免 Telegram inline query 超时
+        try:
+            parse_result = await asyncio.wait_for(parsehub.parse(url), timeout=4.0)
+        except asyncio.TimeoutError:
+            logger.warning(f"[Inline Parse] 解析超时(>4s): {url[:50]}...")
+            return [
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title="⏳ 解析中，请稍候...",
+                    description="该链接解析较慢，请在私聊中使用 /parse 命令",
+                    thumbnail_url="https://img.icons8.com/color/96/000000/hourglass.png",
+                    input_message_content=InputTextMessageContent(
+                        message_text=f"⏳ 该链接解析较慢，请在私聊中使用以下命令：\n\n`/parse {url}`",
+                        parse_mode=ParseMode.MARKDOWN
+                    ),
+                )
+            ]
         if not parse_result:
             return [
                 InlineQueryResultArticle(
@@ -1311,3 +1364,146 @@ async def _handle_image_inline(
             inline_message_id=inline_message_id,
             text=f"**❌ 图片处理失败:**\n```\n{str(e)}\n```"
         )
+
+
+async def handle_lazy_parse_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """处理延迟加载的解析请求（TikTok/Douyin）"""
+    query = update.callback_query
+
+    try:
+        if not query.data or not query.data.startswith("parse_lazy_"):
+            return
+
+        # 提取 URL hash
+        url_hash = query.data.replace("parse_lazy_", "")
+
+        # 从缓存读取 URL
+        cache_manager = context.bot_data.get("cache_manager")
+        if not cache_manager:
+            await query.answer("❌ 缓存服务未初始化", show_alert=True)
+            return
+
+        cached_data = await cache_manager.get(
+            f"parse_pending:{url_hash}",
+            subdirectory="inline_parse"
+        )
+
+        if not cached_data:
+            await query.answer("❌ 链接已过期，请重新查询", show_alert=True)
+            return
+
+        url = cached_data.get("url")
+        if not url:
+            await query.answer("❌ 无效的链接", show_alert=True)
+            return
+
+        # 立即 answer 移除加载圈
+        await query.answer()
+
+        # 立即编辑消息显示"解析中..."状态
+        loading_text = "⏳ 正在解析视频，请稍候...\n\n这可能需要几秒钟"
+        try:
+            await query.edit_message_text(text=loading_text)
+        except Exception as e:
+            if "Message is not modified" not in str(e):
+                logger.warning(f"更新加载状态失败: {e}")
+
+        # 获取 parse_adapter
+        parse_adapter = context.bot_data.get("parse_adapter")
+        if not parse_adapter:
+            await query.edit_message_text(text="❌ 解析功能未初始化")
+            return
+
+        # 开始解析和下载
+        try:
+            from parsehub import ParseHub
+            parsehub = ParseHub()
+
+            # 解析
+            parse_result = await parsehub.parse(url)
+            if not parse_result:
+                await query.edit_message_text(text="❌ 解析失败，请检查链接是否正确")
+                return
+
+            # 下载
+            await query.edit_message_text(text="📥 正在下载视频...")
+            download_result = await parsehub.download(parse_result)
+
+            if not download_result or not download_result.media:
+                await query.edit_message_text(text="❌ 下载失败")
+                return
+
+            # 上传到 Telegram
+            await query.edit_message_text(text="📤 正在上传到 Telegram...")
+
+            from parsehub.types import VideoParseResult
+            from telegram import InputMediaVideo
+            from commands.social_parser import get_url_hash
+
+            title = (parse_result.title or "").strip() or "无标题"
+            caption = f"🎬 *{title[:100]}*"
+
+            # 构建按钮
+            display_url = getattr(parse_result, 'raw_url', url) or url
+            buttons = [[InlineKeyboardButton("🔗 原链接", url=display_url)]]
+
+            # 添加 AI 总结按钮（如果启用）
+            if parse_adapter.config and parse_adapter.config.enable_ai_summary:
+                url_hash_for_summary = get_url_hash(display_url)
+                buttons[0].append(InlineKeyboardButton("📝 AI总结", callback_data=f"summary_{url_hash_for_summary}"))
+
+            keyboard = InlineKeyboardMarkup(buttons)
+
+            # 上传视频
+            video_path = download_result.media[0].path
+            with open(video_path, 'rb') as video_file:
+                sent_message = await context.bot.send_video(
+                    chat_id=query.message.chat_id,
+                    video=video_file,
+                    caption=caption,
+                    parse_mode=ParseMode.MARKDOWN,
+                    reply_markup=keyboard,
+                    supports_streaming=True
+                )
+
+            # 缓存 file_id
+            if cache_manager and sent_message.video:
+                try:
+                    await cache_manager.set(
+                        url,
+                        {
+                            "file_id": sent_message.video.file_id,
+                            "file_type": "video",
+                            "title": title,
+                            "caption": caption
+                        },
+                        ttl=86400,  # 24小时
+                        subdirectory="inline_parse"
+                    )
+                    logger.info(f"[Inline Parse] file_id已缓存: {url[:50]}...")
+                except Exception as e:
+                    logger.warning(f"[Inline Parse] 缓存file_id失败: {e}")
+
+            # 删除原消息
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+
+            # 清理临时文件
+            try:
+                import shutil
+                shutil.rmtree(download_result.output_dir, ignore_errors=True)
+            except Exception:
+                pass
+
+        except Exception as e:
+            logger.error(f"延迟解析失败: {e}", exc_info=True)
+            await query.edit_message_text(text=f"❌ 处理失败: {str(e)[:100]}")
+
+    except Exception as e:
+        logger.error(f"处理延迟解析回调失败: {e}", exc_info=True)
+        try:
+            await query.answer("❌ 处理失败", show_alert=True)
+        except Exception:
+            pass
