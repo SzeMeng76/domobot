@@ -1872,24 +1872,28 @@ class AdminPanelHandler:
                     CallbackQueryHandler(self._to_social_parser_panel, pattern="^manage_social_parser$"),
                     CallbackQueryHandler(self._to_api_usage_panel, pattern="^manage_api_usage$"),
                     CallbackQueryHandler(self.close_panel, pattern="^close$"),
+                    CommandHandler("admin", self.show_main_panel),  # 允许重新启动admin
                 ],
                 USER_PANEL: [
                     CallbackQueryHandler(self._prompt_user_add, pattern="^user_add$"),
                     CallbackQueryHandler(self._prompt_user_remove, pattern="^user_remove$"),
                     CallbackQueryHandler(self._refresh_users, pattern="^refresh_users$"),
                     CallbackQueryHandler(self.show_main_panel, pattern="^back_to_main$"),
+                    CommandHandler("admin", self.show_main_panel),  # 允许重新启动admin
                 ],
                 GROUP_PANEL: [
                     CallbackQueryHandler(self._prompt_group_add, pattern="^group_add$"),
                     CallbackQueryHandler(self._prompt_group_remove, pattern="^group_remove$"),
                     CallbackQueryHandler(self._refresh_groups, pattern="^refresh_groups$"),
                     CallbackQueryHandler(self.show_main_panel, pattern="^back_to_main$"),
+                    CommandHandler("admin", self.show_main_panel),  # 允许重新启动admin
                 ],
                 ADMIN_PANEL: [
                     CallbackQueryHandler(self._prompt_admin_add, pattern="^admin_add$"),
                     CallbackQueryHandler(self._prompt_admin_remove, pattern="^admin_remove$"),
                     CallbackQueryHandler(self._refresh_admins, pattern="^refresh_admins$"),
                     CallbackQueryHandler(self.show_main_panel, pattern="^back_to_main$"),
+                    CommandHandler("admin", self.show_main_panel),  # 允许重新启动admin
                 ],
                 ANTISPAM_PANEL: [
                     CallbackQueryHandler(self._prompt_antispam_input_group, pattern="^antispam_input_group$"),
@@ -1903,6 +1907,7 @@ class AdminPanelHandler:
                     CallbackQueryHandler(self._handle_antispam_global_logs_all, pattern="^antispam_global_logs_all$"),
                     CallbackQueryHandler(self._to_antispam_panel, pattern="^manage_antispam$"),
                     CallbackQueryHandler(self.show_main_panel, pattern="^back_to_main$"),
+                    CommandHandler("admin", self.show_main_panel),  # 允许重新启动admin
                 ],
                 AWAITING_USER_ID_TO_ADD: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_add_user),
@@ -1946,6 +1951,7 @@ class AdminPanelHandler:
                     CallbackQueryHandler(self._handle_parser_disable, pattern="^parser_disable$"),
                     CallbackQueryHandler(self._to_social_parser_panel, pattern="^manage_social_parser$"),
                     CallbackQueryHandler(self.show_main_panel, pattern="^back_to_main$"),
+                    CommandHandler("admin", self.show_main_panel),  # 允许重新启动admin
                 ],
                 API_USAGE_PANEL: [
                     CallbackQueryHandler(self._show_tikhub_usage, pattern="^api_usage_tikhub$"),
@@ -1954,6 +1960,7 @@ class AdminPanelHandler:
                     CallbackQueryHandler(self._show_xhsimage_download, pattern="^api_usage_xhsimage_download$"),
                     CallbackQueryHandler(self._to_api_usage_panel, pattern="^manage_api_usage$"),
                     CallbackQueryHandler(self.show_main_panel, pattern="^back_to_main$"),
+                    CommandHandler("admin", self.show_main_panel),  # 允许重新启动admin
                 ],
                 AWAITING_SOCIAL_PARSER_GROUP_ID: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_parser_group_id),
