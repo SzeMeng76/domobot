@@ -1094,20 +1094,25 @@ async def show_app_details(
         # 调度自动删除详情消息
         from utils.message_manager import _schedule_deletion
         from utils.config_manager import get_config
+        import time
 
         config = get_config()
-        session_id = session.get("session_id")
+
+        # 使用新的 session_id，避免被新搜索取消
+        # 格式：app_details_{user_id}_{timestamp}
+        user_id = query.from_user.id if query.from_user else 0
+        detail_session_id = f"app_details_{user_id}_{int(time.time())}"
 
         # 记录调试信息
-        logger.info(f"准备调度删除: chat_id={query.message.chat_id}, message_id={query.message.message_id}, session_id={session_id}, delay={config.auto_delete_delay}")
+        logger.info(f"准备调度删除: chat_id={query.message.chat_id}, message_id={query.message.message_id}, session_id={detail_session_id}, delay={config.auto_delete_delay}")
 
-        # 无论 session_id 是否存在都调度删除
+        # 调度删除（使用新的 session_id）
         success = await _schedule_deletion(
             context,
             query.message.chat_id,
             query.message.message_id,
             delay=config.auto_delete_delay,
-            session_id=session_id
+            session_id=detail_session_id  # 使用新的 session_id
         )
 
         if not success:
