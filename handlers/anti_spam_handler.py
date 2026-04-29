@@ -230,35 +230,39 @@ class AntiSpamHandler:
                 message_type = 'text'
                 message_text = message.text
 
-                # 检查是否有引用文本（quote reply）
-                if message.reply_to_message and message.reply_to_message.text:
-                    # 如果引用了同群组的消息，将引用的文本也加入检测
-                    quoted_text = message.reply_to_message.text
+                # 检查是否有 quote（引用部分文本）
+                if message.quote and message.quote.text:
+                    quoted_text = message.quote.text
                     message_text = f"{message_text}\n[引用内容]: {quoted_text}"
-                    logger.debug(f"Detected quote reply, including quoted text in detection")
+                    logger.info(f"Detected quote in message, including quoted text: {quoted_text[:100]}...")
 
-                # 检查是否引用了外部消息（频道消息）
-                # 注意：Telegram Bot API 不提供外部消息的完整内容，需要使用 Pyrogram
-                elif self.pyrogram_helper and hasattr(message, 'reply_to_message') and message.reply_to_message:
-                    # 尝试通过 Pyrogram 获取外部消息内容
-                    try:
-                        # 检查是否是外部回复（forward_from_chat 表示来自频道）
-                        replied_msg = message.reply_to_message
-                        if replied_msg.forward_from_chat:
-                            # 这是一个转发自频道的消息
-                            channel_id = replied_msg.forward_from_chat.id
-                            forward_msg_id = replied_msg.forward_from_message_id
+                # 检查是否有 external_reply（引用外部消息）
+                elif message.external_reply:
+                    external_text = None
+                    if message.external_reply.origin:
+                        # 尝试获取外部消息的文本
+                        if hasattr(message.external_reply, 'origin') and hasattr(message.external_reply.origin, 'message_id'):
+                            # 有消息ID，可以尝试用 Pyrogram 获取
+                            if self.pyrogram_helper and hasattr(message.external_reply.origin, 'chat'):
+                                try:
+                                    chat_id = message.external_reply.origin.chat.id
+                                    msg_id = message.external_reply.origin.message_id
+                                    logger.info(f"Detected external reply from chat {chat_id}, message {msg_id}")
+                                    external_msg = await self.pyrogram_helper.get_message(chat_id, msg_id)
+                                    if external_msg and external_msg.get('text'):
+                                        external_text = external_msg['text']
+                                except Exception as e:
+                                    logger.warning(f"Failed to fetch external message: {e}")
 
-                            if forward_msg_id:
-                                logger.info(f"Detected external reply from channel {channel_id}, message {forward_msg_id}")
-                                external_msg = await self.pyrogram_helper.get_message(channel_id, forward_msg_id)
+                    if external_text:
+                        message_text = f"{message_text}\n[引用外部内容]: {external_text}"
+                        logger.info(f"Successfully fetched external message text for spam detection")
 
-                                if external_msg and external_msg.get('text'):
-                                    quoted_text = external_msg['text']
-                                    message_text = f"{message_text}\n[引用频道内容]: {quoted_text}"
-                                    logger.info(f"Successfully fetched external message text for spam detection")
-                    except Exception as e:
-                        logger.warning(f"Failed to fetch external message: {e}")
+                # 检查是否有普通 reply_to_message
+                elif message.reply_to_message and message.reply_to_message.text:
+                    quoted_text = message.reply_to_message.text
+                    message_text = f"{message_text}\n[回复内容]: {quoted_text}"
+                    logger.debug(f"Detected normal reply, including replied text")
 
                 detection_result, detection_time_ms = await self.detector.detect_text(
                     message_text, user_info
