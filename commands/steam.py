@@ -1541,18 +1541,30 @@ async def steam_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                     # 调度自动删除详情消息
                     from utils.message_manager import _schedule_deletion
                     from utils.config_manager import get_config
+                    import time
 
                     config = get_config()
-                    session_id = session.get("session_id")
-                    if session_id:
-                        # 使用配置的延迟时间
-                        await _schedule_deletion(
-                            context,
-                            query.message.chat_id,
-                            query.message.message_id,
-                            delay=config.auto_delete_delay,
-                            session_id=session_id
-                        )
+
+                    # 使用新的 session_id，避免被新搜索取消
+                    # 格式：steam_details_{user_id}_{timestamp}
+                    detail_session_id = f"steam_details_{user_id}_{int(time.time())}"
+
+                    # 记录调试信息
+                    logger.info(f"准备调度删除: chat_id={query.message.chat_id}, message_id={query.message.message_id}, session_id={detail_session_id}, delay={config.auto_delete_delay}")
+
+                    # 调度删除（使用新的 session_id）
+                    success = await _schedule_deletion(
+                        context,
+                        query.message.chat_id,
+                        query.message.message_id,
+                        delay=config.auto_delete_delay,
+                        session_id=detail_session_id  # 使用新的 session_id
+                    )
+
+                    if not success:
+                        logger.error(f"❌ 调度删除失败: chat_id={query.message.chat_id}, message_id={query.message.message_id}")
+                    else:
+                        logger.info(f"✅ 调度删除成功: chat_id={query.message.chat_id}, message_id={query.message.message_id}, delay={config.auto_delete_delay}秒")
 
                     # 清理用户会话
                     if user_id in user_search_sessions:
