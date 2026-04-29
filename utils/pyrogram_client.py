@@ -707,3 +707,56 @@ class PyrogramHelper:
         except Exception as e:
             logger.error(f"❌ Pyrogram上传音频失败: {e}")
             raise
+
+    async def get_message(self, chat_id: int, message_id: int) -> Optional[dict]:
+        """
+        获取指定消息的内容（用于检测引用的外部消息）
+
+        Args:
+            chat_id: 聊天ID（可以是频道ID）
+            message_id: 消息ID
+
+        Returns:
+            消息信息字典，包含:
+            - message_id: 消息ID
+            - text: 消息文本 (可能为 None)
+            - caption: 媒体说明文字 (可能为 None)
+            - from_user: 发送者信息 (可能为 None)
+            - chat: 聊天信息
+
+        Note:
+            用于获取用户引用回复的外部频道消息内容
+        """
+        if not self.is_started or not self.client:
+            logger.warning("Pyrogram client not started, cannot get message")
+            return None
+
+        try:
+            message = await self.client.get_messages(chat_id, message_id)
+
+            if not message:
+                logger.debug(f"Message {message_id} not found in chat {chat_id}")
+                return None
+
+            message_info = {
+                "message_id": message.id,
+                "text": message.text,
+                "caption": message.caption,
+                "from_user": {
+                    "id": message.from_user.id if message.from_user else None,
+                    "username": message.from_user.username if message.from_user else None,
+                    "first_name": message.from_user.first_name if message.from_user else None,
+                } if message.from_user else None,
+                "chat": {
+                    "id": message.chat.id if message.chat else None,
+                    "title": message.chat.title if message.chat else None,
+                    "username": message.chat.username if message.chat else None,
+                } if message.chat else None,
+            }
+
+            logger.debug(f"Successfully fetched message {message_id} from chat {chat_id}")
+            return message_info
+
+        except Exception as e:
+            logger.debug(f"Failed to get message {message_id} from chat {chat_id}: {e}")
+            return None
