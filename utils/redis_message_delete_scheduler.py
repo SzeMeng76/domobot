@@ -246,12 +246,20 @@ class RedisMessageDeleteScheduler:
 
         # 删除所有相关的消息任务
         for key in message_keys:
-            # 从任务表中删除
-            result1 = await self.redis.hdel("msg:delete:tasks", key)
-            # 从调度表中删除
-            result2 = await self.redis.zrem("msg:delete:schedule", key)
-            if result1 or result2:
-                cancelled_count += 1
+            # 检查任务是否仍属于此会话
+            task_json = await self.redis.hget("msg:delete:tasks", key)
+            if task_json:
+                task_data = json.loads(task_json)
+                # 只有当任务的 session_id 匹配时才删除
+                if task_data.get("session_id") == session_id:
+                    # 从任务表中删除
+                    result1 = await self.redis.hdel("msg:delete:tasks", key)
+                    # 从调度表中删除
+                    result2 = await self.redis.zrem("msg:delete:schedule", key)
+                    if result1 or result2:
+                        cancelled_count += 1
+                else:
+                    logger.debug(f"跳过取消任务 {key}，因为它已被重新调度到会话 {task_data.get('session_id')}")
 
         # 删除会话键
         await self.redis.delete(session_key)
