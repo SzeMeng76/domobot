@@ -91,6 +91,7 @@ class RedisCacheManager:
             "map": self.config.map_cache_duration,  # 30分钟，地图服务缓存
             "flights": self.config.flight_cache_duration,  # 1小时，航班服务缓存
             "hotels": self.config.hotel_cache_duration,  # 1小时，酒店服务缓存
+            "weather": self.config.weather_cache_duration,  # 30分钟，天气查询缓存
             "inline_parse": 86400 * 7,  # 7天，inline parse file_id缓存
             "social_parser": self.config.parser_cache_duration,  # 社交媒体解析缓存
             "reddit": self.config.reddit_cache_duration,  # Reddit缓存

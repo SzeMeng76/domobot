@@ -108,6 +108,7 @@ class BotConfig:
         self.flight_price_cache_duration = 7200  # 2小时，航班价格洞察缓存
         self.hotel_cache_duration = 3600  # 1小时，酒店搜索缓存
         self.hotel_details_cache_duration = 7200  # 2小时，酒店详情缓存
+        self.weather_cache_duration = 1800  # 30分钟，天气查询缓存
         self.music_cache_duration = 604800  # 7天，网易云音乐文件缓存
         self.netease_search_cache_duration = 3600  # 1小时，网易云搜索缓存
         self.netease_chart_cache_duration = 1800  # 30分钟，网易云榜单缓存

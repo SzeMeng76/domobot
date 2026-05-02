@@ -138,6 +138,55 @@ class CaiyunAdapter:
 
         return None
 
+    def get_minutely_precipitation(self, caiyun_data: Dict) -> Optional[Dict]:
+        """
+        提取分钟级降水数据（包含概率）
+
+        Args:
+            caiyun_data: 彩云天气返回的result数据
+
+        Returns:
+            分钟级降水数据字典，包含：
+            - description: 描述文本
+            - minutely: 分钟级数据列表 [{"time": "HH:MM", "precip": 0.0, "probability": 0.0}, ...]
+        """
+        if not caiyun_data:
+            return None
+
+        minutely_data = caiyun_data.get("minutely", {})
+        if not minutely_data:
+            return None
+
+        # 获取描述
+        description = minutely_data.get("description", "")
+
+        # 获取降水量和概率数据
+        precips = minutely_data.get("precipitation_2h", [])  # 未来2小时降水量
+        probs = minutely_data.get("probability", [])  # 降水概率
+
+        if not precips:
+            return None
+
+        # 构建分钟级数据列表
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        minutely_list = []
+
+        for i, precip in enumerate(precips):
+            time_point = now + timedelta(minutes=i)
+            probability = probs[i] if i < len(probs) else 0.0
+
+            minutely_list.append({
+                "time": time_point.strftime("%H:%M"),
+                "precip": float(precip),
+                "probability": float(probability)
+            })
+
+        return {
+            "description": description,
+            "minutely": minutely_list
+        }
+
     def get_air_quality(self, caiyun_data: Dict) -> Optional[Dict]:
         """
         提取空气质量数据

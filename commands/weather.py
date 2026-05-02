@@ -484,33 +484,55 @@ def format_hourly_weather(hourly_data: list[dict]) -> str:
     # 将每个小时的文本块用换行符连接起来
     return "\n".join(result_lines)
 
-def format_minutely_rainfall(rainfall_data: dict) -> str:
+def format_minutely_rainfall(rainfall_data: dict, caiyun_minutely: Optional[dict] = None) -> str:
     """
     将分钟级降水数据格式化为包含摘要和详细时间点的列表。
+    支持和风天气数据，可选彩云天气降水概率增强。
+
+    Args:
+        rainfall_data: 和风天气的分钟级降水数据
+        caiyun_minutely: 彩云天气的分钟级降水数据（可选，包含概率）
     """
     result = []
 
     # 1. 添加摘要和主分隔线
     summary = rainfall_data.get('summary', '暂无降水信息')
     result.append(f"📝 {summary}")
+
+    # 如果有彩云的描述，也加上
+    if caiyun_minutely and caiyun_minutely.get('description'):
+        result.append(f"💡 {caiyun_minutely['description']}")
+
     result.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-    # 2. 遍历每个时间点的数据并格式化
+    # 2. 构建降水概率映射（如果有彩云数据）
+    probability_map = {}
+    if caiyun_minutely and caiyun_minutely.get('minutely'):
+        for item in caiyun_minutely['minutely']:
+            time_key = item['time']
+            probability_map[time_key] = item['probability']
+
+    # 3. 遍历每个时间点的数据并格式化
     for minute in rainfall_data.get("minutely", []):
         try:
             time_str = datetime.datetime.fromisoformat(minute.get("fxTime").replace('Z', '+00:00')).strftime('%H:%M')
             precip = minute.get('precip', 'N/A')
-            
+
             precip_type_text = "雨" if minute.get("type") == "rain" else "雪"
             precip_type_icon = "🌧️" if minute.get("type") == "rain" else "❄️"
-            
+
             # 构建单个时间点的信息块
-            minute_info = (
-                f"\n⏰ {time_str}\n"
-                # ↓↓↓ 修正了这一行，为括号添加了转义符 \ ↓↓↓
-                f"💧 预计降水: {precip}mm ({precip_type_icon} {precip_type_text})\n"
-                "━━━━━━━━━━━━━━━━━━━━"
-            )
+            minute_info = f"\n⏰ {time_str}\n"
+            minute_info += f"💧 预计降水: {precip}mm ({precip_type_icon} {precip_type_text})"
+
+            # 如果有彩云的概率数据，添加概率信息
+            if time_str in probability_map:
+                prob = probability_map[time_str]
+                # 概率可能是 0-1 或 0-100，统一转换为百分比
+                prob_percent = prob if prob > 1 else prob * 100
+                minute_info += f"\n📊 降水概率: {prob_percent:.0f}%"
+
+            minute_info += "\n━━━━━━━━━━━━━━━━━━━━"
             result.append(minute_info)
 
         except Exception as e:
@@ -524,7 +546,7 @@ def format_indices_data(indices_data: dict) -> str:
     将生活指数数据格式化为详细的、按日期和类别分组的结构。
     """
     result = []
-    grouped_by_date = {}
+    grouped_by_date: dict = {}
 
     # 1. 首先按日期将所有指数分组
     for index in indices_data.get("daily", []):
@@ -558,6 +580,14 @@ def format_indices_data(indices_data: dict) -> str:
 
     return "\n".join(result)
 
+def encode_location_for_callback(location: str) -> str:
+    """将城市名编码用于 callback_data（空格替换为竖线）"""
+    return location.replace(" ", "|")
+
+def decode_location_from_callback(encoded_location: str) -> str:
+    """从 callback_data 解码城市名（竖线替换回空格）"""
+    return encoded_location.replace("|", " ")
+
 def format_air_quality(air_data: dict) -> str:
     aqi_data = air_data.get('now', {})
     aqi = aqi_data.get('aqi', 'N/A')
@@ -574,22 +604,23 @@ def format_air_quality(air_data: dict) -> str:
 
 def create_weather_main_keyboard(location: str) -> InlineKeyboardMarkup:
     """创建天气查询主菜单键盘"""
+    encoded_loc = encode_location_for_callback(location)
     keyboard = [
         [
-            InlineKeyboardButton("🌤️ 实时天气", callback_data=f"weather_now_{location}"),
-            InlineKeyboardButton("📅 3天预报", callback_data=f"weather_3d_{location}")
+            InlineKeyboardButton("🌤️ 实时天气", callback_data=f"weather_now_{encoded_loc}"),
+            InlineKeyboardButton("📅 3天预报", callback_data=f"weather_3d_{encoded_loc}")
         ],
         [
-            InlineKeyboardButton("📊 7天预报", callback_data=f"weather_7d_{location}"),
-            InlineKeyboardButton("📈 15天预报", callback_data=f"weather_15d_{location}")
+            InlineKeyboardButton("📊 7天预报", callback_data=f"weather_7d_{encoded_loc}"),
+            InlineKeyboardButton("📈 15天预报", callback_data=f"weather_15d_{encoded_loc}")
         ],
         [
-            InlineKeyboardButton("⏰ 24小时预报", callback_data=f"weather_24h_{location}"),
-            InlineKeyboardButton("🕐 72小时预报", callback_data=f"weather_72h_{location}")
+            InlineKeyboardButton("⏰ 24小时预报", callback_data=f"weather_24h_{encoded_loc}"),
+            InlineKeyboardButton("🕐 72小时预报", callback_data=f"weather_72h_{encoded_loc}")
         ],
         [
-            InlineKeyboardButton("🌧️ 分钟降水", callback_data=f"weather_rain_{location}"),
-            InlineKeyboardButton("📋 生活指数", callback_data=f"weather_indices_{location}")
+            InlineKeyboardButton("🌧️ 分钟降水", callback_data=f"weather_rain_{encoded_loc}"),
+            InlineKeyboardButton("📋 生活指数", callback_data=f"weather_indices_{encoded_loc}")
         ],
         [
             InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
@@ -597,7 +628,7 @@ def create_weather_main_keyboard(location: str) -> InlineKeyboardMarkup:
     ]
     return InlineKeyboardMarkup(keyboard)
 
-async def generate_ai_weather_report(location_name: str, realtime_data: dict, daily_data: dict, hourly_data: dict, indices_data: dict, air_data: dict = None, alerts_data: dict = None, caiyun_summary: str = None) -> Optional[str]:
+async def generate_ai_weather_report(location_name: str, realtime_data: dict, daily_data: dict, hourly_data: dict, indices_data: dict, air_data: Optional[dict] = None, alerts_data: Optional[dict] = None, caiyun_summary: Optional[str] = None) -> Optional[str]:
     """使用 AI 生成个性化天气日报"""
     if not OPENAI_AVAILABLE:
         logging.warning("OpenAI not available, cannot generate AI weather report")
@@ -840,8 +871,21 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await _schedule_deletion(context, update.effective_chat.id, message.message_id, config.auto_delete_delay)
         return
 
-    location = context.args[0]
-    param = context.args[1].lower() if len(context.args) > 1 else None
+    # 支持多词城市名：检查最后一个参数是否是查询类型
+    query_types = ['daily', 'hourly', 'rain', 'indices', 'alert', 'chart']
+    param = None
+    location_parts = context.args.copy()
+
+    # 如果最后一个参数是数字或查询类型，则作为参数处理
+    if len(context.args) > 1:
+        last_arg = context.args[-1].lower()
+        # 检查是否是查询类型或数字
+        if last_arg in query_types or last_arg.isdigit() or last_arg.endswith('h') or last_arg.endswith('d') or '-' in last_arg or last_arg.startswith('day'):
+            param = last_arg
+            location_parts = context.args[:-1]
+
+    # 合并城市名（支持空格）
+    location = " ".join(location_parts)
 
     safe_location = escape_markdown(location, version=2)
     message = await context.bot.send_message(chat_id=update.effective_chat.id, text=f"🔍 正在查询 *{safe_location}* 的天气\\.\\.\\.", parse_mode=ParseMode.MARKDOWN_V2)
@@ -856,7 +900,11 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     location_id = location_data['id']
-    location_name = f"{location_data['name']}, {location_data['adm1']}"
+    # 安全构建城市名（某些地区可能没有 adm1）
+    location_name = location_data.get('name', location)
+    adm1 = location_data.get('adm1')
+    if adm1:
+        location_name = f"{location_name}, {adm1}"
     safe_location_name = escape_markdown(location_name, version=2)
 
     result_text = ""
@@ -876,34 +924,35 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             result_text += format_air_quality(air_data)
         # 对于没有空气质量数据的地区，不显示任何信息（静默处理）
 
-        # 创建功能按钮
+        # 创建功能按钮（使用编码后的城市名）
+        encoded_loc = encode_location_for_callback(location)
         keyboard = [
             [
-                InlineKeyboardButton("🤖 AI日报", callback_data=f"weather_aireport_{location}"),
-                InlineKeyboardButton("📅 3天预报", callback_data=f"weather_3d_{location}")
+                InlineKeyboardButton("🤖 AI日报", callback_data=f"weather_aireport_{encoded_loc}"),
+                InlineKeyboardButton("📅 3天预报", callback_data=f"weather_3d_{encoded_loc}")
             ],
             [
-                InlineKeyboardButton("📊 7天预报", callback_data=f"weather_7d_{location}"),
-                InlineKeyboardButton("📈 15天预报", callback_data=f"weather_15d_{location}")
+                InlineKeyboardButton("📊 7天预报", callback_data=f"weather_7d_{encoded_loc}"),
+                InlineKeyboardButton("📈 15天预报", callback_data=f"weather_15d_{encoded_loc}")
             ],
             [
-                InlineKeyboardButton("⏰ 24小时预报", callback_data=f"weather_24h_{location}"),
-                InlineKeyboardButton("🕐 72小时预报", callback_data=f"weather_72h_{location}")
+                InlineKeyboardButton("⏰ 24小时预报", callback_data=f"weather_24h_{encoded_loc}"),
+                InlineKeyboardButton("🕐 72小时预报", callback_data=f"weather_72h_{encoded_loc}")
             ],
             [
-                InlineKeyboardButton("🌧️ 分钟降水", callback_data=f"weather_rain_{location}"),
-                InlineKeyboardButton("📋 生活指数", callback_data=f"weather_indices_{location}")
+                InlineKeyboardButton("🌧️ 分钟降水", callback_data=f"weather_rain_{encoded_loc}"),
+                InlineKeyboardButton("📋 生活指数", callback_data=f"weather_indices_{encoded_loc}")
             ],
             [
-                InlineKeyboardButton("📈 温度图表", callback_data=f"weather_chart_temp_{location}"),
-                InlineKeyboardButton("🌧️ 降水图表", callback_data=f"weather_chart_rain_{location}")
+                InlineKeyboardButton("📈 温度图表", callback_data=f"weather_chart_temp_{encoded_loc}"),
+                InlineKeyboardButton("🌧️ 降水图表", callback_data=f"weather_chart_rain_{encoded_loc}")
             ],
             [
-                InlineKeyboardButton("⚠️ 天气预警", callback_data=f"weather_alert_{location}"),
+                InlineKeyboardButton("⚠️ 天气预警", callback_data=f"weather_alert_{encoded_loc}"),
                 InlineKeyboardButton("🌀 台风追踪", callback_data="typhoon_list")
             ],
             [
-                InlineKeyboardButton("🔄 刷新", callback_data=f"weather_now_{location}"),
+                InlineKeyboardButton("🔄 刷新", callback_data=f"weather_now_{encoded_loc}"),
                 InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
             ]
         ]
@@ -922,9 +971,23 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif param == "降水":
         coords = f"{location_data['lon']},{location_data['lat']}"
         data = await _get_api_response("minutely/5m", {"location": coords})
+
+        # 尝试获取彩云的分钟级降水概率
+        caiyun_minutely = None
+        if caiyun_adapter:
+            try:
+                logging.info(f"[Caiyun Weather] 正在获取 {location_name} 的分钟级降水概率...")
+                caiyun_data = await caiyun_adapter.get_weather(coords)
+                if caiyun_data:
+                    caiyun_minutely = caiyun_adapter.get_minutely_precipitation(caiyun_data)
+                    if caiyun_minutely:
+                        logging.info(f"[Caiyun Weather] ✅ 成功获取分钟级降水概率")
+            except Exception as e:
+                logging.error(f"[Caiyun Weather] 获取分钟级降水失败: {e}")
+
         if data:
             result_text = f"🌍 *{safe_location_name}* 未来2小时分钟级降水预报：\n"
-            result_text += format_minutely_rainfall(data)
+            result_text += format_minutely_rainfall(data, caiyun_minutely)
         else:
             result_text = f"❌ 获取 *{safe_location_name}* 的分钟级降水失败。"
             
@@ -1116,10 +1179,13 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
         # 处理 weather_chart_temp_location 格式
         if len(parts) == 4:
             action = f"{parts[1]}_{parts[2]}"  # chart_temp 或 chart_rain
-            location = parts[3]
+            encoded_location = parts[3]
         else:
             action = parts[1]
-            location = parts[2]
+            encoded_location = parts[2]
+
+        # 解码城市名（支持多词城市名）
+        location = decode_location_from_callback(encoded_location)
 
         # 显示加载状态
         safe_location = escape_markdown(location, version=2)
@@ -1147,6 +1213,9 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
         location_name = f"{location_data['name']}, {location_data['adm1']}"
         safe_location_name = escape_markdown(location_name, version=2)
 
+        # 编码城市名用于 callback_data
+        encoded_loc = encode_location_for_callback(location)
+
         result_text = ""
         keyboard = []
 
@@ -1167,27 +1236,27 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
             # 创建功能按钮
             keyboard = [
                 [
-                    InlineKeyboardButton("🤖 AI日报", callback_data=f"weather_aireport_{location}"),
-                    InlineKeyboardButton("📅 3天预报", callback_data=f"weather_3d_{location}")
+                    InlineKeyboardButton("🤖 AI日报", callback_data=f"weather_aireport_{encoded_loc}"),
+                    InlineKeyboardButton("📅 3天预报", callback_data=f"weather_3d_{encoded_loc}")
                 ],
                 [
-                    InlineKeyboardButton("📊 7天预报", callback_data=f"weather_7d_{location}"),
-                    InlineKeyboardButton("📈 15天预报", callback_data=f"weather_15d_{location}")
+                    InlineKeyboardButton("📊 7天预报", callback_data=f"weather_7d_{encoded_loc}"),
+                    InlineKeyboardButton("📈 15天预报", callback_data=f"weather_15d_{encoded_loc}")
                 ],
                 [
-                    InlineKeyboardButton("⏰ 24小时预报", callback_data=f"weather_24h_{location}"),
-                    InlineKeyboardButton("🕐 72小时预报", callback_data=f"weather_72h_{location}")
+                    InlineKeyboardButton("⏰ 24小时预报", callback_data=f"weather_24h_{encoded_loc}"),
+                    InlineKeyboardButton("🕐 72小时预报", callback_data=f"weather_72h_{encoded_loc}")
                 ],
                 [
-                    InlineKeyboardButton("🌧️ 分钟降水", callback_data=f"weather_rain_{location}"),
-                    InlineKeyboardButton("📋 生活指数", callback_data=f"weather_indices_{location}")
+                    InlineKeyboardButton("🌧️ 分钟降水", callback_data=f"weather_rain_{encoded_loc}"),
+                    InlineKeyboardButton("📋 生活指数", callback_data=f"weather_indices_{encoded_loc}")
                 ],
                 [
-                    InlineKeyboardButton("⚠️ 天气预警", callback_data=f"weather_alert_{location}"),
+                    InlineKeyboardButton("⚠️ 天气预警", callback_data=f"weather_alert_{encoded_loc}"),
                     InlineKeyboardButton("🌀 台风追踪", callback_data="typhoon_list")
                 ],
                 [
-                    InlineKeyboardButton("🔄 刷新", callback_data=f"weather_now_{location}"),
+                    InlineKeyboardButton("🔄 刷新", callback_data=f"weather_now_{encoded_loc}"),
                     InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
                 ]
             ]
@@ -1206,7 +1275,7 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
 
             keyboard = [
                 [
-                    InlineKeyboardButton("🔙 返回实时", callback_data=f"weather_now_{location}"),
+                    InlineKeyboardButton("🔙 返回实时", callback_data=f"weather_now_{encoded_loc}"),
                     InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
                 ]
             ]
@@ -1225,7 +1294,7 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
 
             keyboard = [
                 [
-                    InlineKeyboardButton("🔙 返回实时", callback_data=f"weather_now_{location}"),
+                    InlineKeyboardButton("🔙 返回实时", callback_data=f"weather_now_{encoded_loc}"),
                     InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
                 ]
             ]
@@ -1235,15 +1304,28 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
             coords = f"{location_data['lon']},{location_data['lat']}"
             data = await _get_api_response("minutely/5m", {"location": coords})
 
+            # 尝试获取彩云的分钟级降水概率
+            caiyun_minutely = None
+            if caiyun_adapter:
+                try:
+                    logging.info(f"[Caiyun Weather] 正在获取 {location_name} 的分钟级降水概率...")
+                    caiyun_data = await caiyun_adapter.get_weather(coords)
+                    if caiyun_data:
+                        caiyun_minutely = caiyun_adapter.get_minutely_precipitation(caiyun_data)
+                        if caiyun_minutely:
+                            logging.info(f"[Caiyun Weather] ✅ 成功获取分钟级降水概率")
+                except Exception as e:
+                    logging.error(f"[Caiyun Weather] 获取分钟级降水失败: {e}")
+
             if data:
                 result_text = f"🌍 *{safe_location_name}* 未来2小时分钟级降水预报：\n"
-                result_text += format_minutely_rainfall(data)
+                result_text += format_minutely_rainfall(data, caiyun_minutely)
             else:
                 result_text = f"❌ 获取 *{safe_location_name}* 的分钟级降水失败。"
 
             keyboard = [
                 [
-                    InlineKeyboardButton("🔙 返回实时", callback_data=f"weather_now_{location}"),
+                    InlineKeyboardButton("🔙 返回实时", callback_data=f"weather_now_{encoded_loc}"),
                     InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
                 ]
             ]
@@ -1261,7 +1343,7 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
 
             keyboard = [
                 [
-                    InlineKeyboardButton("🔙 返回实时", callback_data=f"weather_now_{location}"),
+                    InlineKeyboardButton("🔙 返回实时", callback_data=f"weather_now_{encoded_loc}"),
                     InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
                 ]
             ]
@@ -1351,7 +1433,7 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
 
             keyboard = [
                 [
-                    InlineKeyboardButton("🔙 返回实时", callback_data=f"weather_now_{location}"),
+                    InlineKeyboardButton("🔙 返回实时", callback_data=f"weather_now_{encoded_loc}"),
                     InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
                 ]
             ]
@@ -1369,7 +1451,7 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
 
             keyboard = [
                 [
-                    InlineKeyboardButton("🔙 返回实时", callback_data=f"weather_now_{location}"),
+                    InlineKeyboardButton("🔙 返回实时", callback_data=f"weather_now_{encoded_loc}"),
                     InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
                 ]
             ]
@@ -1380,7 +1462,7 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
                 result_text = "❌ 图表功能未启用，请安装 matplotlib 库。"
                 keyboard = [
                     [
-                        InlineKeyboardButton("🔙 返回实时", callback_data=f"weather_now_{location}"),
+                        InlineKeyboardButton("🔙 返回实时", callback_data=f"weather_now_{encoded_loc}"),
                         InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
                     ]
                 ]
@@ -1444,7 +1526,7 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
 
                 keyboard = [
                     [
-                        InlineKeyboardButton("🔙 返回实时", callback_data=f"weather_now_{location}"),
+                        InlineKeyboardButton("🔙 返回实时", callback_data=f"weather_now_{encoded_loc}"),
                         InlineKeyboardButton("❌ 关闭", callback_data="weather_close")
                     ]
                 ]
@@ -1692,7 +1774,8 @@ async def weather_inline_execute(args: str, use_ai_report: bool = True) -> dict:
             "error": "服务未初始化"
         }
 
-    location = args.strip().split()[0]  # 只取第一个参数作为城市名
+    # 支持多词城市名：取所有参数作为城市名
+    location = args.strip()
 
     try:
         # 获取位置信息
@@ -1836,6 +1919,7 @@ async def weather_subscribe_command(update: Update, context: ContextTypes.DEFAUL
 *示例：*
 • `/tq_sub 北京` \\- 订阅北京每日天气
 • `/tq_sub 上海` \\- 订阅上海每日天气
+• `/tq_sub New York` \\- 订阅纽约每日天气
 
 *查看订阅：* `/tq_mysub`
 *取消订阅：* `/tq_unsub 城市名`
@@ -1850,7 +1934,8 @@ async def weather_subscribe_command(update: Update, context: ContextTypes.DEFAUL
         )
         return
 
-    location = context.args[0]
+    # 支持多词城市名：合并所有参数
+    location = " ".join(context.args).strip()
 
     # 验证城市是否存在
     location_data = await get_location_id(location)
@@ -1926,12 +2011,13 @@ async def weather_unsubscribe_command(update: Update, context: ContextTypes.DEFA
         await send_error(
             context,
             update.effective_chat.id,
-            "请提供城市名称，例如：`/tq_unsub 北京`",
+            "请提供城市名称，例如：`/tq_unsub 北京` 或 `/tq_unsub New York`",
             parse_mode=ParseMode.MARKDOWN_V2
         )
         return
 
-    location = context.args[0]
+    # 支持多词城市名：合并所有参数
+    location = " ".join(context.args).strip()
 
     # 使用 JSON 文件存储订阅（立即保存）
     import json
