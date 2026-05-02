@@ -11,6 +11,7 @@ import time
 from datetime import datetime
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 
 # 导入新的模块化组件
@@ -39,6 +40,7 @@ from utils.message_manager import (
 )
 from utils.permissions import Permission
 from utils.session_manager import app_search_sessions as user_search_sessions
+from utils.telegram_helpers import safe_delete_message, safe_edit_message_text
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -853,7 +855,7 @@ async def handle_app_search_callback(
             f"❌ User {user_id} has no active search session for callback: {data}"
         )
         error_message = "❌ 搜索会话已过期，请重新搜索。"
-        await query.message.delete()
+        await safe_delete_message(query.message)
         await send_error(
             context,
             query.message.chat_id,
@@ -881,16 +883,20 @@ async def handle_app_search_callback(
 
                 if app_id:
                     loading_message = f"🔍 正在获取 '{selected_app.get('trackName', '应用')}' 的详细价格信息"
-                    await query.edit_message_text(
-                        foldable_text_v2(loading_message), parse_mode="MarkdownV2"
+                    await safe_edit_message_text(
+                        query,
+                        foldable_text_v2(loading_message),
+                        parse_mode="MarkdownV2"
                     )
                     await show_app_details(
                         query, app_id, selected_app, context, session
                     )
                 else:
                     error_message = "❌ 无法获取应用ID，请重新选择。"
-                    await query.edit_message_text(
-                        foldable_text_v2(error_message), parse_mode="MarkdownV2"
+                    await safe_edit_message_text(
+                        query,
+                        foldable_text_v2(error_message),
+                        parse_mode="MarkdownV2"
                     )
 
         elif data.startswith("app_page_"):
@@ -913,7 +919,8 @@ async def handle_app_search_callback(
             result_text = format_search_results(search_data)
             keyboard = create_search_keyboard(search_data)
 
-            await query.edit_message_text(
+            await safe_edit_message_text(
+                query,
                 foldable_text_v2(result_text),
                 reply_markup=keyboard,
                 parse_mode="MarkdownV2",
@@ -938,7 +945,8 @@ async def handle_app_search_callback(
                 region_buttons[i : i + 2] for i in range(0, len(region_buttons), 2)
             ]
 
-            await query.edit_message_text(
+            await safe_edit_message_text(
+                query,
                 foldable_text_v2(change_region_text),
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode="MarkdownV2",
@@ -955,8 +963,10 @@ async def handle_app_search_callback(
             loading_message = (
                 f"🔍 正在在 {country_code.upper()} 区域重新搜索 '{final_query}'..."
             )
-            await query.edit_message_text(
-                foldable_text_v2(loading_message), parse_mode="MarkdownV2"
+            await safe_edit_message_text(
+                query,
+                foldable_text_v2(loading_message),
+                parse_mode="MarkdownV2"
             )
 
             # 使用新的搜索缓存加载函数
@@ -985,7 +995,8 @@ async def handle_app_search_callback(
             result_text = format_search_results(search_data_for_session)
             keyboard = create_search_keyboard(search_data_for_session)
 
-            await query.edit_message_text(
+            await safe_edit_message_text(
+                query,
                 foldable_text_v2(result_text),
                 reply_markup=keyboard,
                 parse_mode="MarkdownV2",
@@ -998,7 +1009,8 @@ async def handle_app_search_callback(
             result_text = format_search_results(search_data)
             keyboard = create_search_keyboard(search_data)
 
-            await query.edit_message_text(
+            await safe_edit_message_text(
+                query,
                 foldable_text_v2(result_text),
                 reply_markup=keyboard,
                 parse_mode="MarkdownV2",
@@ -1007,7 +1019,8 @@ async def handle_app_search_callback(
         elif data == "app_new_search":
             # 开始新搜索
             new_search_message = "🔍 *开始新的搜索*\n\n请使用 `/app 应用名称` 命令开始新的搜索。\n\n例如: `/app 微信`"
-            await query.edit_message_text(
+            await safe_edit_message_text(
+                query,
                 foldable_text_with_markdown_v2(new_search_message),
                 parse_mode="MarkdownV2",
             )
@@ -1018,7 +1031,7 @@ async def handle_app_search_callback(
         elif data == "app_close":
             # 关闭搜索
             close_message = "🔍 搜索已关闭。\n\n使用 `/app 应用名称` 开始新的搜索。"
-            await query.message.delete()
+            await safe_delete_message(query.message)
             await send_info(
                 context,
                 query.message.chat_id,
@@ -1030,16 +1043,35 @@ async def handle_app_search_callback(
             if user_id in user_search_sessions:
                 del user_search_sessions[user_id]
 
+    except BadRequest as e:
+        if "Message to edit not found" in str(e) or "Message to delete not found" in str(e):
+            logger.warning(f"消息已被删除或不存在，忽略错误: {e}")
+        else:
+            logger.error(f"Telegram API 错误: {e}")
+            try:
+                await send_error(
+                    context,
+                    query.message.chat_id,
+                    foldable_text_v2("❌ 操作失败，请重新搜索。"),
+                    parse_mode="MarkdownV2",
+                )
+            except BadRequest:
+                pass
     except Exception as e:
         logger.error(f"处理回调查询时发生错误: {e}")
         error_message = f"❌ 操作失败: {e!s}\n\n请重新搜索或联系管理员."
-        await query.message.delete()
-        await send_error(
-            context,
-            query.message.chat_id,
-            foldable_text_v2(error_message),
-            parse_mode="MarkdownV2",
-        )
+
+        await safe_delete_message(query.message)
+
+        try:
+            await send_error(
+                context,
+                query.message.chat_id,
+                foldable_text_v2(error_message),
+                parse_mode="MarkdownV2",
+            )
+        except Exception as send_error_exception:
+            logger.error(f"发送错误消息失败: {send_error_exception}")
 
 
 async def show_app_details(
@@ -1053,7 +1085,8 @@ async def show_app_details(
     # 从 context.bot_data 获取 AppStorePriceBot 实例
     bot = context.bot_data.get("app_store_price_bot")
     if not bot:
-        await query.edit_message_text(
+        await safe_edit_message_text(
+            query,
             foldable_text_v2("❌ 错误：App Store 查询服务未初始化。"),
             parse_mode="MarkdownV2",
         )
@@ -1087,8 +1120,11 @@ async def show_app_details(
 
         formatted_message = foldable_text_with_markdown_v2(full_raw_message)
 
-        await query.edit_message_text(
-            formatted_message, parse_mode="MarkdownV2", disable_web_page_preview=True
+        await safe_edit_message_text(
+            query,
+            formatted_message,
+            parse_mode="MarkdownV2",
+            disable_web_page_preview=True
         )
 
         # 调度自动删除详情消息
@@ -1123,8 +1159,10 @@ async def show_app_details(
     except Exception as e:
         logger.error(f"显示应用详情时发生错误: {e}", exc_info=True)
         error_message = f"❌ 获取应用详情失败: {e!s}"
-        await query.edit_message_text(
-            foldable_text_v2(error_message), parse_mode="MarkdownV2"
+        await safe_edit_message_text(
+            query,
+            foldable_text_v2(error_message),
+            parse_mode="MarkdownV2"
         )
 
 
