@@ -563,10 +563,13 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         # 生成唯一的会话ID
         session_id = f"app_search_{user_id}_{int(time.time())}"
 
-        # 如果用户已经有活跃的搜索会话，取消旧的删除任务
+        # 如果用户已经有活跃的搜索会话，取消旧的删除任务并删除旧消息
         if user_id in user_search_sessions:
             old_session = user_search_sessions[user_id]
             old_session_id = old_session.get("session_id")
+            old_message_id = old_session.get("message_id")
+            old_chat_id = old_session.get("chat_id")
+
             if old_session_id:
                 cancelled_count = await cancel_session_deletions(
                     old_session_id, context
@@ -574,6 +577,14 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                 logger.info(
                     f"🔄 用户 {user_id} 有现有搜索会话，已取消 {cancelled_count} 个旧的删除任务"
                 )
+
+            # 删除旧的搜索结果消息
+            if old_message_id and old_chat_id:
+                try:
+                    await context.bot.delete_message(chat_id=old_chat_id, message_id=old_message_id)
+                    logger.info(f"✅ 已删除用户 {user_id} 的旧搜索结果消息: {old_message_id}")
+                except Exception as e:
+                    logger.warning(f"删除旧搜索结果消息失败: {e}")
 
         # For search, we only use the first specified country.
         country_code = (
