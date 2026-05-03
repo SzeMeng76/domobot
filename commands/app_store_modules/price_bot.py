@@ -255,6 +255,25 @@ class AppStorePriceBot:
         # 从URL检测实际平台（可能与请求的平台不同）
         from commands.app_store_modules.api import detect_platform_from_url
         detected_platform = detect_platform_from_url(final_url)
+
+        # 如果URL没有mt参数，尝试从HTML内容检测平台
+        if not detected_platform:
+            # 提取元数据获取设备信息
+            metadata = AppStoreParser.extract_metadata(html_content)
+            supported_devices = metadata.get("supported_devices", [])
+
+            # 根据支持的设备判断平台
+            if supported_devices:
+                devices_str = ", ".join(supported_devices).lower()
+                # 只支持iPad，不支持iPhone
+                if "ipad" in devices_str and "iphone" not in devices_str:
+                    detected_platform = "ipad"
+                    logger.info(f"从HTML检测到平台: iPad专属应用")
+                # 只支持Mac
+                elif "mac" in devices_str and "iphone" not in devices_str and "ipad" not in devices_str:
+                    detected_platform = "mac"
+                    logger.info(f"从HTML检测到平台: Mac专属应用")
+
         if detected_platform and detected_platform != platform:
             logger.info(f"⚠️ 平台不匹配: 请求={platform}, 实际={detected_platform}")
             # 返回平台不匹配的状态，让上层重试正确的平台
