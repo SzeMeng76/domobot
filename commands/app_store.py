@@ -1485,6 +1485,13 @@ async def handle_inline_appstore_search(
                 )
             ]
 
+        # 检测是否为 App ID 查询（格式：id + 数字）
+        first_param = cleaned_keyword.split()[0].lower() if cleaned_keyword.split() else ""
+        if first_param.startswith("id") and first_param[2:].isdigit():
+            # App ID 直接查询 - 调用专门的 inline handler
+            from commands.app_store import handle_inline_appstore_id_query
+            return await handle_inline_appstore_id_query(cleaned_keyword, context)
+
         # 解析应用名称和国家参数
         try:
             all_params_list = parse_command_args(cleaned_keyword)
@@ -1626,6 +1633,156 @@ async def handle_inline_appstore_search(
                 description=str(e)[:100],
                 input_message_content=InputTextMessageContent(
                     message_text=f"❌ 搜索失败: {str(e)}"
+                ),
+            )
+        ]
+
+
+async def handle_inline_appstore_id_query(
+    keyword: str,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> list:
+    """
+    Inline 查询指定 App ID 的价格信息
+    当用户输入 "appstore id6446206067$" 时调用
+
+    Args:
+        keyword: 包含 app ID 的关键词，格式为 "id6446206067" 或 "id6446206067 hk tw jp"
+        context: Telegram context
+
+    Returns:
+        list: InlineQueryResult 列表（单个结果）
+    """
+    from telegram import InlineQueryResultArticle, InputTextMessageContent
+    from uuid import uuid4
+
+    try:
+        # 解析平台参数
+        platform, cleaned_keyword = extract_platform_flag(keyword)
+
+        # 解析参数
+        try:
+            all_params_list = parse_command_args(cleaned_keyword)
+        except ValueError:
+            all_params_list = cleaned_keyword.split()
+
+        if not all_params_list:
+            return [
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title="❌ 请输入 App ID",
+                    description="格式: id6446206067 或 id6446206067 hk tw jp",
+                    input_message_content=InputTextMessageContent(
+                        message_text="❌ 请输入 App ID\n\n格式: id6446206067 或 id6446206067 hk tw jp"
+                    ),
+                )
+            ]
+
+        # 提取 App ID
+        app_id_param = all_params_list[0]
+        if not (app_id_param.lower().startswith("id") and app_id_param[2:].isdigit()):
+            return [
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title="❌ 无效的 App ID",
+                    description=f"App ID 必须是数字，如 id363590051",
+                    input_message_content=InputTextMessageContent(
+                        message_text=f"❌ 无效的 App ID: `{app_id_param}`\n\nApp ID 必须是数字，如 `id363590051`"
+                    ),
+                )
+            ]
+
+        app_id = app_id_param[2:]  # 移除 'id' 前缀
+
+        # 解析国家参数
+        countries_parsed = []
+        if len(all_params_list) > 1:
+            countries_parsed = parse_countries(all_params_list[1:])
+
+        # 确定要查询的国家列表
+        countries_to_check = countries_parsed if countries_parsed else DEFAULT_COUNTRIES
+
+        # 获取平台信息
+        platform_info = PLATFORM_INFO.get(platform, {"icon": "📱", "name": "iOS"})
+
+        # 查询价格
+        logger.info(f"Inline App Store ID 查询: id{app_id}, platform: {platform}, countries: {countries_to_check}")
+        bot = context.bot_data.get("app_store_price_bot")
+        if not bot:
+            return [
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title="❌ 服务未初始化",
+                    description="App Store 查询服务未初始化",
+                    input_message_content=InputTextMessageContent(
+                        message_text="❌ App Store 查询服务未初始化，请联系管理员"
+                    ),
+                )
+            ]
+
+        price_results_raw = await bot.get_multi_country_prices(
+            app_name=f"App ID {app_id}",
+            app_id=int(app_id),
+            platform=platform,
+            countries=countries_to_check,
+        )
+
+        if not price_results_raw:
+            countries_str = ", ".join(countries_to_check)
+            return [
+                InlineQueryResultArticle(
+                    id=str(uuid4()),
+                    title=f"❌ 未找到 App id{app_id}",
+                    description=f"在 {countries_str} 均未找到",
+                    input_message_content=InputTextMessageContent(
+                        message_text=f"❌ 在以下区域均未找到 App ID {app_id}：{countries_str}\n\n请检查 ID 是否正确或尝试其他区域"
+                    ),
+                )
+            ]
+
+        # 获取真实应用名称（从第一个有效结果中）
+        real_app_name = None
+        for result in price_results_raw:
+            if result.get("app_name"):
+                real_app_name = result["app_name"]
+                break
+
+        app_name = real_app_name or f"App ID {app_id}"
+
+        # 格式化价格信息
+        target_plan = find_common_plan(price_results_raw)
+        formatted_result = format_app_details(
+            app_name=app_name,
+            app_id=app_id,
+            platform=platform,
+            price_results=price_results_raw,
+            target_plan=target_plan,
+        )
+
+        # 使用 MarkdownV2 格式
+        message_text = foldable_text_with_markdown_v2(formatted_result)
+
+        return [
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title=f"{platform_info['icon']} {app_name}",
+                description=f"id{app_id} - 点击查看多国价格",
+                input_message_content=InputTextMessageContent(
+                    message_text=message_text,
+                    parse_mode="MarkdownV2",
+                ),
+            )
+        ]
+
+    except Exception as e:
+        logger.error(f"Inline App Store ID 查询失败: {e}", exc_info=True)
+        return [
+            InlineQueryResultArticle(
+                id=str(uuid4()),
+                title="❌ 查询失败",
+                description=str(e)[:100],
+                input_message_content=InputTextMessageContent(
+                    message_text=f"❌ 查询失败: {str(e)}"
                 ),
             )
         ]
