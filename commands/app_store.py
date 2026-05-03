@@ -1837,10 +1837,11 @@ async def handle_inline_appstore_id_query(
             ]
 
         # 获取真实应用名称（从第一个有效结果中）
+        successful_results = [res for res in price_results_raw if res.get("status") == "ok"]
         real_app_name = None
-        for result in price_results_raw:
-            if result.get("app_name"):
-                real_app_name = result["app_name"]
+        for result in successful_results:
+            if result.get("real_app_name"):
+                real_app_name = result["real_app_name"]
                 break
 
         app_name = real_app_name or f"App ID {app_id}"
