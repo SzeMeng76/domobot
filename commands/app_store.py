@@ -783,6 +783,19 @@ async def handle_app_id_query(
                     countries=countries_to_check,
                 )
 
+                # 检查是否有平台不匹配的情况
+                platform_mismatch_results = [
+                    r for r in price_results_raw if r.get("status") == "platform_mismatch"
+                ]
+                if platform_mismatch_results:
+                    # 发现平台不匹配，获取检测到的平台
+                    detected = platform_mismatch_results[0].get("detected_platform")
+                    if detected and detected not in platforms_to_try:
+                        logger.info(f"🔄 检测到实际平台: {detected}，添加到尝试列表")
+                        platforms_to_try.append(detected)
+                    # 跳过当前平台，继续尝试
+                    continue
+
                 # 检查是否有有效结果
                 if price_results_raw and any(r.get("status") == "ok" for r in price_results_raw):
                     actual_platform = try_platform
@@ -1781,6 +1794,19 @@ async def handle_inline_appstore_id_query(
                     platform=try_platform,
                     countries=countries_to_check,
                 )
+
+                # 检查是否有平台不匹配的情况
+                platform_mismatch_results = [
+                    r for r in price_results_raw if r.get("status") == "platform_mismatch"
+                ]
+                if platform_mismatch_results:
+                    # 发现平台不匹配，获取检测到的平台
+                    detected = platform_mismatch_results[0].get("detected_platform")
+                    if detected and detected not in platforms_to_try:
+                        logger.info(f"🔄 检测到实际平台: {detected}，添加到尝试列表")
+                        platforms_to_try.append(detected)
+                    # 跳过当前平台，继续尝试
+                    continue
 
                 # 检查是否有有效结果
                 if price_results_raw and any(r.get("status") == "ok" for r in price_results_raw):

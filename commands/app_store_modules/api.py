@@ -6,7 +6,8 @@ App Store 网页搜索 API 封装
 
 import logging
 import re
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
+from urllib.parse import parse_qs, urlparse
 
 import httpx
 from bs4 import BeautifulSoup
@@ -16,20 +17,58 @@ from .constants import MINIMAL_HEADERS, WEB_SEARCH_LIMIT
 logger = logging.getLogger(__name__)
 
 
+def detect_platform_from_url(url: str) -> Optional[str]:
+    """
+    从App Store URL中检测实际平台
+
+    Args:
+        url: App Store URL (可能包含mt参数)
+
+    Returns:
+        平台标识 (iphone/mac/ipad) 或 None
+
+    URL参数说明:
+        - mt=8: iOS/iPhone
+        - mt=12: macOS
+        - mt=11: iPad (较少见，通常iPad也用mt=8)
+    """
+    try:
+        parsed = urlparse(str(url))
+        query_params = parse_qs(parsed.query)
+
+        # 检查mt参数
+        mt_value = query_params.get('mt', [None])[0]
+        if mt_value:
+            mt_map = {
+                '8': 'iphone',   # iOS/iPhone
+                '12': 'mac',     # macOS
+                '11': 'ipad',    # iPad (较少见)
+            }
+            detected = mt_map.get(mt_value)
+            if detected:
+                logger.info(f"从URL检测到平台: mt={mt_value} -> {detected}")
+                return detected
+
+        return None
+    except Exception as e:
+        logger.warning(f"URL平台检测失败: {e}")
+        return None
+
+
 class AppStoreWebAPI:
     """App Store 网页 API 客户端"""
 
     @staticmethod
-    async def fetch_app_page(app_id: int, country_code: str) -> Optional[str]:
+    async def fetch_app_page(app_id: int, country_code: str) -> Optional[Tuple[str, str]]:
         """
-        获取应用详情页面的 HTML 内容
+        获取应用详情页面的 HTML 内容和最终URL
 
         Args:
             app_id: App ID
             country_code: 国家代码
 
         Returns:
-            HTML 内容，失败返回 None
+            (HTML内容, 最终URL) 的元组，失败返回 None
         """
         url = f"https://apps.apple.com/{country_code.lower()}/app/id{app_id}"
 
@@ -48,7 +87,7 @@ class AppStoreWebAPI:
                 if response.history:
                     logger.info(f"经过 {len(response.history)} 次重定向，最终 URL: {response.url}")
 
-                return response.text
+                return (response.text, str(response.url))
 
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:

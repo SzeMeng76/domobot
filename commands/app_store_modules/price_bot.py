@@ -238,16 +238,33 @@ class AppStorePriceBot:
         country_name = country_info.get("name", country_code)
         flag_emoji = get_country_flag(country_code)
 
-        # 获取应用页面 HTML
-        html_content = await AppStoreWebAPI.fetch_app_page(app_id, country_code)
+        # 获取应用页面 HTML 和最终URL
+        fetch_result = await AppStoreWebAPI.fetch_app_page(app_id, country_code)
 
-        if not html_content:
+        if not fetch_result:
             return {
                 "country_code": country_code,
                 "country_name": country_name,
                 "flag_emoji": flag_emoji,
                 "status": "not_listed",
                 "error_message": "未上架",
+            }
+
+        html_content, final_url = fetch_result
+
+        # 从URL检测实际平台（可能与请求的平台不同）
+        from commands.app_store_modules.api import detect_platform_from_url
+        detected_platform = detect_platform_from_url(final_url)
+        if detected_platform and detected_platform != platform:
+            logger.info(f"⚠️ 平台不匹配: 请求={platform}, 实际={detected_platform}")
+            # 返回平台不匹配的状态，让上层重试正确的平台
+            return {
+                "country_code": country_code,
+                "country_name": country_name,
+                "flag_emoji": flag_emoji,
+                "status": "platform_mismatch",
+                "detected_platform": detected_platform,
+                "error_message": f"应用在{detected_platform}平台，非{platform}",
             }
 
         try:
