@@ -726,30 +726,33 @@ async def handle_app_id_query(
         # 确定要查询的国家
         countries_to_check = countries_parsed if countries_parsed else DEFAULT_COUNTRIES
 
-        # 生成缓存键（使用新的缓存键构建器）
-        detail_cache_key = CacheKeyBuilder.app_details(
-            int(app_id), countries_to_check, platform
-        )
-
-        # 尝试从缓存加载完整的格式化结果
-        cached_detail = await bot.cache_manager.load_cache(
-            detail_cache_key,
-            max_age_seconds=bot.redis_cache_duration,
-            subdirectory="app_store",
-        )
-
-        if cached_detail:
-            # 使用缓存的完整结果
-            logger.info(f"使用缓存的应用详情: App ID {app_id}")
-            formatted_message = cached_detail.get(
-                "formatted_message", "❌ 缓存数据格式错误"
+        # 如果用户明确指定了平台，尝试从缓存加载
+        detail_cache_key = None
+        if platform != DEFAULT_APP_STORE_PLATFORM or "-mac" in args_str_full.lower() or "-ipad" in args_str_full.lower():
+            # 用户明确指定了平台，可以使用缓存
+            detail_cache_key = CacheKeyBuilder.app_details(
+                int(app_id), countries_to_check, platform
             )
-            await message.edit_text(
-                formatted_message,
-                parse_mode="MarkdownV2",
-                disable_web_page_preview=True,
+
+            # 尝试从缓存加载完整的格式化结果
+            cached_detail = await bot.cache_manager.load_cache(
+                detail_cache_key,
+                max_age_seconds=bot.redis_cache_duration,
+                subdirectory="app_store",
             )
-            return
+
+            if cached_detail:
+                # 使用缓存的完整结果
+                logger.info(f"使用缓存的应用详情: App ID {app_id}")
+                formatted_message = cached_detail.get(
+                    "formatted_message", "❌ 缓存数据格式错误"
+                )
+                await message.edit_text(
+                    formatted_message,
+                    parse_mode="MarkdownV2",
+                    disable_web_page_preview=True,
+                )
+                return
 
         # 直接使用 App ID 作为应用名称，先开始获取价格信息
         app_name = f"App ID {app_id}"
@@ -760,13 +763,47 @@ async def handle_app_id_query(
             parse_mode="MarkdownV2",
         )
 
-        # 获取多国价格信息
-        price_results_raw = await bot.get_multi_country_prices(
-            app_name=app_name,
-            app_id=int(app_id),
-            platform=platform,
-            countries=countries_to_check,
-        )
+        # 如果用户没有指定平台（使用默认平台），尝试多个平台
+        platforms_to_try = [platform]
+        if platform == DEFAULT_APP_STORE_PLATFORM and "-mac" not in args_str_full.lower() and "-ipad" not in args_str_full.lower():
+            # 用户没有明确指定平台，尝试常见平台顺序：iOS -> macOS -> iPadOS
+            platforms_to_try = ["iphone", "mac", "ipad"]
+            logger.info(f"未指定平台，将依次尝试: {platforms_to_try}")
+
+        price_results_raw = None
+        actual_platform = platform
+
+        for try_platform in platforms_to_try:
+            logger.info(f"尝试平台: {try_platform}")
+            try:
+                price_results_raw = await bot.get_multi_country_prices(
+                    app_name=app_name,
+                    app_id=int(app_id),
+                    platform=try_platform,
+                    countries=countries_to_check,
+                )
+
+                # 检查是否有有效结果
+                if price_results_raw and any(r.get("status") == "ok" for r in price_results_raw):
+                    actual_platform = try_platform
+                    logger.info(f"✅ 在平台 {try_platform} 找到应用")
+                    break
+                else:
+                    logger.info(f"在平台 {try_platform} 未找到应用")
+                    price_results_raw = None
+            except Exception as e:
+                logger.warning(f"查询平台 {try_platform} 失败: {e}")
+                continue
+
+        if not price_results_raw:
+            # 所有平台都没找到
+            countries_str = ", ".join(countries_to_check)
+            platforms_tried = ", ".join(platforms_to_try)
+            error_message = f"❌ 在以下区域和平台均未找到 App ID {app_id}\n\n区域: {countries_str}\n平台: {platforms_tried}\n\n请检查 ID 是否正确或尝试其他区域"
+            await message.edit_text(
+                foldable_text_v2(error_message), parse_mode="MarkdownV2"
+            )
+            return
 
         # 格式化结果
         target_plan = find_common_plan(price_results_raw)
@@ -796,18 +833,23 @@ async def handle_app_id_query(
         full_raw_message = format_app_details(
             app_name=app_name,
             app_id=app_id,
-            platform=platform,
+            platform=actual_platform,
             price_results=price_results_raw,
             target_plan=target_plan,
         )
 
         formatted_message = foldable_text_with_markdown_v2(full_raw_message)
 
+        # 使用实际平台生成缓存键
+        detail_cache_key = CacheKeyBuilder.app_details(
+            int(app_id), countries_to_check, actual_platform
+        )
+
         # 保存格式化结果到缓存
         cache_data = {
             "app_id": app_id,
             "app_name": app_name,
-            "platform": platform,
+            "platform": actual_platform,
             "countries": countries_to_check,
             "formatted_message": formatted_message,
             "timestamp": time.time(),
@@ -1720,12 +1762,40 @@ async def handle_inline_appstore_id_query(
                 )
             ]
 
-        price_results_raw = await bot.get_multi_country_prices(
-            app_name=f"App ID {app_id}",
-            app_id=int(app_id),
-            platform=platform,
-            countries=countries_to_check,
-        )
+        # 如果用户没有指定平台（使用默认平台），尝试多个平台
+        platforms_to_try = [platform]
+        if platform == DEFAULT_APP_STORE_PLATFORM and "-mac" not in keyword.lower() and "-ipad" not in keyword.lower():
+            # 用户没有明确指定平台，尝试常见平台顺序：iOS -> macOS -> iPadOS
+            platforms_to_try = ["iphone", "mac", "ipad"]
+            logger.info(f"未指定平台，将依次尝试: {platforms_to_try}")
+
+        price_results_raw = None
+        actual_platform = platform
+
+        for try_platform in platforms_to_try:
+            logger.info(f"尝试平台: {try_platform}")
+            try:
+                price_results_raw = await bot.get_multi_country_prices(
+                    app_name=f"App ID {app_id}",
+                    app_id=int(app_id),
+                    platform=try_platform,
+                    countries=countries_to_check,
+                )
+
+                # 检查是否有有效结果
+                if price_results_raw and any(r.get("status") == "ok" for r in price_results_raw):
+                    actual_platform = try_platform
+                    logger.info(f"✅ 在平台 {try_platform} 找到应用")
+                    break
+                else:
+                    logger.info(f"在平台 {try_platform} 未找到应用")
+                    price_results_raw = None
+            except Exception as e:
+                logger.warning(f"查询平台 {try_platform} 失败: {e}")
+                continue
+
+        # 更新平台信息为实际找到的平台
+        platform_info = PLATFORM_INFO.get(actual_platform, {"icon": "📱", "name": "iOS"})
 
         if not price_results_raw:
             countries_str = ", ".join(countries_to_check)
@@ -1754,7 +1824,7 @@ async def handle_inline_appstore_id_query(
         formatted_result = format_app_details(
             app_name=app_name,
             app_id=app_id,
-            platform=platform,
+            platform=actual_platform,
             price_results=price_results_raw,
             target_plan=target_plan,
         )
