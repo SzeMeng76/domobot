@@ -240,7 +240,8 @@ async def get_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if chat_info.get('members_count'):
                 members = chat_info['members_count']
                 # 格式化大数字（添加千位分隔符）
-                members_formatted = f"{members:,}".replace(',', '\\,')
+                # 注意：不需要手动转义逗号，foldable_text_with_markdown_v2会自动处理
+                members_formatted = f"{members:,}"
                 reply_text += f"👥 *成员数*: {members_formatted}\n"
 
             # 显示认证状态
