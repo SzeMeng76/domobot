@@ -1556,10 +1556,14 @@ async def steam_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                         country_inputs = session["country_inputs"]
                         result = await steam_checker.search_multiple_countries(str(item_id), country_inputs)
 
-                    await query.edit_message_text(
-                        foldable_text_with_markdown_v2(result),
-                        parse_mode="MarkdownV2"
-                    )
+                    # 显示价格详情（捕获异常确保删除调度能执行）
+                    try:
+                        await query.edit_message_text(
+                            foldable_text_with_markdown_v2(result),
+                            parse_mode="MarkdownV2"
+                        )
+                    except Exception as edit_error:
+                        logger.error(f"编辑消息失败: {edit_error}", exc_info=True)
 
                     # 调度自动删除详情消息（独立的 try-except 确保不影响主流程）
                     try:
