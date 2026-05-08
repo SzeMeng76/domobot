@@ -17,7 +17,7 @@ from utils.command_factory import command_factory
 from utils.config_manager import config_manager
 from utils.country_data import SUPPORTED_COUNTRIES, get_country_flag
 from utils.formatter import foldable_text_v2, foldable_text_with_markdown_v2
-from utils.message_manager import delete_user_command, send_error, send_help, send_search_result, send_success, send_message_with_auto_delete, MessageType
+from utils.message_manager import delete_user_command, send_error, send_help, send_search_result, send_success, send_message_with_auto_delete, MessageType, cancel_session_deletions
 from utils.permissions import Permission
 from utils.rate_converter import RateConverter
 from utils.session_manager import steam_bundle_sessions as bundle_search_sessions
@@ -1087,6 +1087,29 @@ async def steam_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         import time
         session_id = f"steam_search_{user_id}_{int(time.time())}"
 
+        # 如果用户已经有活跃的搜索会话，取消旧的删除任务并删除旧消息
+        if user_id in user_search_sessions:
+            old_session = user_search_sessions[user_id]
+            old_session_id = old_session.get("session_id")
+            old_message_id = old_session.get("message_id")
+            old_chat_id = update.effective_chat.id
+
+            if old_session_id:
+                cancelled_count = await cancel_session_deletions(
+                    old_session_id, context
+                )
+                logger.info(
+                    f"🔄 用户 {user_id} 有现有搜索会话，已取消 {cancelled_count} 个旧的删除任务"
+                )
+
+            # 删除旧的搜索结果消息
+            if old_message_id and old_chat_id:
+                try:
+                    await context.bot.delete_message(chat_id=old_chat_id, message_id=old_message_id)
+                    logger.info(f"✅ 已删除用户 {user_id} 的旧搜索结果消息: {old_message_id}")
+                except Exception as e:
+                    logger.warning(f"删除旧搜索结果消息失败: {e}")
+
         # 存储用户搜索会话
         user_search_sessions[user_id] = {
             "query": query,
@@ -1538,33 +1561,36 @@ async def steam_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                         parse_mode="MarkdownV2"
                     )
 
-                    # 调度自动删除详情消息
-                    from utils.message_manager import _schedule_deletion
-                    from utils.config_manager import get_config
-                    import time
+                    # 调度自动删除详情消息（独立的 try-except 确保不影响主流程）
+                    try:
+                        from utils.message_manager import _schedule_deletion
+                        from utils.config_manager import get_config
+                        import time
 
-                    config = get_config()
+                        config = get_config()
 
-                    # 使用新的 session_id，避免被新搜索取消
-                    # 格式：steam_details_{user_id}_{timestamp}
-                    detail_session_id = f"steam_details_{user_id}_{int(time.time())}"
+                        # 使用新的 session_id，避免被新搜索取消
+                        # 格式：steam_details_{user_id}_{timestamp}
+                        detail_session_id = f"steam_details_{user_id}_{int(time.time())}"
 
-                    # 记录调试信息
-                    logger.info(f"准备调度删除: chat_id={query.message.chat_id}, message_id={query.message.message_id}, session_id={detail_session_id}, delay={config.auto_delete_delay}")
+                        # 记录调试信息
+                        logger.info(f"准备调度删除: chat_id={query.message.chat_id}, message_id={query.message.message_id}, session_id={detail_session_id}, delay={config.auto_delete_delay}")
 
-                    # 调度删除（使用新的 session_id）
-                    success = await _schedule_deletion(
-                        context,
-                        query.message.chat_id,
-                        query.message.message_id,
-                        delay=config.auto_delete_delay,
-                        session_id=detail_session_id  # 使用新的 session_id
-                    )
+                        # 调度删除（使用新的 session_id）
+                        success = await _schedule_deletion(
+                            context,
+                            query.message.chat_id,
+                            query.message.message_id,
+                            delay=config.auto_delete_delay,
+                            session_id=detail_session_id  # 使用新的 session_id
+                        )
 
-                    if not success:
-                        logger.error(f"❌ 调度删除失败: chat_id={query.message.chat_id}, message_id={query.message.message_id}")
-                    else:
-                        logger.info(f"✅ 调度删除成功: chat_id={query.message.chat_id}, message_id={query.message.message_id}, delay={config.auto_delete_delay}秒")
+                        if not success:
+                            logger.error(f"❌ 调度删除失败: chat_id={query.message.chat_id}, message_id={query.message.message_id}")
+                        else:
+                            logger.info(f"✅ 调度删除成功: chat_id={query.message.chat_id}, message_id={query.message.message_id}, delay={config.auto_delete_delay}秒")
+                    except Exception as schedule_error:
+                        logger.error(f"调度删除时发生异常: {schedule_error}", exc_info=True)
 
                     # 清理用户会话
                     if user_id in user_search_sessions:
