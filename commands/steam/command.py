@@ -643,6 +643,33 @@ async def steam_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                         parse_mode="MarkdownV2"
                     )
 
+                    # 调度自动删除详情消息
+                    try:
+                        from utils.message_manager import _schedule_deletion
+                        from utils.config_manager import get_config
+                        import time
+
+                        config = get_config()
+
+                        # 使用新的 session_id，避免被新搜索取消
+                        detail_session_id = f"steam_details_{user_id}_{int(time.time())}"
+
+                        # 调度删除
+                        success = await _schedule_deletion(
+                            context,
+                            query.message.chat_id,
+                            query.message.message_id,
+                            delay=config.auto_delete_delay,
+                            session_id=detail_session_id
+                        )
+
+                        if success:
+                            logger.info(f"✅ 调度删除Steam价格详情: chat_id={query.message.chat_id}, message_id={query.message.message_id}, delay={config.auto_delete_delay}秒")
+                        else:
+                            logger.error(f"❌ 调度删除失败: chat_id={query.message.chat_id}, message_id={query.message.message_id}")
+                    except Exception as schedule_error:
+                        logger.error(f"调度删除时发生异常: {schedule_error}", exc_info=True)
+
                     # 清理用户会话
                     if user_id in user_search_sessions:
                         del user_search_sessions[user_id]
