@@ -140,6 +140,20 @@ async def steam_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "results": page_results,
         }
 
+        # 如果用户已经有活跃的搜索会话，取消旧的删除任务并删除旧消息
+        if user_id in user_search_sessions:
+            old_session = user_search_sessions[user_id]
+            old_message_id = old_session.get("message_id")
+            old_chat_id = update.effective_chat.id
+
+            # 删除旧的搜索结果消息
+            if old_message_id:
+                try:
+                    await context.bot.delete_message(chat_id=old_chat_id, message_id=old_message_id)
+                    logger.info(f"✅ 已删除用户 {user_id} 的旧Steam搜索结果消息: {old_message_id}")
+                except Exception as e:
+                    logger.warning(f"删除旧Steam搜索结果消息失败: {e}")
+
         # 存储用户搜索会话
         user_search_sessions[user_id] = {
             "query": query,
@@ -424,6 +438,20 @@ async def steam_bundle_command(update: Update, context: ContextTypes.DEFAULT_TYP
         # 生成会话ID用于消息管理
         import time
         session_id = f"steam_bundle_{user_id}_{int(time.time())}"
+
+        # 如果用户已经有活跃的搜索会话，删除旧消息
+        if user_id in bundle_search_sessions:
+            old_session = bundle_search_sessions[user_id]
+            old_message_id = old_session.get("message_id")
+            old_chat_id = update.effective_chat.id
+
+            # 删除旧的搜索结果消息
+            if old_message_id:
+                try:
+                    await context.bot.delete_message(chat_id=old_chat_id, message_id=old_message_id)
+                    logger.info(f"✅ 已删除用户 {user_id} 的旧Steam Bundle搜索结果消息: {old_message_id}")
+                except Exception as e:
+                    logger.warning(f"删除旧Steam Bundle搜索结果消息失败: {e}")
 
         # 存储用户搜索会话
         bundle_search_sessions[user_id] = {
