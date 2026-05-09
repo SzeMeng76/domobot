@@ -63,6 +63,19 @@ class AntiSpamHandler:
                     risk_score += 25
                     risk_factors.append("无个人简介")
                     logger.debug(f"User {user.id} has no bio")
+                else:
+                    # 检查 bio 中的赌博/网赚关键词
+                    gambling_keywords = [
+                        '日入', '稳定收益', '公群担保', '安全保障', '红包奖励',
+                        '每单', '风口', '赌台', 'PG平台', '官方直推',
+                        '刷单', '网赚', '兼职', '副业', '躺赚',
+                        '月入', '周入', '保底', '包赚', '稳赚'
+                    ]
+                    matched_gambling = [kw for kw in gambling_keywords if kw in bio_text]
+                    if matched_gambling:
+                        risk_score += 50  # 简介包含赌博/网赚关键词，极高风险
+                        risk_factors.append(f"简介包含赌博/网赚关键词: {', '.join(matched_gambling[:3])}")  # 最多显示3个
+                        logger.info(f"User {user.id} has gambling keywords in bio: {matched_gambling}")
             except Exception as e:
                 logger.debug(f"Failed to get chat info for user {user.id}: {e}")
                 # 无法获取 bio 可能是隐私设置，不算高风险
