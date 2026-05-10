@@ -1485,9 +1485,19 @@ async def clean_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     return
                 
-                # 执行按时间清理
+                # 执行按时间清理（保护白名单和管理员）
                 await cursor.execute(
-                    "DELETE FROM users WHERE last_seen < DATE_SUB(NOW(), INTERVAL %s DAY)",
+                    """
+                    DELETE FROM users
+                    WHERE last_seen < DATE_SUB(NOW(), INTERVAL %s DAY)
+                    AND user_id NOT IN (
+                        SELECT user_id FROM user_whitelist
+                        UNION
+                        SELECT user_id FROM admin_permissions
+                        UNION
+                        SELECT user_id FROM super_admins
+                    )
+                    """,
                     (days_ago,)
                 )
                 affected_rows = cursor.rowcount or 0
@@ -1511,8 +1521,17 @@ async def clean_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     return
                 
-                # 执行全部清理
-                await cursor.execute("DELETE FROM users")
+                # 执行全部清理（保护白名单和管理员）
+                await cursor.execute("""
+                    DELETE FROM users
+                    WHERE user_id NOT IN (
+                        SELECT user_id FROM user_whitelist
+                        UNION
+                        SELECT user_id FROM admin_permissions
+                        UNION
+                        SELECT user_id FROM super_admins
+                    )
+                """)
                 affected_rows = cursor.rowcount or 0
                 
                 result_text = (
