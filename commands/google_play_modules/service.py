@@ -581,7 +581,7 @@ class GooglePlayService:
 
                 # 如果 Sensor Tower 没有数据,尝试从 google_play_scraper 获取
                 if not iap_range_raw:
-                    iap_range_raw = details.get("IAPRange")
+                    iap_range_raw = details.get("IAPRange") or details.get("inAppProductPrice")
 
                 iap_str = "无"
 
