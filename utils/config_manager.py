@@ -221,7 +221,6 @@ class BotConfig:
         self.downloader_proxy = None  # 下载代理
         self.bilibili_geo_proxy = None  # Bilibili地区限制代理（用于番剧等地区限制内容）
         self.parser_cache_duration = 86400  # 解析缓存时间（默认24小时）
-        self.douyin_api = None  # 抖音API地址
         self.tikhub_api_key = ""  # TikHub API密钥（用于YouTube直接下载）
         self.xhsimage_api_key = ""  # XHSImage API密钥（用于小红书图片代理）
 
@@ -258,6 +257,7 @@ class BotConfig:
         self.kuaishou_cookie = None
         self.youtube_cookie = None
         self.tieba_cookie = None  # 贴吧完整Cookie字符串（绕过安全验证）
+        self.douyin_cookie = None
 
         # Reddit API 配置
         self.reddit_client_id = ""
@@ -551,7 +551,6 @@ class ConfigManager:
         self.config.downloader_proxy = os.getenv("DOWNLOADER_PROXY", None)
         self.config.bilibili_geo_proxy = os.getenv("BILIBILI_GEO_PROXY", None)
         self.config.parser_cache_duration = get_int_env("PARSER_CACHE_DURATION", "86400")
-        self.config.douyin_api = os.getenv("DOUYIN_API", None)
         self.config.tikhub_api_key = os.getenv("TIKHUB_API_KEY", "")
         self.config.xhsimage_api_key = os.getenv("XHSIMAGE_API_KEY", "")
 
@@ -595,6 +594,10 @@ class ConfigManager:
         self.config.bilibili_cookie = os.getenv("BILIBILI_COOKIE", None)
         self.config.kuaishou_cookie = os.getenv("KUAISHOU_COOKIE", None)
         self.config.tieba_cookie = os.getenv("TIEBA_COOKIE", None)
+
+        self.config.douyin_cookie = os.getenv("DOUYIN_COOKIE", None)
+        if self.config.douyin_cookie:
+            logger.info(f"✅ Douyin cookie配置: {self.config.douyin_cookie[:50]}...")
 
         # YouTube Cookie: 保持Netscape文件路径字符串（不解析，直接传给yt-dlp）
         self.config.youtube_cookie = os.getenv("YOUTUBE_COOKIE", None)

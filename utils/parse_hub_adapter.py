@@ -61,10 +61,6 @@ class ParseHubAdapter:
 
         # 配置 ParseHub GlobalConfig
         if config:
-            if config.douyin_api:
-                GlobalConfig.douyin_api = config.douyin_api
-                logger.info(f"✅ 配置抖音API: {config.douyin_api}")
-
             # 配置伪装User-Agent（绕过反爬虫）
             GlobalConfig.ua = (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -237,6 +233,9 @@ class ParseHubAdapter:
                 elif platform_id == 'kuaishou' and self.config.kuaishou_cookie:
                     platform_cookie = self.config.kuaishou_cookie
                     logger.info(f"✅ 使用Kuaishou cookie")
+                elif platform_id == 'douyin' and self.config.douyin_cookie:
+                    platform_cookie = self.config.douyin_cookie
+                    logger.info(f"✅ 使用Douyin cookie: {platform_cookie[:50]}...")
                 elif platform_id == 'tieba' and self.config.tieba_cookie:
                     platform_cookie = self.config.tieba_cookie
                     logger.info(f"✅ 使用Tieba cookie (绕过安全验证): {platform_cookie[:50]}...")
