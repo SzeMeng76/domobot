@@ -236,6 +236,9 @@ class ParseHubAdapter:
                 elif platform_id == 'douyin' and self.config.douyin_cookie:
                     platform_cookie = self.config.douyin_cookie
                     logger.info(f"✅ 使用Douyin cookie: {platform_cookie[:50]}...")
+                elif platform_id == 'tiktok' and self.config.tiktok_cookie:
+                    platform_cookie = self.config.tiktok_cookie
+                    logger.info(f"✅ 使用TikTok cookie: {platform_cookie[:50]}...")
                 elif platform_id == 'tieba' and self.config.tieba_cookie:
                     platform_cookie = self.config.tieba_cookie
                     logger.info(f"✅ 使用Tieba cookie (绕过安全验证): {platform_cookie[:50]}...")
