@@ -66,7 +66,7 @@ yfinance==1.3.0  # 最新版本：支持valuation_measures、ETFQuery、dividend
 pandas==3.0.2  # Latest stable version as of Apr 2026
 
 # Social Media Parser (ParseHub) - 社交媒体解析功能
-parsehub~=2.0.20  # 社交媒体聚合解析器，支持20+平台 (2.0.20: CLI重构优化，核心解析无变更)
+parsehub~=2.0.22  # 社交媒体聚合解析器，支持20+平台 (2.0.22: XHS cookie支持，快手风控处理，抖音重试优化)
 cryptography>=48.0.0  # ParseHub依赖：用于小黑盒动态加密算法（RSA/AES/3DES）
 yt-dlp>=2026.3.17  # 升级到最新版本以支持YouTube最新反爬虫机制（n challenge）
 pytubefix>=10.6.1  # YouTube 下载库（官方已修复cipher.py, ref: pytubefix#579）

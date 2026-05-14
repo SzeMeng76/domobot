@@ -242,6 +242,9 @@ class ParseHubAdapter:
                 elif platform_id == 'tieba' and self.config.tieba_cookie:
                     platform_cookie = self.config.tieba_cookie
                     logger.info(f"✅ 使用Tieba cookie (绕过安全验证): {platform_cookie[:50]}...")
+                elif platform_id in ('xiaohongshu', 'xhs') and self.config.xhs_cookie:
+                    platform_cookie = self.config.xhs_cookie
+                    logger.info(f"✅ 使用XHS cookie: {platform_cookie[:50]}...")
                 elif platform_id == 'youtube' and self.config.youtube_cookie:
                     # YouTube cookie是文件路径，不能传给ParseConfig（会被解析成dict）
                     # 直接在parsehub_patch.py中通过环境变量 YOUTUBE_COOKIE 读取
