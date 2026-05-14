@@ -231,7 +231,17 @@ async def _auto_parse_single(url: str, user_id: int, group_id: int, message, con
             reply_markup = InlineKeyboardMarkup(buttons)
 
         reply_params = ReplyParameters(message_id=message.message_id)
-        sent_messages = await _send_media(context, group_id, result, caption, reply_params, reply_markup, parse_result=parse_result)
+
+        # 添加超时保护，避免上传卡死
+        try:
+            sent_messages = await asyncio.wait_for(
+                _send_media(context, group_id, result, caption, reply_params, reply_markup, parse_result=parse_result),
+                timeout=300  # 5分钟超时
+            )
+        except asyncio.TimeoutError:
+            logger.error(f"❌ 视频上传超时（5分钟），平台: {platform}")
+            await status_msg.edit_text("❌ 视频上传超时，请稍后重试")
+            return
 
         await status_msg.delete()
 

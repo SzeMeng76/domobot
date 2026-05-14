@@ -289,10 +289,22 @@ async def ensure_h264(file: str) -> str:
 
     proc = await asyncio.create_subprocess_exec(
         *cmd,
-        stdout=asyncio.subprocess.DEVNULL,
-        stderr=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
     )
-    await proc.wait()
+
+    # 添加超时保护（根据视频时长动态设置超时时间）
+    # 转码时间通常是视频时长的2-5倍，超长视频给更多时间
+    timeout = max(300, int(duration * 3))  # 最少5分钟，最多视频时长的3倍
+
+    try:
+        await asyncio.wait_for(proc.wait(), timeout=timeout)
+    except asyncio.TimeoutError:
+        logger.error(f"❌ FFmpeg转码超时（{timeout}秒），终止进程")
+        proc.kill()
+        await proc.wait()
+        logger.warning(f"转码超时，使用原文件")
+        return file
 
     if out.exists() and out.stat().st_size > 0:
         original_size = src.stat().st_size / (1024 * 1024)

@@ -569,7 +569,17 @@ async def _handle_single_parse(
 
         # 发送媒体（带按钮）
         reply_params = ReplyParameters(message_id=reply_to_message_id) if reply_to_message_id else None
-        sent_messages = await _send_media(context, chat_id, result, caption, reply_parameters=reply_params, reply_markup=reply_markup, parse_result=parse_result)
+
+        # 添加超时保护，避免上传卡死
+        try:
+            sent_messages = await asyncio.wait_for(
+                _send_media(context, chat_id, result, caption, reply_parameters=reply_params, reply_markup=reply_markup, parse_result=parse_result),
+                timeout=300  # 5分钟超时
+            )
+        except asyncio.TimeoutError:
+            logger.error(f"❌ 视频上传超时（5分钟），平台: {platform}")
+            await status_msg.edit_text("❌ 视频上传超时，请稍后重试")
+            return
 
         # 删除状态消息
         await status_msg.delete()

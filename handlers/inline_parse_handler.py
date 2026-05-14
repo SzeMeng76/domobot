@@ -1075,7 +1075,17 @@ async def _handle_video_inline(
         # 检查文件大小
         from utils.video_splitter import ensure_h264
 
-        video_path = Path(await ensure_h264(str(video_path)))
+        # 添加超时保护，避免转码卡死
+        try:
+            video_path = Path(await asyncio.wait_for(
+                ensure_h264(str(video_path)),
+                timeout=600  # 10分钟超时（inline模式给更多时间）
+            ))
+        except asyncio.TimeoutError:
+            logger.error(f"❌ 视频转码超时（10分钟）")
+            await _update_status("❌ 视频转码超时，请稍后重试")
+            return
+
         video_size_mb = video_path.stat().st_size / (1024 * 1024)
 
         if video_size_mb <= 2048:  # 2GB limit via Pyrogram MTProto
