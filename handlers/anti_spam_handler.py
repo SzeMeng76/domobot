@@ -4,12 +4,36 @@ AI反垃圾消息处理器
 """
 import logging
 import asyncio
+import time
 from datetime import datetime
 from telegram import Update, ChatMember
 from telegram.ext import ContextTypes
 from telegram.constants import ChatMemberStatus
 
 logger = logging.getLogger(__name__)
+
+# TTL缓存：追踪最近消息，用于删除触发 guest bot 的 @mention 消息
+# key: (chat_id, user_id) -> (message_id, timestamp)
+_recent_messages: dict = {}
+_RECENT_MSG_TTL = 30  # 秒
+
+
+def _track_message(chat_id: int, user_id: int, message_id: int):
+    """记录最近消息，供 guest bot 检测时关联删除触发消息"""
+    _recent_messages[(chat_id, user_id)] = (message_id, time.monotonic())
+    # 顺手清理过期条目，避免内存无限增长
+    now = time.monotonic()
+    expired = [k for k, v in _recent_messages.items() if now - v[1] > _RECENT_MSG_TTL]
+    for k in expired:
+        del _recent_messages[k]
+
+
+def _pop_recent_message(chat_id: int, user_id: int) -> int | None:
+    """取出并移除某用户最近的消息ID，超时则返回None"""
+    entry = _recent_messages.pop((chat_id, user_id), None)
+    if entry and time.monotonic() - entry[1] <= _RECENT_MSG_TTL:
+        return entry[0]
+    return None
 
 
 class AntiSpamHandler:
@@ -164,11 +188,83 @@ class AntiSpamHandler:
         except Exception as e:
             logger.error(f"Failed to handle new member: {e}")
 
+    async def _handle_guest_bot_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+        """
+        检测并处理 Guest Bot 消息（Telegram Bot API 10.0 新功能）。
+        Guest Bot：任何人 @mention 一个 bot，该 bot 无需加入群组即可自动回复广告。
+
+        Returns:
+            True 表示已处理（是 guest bot 消息），调用方应直接 return
+        """
+        message = update.message
+        if not message:
+            return False
+
+        group_id = update.effective_chat.id
+
+        # 检查群组是否启用反垃圾功能
+        if not await self.manager.is_group_enabled(group_id):
+            return False
+
+        # 方法1：guest_query_id 是 Bot API 10.0 的权威标识字段
+        # PTB 22.7 尚未解析此字段，通过 api_kwargs 读取原始数据
+        guest_query_id = message.api_kwargs.get("guest_query_id") if message.api_kwargs else None
+
+        if guest_query_id:
+            logger.info(f"Guest bot message detected in group {group_id} via guest_query_id, deleting")
+            try:
+                await message.delete()
+            except Exception as e:
+                logger.error(f"Failed to delete guest bot message: {e}")
+
+            # 尝试删除触发此 guest bot 的 @mention 消息
+            caller = message.api_kwargs.get("guest_bot_caller_user") or {}
+            caller_id = caller.get("id") if isinstance(caller, dict) else None
+            if caller_id:
+                trigger_msg_id = _pop_recent_message(group_id, caller_id)
+                if trigger_msg_id:
+                    try:
+                        await context.bot.delete_message(group_id, trigger_msg_id)
+                        logger.info(f"Deleted triggering @mention message {trigger_msg_id} from user {caller_id}")
+                    except Exception as e:
+                        logger.warning(f"Failed to delete triggering message: {e}")
+            return True
+
+        # 方法2：fallback — 发送者是 bot 但不是群成员（getChatMember 兜底）
+        sender = update.effective_user
+        if sender and sender.is_bot:
+            # 转发消息不处理（合法场景）
+            if message.forward_origin:
+                return False
+            try:
+                member = await context.bot.get_chat_member(group_id, sender.id)
+                if member.status in (ChatMemberStatus.LEFT, ChatMemberStatus.BANNED):
+                    logger.info(f"Non-member bot {sender.id} sent message in group {group_id}, deleting")
+                    try:
+                        await message.delete()
+                    except Exception as e:
+                        logger.error(f"Failed to delete non-member bot message: {e}")
+                    return True
+            except Exception:
+                # getChatMember 失败通常意味着 bot 不是成员，直接删除
+                logger.info(f"Bot {sender.id} not found as member of group {group_id}, deleting message")
+                try:
+                    await message.delete()
+                except Exception as e:
+                    logger.error(f"Failed to delete non-member bot message: {e}")
+                return True
+
+        return False
+
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """处理群组消息"""
         try:
             # 基本检查
             if not update.effective_chat or not update.effective_user:
+                # Guest bot 消息可能 effective_user 为 None（channel 身份发送）
+                # 仍需检测 guest_query_id
+                if update.effective_chat and update.message:
+                    await self._handle_guest_bot_message(update, context)
                 return
 
             group_id = update.effective_chat.id
@@ -177,6 +273,14 @@ class AntiSpamHandler:
             # 检查群组是否启用反垃圾功能
             if not await self.manager.is_group_enabled(group_id):
                 return
+
+            # Guest Bot 检测（优先于其他逻辑）
+            if await self._handle_guest_bot_message(update, context):
+                return
+
+            # 追踪普通用户消息，用于后续关联删除触发 guest bot 的 @mention
+            if update.message:
+                _track_message(group_id, user_id, update.message.message_id)
 
             # 跳过管理员消息
             if await self.is_admin(update, context):
