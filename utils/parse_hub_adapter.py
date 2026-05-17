@@ -919,6 +919,7 @@ class ParseHubAdapter:
         import asyncio
         import time
         from yt_dlp import YoutubeDL
+        from yt_dlp.networking.impersonate import ImpersonateTarget
         from parsehub.types import DownloadResult, VideoFile
 
         start_time = time.time()
@@ -930,6 +931,7 @@ class ParseHubAdapter:
             "no_warnings": True,
             "format": "best[height<=1080][ext=mp4]/best[height<=1080]/best",
             "outtmpl": str(output_dir / "video.%(ext)s"),
+            "impersonate": ImpersonateTarget("chrome"),
         }
         if proxy:
             params["proxy"] = proxy
