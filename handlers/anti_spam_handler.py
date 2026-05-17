@@ -93,7 +93,10 @@ class AntiSpamHandler:
                         '日入', '稳定收益', '公群担保', '安全保障', '红包奖励',
                         '每单', '风口', '赌台', 'PG平台', '官方直推',
                         '刷单', '网赚', '兼职', '副业', '躺赚',
-                        '月入', '周入', '保底', '包赚', '稳赚'
+                        '月入', '周入', '保底', '包赚', '稳赚',
+                        '找人合作', '靠谱项目', '大量招募', '诚招', '招募',
+                        '看简介', '点简介', '私聊', '加我', '合作项目',
+                        '长期合作', '高薪', '日结', '周结', '轻松赚',
                     ]
                     matched_gambling = [kw for kw in gambling_keywords if kw in bio_text]
                     if matched_gambling:
@@ -126,9 +129,9 @@ class AntiSpamHandler:
                 risk_factors.append(f"昵称包含货币关键词: {', '.join(matched_keywords)}")
                 logger.info(f"User {user.id} has currency keywords in display name: {matched_keywords}")
 
-            # 5. 检查是否为 Premium 用户（Premium 用户风险较低）
+            # 5. 检查是否为 Premium 用户（Premium 用户风险略低，但广告商也常购买）
             if user.is_premium:
-                risk_score = max(0, risk_score - 25)  # 降低风险
+                risk_score = max(0, risk_score - 10)  # 降低风险
                 logger.debug(f"User {user.id} is Premium - reduced risk")
 
             # 6. 检查 DC ID（如果 Pyrogram 可用）
