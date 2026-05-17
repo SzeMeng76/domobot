@@ -932,8 +932,6 @@ class ParseHubAdapter:
             "format": "best[height<=1080][ext=mp4]/best[height<=1080]/best",
             "outtmpl": str(output_dir / "video.%(ext)s"),
             "impersonate": ImpersonateTarget(),
-            "external_downloader": "ffmpeg",
-            "external_downloader_args": {"ffmpeg_i": ["-headers", "Origin: https://www.dailymotion.com"]},
         }
         if proxy:
             params["proxy"] = proxy
