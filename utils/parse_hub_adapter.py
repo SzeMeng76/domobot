@@ -199,6 +199,8 @@ class ParseHubAdapter:
             # 选择解析器
             parser = self.parsehub._select_parser(url)
             if not parser:
+                if 'dailymotion.com' in url:
+                    return await self._parse_dailymotion(url, proxy)
                 logger.error(f"不支持的平台: {url}")
                 return None, None, None, 0, "不支持的平台"
 
@@ -894,6 +896,10 @@ class ParseHubAdapter:
             # 3. 验证URL是否被支持
             parser = self.parsehub._select_parser(url)
             if not parser:
+                # Dailymotion 由 yt-dlp 直接处理，不经过 ParseHub
+                if 'dailymotion.com' in url:
+                    logger.info(f"Dailymotion URL，使用 yt-dlp 直接处理: {url[:60]}")
+                    return url
                 logger.error(f"不支持的平台: {url}")
                 return None
 
@@ -903,6 +909,74 @@ class ParseHubAdapter:
         except Exception as e:
             logger.error(f"提取URL失败: {text}, 错误: {e}", exc_info=True)
             return None
+
+    async def _parse_dailymotion(
+        self,
+        url: str,
+        proxy: Optional[str] = None
+    ) -> Tuple[Optional[Any], Optional[Any], str, float, Optional[str]]:
+        """使用 yt-dlp 直接解析并下载 Dailymotion 视频"""
+        import asyncio
+        import time
+        from yt_dlp import YoutubeDL
+        from parsehub.types import DownloadResult, VideoFile
+
+        start_time = time.time()
+        output_dir = self.temp_dir / f"dailymotion_{hashlib.md5(url.encode()).hexdigest()[:8]}"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        params = {
+            "quiet": True,
+            "no_warnings": True,
+            "format": "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best[height<=1080]/best",
+            "outtmpl": str(output_dir / "video.%(ext)s"),
+            "merge_output_format": "mp4",
+        }
+        if proxy:
+            params["proxy"] = proxy
+
+        try:
+            def _download():
+                with YoutubeDL(params) as ydl:  # type: ignore[arg-type]
+                    info = ydl.extract_info(url, download=True)
+                    return info
+
+            info = await asyncio.wait_for(asyncio.to_thread(_download), timeout=60 * 30)
+
+            if not info:
+                return None, None, "dailymotion", 0, "yt-dlp 返回空结果"
+
+            # 找到下载的文件
+            video_files = list(output_dir.glob("*.mp4")) or list(output_dir.glob("*.*"))
+            if not video_files:
+                return None, None, "dailymotion", 0, "下载完成但找不到文件"
+
+            video_path = video_files[0]
+            video_file = VideoFile(
+                path=video_path,
+                width=info.get("width") or 0,
+                height=info.get("height") or 0,
+                duration=int(info.get("duration") or 0),
+            )
+            download_result = DownloadResult(media=video_file, output_dir=output_dir)
+
+            # 构造一个轻量 parse_result 供 format_result 使用
+            from parsehub.types import VideoParseResult
+            parse_result = VideoParseResult(
+                title=info.get("title") or "",
+                content=info.get("description") or "",
+            )
+            parse_result.raw_url = url  # type: ignore[assignment]
+
+            parse_time = (time.time() - start_time) * 1000
+            logger.info(f"✅ Dailymotion 解析完成: {(info.get('title') or '')[:60]} ({parse_time:.0f}ms)")
+            return download_result, parse_result, "dailymotion", parse_time, None
+
+        except asyncio.TimeoutError:
+            return None, None, "dailymotion", 0, "下载超时（>30分钟）"
+        except Exception as e:
+            logger.error(f"Dailymotion 解析失败: {e}", exc_info=True)
+            return None, None, "dailymotion", 0, str(e)
 
     def _get_cache_key(self, url: str) -> str:
         """生成缓存键"""

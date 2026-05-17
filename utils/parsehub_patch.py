@@ -98,6 +98,12 @@ def patch_parsehub_yt_dlp():
                     "Origin": "https://www.kuaishou.com"
                 })
                 logger.info(f"🌐 [Patch] Added Kuaishou headers (Referer/Origin)")
+            elif "dailymotion.com" in url_lower:
+                http_headers.update({
+                    "Referer": "https://www.dailymotion.com/",
+                    "Origin": "https://www.dailymotion.com"
+                })
+                logger.info(f"🌐 [Patch] Added Dailymotion headers (Referer/Origin)")
             elif "facebook.com" in url_lower or "fb.watch" in url_lower:
                 http_headers.update({
                     "Referer": "https://www.facebook.com/",
