@@ -932,7 +932,6 @@ class ParseHubAdapter:
             "format": "best[height<=1080][ext=mp4]/best[height<=1080]/best",
             "outtmpl": str(output_dir / "video.%(ext)s"),
             "impersonate": ImpersonateTarget(),
-            "external_downloader": "ffmpeg",
         }
         if proxy:
             params["proxy"] = proxy
@@ -940,7 +939,22 @@ class ParseHubAdapter:
         try:
             def _download():
                 with YoutubeDL(params) as ydl:  # type: ignore[arg-type]
-                    info = ydl.extract_info(url, download=True)
+                    # Step 1: extract info only to get fresh manifest_url
+                    info = ydl.extract_info(url, download=False)
+                    if not info:
+                        return None
+
+                    # Step 2: replace url with manifest_url so hls downloader
+                    # re-fetches a fresh signed URL instead of using the cached one
+                    requested = info.get("requested_downloads", [])
+                    if requested and requested[0].get("manifest_url"):
+                        info["url"] = requested[0]["manifest_url"]
+                        for fmt in info.get("formats", []):
+                            if fmt.get("manifest_url"):
+                                fmt["url"] = fmt["manifest_url"]
+
+                    # Step 3: download with fresh URLs
+                    ydl.process_info(info)
                     return info
 
             info = await asyncio.wait_for(asyncio.to_thread(_download), timeout=60 * 30)
