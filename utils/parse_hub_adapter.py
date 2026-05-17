@@ -928,9 +928,8 @@ class ParseHubAdapter:
         params = {
             "quiet": True,
             "no_warnings": True,
-            "format": "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best[height<=1080]/best",
+            "format": "best[height<=1080][ext=mp4]/best[height<=1080]/best",
             "outtmpl": str(output_dir / "video.%(ext)s"),
-            "merge_output_format": "mp4",
         }
         if proxy:
             params["proxy"] = proxy
@@ -947,7 +946,8 @@ class ParseHubAdapter:
                 return None, None, "dailymotion", 0, "yt-dlp 返回空结果"
 
             # 找到下载的文件
-            video_files = list(output_dir.glob("*.mp4")) or list(output_dir.glob("*.*"))
+            video_files = (list(output_dir.glob("*.mp4")) or list(output_dir.glob("*.mkv"))
+                           or list(output_dir.glob("*.ts")) or list(output_dir.glob("*.*")))
             if not video_files:
                 return None, None, "dailymotion", 0, "下载完成但找不到文件"
 
