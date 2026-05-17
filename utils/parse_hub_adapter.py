@@ -932,6 +932,7 @@ class ParseHubAdapter:
             "format": "best[height<=1080][ext=mp4]/best[height<=1080]/best",
             "outtmpl": str(output_dir / "video.%(ext)s"),
             "impersonate": ImpersonateTarget(),
+            "external_downloader": "ffmpeg",
         }
         if proxy:
             params["proxy"] = proxy
