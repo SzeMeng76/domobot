@@ -926,35 +926,22 @@ class ParseHubAdapter:
         output_dir = self.temp_dir / f"dailymotion_{hashlib.md5(url.encode()).hexdigest()[:8]}"
         output_dir.mkdir(parents=True, exist_ok=True)
 
+        # Dailymotion CDN blocks some datacenter IPs (e.g. HK); always route through WARP
+        dm_proxy = proxy or (self.config.downloader_proxy if self.config else None) or os.getenv("WARP_PROXY", "socks5://warp:1080")
+
         params = {
             "quiet": True,
             "no_warnings": True,
             "format": "best[height<=1080][ext=mp4]/best[height<=1080]/best",
             "outtmpl": str(output_dir / "video.%(ext)s"),
             "impersonate": ImpersonateTarget(),
+            "proxy": dm_proxy,
         }
-        if proxy:
-            params["proxy"] = proxy
 
         try:
             def _download():
                 with YoutubeDL(params) as ydl:  # type: ignore[arg-type]
-                    # Step 1: extract info only to get fresh manifest_url
-                    info = ydl.extract_info(url, download=False)
-                    if not info:
-                        return None
-
-                    # Step 2: replace url with manifest_url so hls downloader
-                    # re-fetches a fresh signed URL instead of using the cached one
-                    requested = info.get("requested_downloads", [])
-                    if requested and requested[0].get("manifest_url"):
-                        info["url"] = requested[0]["manifest_url"]
-                        for fmt in info.get("formats", []):
-                            if fmt.get("manifest_url"):
-                                fmt["url"] = fmt["manifest_url"]
-
-                    # Step 3: download with fresh URLs
-                    ydl.process_info(info)
+                    info = ydl.extract_info(url, download=True)
                     return info
 
             info = await asyncio.wait_for(asyncio.to_thread(_download), timeout=60 * 30)
