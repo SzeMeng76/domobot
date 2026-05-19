@@ -117,6 +117,62 @@ async def auto_parse_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await delete_user_command(context, group_id, message.message_id)
 
 
+async def _fallback_to_image_host(context, chat_id, download_result, caption, reply_params, reply_markup, status_msg, error_reason):
+    """
+    Telegram 上传失败时的图床兜底：把视频/媒体上传到图床，发送链接消息。
+    返回发送的消息列表，全部失败返回 None。
+    """
+    try:
+        # 找出要上传的视频路径
+        video_path = None
+        if download_result and hasattr(download_result, 'processed_list'):
+            for item in download_result.processed_list:
+                if hasattr(item, 'path'):
+                    p = str(item.path)
+                    if p.lower().endswith(('.mp4', '.mov', '.mkv', '.webm')):
+                        video_path = p
+                        break
+
+        if not video_path:
+            logger.warning("⚠️ 图床兜底：未找到可上传的视频文件")
+            await status_msg.edit_text(f"**❌ 自动解析失败:**\n```\n{error_reason}\n```", parse_mode="Markdown")
+            return None
+
+        from pathlib import Path
+        image_host_url = await _adapter.upload_to_image_host(Path(video_path))
+        if not image_host_url:
+            logger.error("❌ 图床上传也失败")
+            await status_msg.edit_text(f"**❌ 自动解析失败:**\n```\n{error_reason}\n```", parse_mode="Markdown")
+            return None
+
+        fallback_caption = (
+            f"{caption}\n\n"
+            f"⚠️ Telegram 上传失败，已改用图床\n"
+            f"🔗 [点击查看视频]({image_host_url})"
+        )
+        msg = await context.bot.send_message(
+            chat_id=chat_id,
+            text=fallback_caption,
+            parse_mode="Markdown",
+            reply_parameters=reply_params,
+            reply_markup=reply_markup,
+            disable_web_page_preview=False,
+        )
+        try:
+            await status_msg.delete()
+        except Exception:
+            pass
+        logger.info(f"✅ 图床兜底成功: {image_host_url}")
+        return [msg]
+    except Exception as fb_err:
+        logger.error(f"❌ 图床兜底逻辑异常: {fb_err}", exc_info=True)
+        try:
+            await status_msg.edit_text(f"**❌ 自动解析失败:**\n```\n{error_reason}\n```", parse_mode="Markdown")
+        except Exception:
+            pass
+        return None
+
+
 async def _auto_parse_single(url: str, user_id: int, group_id: int, message, context: ContextTypes.DEFAULT_TYPE) -> None:
     """自动解析单条 URL 并发送结果"""
     status_msg = await message.reply_text("🔄 检测到链接，自动解析中...")
@@ -242,6 +298,14 @@ async def _auto_parse_single(url: str, user_id: int, group_id: int, message, con
             logger.error(f"❌ 视频上传超时（5分钟），平台: {platform}")
             await status_msg.edit_text("❌ 视频上传超时，请稍后重试")
             return
+        except Exception as send_err:
+            # Telegram 上传失败（FloodWait / PeerFlood 等）→ 尝试图床兜底
+            logger.warning(f"⚠️ Telegram 上传失败，尝试图床兜底: {send_err}")
+            sent_messages = await _fallback_to_image_host(
+                context, group_id, result, caption, reply_params, reply_markup, status_msg, str(send_err)
+            )
+            if not sent_messages:
+                return
 
         await status_msg.delete()
 
