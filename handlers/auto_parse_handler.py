@@ -288,6 +288,36 @@ async def _auto_parse_single(url: str, user_id: int, group_id: int, message, con
 
         reply_params = ReplyParameters(message_id=message.message_id)
 
+        # ⚡ 先查 file_id 缓存：命中则直接复用，跳过上传
+        from utils.file_id_cache import get_cached_media, send_from_cache, save_cached_media
+        cache_manager = getattr(_adapter, "cache_manager", None)
+        cache_url = formatted.get('url') or url
+        cached_media = await get_cached_media(cache_manager, cache_url)
+        if cached_media:
+            try:
+                sent_messages = await send_from_cache(
+                    context, group_id, cached_media, caption,
+                    reply_parameters=reply_params, reply_markup=reply_markup,
+                    parse_mode="MarkdownV2",
+                )
+                await status_msg.delete()
+                config = get_config()
+                for msg in sent_messages:
+                    msg_id = getattr(msg, 'message_id', None)
+                    if msg_id:
+                        await _schedule_deletion(context, group_id, msg_id, config.auto_delete_delay)
+                logger.info(f"✅ 群组 {group_id} 自动解析（缓存命中）: {platform}")
+                return
+            except Exception as cache_err:
+                logger.warning(f"⚠️ file_id 缓存发送失败，降级为正常流程: {cache_err}")
+                # 缓存的 file_id 可能失效，删掉重新走正常流程
+                try:
+                    from utils.file_id_cache import _url_hash, CACHE_SUBDIR
+                    if cache_manager:
+                        await cache_manager.clear_cache(key=_url_hash(cache_url), subdirectory=CACHE_SUBDIR)
+                except Exception:
+                    pass
+
         # 添加超时保护，避免上传卡死
         try:
             sent_messages = await asyncio.wait_for(
@@ -306,6 +336,9 @@ async def _auto_parse_single(url: str, user_id: int, group_id: int, message, con
             )
             if not sent_messages:
                 return
+        else:
+            # 上传成功 → 保存 file_id 缓存，下次复用
+            await save_cached_media(cache_manager, cache_url, sent_messages)
 
         await status_msg.delete()
 

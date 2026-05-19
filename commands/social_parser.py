@@ -570,6 +570,34 @@ async def _handle_single_parse(
         # 发送媒体（带按钮）
         reply_params = ReplyParameters(message_id=reply_to_message_id) if reply_to_message_id else None
 
+        # ⚡ 先查 file_id 缓存
+        from utils.file_id_cache import get_cached_media, send_from_cache, save_cached_media, _url_hash, CACHE_SUBDIR
+        cache_manager = getattr(_adapter, "cache_manager", None)
+        cached_media = await get_cached_media(cache_manager, display_url)
+        if cached_media:
+            try:
+                sent_messages = await send_from_cache(
+                    context, chat_id, cached_media, caption,
+                    reply_parameters=reply_params, reply_markup=reply_markup,
+                    parse_mode="MarkdownV2",
+                )
+                await status_msg.delete()
+                config = get_config()
+                if sent_messages:
+                    for msg in sent_messages:
+                        msg_id = getattr(msg, 'message_id', None)
+                        if msg_id:
+                            await _schedule_deletion(context, chat_id, msg_id, config.auto_delete_delay)
+                logger.info(f"✅ /parse 缓存命中: {display_url[:50]}...")
+                return
+            except Exception as cache_err:
+                logger.warning(f"⚠️ file_id 缓存发送失败，降级为正常流程: {cache_err}")
+                try:
+                    if cache_manager:
+                        await cache_manager.clear_cache(key=_url_hash(display_url), subdirectory=CACHE_SUBDIR)
+                except Exception:
+                    pass
+
         # 添加超时保护，避免上传卡死
         try:
             sent_messages = await asyncio.wait_for(
@@ -580,6 +608,10 @@ async def _handle_single_parse(
             logger.error(f"❌ 视频上传超时（5分钟），平台: {platform}")
             await status_msg.edit_text("❌ 视频上传超时，请稍后重试")
             return
+        else:
+            # 上传成功 → 保存 file_id 缓存
+            if sent_messages:
+                await save_cached_media(cache_manager, display_url, sent_messages)
 
         # 删除状态消息
         await status_msg.delete()
