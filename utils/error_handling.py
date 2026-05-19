@@ -17,12 +17,13 @@ from utils.message_manager import delete_user_command, send_error
 logger = logging.getLogger(__name__)
 
 
-def with_telegram_retry(max_retries: int = 5):
+def with_telegram_retry(max_retries: int = 5, max_wait: int = 60):
     """
     Telegram API 重试装饰器，专门处理 RetryAfter 异常
 
     Args:
         max_retries: 最大重试次数（默认5次）
+        max_wait: 单次 RetryAfter 最大等待秒数，超过直接抛异常给上层 fallback（默认60s）
     """
     def decorator(func):
         @wraps(func)
@@ -35,6 +36,13 @@ def with_telegram_retry(max_retries: int = 5):
                     return await func(*args, **kwargs)
                 except RetryAfter as e:
                     last_exception = e
+                    # 如果限速时间超过阈值，直接放弃，让上层走 fallback（如图床）
+                    if e.retry_after > max_wait:
+                        logger.error(
+                            f"Telegram RetryAfter in {func.__name__}: wait {e.retry_after}s "
+                            f"exceeds max_wait={max_wait}s, giving up to let caller fallback"
+                        )
+                        raise
                     if attempt < max_retries:
                         wait_time = e.retry_after + 1  # 额外等待1秒
                         logger.warning(

@@ -904,8 +904,41 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
                 connect_timeout=30
             )
 
-    msg = await _send_video_fallback()
-    return [msg]
+    try:
+        msg = await _send_video_fallback()
+        return [msg]
+    except Exception as e:
+        logger.warning(f"⚠️ python-telegram-bot 上传也失败，降级到图床: {e}")
+
+        # 最后兜底：上传到图床
+        image_host_url = await _adapter.upload_to_image_host(video_path)
+        if image_host_url:
+            size_text = f"{video_size_mb:.1f}".replace(".", "\\.")
+            fallback_caption = (
+                f"{caption}\n\n⚠️ 视频上传到 Telegram 失败 \\({size_text}MB\\)\n"
+                f"📤 已上传到图床\n🔗 [点击查看视频]({image_host_url})"
+            )
+            msg = await context.bot.send_message(
+                chat_id=chat_id,
+                text=fallback_caption,
+                parse_mode="MarkdownV2",
+                reply_parameters=reply_parameters,
+                reply_markup=reply_markup,
+                disable_web_page_preview=False
+            )
+            logger.info(f"✅ 图床兜底成功: {image_host_url}")
+            return [msg]
+
+        # 图床也失败，发送纯文本提示
+        logger.error(f"❌ 所有上传方案均失败: {e}")
+        fail_msg = await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"{caption}\n\n❌ 视频上传失败，请稍后重试",
+            parse_mode="MarkdownV2",
+            reply_parameters=reply_parameters,
+            reply_markup=reply_markup
+        )
+        return [fail_msg]
 
 
 async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_parameters: ReplyParameters = None, reply_markup=None, parse_result=None):
