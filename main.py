@@ -101,6 +101,7 @@ from commands import (
     memes,
     movie,
     music,
+    kugou,
     netflix,
     ytmusic,
     news,
@@ -205,6 +206,10 @@ def setup_handlers(application: Application):
     # 注册网易云音乐自动识别处理器
     from handlers.auto_music_handler import setup_auto_music_handler
     setup_auto_music_handler(application)
+
+    # 注册酷狗音乐自动识别处理器
+    from handlers.auto_kugou_handler import setup_auto_kugou_handler
+    setup_auto_kugou_handler(application)
 
     # 注册AI总结callback handler
     from handlers.ai_summary_callback_handler import get_ai_summary_handler, set_adapter
@@ -628,6 +633,11 @@ async def setup_application(application: Application, config) -> None:
     music.set_dependencies(cache_manager, httpx_client, pyrogram_helper)
     from handlers import auto_music_handler
     auto_music_handler.set_dependencies(cache_manager, httpx_client, pyrogram_helper)
+
+    # 注入酷狗音乐依赖
+    kugou.set_dependencies(cache_manager, httpx_client, pyrogram_helper)
+    from handlers import auto_kugou_handler
+    auto_kugou_handler.set_dependencies(cache_manager, httpx_client, pyrogram_helper)
 
     # 注入 YouTube Music 依赖
     ytmusic.set_dependencies(cache_manager, httpx_client, pyrogram_helper)

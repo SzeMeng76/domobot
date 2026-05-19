@@ -47,6 +47,7 @@ CACHE_SERVICES = {
     'hotels': '酒店服务缓存',
     'social_parser': '社交解析缓存',
     'music': '网易云音乐缓存',
+    'kugou': '酷狗音乐缓存',
     'ytmusic': 'YouTube Music缓存',
     'reddit': 'Reddit缓存',
     'abuseipdb': 'IP信誉检测缓存',
@@ -121,6 +122,10 @@ async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
                         prefixes = ["music:file:", "music:search:", "music:chart:", "music:lyric:"]
                         for prefix in prefixes:
                             await cache_manager.clear_cache(subdirectory="music", key_prefix=prefix)
+                    elif svc == 'kugou':
+                        prefixes = ["kugou:file:", "kugou:search:", "kugou:rank:", "kugou:lyric:"]
+                        for prefix in prefixes:
+                            await cache_manager.clear_cache(subdirectory="kugou", key_prefix=prefix)
                     elif svc == 'ytmusic':
                         prefixes = ["ytmusic:file:", "ytmusic:search:", "ytmusic:chart:", "ytmusic:lyric:"]
                         for prefix in prefixes:
@@ -191,6 +196,10 @@ async def clear_service_cache(service: str, context: ContextTypes.DEFAULT_TYPE):
                 prefixes = ["music:file:", "music:search:", "music:chart:", "music:lyric:"]
                 for prefix in prefixes:
                     await cache_manager.clear_cache(subdirectory="music", key_prefix=prefix)
+            elif service == 'kugou':
+                prefixes = ["kugou:file:", "kugou:search:", "kugou:rank:", "kugou:lyric:"]
+                for prefix in prefixes:
+                    await cache_manager.clear_cache(subdirectory="kugou", key_prefix=prefix)
             elif service == 'system':
                 # 清理系统命令缓存（如 /gstat 的群组DC统计）
                 await cache_manager.clear_cache(subdirectory="system")

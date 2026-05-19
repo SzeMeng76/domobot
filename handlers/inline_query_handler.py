@@ -69,6 +69,29 @@ class InlineQueryHandler:
             return
 
         # ========================================
+        # 检查是否是酷狗音乐链接
+        # ========================================
+        from utils.kugou_api import contains_kugou_link
+        if contains_kugou_link(query):
+            from handlers.inline_kugou_handler import handle_inline_kugou_link
+            try:
+                results = await handle_inline_kugou_link(query, update.inline_query, context)
+                await update.inline_query.answer(results, cache_time=60)
+            except Exception as e:
+                logger.error(f"[Inline Kugou] 处理失败: {e}", exc_info=True)
+                await update.inline_query.answer([
+                    InlineQueryResultArticle(
+                        id=str(uuid4()),
+                        title="❌ 酷狗链接解析失败",
+                        description=str(e)[:100],
+                        input_message_content=InputTextMessageContent(
+                            message_text=f"❌ 酷狗链接解析失败: {str(e)}"
+                        ),
+                    )
+                ])
+            return
+
+        # ========================================
         # 检查是否是 YouTube / YouTube Music 链接
         # ========================================
         from utils.ytmusic_api import contains_ytmusic_link
@@ -236,6 +259,14 @@ class InlineQueryHandler:
             keyword = parts[1].strip() if len(parts) > 1 else ""
             from handlers.inline_music_handler import handle_inline_music_search
             results = await handle_inline_music_search(keyword, context)
+            await update.inline_query.answer(results, cache_time=60)
+            return
+
+        # 酷狗音乐搜索单独处理
+        if parts and parts[0].lower() in ("kg", "kugou"):
+            keyword = parts[1].strip() if len(parts) > 1 else ""
+            from handlers.inline_kugou_handler import handle_inline_kugou_search
+            results = await handle_inline_kugou_search(keyword, context)
             await update.inline_query.answer(results, cache_time=60)
             return
 
@@ -478,9 +509,11 @@ class InlineQueryHandler:
 
 **🎵 音乐:**
 • `netease 晴天$` - 搜索网易云音乐
+• `kugou 海阔天空$` - 搜索酷狗音乐
 • `yt 晴天$` - 搜索YouTube Music
 • `yt chart$` - YouTube Music排行榜
 • 直接输入网易云链接(无需$) - 解析网易云音乐
+• 直接输入酷狗链接(无需$) - 解析酷狗音乐
 • 直接输入YouTube链接(无需$) - 下载YouTube音乐
 
 **📱 社交媒体解析:**
@@ -550,6 +583,8 @@ class InlineQueryHandler:
             "whois": "🌐 域名查询 - 添加 $ 执行查询",
             "cooking": "👨‍🍳 菜谱 - 添加 $ 执行查询",
             "netease": "🎵 网易云音乐 - 添加 $ 搜索歌曲",
+            "kugou": "🎵 酷狗音乐 - 添加 $ 搜索歌曲",
+            "kg": "🎵 酷狗音乐 - 添加 $ 搜索歌曲",
             "yt": "🎵 YouTube Music - 添加 $ 搜索歌曲",
             "chart": "📊 排行榜 - 添加 $ 执行查询",
             "movie": "🎬 电影搜索 - 添加 $ 执行查询（支持中英文）",
@@ -607,6 +642,8 @@ class InlineQueryHandler:
             "cooking": {"icon": "👨‍🍳", "title": "菜谱", "desc": "烹饪指南"},
             "chart": {"icon": "📊", "title": "排行榜", "desc": "影视排行"},
             "netease": {"icon": "🎵", "title": "网易云音乐", "desc": "搜索歌曲"},
+            "kugou": {"icon": "🎵", "title": "酷狗音乐", "desc": "搜索歌曲"},
+            "kg": {"icon": "🎵", "title": "酷狗音乐", "desc": "搜索歌曲"},
             "yt": {"icon": "🎵", "title": "YouTube Music", "desc": "搜索歌曲"},
             "ytmusic": {"icon": "🎵", "title": "YouTube Music", "desc": "搜索歌曲"},
         }
@@ -681,6 +718,7 @@ async def setup_inline_query_handler(application) -> None:
     # 注册 chosen inline result 处理器（parse + music + reddit + scan）
     from handlers.inline_parse_handler import handle_inline_parse_chosen
     from handlers.inline_music_handler import handle_inline_music_chosen
+    from handlers.inline_kugou_handler import handle_inline_kugou_chosen
     from handlers.inline_ytmusic_handler import handle_inline_ytmusic_chosen
     from handlers.inline_reddit_handler import handle_inline_reddit_chosen
     from commands.scan_command import handle_inline_scan_chosen
@@ -690,6 +728,8 @@ async def setup_inline_query_handler(application) -> None:
         result_id = update.chosen_inline_result.result_id
         if result_id.startswith("music_dl_"):
             await handle_inline_music_chosen(update, context)
+        elif result_id.startswith("kgmusic_dl_"):
+            await handle_inline_kugou_chosen(update, context)
         elif result_id.startswith("ytm_dl_"):
             await handle_inline_ytmusic_chosen(update, context)
         elif result_id.startswith("parse_"):

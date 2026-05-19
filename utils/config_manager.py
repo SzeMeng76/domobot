@@ -122,6 +122,17 @@ class BotConfig:
         self.music_u_cookie: str = ""  # 网易云 MUSIC_U cookie
         self.music_download_timeout: int = 60  # 下载超时（秒）
 
+        # 酷狗音乐配置
+        self.kugou_api_url: str = ""  # KuGouMusicApi 部署地址（无尾斜杠）
+        self.kugou_token: str = ""
+        self.kugou_userid: str = ""
+        self.kugou_dfid: str = ""
+        self.kugou_mid: str = ""
+        self.kugou_default_quality: str = "flac"  # 128 / 320 / flac / high
+        self.kugou_search_cache_duration = 3600
+        self.kugou_lyric_cache_duration = 86400
+        self.kugou_rank_cache_duration = 1800
+
         # 定时清理配置
         self.spotify_weekly_cleanup = True  # 默认启用
         self.disney_weekly_cleanup = True  # 默认启用
@@ -434,6 +445,17 @@ class ConfigManager:
         self.config.ytmusic_lyric_cache_duration = get_int_env("YTMUSIC_LYRIC_CACHE_DURATION", "86400")
         self.config.gstat_cache_duration = get_int_env("GSTAT_CACHE_DURATION", "600")
         self.config.music_download_timeout = get_int_env("MUSIC_DOWNLOAD_TIMEOUT", "60")
+
+        # 酷狗音乐配置
+        self.config.kugou_api_url = os.getenv("KUGOU_API_URL", "").rstrip("/")
+        self.config.kugou_token = os.getenv("KUGOU_TOKEN", "")
+        self.config.kugou_userid = os.getenv("KUGOU_USERID", "")
+        self.config.kugou_dfid = os.getenv("KUGOU_DFID", "")
+        self.config.kugou_mid = os.getenv("KUGOU_MID", "")
+        self.config.kugou_default_quality = os.getenv("KUGOU_DEFAULT_QUALITY", "flac")
+        self.config.kugou_search_cache_duration = get_int_env("KUGOU_SEARCH_CACHE_DURATION", "3600")
+        self.config.kugou_lyric_cache_duration = get_int_env("KUGOU_LYRIC_CACHE_DURATION", "86400")
+        self.config.kugou_rank_cache_duration = get_int_env("KUGOU_RANK_CACHE_DURATION", "1800")
 
         # API配置
         keys_str = os.getenv("EXCHANGE_RATE_API_KEYS") or os.getenv("EXCHANGE_RATE_API_KEY", "")
