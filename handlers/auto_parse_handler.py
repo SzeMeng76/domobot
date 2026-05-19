@@ -124,19 +124,43 @@ async def _fallback_to_image_host(context, chat_id, download_result, caption, re
     """
     try:
         # 找出要上传的视频路径
+        # download_result 结构：.media 可能是单个 VideoFile 或 list[ImageFile/VideoFile]
         video_path = None
-        if download_result and hasattr(download_result, 'processed_list'):
-            for item in download_result.processed_list:
-                if hasattr(item, 'path'):
-                    p = str(item.path)
-                    if p.lower().endswith(('.mp4', '.mov', '.mkv', '.webm')):
-                        video_path = p
+        if download_result and hasattr(download_result, 'media'):
+            media = download_result.media
+            media_iter = media if isinstance(media, list) else [media]
+            for item in media_iter:
+                p = getattr(item, 'path', None)
+                if not p:
+                    continue
+                p = str(p)
+                if p.lower().endswith(('.mp4', '.mov', '.mkv', '.webm', '.m4v')):
+                    video_path = p
+                    break
+            # 如果没视频但有图片，也试着传第一个
+            if not video_path:
+                for item in media_iter:
+                    p = getattr(item, 'path', None)
+                    if p:
+                        video_path = str(p)
                         break
 
         if not video_path:
-            logger.warning("⚠️ 图床兜底：未找到可上传的视频文件")
-            await status_msg.edit_text(f"**❌ 自动解析失败:**\n```\n{error_reason}\n```", parse_mode="Markdown")
-            return None
+            # 没有本地文件（result 为 None 或纯文本解析），直接发 caption 文本给用户
+            logger.warning("⚠️ 图床兜底：无本地媒体文件，发送文本兜底")
+            msg = await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"{caption}\n\n⚠️ 媒体上传失败，请点击原链接查看",
+                parse_mode="Markdown",
+                reply_parameters=reply_params,
+                reply_markup=reply_markup,
+                disable_web_page_preview=False,
+            )
+            try:
+                await status_msg.delete()
+            except Exception:
+                pass
+            return [msg]
 
         from pathlib import Path
         image_host_url = await _adapter.upload_to_image_host(Path(video_path))

@@ -608,6 +608,56 @@ async def _handle_single_parse(
             logger.error(f"❌ 视频上传超时（5分钟），平台: {platform}")
             await status_msg.edit_text("❌ 视频上传超时，请稍后重试")
             return
+        except Exception as send_err:
+            # Telegram 上传失败（FloodWait / PeerFlood 等）→ 尝试图床兜底
+            logger.warning(f"⚠️ Telegram 上传失败，尝试图床兜底: {send_err}")
+            media_path = None
+            if result and hasattr(result, 'media'):
+                media = result.media
+                media_iter = media if isinstance(media, list) else [media]
+                for item in media_iter:
+                    p = getattr(item, 'path', None)
+                    if p and str(p).lower().endswith(('.mp4', '.mov', '.mkv', '.webm', '.m4v')):
+                        media_path = str(p)
+                        break
+                if not media_path:
+                    for item in media_iter:
+                        p = getattr(item, 'path', None)
+                        if p:
+                            media_path = str(p)
+                            break
+
+            if media_path:
+                from pathlib import Path
+                image_host_url = await _adapter.upload_to_image_host(Path(media_path))
+                if image_host_url:
+                    fallback_caption = f"{caption}\n\n⚠️ Telegram 上传失败，已改用图床\n🔗 [点击查看媒体]({image_host_url})"
+                    msg = await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=fallback_caption,
+                        parse_mode="MarkdownV2",
+                        reply_parameters=reply_params,
+                        reply_markup=reply_markup,
+                        disable_web_page_preview=False,
+                    )
+                    await status_msg.delete()
+                    logger.info(f"✅ /parse 图床兜底成功: {image_host_url}")
+                    sent_messages = [msg]
+                else:
+                    await status_msg.edit_text(f"❌ 处理失败: {send_err}")
+                    return
+            else:
+                # 无本地文件，发文本兜底
+                msg = await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"{caption}\n\n⚠️ 媒体上传失败，请点击原链接查看",
+                    parse_mode="MarkdownV2",
+                    reply_parameters=reply_params,
+                    reply_markup=reply_markup,
+                    disable_web_page_preview=False,
+                )
+                await status_msg.delete()
+                sent_messages = [msg]
         else:
             # 上传成功 → 保存 file_id 缓存
             if sent_messages:
