@@ -11,6 +11,7 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
+import httpx
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, InputFile
 from telegram.ext import ContextTypes
 
@@ -120,6 +121,39 @@ def _build_kugou_keyboard(hash_: str, name: str = "", artists: str = "") -> Inli
     ])
 
 
+async def _download_kugou_file(url: str, path: Path, timeout: int = 60) -> bool:
+    """
+    酷狗 CDN 文件下载 — 不强制 HTTPS(酷狗 CDN 不支持 HTTPS),
+    可选走 KUGOU_DOWNLOAD_PROXY 代理(海外服务器必填)
+    """
+    config = get_config()
+    proxy = (config.kugou_download_proxy or "").strip() or None
+
+    # 构造 client(代理参数无法用全局 _httpx_client,所以单独建)
+    if proxy:
+        client = httpx.AsyncClient(timeout=timeout, proxy=proxy)
+    else:
+        client = _httpx_client or httpx.AsyncClient(timeout=timeout)
+
+    try:
+        async with client.stream("GET", url) as resp:
+            resp.raise_for_status()
+            with open(path, "wb") as f:
+                async for chunk in resp.aiter_bytes(8192):
+                    f.write(chunk)
+        return True
+    except Exception as e:
+        logger.error(f"酷狗下载失败 {url}: {e}")
+        return False
+    finally:
+        # 自建的(走代理或无全局)需要关闭
+        if proxy or not _httpx_client:
+            try:
+                await client.aclose()
+            except Exception:
+                pass
+
+
 # ============================================================
 # 核心:下载并发送
 # ============================================================
@@ -213,11 +247,11 @@ async def _download_and_send_kugou(
         thumb_path = tmp_dir / f"{hash_[:8]}_cover.jpg"
 
         try:
-            # 复用 commands/music.py 的下载函数
-            from commands.music import _download_file, _embed_metadata
+            # 酷狗 CDN 不支持 HTTPS,且海外服务器可能需要代理,用专用下载函数
+            from commands.music import _embed_metadata
 
-            download_ok = await _download_file(
-                song_url["url"], audio_path, None, config.music_download_timeout,
+            download_ok = await _download_kugou_file(
+                song_url["url"], audio_path, config.music_download_timeout,
             )
             if not download_ok:
                 if status_message:
@@ -236,6 +270,8 @@ async def _download_and_send_kugou(
             cover_downloaded = False
             if pic_url:
                 try:
+                    # 封面图通常是 HTTPS,走通用下载即可(不需要酷狗代理)
+                    from commands.music import _download_file
                     cover_downloaded = await _download_file(pic_url, thumb_path, timeout=15)
                 except Exception:
                     pass

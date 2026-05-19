@@ -129,6 +129,7 @@ class BotConfig:
         self.kugou_dfid: str = ""
         self.kugou_mid: str = ""
         self.kugou_default_quality: str = "flac"  # 128 / 320 / flac / high
+        self.kugou_download_proxy: str = ""  # 酷狗 CDN 下载用代理(CN IP),需要时配置
         self.kugou_search_cache_duration = 3600
         self.kugou_lyric_cache_duration = 86400
         self.kugou_rank_cache_duration = 1800
@@ -453,6 +454,7 @@ class ConfigManager:
         self.config.kugou_dfid = os.getenv("KUGOU_DFID", "")
         self.config.kugou_mid = os.getenv("KUGOU_MID", "")
         self.config.kugou_default_quality = os.getenv("KUGOU_DEFAULT_QUALITY", "flac")
+        self.config.kugou_download_proxy = os.getenv("KUGOU_DOWNLOAD_PROXY", "")
         self.config.kugou_search_cache_duration = get_int_env("KUGOU_SEARCH_CACHE_DURATION", "3600")
         self.config.kugou_lyric_cache_duration = get_int_env("KUGOU_LYRIC_CACHE_DURATION", "86400")
         self.config.kugou_rank_cache_duration = get_int_env("KUGOU_RANK_CACHE_DURATION", "1800")

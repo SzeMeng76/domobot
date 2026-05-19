@@ -240,7 +240,7 @@ async def handle_inline_kugou_chosen(
     pic_url = pending.get("image", "")
     display = f"{name} - {artists}" if name else hash_[:8]
 
-    from commands.kugou import _kugou_api, _pyrogram_helper
+    from commands.kugou import _kugou_api, _pyrogram_helper, _download_kugou_file
     from commands.music import _download_file, _embed_metadata
     from utils.config_manager import get_config
 
@@ -287,8 +287,8 @@ async def handle_inline_kugou_chosen(
         thumb_path = tmp_dir / f"{hash_[:8]}_cover.jpg"
 
         try:
-            download_ok = await _download_file(
-                song_url["url"], audio_path, None, config.music_download_timeout,
+            download_ok = await _download_kugou_file(
+                song_url["url"], audio_path, config.music_download_timeout,
             )
             if not download_ok:
                 await context.bot.edit_message_text(
