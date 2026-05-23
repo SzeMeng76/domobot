@@ -59,7 +59,7 @@ async def weather_ai_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         if result["success"]:
             # AI 日报是纯文本，使用普通 Markdown
-            if "🤖" in result.get("title", "") or "敏敏" in result.get("message", ""):
+            if "🤖" in result.get("title", "") or "天气日报" in result.get("message", ""):
                 await query.edit_message_text(
                     text=result["message"],
                     parse_mode="Markdown"
