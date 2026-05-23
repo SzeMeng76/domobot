@@ -62,18 +62,18 @@ feedparser==6.0.12
 googletrans==4.0.2
 
 # Yahoo Finance API
-yfinance==1.3.0  # 最新版本：支持valuation_measures、ETFQuery、dividends/splits返回Series等新功能
-pandas==3.0.2  # Latest stable version as of Apr 2026
+yfinance==1.4.0  # 最新版本：新增 Auth 登录、Sector/Industry region 范围、curl_cffi 可降级到 requests
+pandas==3.0.3  # Latest stable version as of May 2026
 
 # Social Media Parser (ParseHub) - 社交媒体解析功能
 parsehub~=2.0.24  # 社交媒体聚合解析器，支持20+平台 (2.0.24: 微博mapp.api.weibo.cn/fx短链支持 + xhs/xiaoheihe边界保护 + 类型注解完善)
 cryptography>=48.0.0  # ParseHub依赖：用于小黑盒动态加密算法（RSA/AES/3DES）
 yt-dlp>=2026.3.17  # 升级到最新版本以支持YouTube最新反爬虫机制（n challenge）
-pytubefix>=10.7.1  # YouTube 下载库（10.7.1: improved nsig extraction for recent YouTube player variants）
+pytubefix>=10.7.2  # YouTube 下载库（10.7.2: improved nsig extraction for recent YouTube player variants）
 ytmusicapi>=1.12.0  # YouTube Music API（搜索、排行榜、歌词）1.12.0: get_song_credits国际化改进
 pillow>=12.2.0  # 图像处理库
 pillow-heif>=1.3.0  # HEIF/HEIC 图片格式支持
-lxml-html-clean>=0.4.4  # HTML 清理工具
+lxml-html-clean>=0.4.5  # HTML 清理工具
 markdown>=3.10.2  # Markdown 转换器
 pyyaml>=6.0.3  # YAML配置文件解析
 tenacity>=9.1.4  # 重试机制（用于图床上传）

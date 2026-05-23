@@ -781,8 +781,10 @@ class FinanceService:
                 logger.debug(f"获取actions失败 {symbol}: {e}")
 
             # 使用repair参数，自动进行货币转换
-            dividends = ticker.get_dividends(period="max", repair=repair)
-            splits = ticker.get_splits(period="max", repair=repair)
+            # 走内层 price history 才能透传 repair（Ticker 外层方法未透传该参数）
+            price_history = ticker._lazy_load_price_history()
+            dividends = price_history.get_dividends(period="max", repair=repair)
+            splits = price_history.get_splits(period="max", repair=repair)
 
             # 获取货币信息
             info = ticker.info
