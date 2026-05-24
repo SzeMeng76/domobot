@@ -1843,7 +1843,12 @@ def format_reviews(reviews: List[Dict], place_name: str, total_count: int) -> st
     return result
 
 async def _safe_edit_message(query, text, reply_markup=None, parse_mode=None):
-    """安全地编辑消息，处理内容相同的情况和照片消息"""
+    """安全地编辑消息，处理内容相同的情况和照片消息
+
+    如果因为 caption 过长等原因必须删除原消息并新发一条，会返回新发的 Message 对象；
+    其他情况（直接编辑成功 / 静默失败）返回 None。调用方应在拿到新 Message 时改用其
+    chat_id/message_id 调度自动删除，避免对已删除的旧消息 ID 调度。
+    """
     try:
         # 检查消息是否包含照片
         if query.message.photo:
@@ -1853,7 +1858,7 @@ async def _safe_edit_message(query, text, reply_markup=None, parse_mode=None):
                 logger.warning(f"Caption太长 ({len(text)} 字符)，删除照片改用文本消息")
                 chat_id = query.message.chat_id
                 await query.message.delete()
-                await query.message.get_bot().send_message(
+                return await query.message.get_bot().send_message(
                     chat_id=chat_id,
                     text=text,
                     reply_markup=reply_markup,
@@ -1889,7 +1894,7 @@ async def _safe_edit_message(query, text, reply_markup=None, parse_mode=None):
                     logger.warning(f"Caption太长 ({len(text)} 字符)，删除照片改用文本消息")
                     chat_id = query.message.chat_id
                     await query.message.delete()
-                    await query.message.get_bot().send_message(
+                    return await query.message.get_bot().send_message(
                         chat_id=chat_id,
                         text=text,
                         reply_markup=reply_markup,
@@ -1913,7 +1918,7 @@ async def _safe_edit_message(query, text, reply_markup=None, parse_mode=None):
             try:
                 chat_id = query.message.chat_id
                 await query.message.delete()
-                await query.message.get_bot().send_message(
+                return await query.message.get_bot().send_message(
                     chat_id=chat_id,
                     text=text,
                     reply_markup=reply_markup,
@@ -1928,6 +1933,7 @@ async def _safe_edit_message(query, text, reply_markup=None, parse_mode=None):
         else:
             logger.error(f"编辑消息失败: {e}")
             raise
+    return None
 
 @with_error_handling
 async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2342,26 +2348,28 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                     ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
 
-                await _safe_edit_message(
+                new_msg = await _safe_edit_message(
                     query,
                     text=foldable_text_with_markdown_v2(result_text),
                     parse_mode="MarkdownV2",
                     reply_markup=reply_markup
                 )
-                # 为编辑后的消息添加自动删除
+                # 为编辑后的消息添加自动删除（若因 caption 过长改为新发消息，则用新消息 ID）
                 config = get_config()
-                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
+                target = new_msg if new_msg else query.message
+                await _schedule_auto_delete(context, target.chat_id, target.message_id, config.auto_delete_delay)
 
             except Exception as e:
                 logger.error(f"获取评价失败: {e}")
-                await _safe_edit_message(
+                new_msg = await _safe_edit_message(
                     query,
                     text=f"❌ 获取评价失败: {str(e)}",
                     reply_markup=InlineKeyboardMarkup([
                         [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
                     ])
                 )
-                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
+                target = new_msg if new_msg else query.message
+                await _schedule_auto_delete(context, target.chat_id, target.message_id, config.auto_delete_delay)
 
         elif full_data.startswith("back_to_location:"):
             # 返回地点详情
