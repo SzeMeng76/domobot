@@ -17,6 +17,18 @@ logger = logging.getLogger(__name__)
 _recent_messages: dict = {}
 _RECENT_MSG_TTL = 30  # 秒
 
+# 缓存：群组 -> 关联频道ID，避免每条消息都调 get_chat
+# value: (linked_chat_id 或 None, timestamp)
+_linked_chat_cache: dict = {}
+_LINKED_CHAT_TTL = 3600  # 秒，关联频道很少变动，缓存1小时
+
+# Telegram 系统/官方账号，固定ID，普通用户拿不到——永远豁免反垃圾检测
+_SYSTEM_USER_IDS = frozenset({
+    777000,      # Telegram service notifications（登录验证码、官方通知）
+    1087968824,  # GroupAnonymousBot（匿名管理员身份发言）
+    136817688,   # Channel_Bot（以频道身份在群里发言的代理）
+})
+
 
 def _track_message(chat_id: int, user_id: int, message_id: int):
     """记录最近消息，供 guest bot 检测时关联删除触发消息"""
@@ -170,6 +182,26 @@ class AntiSpamHandler:
             logger.error(f"Failed to check admin status: {e}")
             return False
 
+    async def _get_linked_channel_id(self, group_id: int, context: ContextTypes.DEFAULT_TYPE) -> int | None:
+        """
+        获取群组官方绑定的关联频道ID（带缓存）。
+        用于豁免「本群绑定频道自动转发进群」的消息——只有 sender_chat.id 等于
+        这个ID 的自动转发才会被放行，伪装的频道ID对不上，照常检测。
+        """
+        cached = _linked_chat_cache.get(group_id)
+        if cached and time.monotonic() - cached[1] <= _LINKED_CHAT_TTL:
+            return cached[0]
+
+        linked_id = None
+        try:
+            chat = await context.bot.get_chat(group_id)
+            linked_id = getattr(chat, 'linked_chat_id', None)
+        except Exception as e:
+            logger.warning(f"Failed to get linked_chat_id for group {group_id}: {e}")
+
+        _linked_chat_cache[group_id] = (linked_id, time.monotonic())
+        return linked_id
+
     async def handle_new_member(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """处理新成员加入"""
         try:
@@ -277,9 +309,34 @@ class AntiSpamHandler:
             if not await self.manager.is_group_enabled(group_id):
                 return
 
+            # 系统/官方账号豁免（777000 服务通知、匿名管理员、频道代理bot等）
+            # 这些是固定系统ID，普通用户拿不到，永远不该被检测或封禁
+            if user_id in _SYSTEM_USER_IDS:
+                logger.debug(f"Skipping anti-spam for system account {user_id} in group {group_id}")
+                return
+
             # Guest Bot 检测（优先于其他逻辑）
             if await self._handle_guest_bot_message(update, context):
                 return
+
+            # 关联频道自动转发豁免（只豁免本群官方绑定的频道）
+            # 场景：你自己的频道发补货/库存通知，Telegram 自动同步进绑定的讨论群。
+            # 安全性：必须同时满足 is_automatic_forward=True 且 sender_chat.id 等于
+            #   本群官方绑定的 linked_chat_id。伪装他人频道发广告时 sender_chat.id
+            #   对不上绑定频道，不会被豁免，照常进 AI 检测。
+            message = update.message
+            if message and message.is_automatic_forward and message.sender_chat:
+                linked_id = await self._get_linked_channel_id(group_id, context)
+                if linked_id is not None and message.sender_chat.id == linked_id:
+                    logger.info(
+                        f"Skipping anti-spam: message auto-forwarded from linked channel "
+                        f"{linked_id} into group {group_id}"
+                    )
+                    return
+                logger.debug(
+                    f"Auto-forward in group {group_id} NOT from linked channel: "
+                    f"sender_chat={message.sender_chat.id}, linked={linked_id} — will check"
+                )
 
             # 追踪普通用户消息，用于后续关联删除触发 guest bot 的 @mention
             if update.message:
