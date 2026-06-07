@@ -580,16 +580,6 @@ class AntiSpamHandler:
         result = {"kicked": 0, "failed": 0, "total_scanned": 0}
 
         try:
-            # 发送「正在扫描」提示
-            scanning_msg = None
-            try:
-                scanning_msg = await bot.send_message(
-                    chat_id=group_id,
-                    text="🔍 正在扫描群组中的已注销账号，请稍候…"
-                )
-            except Exception as e:
-                logger.warning(f"Failed to send scanning notice to group {group_id}: {e}")
-
             deleted_members = await self.pyrogram_helper.get_deleted_members(group_id)
             result["total_scanned"] = len(deleted_members)
 
@@ -605,13 +595,6 @@ class AntiSpamHandler:
                     logger.warning(f"Failed to kick deleted account {user_id} from group {group_id}: {e}")
 
             logger.info(f"Kick deleted users done for group {group_id}: {result}")
-
-            # 删除「正在扫描」提示
-            if scanning_msg:
-                try:
-                    await scanning_msg.delete()
-                except Exception:
-                    pass
 
             # 发送结果通知
             kicked = result["kicked"]
