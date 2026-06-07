@@ -708,6 +708,65 @@ class PyrogramHelper:
             logger.error(f"❌ Pyrogram上传音频失败: {e}")
             raise
 
+    async def get_deleted_members(self, chat_id: int) -> list[dict]:
+        """
+        获取群组中所有已注销的账号
+
+        Args:
+            chat_id: 群组 ID
+
+        Returns:
+            已注销用户列表，每个元素包含 user_id 和 first_name
+        """
+        if not self.is_started or not self.client:
+            logger.warning("Pyrogram client not started, cannot get chat members")
+            return []
+
+        deleted_members = []
+        try:
+            from pyrogram.enums import ChatMembersFilter, UserStatus
+
+            async for member in self.client.get_chat_members(chat_id, filter=ChatMembersFilter.SEARCH, query=""):
+                user = member.user
+                if not user or user.is_bot:
+                    continue
+
+                is_deleted_attr = getattr(user, "is_deleted", None) or getattr(user, "deleted", None)
+
+                first_name = user.first_name or ""
+                last_name = user.last_name or ""
+                user_status = getattr(user, "status", None)
+                username = user.username
+
+                is_name_deleted = (first_name == "Deleted Account")
+                is_lastname_empty = not last_name
+                has_no_username = not username
+
+                try:
+                    is_status_suspicious = (user_status is None or user_status == UserStatus.LONG_AGO)
+                except Exception:
+                    is_status_suspicious = (user_status is None)
+
+                is_deleted = (is_deleted_attr is True) or (
+                    is_status_suspicious and
+                    is_name_deleted and
+                    (is_lastname_empty or has_no_username)
+                )
+
+                if is_deleted:
+                    deleted_members.append({
+                        "user_id": user.id,
+                        "first_name": first_name,
+                        "username": username,
+                    })
+
+            logger.info(f"Found {len(deleted_members)} deleted accounts in chat {chat_id}")
+
+        except Exception as e:
+            logger.error(f"Failed to get chat members for {chat_id}: {e}")
+
+        return deleted_members
+
     async def get_message(self, chat_id: int, message_id: int) -> Optional[dict]:
         """
         获取指定消息的内容（用于检测引用的外部消息）

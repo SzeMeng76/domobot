@@ -566,6 +566,90 @@ class AntiSpamHandler:
         except Exception as e:
             logger.error(f"Failed in _detect_and_process: {e}")
 
+    async def kick_deleted_users(self, group_id: int, bot) -> dict:
+        """
+        扫描群组并踢出所有已注销账号，完成后发送群内通知。
+
+        Returns:
+            {"kicked": int, "failed": int, "total_scanned": int}
+        """
+        if not self.pyrogram_helper:
+            logger.warning(f"Pyrogram not available, cannot kick deleted users in group {group_id}")
+            return {"kicked": 0, "failed": 0, "total_scanned": 0}
+
+        result = {"kicked": 0, "failed": 0, "total_scanned": 0}
+
+        try:
+            # 发送「正在扫描」提示
+            scanning_msg = None
+            try:
+                scanning_msg = await bot.send_message(
+                    chat_id=group_id,
+                    text="🔍 正在扫描群组中的已注销账号，请稍候…"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to send scanning notice to group {group_id}: {e}")
+
+            deleted_members = await self.pyrogram_helper.get_deleted_members(group_id)
+            result["total_scanned"] = len(deleted_members)
+
+            for member in deleted_members:
+                user_id = member["user_id"]
+                try:
+                    await bot.ban_chat_member(group_id, user_id)
+                    await bot.unban_chat_member(group_id, user_id)
+                    result["kicked"] += 1
+                    logger.info(f"Kicked deleted account {user_id} from group {group_id}")
+                except Exception as e:
+                    result["failed"] += 1
+                    logger.warning(f"Failed to kick deleted account {user_id} from group {group_id}: {e}")
+
+            logger.info(f"Kick deleted users done for group {group_id}: {result}")
+
+            # 删除「正在扫描」提示
+            if scanning_msg:
+                try:
+                    await scanning_msg.delete()
+                except Exception:
+                    pass
+
+            # 发送结果通知
+            kicked = result["kicked"]
+            failed = result["failed"]
+            scanned = result["total_scanned"]
+
+            if scanned == 0:
+                notice_text = "✅ 已注销账号扫描完成\n\n群内没有发现已注销账号。"
+            else:
+                lines = [
+                    "🧹 已注销账号清理完成\n",
+                    f"📊 发现已注销账号：{scanned} 个",
+                    f"✅ 成功踢出：{kicked} 个",
+                ]
+                if failed > 0:
+                    lines.append(f"⚠️ 踢出失败：{failed} 个（可能缺少封禁权限）")
+                notice_text = "\n".join(lines)
+
+            try:
+                notice_msg = await bot.send_message(chat_id=group_id, text=notice_text)
+                # 60 秒后自动删除通知
+                asyncio.create_task(self._auto_delete_message(notice_msg, delay=60))
+            except Exception as e:
+                logger.warning(f"Failed to send kick result notice to group {group_id}: {e}")
+
+        except Exception as e:
+            logger.error(f"kick_deleted_users failed for group {group_id}: {e}")
+
+        return result
+
+    async def _auto_delete_message(self, message, delay: int = 60):
+        """延迟删除消息"""
+        try:
+            await asyncio.sleep(delay)
+            await message.delete()
+        except Exception:
+            pass
+
     async def handle_unban_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """处理解禁按钮回调"""
         try:

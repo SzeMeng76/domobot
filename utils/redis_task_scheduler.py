@@ -42,6 +42,12 @@ class RedisTaskScheduler:
         self._handlers["cache_cleanup"] = self._handle_cache_cleanup
         self._handlers["weekly_cleanup"] = self._handle_cache_cleanup
         self._handlers["rate_refresh"] = self._handle_rate_refresh
+        self._handlers["kick_deleted_members"] = self._handle_kick_deleted_members
+
+    def set_anti_spam_handler(self, anti_spam_handler, bot):
+        """设置反垃圾处理器和 bot 实例（用于踢出已注销账号任务）"""
+        self._anti_spam_handler = anti_spam_handler
+        self._bot = bot
 
     def start(self):
         """启动调度器"""
@@ -190,9 +196,37 @@ class RedisTaskScheduler:
                 repeat_interval = data.get("repeat_interval", 86400)  # 默认24小时
                 next_run = time.time() + repeat_interval
                 await self.schedule_task(task_id, task_type, next_run, data)
+            elif task_type == "kick_deleted_members":
+                # 踢出已注销账号任务每天执行一次
+                repeat_interval = data.get("repeat_interval", 86400)
+                next_run = time.time() + repeat_interval
+                await self.schedule_task(task_id, task_type, next_run, data)
 
         except Exception as e:
             logger.error(f"执行任务失败 {task_id}: {e}")
+
+    async def _handle_kick_deleted_members(self, task_id: str, data: dict):
+        """处理踢出已注销账号任务"""
+        if not hasattr(self, "_anti_spam_handler") or not self._anti_spam_handler:
+            logger.warning("anti_spam_handler 未设置，跳过踢出已注销账号任务")
+            return
+        if not hasattr(self, "_bot") or not self._bot:
+            logger.warning("bot 未设置，跳过踢出已注销账号任务")
+            return
+
+        group_id = data.get("group_id")
+        if not group_id:
+            logger.warning(f"踢出任务缺少 group_id: {task_id}")
+            return
+
+        try:
+            result = await self._anti_spam_handler.kick_deleted_users(group_id, self._bot)
+            logger.info(
+                f"群 {group_id} 已注销账号清理完成: "
+                f"踢出={result['kicked']}, 失败={result['failed']}, 扫描={result['total_scanned']}"
+            )
+        except Exception as e:
+            logger.error(f"踢出已注销账号任务执行失败 group={group_id}: {e}")
 
     async def _handle_cache_cleanup(self, task_id: str, data: dict):
         """处理缓存清理任务"""
