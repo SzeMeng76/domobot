@@ -148,8 +148,8 @@ class RedisTaskScheduler:
 
             except asyncio.CancelledError:
                 break
-            except Exception as e:
-                logger.error(f"任务调度工作器错误: {e}")
+            except BaseException as e:
+                logger.error(f"任务调度工作器错误: {type(e).__name__}: {e}")
                 await asyncio.sleep(5)
 
         logger.info("任务调度工作器已停止")

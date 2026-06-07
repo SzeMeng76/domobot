@@ -100,7 +100,7 @@ class AntiSpamManager:
     async def get_all_enabled_groups(self) -> List[int]:
         """获取所有启用反垃圾功能的群组ID"""
         async with self.pool.acquire() as conn:
-            async with conn.cursor() as cursor:
+            async with conn.cursor(aiomysql.Cursor) as cursor:
                 await cursor.execute(
                     "SELECT group_id FROM anti_spam_config WHERE enabled = TRUE"
                 )
