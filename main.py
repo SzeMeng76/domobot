@@ -788,29 +788,24 @@ async def setup_application(application: Application, config) -> None:
         logger.info(f"🗑️ 已配置 AI反垃圾数据 每周日UTC 6:00 定时清理（保留：日志30天，统计90天，用户60天）")
         cleanup_tasks_added += 1
 
-        # 为每个已启用 antispam 的群注册「踢出已注销账号」每日任务
+        # 注册「踢出已注销账号」每日任务（全局一个，自动扫描所有启用 antispam 的群）
         try:
             task_scheduler.set_anti_spam_handler(anti_spam_handler, application.bot)
 
-            enabled_groups = await anti_spam_handler.manager.get_all_enabled_groups()
             kick_hour, kick_minute = 3, 0  # UTC 3:00 每天执行
+            kick_now = datetime.datetime.now(datetime.timezone.utc)
+            days_kick = 1 if kick_now.hour >= kick_hour else 0
+            next_kick = kick_now.replace(hour=kick_hour, minute=kick_minute, second=0, microsecond=0)
+            next_kick = next_kick + datetime.timedelta(days=days_kick)
 
-            for gid in enabled_groups:
-                kick_now = datetime.datetime.now(datetime.timezone.utc)
-                days_kick = 1 if kick_now.hour >= kick_hour else 0
-                next_kick = kick_now.replace(hour=kick_hour, minute=kick_minute, second=0, microsecond=0)
-                next_kick = next_kick + datetime.timedelta(days=days_kick)
-
-                await task_scheduler.schedule_task(
-                    task_id=f"kick_deleted_{gid}",
-                    task_type="kick_deleted_members",
-                    execute_at=next_kick.timestamp(),
-                    data={"group_id": gid, "repeat_interval": 86400},
-                )
-                cleanup_tasks_added += 1
-
-            if enabled_groups:
-                logger.info(f"🧹 已为 {len(enabled_groups)} 个群配置「踢出已注销账号」每日任务（UTC 3:00）")
+            await task_scheduler.schedule_task(
+                task_id="kick_deleted_members_daily",
+                task_type="kick_deleted_members",
+                execute_at=next_kick.timestamp(),
+                data={"repeat_interval": 86400},
+            )
+            cleanup_tasks_added += 1
+            logger.info(f"🧹 已配置「踢出已注销账号」每日任务（UTC 3:00）")
         except Exception as e:
             logger.error(f"❌ 注册踢出已注销账号任务失败: {e}")
 

@@ -206,7 +206,7 @@ class RedisTaskScheduler:
             logger.error(f"执行任务失败 {task_id}: {e}")
 
     async def _handle_kick_deleted_members(self, task_id: str, data: dict):
-        """处理踢出已注销账号任务"""
+        """处理踢出已注销账号任务——自动扫描所有启用 antispam 的群"""
         if not hasattr(self, "_anti_spam_handler") or not self._anti_spam_handler:
             logger.warning("anti_spam_handler 未设置，跳过踢出已注销账号任务")
             return
@@ -214,19 +214,23 @@ class RedisTaskScheduler:
             logger.warning("bot 未设置，跳过踢出已注销账号任务")
             return
 
-        group_id = data.get("group_id")
-        if not group_id:
-            logger.warning(f"踢出任务缺少 group_id: {task_id}")
-            return
-
         try:
-            result = await self._anti_spam_handler.kick_deleted_users(group_id, self._bot)
-            logger.info(
-                f"群 {group_id} 已注销账号清理完成: "
-                f"踢出={result['kicked']}, 失败={result['failed']}, 扫描={result['total_scanned']}"
-            )
+            enabled_groups = await self._anti_spam_handler.manager.get_all_enabled_groups()
+            if not enabled_groups:
+                logger.info("没有启用 antispam 的群，跳过踢出已注销账号任务")
+                return
+
+            for group_id in enabled_groups:
+                try:
+                    result = await self._anti_spam_handler.kick_deleted_users(group_id, self._bot)
+                    logger.info(
+                        f"群 {group_id} 已注销账号清理完成: "
+                        f"踢出={result['kicked']}, 失败={result['failed']}, 扫描={result['total_scanned']}"
+                    )
+                except Exception as e:
+                    logger.error(f"踢出已注销账号失败 group={group_id}: {e}")
         except Exception as e:
-            logger.error(f"踢出已注销账号任务执行失败 group={group_id}: {e}")
+            logger.error(f"踢出已注销账号任务执行失败: {e}")
 
     async def _handle_cache_cleanup(self, task_id: str, data: dict):
         """处理缓存清理任务"""
