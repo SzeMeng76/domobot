@@ -789,27 +789,30 @@ async def setup_application(application: Application, config) -> None:
         cleanup_tasks_added += 1
 
         # 为每个已启用 antispam 的群注册「踢出已注销账号」每日任务
-        task_scheduler.set_anti_spam_handler(anti_spam_handler, application.bot)
+        try:
+            task_scheduler.set_anti_spam_handler(anti_spam_handler, application.bot)
 
-        enabled_groups = await anti_spam_handler.manager.get_all_enabled_groups()
-        kick_hour, kick_minute = 3, 0  # UTC 3:00 每天执行
+            enabled_groups = await anti_spam_handler.manager.get_all_enabled_groups()
+            kick_hour, kick_minute = 3, 0  # UTC 3:00 每天执行
 
-        for gid in enabled_groups:
-            kick_now = datetime.datetime.now(datetime.timezone.utc)
-            days_kick = 1 if kick_now.hour >= kick_hour else 0
-            next_kick = kick_now.replace(hour=kick_hour, minute=kick_minute, second=0, microsecond=0)
-            next_kick = next_kick + datetime.timedelta(days=days_kick)
+            for gid in enabled_groups:
+                kick_now = datetime.datetime.now(datetime.timezone.utc)
+                days_kick = 1 if kick_now.hour >= kick_hour else 0
+                next_kick = kick_now.replace(hour=kick_hour, minute=kick_minute, second=0, microsecond=0)
+                next_kick = next_kick + datetime.timedelta(days=days_kick)
 
-            await task_scheduler.schedule_task(
-                task_id=f"kick_deleted_{gid}",
-                task_type="kick_deleted_members",
-                execute_at=next_kick.timestamp(),
-                data={"group_id": gid, "repeat_interval": 86400},
-            )
-            cleanup_tasks_added += 1
+                await task_scheduler.schedule_task(
+                    task_id=f"kick_deleted_{gid}",
+                    task_type="kick_deleted_members",
+                    execute_at=next_kick.timestamp(),
+                    data={"group_id": gid, "repeat_interval": 86400},
+                )
+                cleanup_tasks_added += 1
 
-        if enabled_groups:
-            logger.info(f"🧹 已为 {len(enabled_groups)} 个群配置「踢出已注销账号」每日任务（UTC 3:00）")
+            if enabled_groups:
+                logger.info(f"🧹 已为 {len(enabled_groups)} 个群配置「踢出已注销账号」每日任务（UTC 3:00）")
+        except Exception as e:
+            logger.error(f"❌ 注册踢出已注销账号任务失败: {e}")
 
     # 添加临时文件清理任务（每天UTC 4:00清理24小时前的文件）
     if "parse_adapter" in application.bot_data:
