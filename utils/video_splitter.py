@@ -238,32 +238,39 @@ async def ensure_h264(file: str) -> str:
     # 获取视频信息
     duration, width, height = await get_video_info(file)
 
+    # 4K视频（任意边超过1920）强制降到1080p再转码，否则CPU转码极慢
+    is_4k = max(width, height) > 1920
+    if is_4k:
+        # 保持原始方向（竖屏/横屏），长边缩到1920
+        scale_filter = "scale='if(gt(iw,ih),min(1920,iw),min(1080,iw))':'if(gt(iw,ih),min(1080,ih),min(1920,ih))':force_original_aspect_ratio=decrease"
+        logger.info(f"检测到高分辨率视频 ({width}x{height})，缩放到1080p加速转码")
+    else:
+        scale_filter = None
+
     # 根据时长选择转码参数
     if duration <= 0:
         # 无法获取时长，使用保守的快速转码避免卡死
         preset, crf = "fast", "23"
-        scale_filter = None
         logger.warning(f"无法获取视频时长，使用快速转码: preset={preset}, crf={crf}")
     elif duration <= 30:
         preset, crf = "slow", "18"
-        scale_filter = None
         logger.info(f"短视频 ({duration:.1f}s)，使用高质量转码: preset={preset}, crf={crf}")
     elif duration <= 60:
         preset, crf = "medium", "20"
-        scale_filter = None
         logger.info(f"中短视频 ({duration:.1f}s)，使用中等质量转码: preset={preset}, crf={crf}")
     elif duration <= 600:
         preset, crf = "fast", "23"
-        scale_filter = None
         logger.info(f"中等视频 ({duration:.1f}s)，使用标准转码: preset={preset}, crf={crf}")
     elif duration <= 1800:
         preset, crf = "veryfast", "26"
-        scale_filter = None
         logger.info(f"较长视频 ({duration:.1f}s)，使用快速转码: preset={preset}, crf={crf}")
     else:
         preset, crf = "ultrafast", "28"
-        # 超长视频缩放到720p以加快处理速度
-        scale_filter = "scale='min(1280,iw)':'min(720,ih)':force_original_aspect_ratio=decrease"
+        # 超长视频额外降到720p
+        if is_4k:
+            scale_filter = "scale='if(gt(iw,ih),min(1280,iw),min(720,iw))':'if(gt(iw,ih),min(720,ih),min(1280,ih))':force_original_aspect_ratio=decrease"
+        else:
+            scale_filter = "scale='min(1280,iw)':'min(720,ih)':force_original_aspect_ratio=decrease"
         logger.info(f"超长视频 ({duration:.1f}s)，使用极速转码+720p缩放: preset={preset}, crf={crf}")
 
     src = Path(file)

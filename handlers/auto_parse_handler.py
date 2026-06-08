@@ -343,13 +343,14 @@ async def _auto_parse_single(url: str, user_id: int, group_id: int, message, con
                     pass
 
         # 添加超时保护，避免上传卡死
+        # 转码本身最少5分钟，外层超时必须更长，否则转码未完成就被截断
         try:
             sent_messages = await asyncio.wait_for(
                 _send_media(context, group_id, result, caption, reply_params, reply_markup, parse_result=parse_result),
-                timeout=300  # 5分钟超时
+                timeout=900  # 15分钟，覆盖4K转码+上传
             )
         except asyncio.TimeoutError:
-            logger.error(f"❌ 视频上传超时（5分钟），平台: {platform}")
+            logger.error(f"❌ 视频上传超时（15分钟），平台: {platform}")
             await status_msg.edit_text("❌ 视频上传超时，请稍后重试")
             return
         except Exception as send_err:
