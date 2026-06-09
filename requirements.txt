@@ -10,10 +10,10 @@ python-dotenv>=1.0.1  # ParseHub requires >=1.0.1
 
 # HTTP Requests
 httpx==0.28.1
-brotli==1.1.0  # Required for Brotli decompression (App Store uses br encoding)
+brotli==1.2.0  # Required for Brotli decompression (App Store uses br encoding)
 
 # OpenAI API (for AI Anti-Spam)
-openai==2.15.0
+openai==2.41.0
 
 # Web Scraping
 beautifulsoup4>=4.12.3  # ParseHub requires >=4.12.3, yfinance requires >=4.11.1
@@ -26,20 +26,20 @@ google-play-scraper==1.2.7
 schedule==1.2.2
 
 # Redis (with async support and performance optimizations)
-redis[hiredis]==5.0.1
+redis[hiredis]==8.0.0
 
 # MySQL Async Driver
-aiomysql==0.2.0
+aiomysql==0.3.2
 
 # Internationalization and Number Formatting
 Babel>=2.14.0
 
 # JustWatch API for streaming providers
-simple-justwatch-python-api==0.16
+simple-justwatch-python-api==1.3.1
 
 # Timezone Support
 tzlocal==5.3.1
-tzdata==2025.2
+tzdata==2026.2
 backports.zoneinfo==0.2.1; python_version<"3.9"
 
 # WHOIS Query Libraries
@@ -53,7 +53,7 @@ whodap>=0.1.14  # RDAP support for asyncwhois
 dnspython==2.8.0
 
 # Data Validation and Settings Management
-pydantic~=2.11.9
+pydantic~=2.13.4
 
 # RSS Feed Parser
 feedparser==6.0.12
@@ -66,11 +66,11 @@ yfinance==1.4.1  # 最新版本：新增 Auth 登录、Sector/Industry region �
 pandas==3.0.3  # Latest stable version as of May 2026
 
 # Social Media Parser (ParseHub) - 社交媒体解析功能
-parsehub~=2.0.24  # 社交媒体聚合解析器，支持20+平台 (2.0.24: 微博mapp.api.weibo.cn/fx短链支持 + xhs/xiaoheihe边界保护 + 类型注解完善)
+parsehub~=2.0.25  # 社交媒体聚合解析器，支持20+平台 (2.0.25: coolapk变量命名规范化 + DownloadResult类型注解优化)
 cryptography>=48.0.0  # ParseHub依赖：用于小黑盒动态加密算法（RSA/AES/3DES）
 yt-dlp>=2026.3.17  # 升级到最新版本以支持YouTube最新反爬虫机制（n challenge）
-pytubefix>=10.7.3  # YouTube 下载库（10.7.3: improved nsig extraction for recent YouTube player variants）
-ytmusicapi>=1.12.0  # YouTube Music API（搜索、排行榜、歌词）1.12.0: get_song_credits国际化改进
+pytubefix>=10.9.0  # YouTube 下载库（10.9.0: improved nsig extraction for recent YouTube player variants）
+ytmusicapi>=1.12.1  # YouTube Music API（搜索、排行榜、歌词）1.12.0: get_song_credits国际化改进
 pillow>=12.2.0  # 图像处理库
 pillow-heif>=1.3.0  # HEIF/HEIC 图片格式支持
 lxml-html-clean>=0.4.5  # HTML 清理工具
