@@ -55,10 +55,7 @@ COPY requirements.txt .
 RUN apt-get update && apt-get install -y --no-install-recommends git \
     && pip install --no-cache-dir --find-links=/app/wheels -r requirements.txt \
     && apt-get purge -y git && apt-get autoremove -y && rm -rf /var/lib/apt/lists/* \
-    && rm -rf /app/wheels \
-    && sed -i 's/curl_cffi_version < (0, 15)/curl_cffi_version < (0, 16)/' \
-       $(python -c "import yt_dlp, os; print(os.path.dirname(yt_dlp.__file__))")/networking/_curlcffi.py \
-    && python -c "import yt_dlp.networking._curlcffi; print('✅ curl_cffi patch OK')"
+    && rm -rf /app/wheels
 
 # 重建 matplotlib 字体缓存（识别 Noto CJK 字体）
 RUN python -c "import matplotlib.font_manager as fm; fm._load_fontmanager(try_read_cache=False)"

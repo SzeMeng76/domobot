@@ -232,7 +232,20 @@ async def ensure_h264(file: str) -> str:
     返回最终文件路径。
     """
     codec = await get_video_codec(file)
+    src = Path(file)
     if codec == "h264":
+        # codec 已是 h264，但容器可能不是 mp4（如 mkv/webm），Telegram 要求 mp4 容器
+        if src.suffix.lower() != ".mp4":
+            out = src.with_stem(src.stem + "_remux").with_suffix(".mp4")
+            remux_cmd = ["ffmpeg", "-i", str(src), "-c", "copy", "-movflags", "+faststart", "-y", str(out)]
+            proc = await asyncio.create_subprocess_exec(
+                *remux_cmd,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await proc.wait()
+            logger.info(f"h264 非mp4容器，已 remux: {src.suffix} → .mp4")
+            return str(out)
         return file
 
     # 获取视频信息

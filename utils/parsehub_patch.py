@@ -5,7 +5,6 @@ Monkey patch for ParseHub to fix issues:
 3. BiliAPI anti-crawler: BiliAPI doesn't set Referer headers for API calls
 4. XhsParser empty download list: XhsParser crashes when download_list is empty
 5. FacebookParse regex: watch/?v= URLs not recognized (Facebook redirects /watch?v= to /watch/?v=)
-6. Twitter guest_token: Twitter/X API no longer requires guest_token for public tweets
 """
 
 
@@ -1166,67 +1165,6 @@ def patch_parsehub_yt_dlp():
 
         FacebookParse._do_parse = patched_facebook_parse
         logger.info("✅ FacebookParse._do_parse patched: Skip internal get_raw_url for watch/?v= URLs")
-
-        # Patch Twitter.fetch_tweet to remove guest_token requirement
-        # Twitter/X API no longer requires guest_token for public tweets
-        from parsehub.provider_api.twitter import Twitter
-
-        original_twitter_fetch_tweet = Twitter.fetch_tweet
-
-        async def patched_twitter_fetch_tweet(self, url: str):
-            """Patched fetch_tweet that doesn't use guest_token"""
-            import httpx
-            from parsehub.config import GlobalConfig
-
-            tweet_id = self.get_id_by_url(url)
-            headers = {
-                "accept-language": "zh-CN,zh;q=0.9",
-                "authorization": self.authorization,
-                "content-type": "application/json",
-                "user-agent": GlobalConfig.ua,
-                # Twitter/X API no longer requires guest_token for public tweets
-                # "x-guest-token": await self.get_guest_token(url),
-                "x-twitter-active-user": "yes",
-                "x-twitter-client-language": "zh-cn",
-            }
-
-            cookie = None
-            if self.cookie and self.check_cookie():
-                headers["x-csrf-token"] = self.cookie.get("ct0")
-                cookie = self.cookie
-
-            params = {
-                "variables": f'{{"tweetId":"{tweet_id}","withCommunity":false,"includePromotedContent":false,"withVoice":false}}',
-                "features": '{"creator_subscriptions_tweet_preview_api_enabled":true,'
-                '"communities_web_enable_tweet_community_results_fetch":true,'
-                '"c9s_tweet_anatomy_moderator_badge_enabled":true,"tweetypie_unmention_optimization_enabled":true,'
-                '"responsive_web_edit_tweet_api_enabled":true,"graphql_is_translatable_rweb_tweet_is_translatable_enabled":true,'
-                '"view_counts_everywhere_api_enabled":true,"longform_notetweets_consumption_enabled":true,'
-                '"responsive_web_twitter_article_tweet_consumption_enabled":true,"tweet_awards_web_tipping_enabled":false,'
-                '"creator_subscriptions_quote_tweet_preview_enabled":false,"freedom_of_speech_not_reach_fetch_enabled":true,'
-                '"standardized_nudges_misinfo":true,"tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled":true,'
-                '"tweet_with_visibility_results_prefer_gql_media_interstitial_enabled":false,"rweb_video_timestamps_enabled":true,'
-                '"longform_notetweets_rich_text_read_enabled":true,"longform_notetweets_inline_media_enabled":true,'
-                '"rweb_tipjar_consumption_enabled":true,"responsive_web_graphql_exclude_directive_enabled":true,'
-                '"verified_phone_label_enabled":false,'
-                '"responsive_web_graphql_skip_user_profile_image_extensions_enabled":false,'
-                '"responsive_web_graphql_timeline_navigation_enabled":true,'
-                '"responsive_web_enhance_cards_enabled":false}',
-                "fieldToggles": '{"withArticleRichContentState":true,"withArticlePlainText":false}',
-            }
-
-            async with httpx.AsyncClient(proxy=self.proxy, timeout=30.0) as client:
-                response = await client.get(
-                    "https://api.twitter.com/graphql/kPLTRmMnzbPTv70___D06w/TweetResultByRestId",
-                    params=params,
-                    headers=headers,
-                    cookies=cookie,
-                )
-            response.raise_for_status()
-            return self.parse(response.json())
-
-        Twitter.fetch_tweet = patched_twitter_fetch_tweet
-        logger.info("✅ Twitter.fetch_tweet patched: Remove guest_token requirement (API no longer needs it)")
 
         return True
 
