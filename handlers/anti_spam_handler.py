@@ -202,6 +202,67 @@ class AntiSpamHandler:
         _linked_chat_cache[group_id] = (linked_id, time.monotonic())
         return linked_id
 
+    async def _is_legitimate_participation(self, text: str) -> bool:
+        """
+        判断用户回复关联频道消息的内容是否是正常参与群内活动。
+
+        正常参与特征：
+        - 竞价出价：如 "我要71元购买DO！"、"+10"、"100" 等
+        - 报名响应：如 "报名"、"要"、"+1"、"我要" 等
+        - 简短询问：如 "还有吗"、"多少钱"、"什么时候" 等
+
+        恶意广告特征（即使回复频道也要检测）：
+        - 包含联系方式：TG链接、@用户名、t.me 链接
+        - 引流话术：看简介、加我、私聊、扫码等
+        - 推广内容：卖、出售、代理、兼职等主动推销
+
+        Args:
+            text: 用户回复的文本内容
+
+        Returns:
+            True 表示正常参与（豁免检测），False 表示可疑内容（需要检测）
+        """
+        if not text:
+            return True  # 空消息（贴纸、表情等）认为正常
+
+        text_lower = text.lower()
+        text_len = len(text)
+
+        # 恶意广告特征检测（优先级高）
+        spam_patterns = [
+            't.me/', '@', 'http://', 'https://',  # 链接和用户名
+            '看简介', '点简介', '加我', '私聊', '扫码', '进群',  # 引流话术
+            '代理', '兼职', '招募', '收益', '赚钱', '日入', '稳定',  # 推广关键词
+            '出售', '代充', '出u', '收u', 'usdt', '换汇',  # 交易推广
+        ]
+
+        for pattern in spam_patterns:
+            if pattern in text_lower:
+                logger.info(f"Detected spam pattern '{pattern}' in reply to linked channel")
+                return False
+
+        # 简短消息（<50字）通常是正常参与
+        if text_len < 50:
+            # 检查是否包含价格、数字、常见参与词
+            participation_keywords = [
+                '我要', '要', '报名', '+1', '购买', '买',
+                '还有', '多少', '什么时候', '在吗', '可以',
+                '元', '块', '刀', '￥', '$', '价格'
+            ]
+
+            # 包含参与关键词 或 主要是数字/符号 → 认为正常
+            if any(kw in text for kw in participation_keywords):
+                return True
+
+            # 主要是数字和简单符号（如纯数字、"+10"、"100元"）
+            import re
+            if re.match(r'^[\d\s+\-元块刀￥$.,!！？?]+$', text):
+                return True
+
+        # 长消息（>=50字）且没有明显参与特征 → 可疑，需要检测
+        logger.debug(f"Long reply ({text_len} chars) to linked channel, will check")
+        return False
+
     async def handle_new_member(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """处理新成员加入"""
         try:
@@ -345,6 +406,28 @@ class AntiSpamHandler:
             # 跳过管理员消息
             if await self.is_admin(update, context):
                 return
+
+            # 回复关联频道消息的特殊处理
+            # 如果用户回复的是本群关联频道的消息，且回复内容看起来是正常参与群内活动
+            # （如竞价出价、报名等），则豁免检测；但如果回复内容包含明显广告特征，
+            # 仍然进行检测（防止恶意用户借机打广告）
+            if message and message.reply_to_message:
+                reply_msg = message.reply_to_message
+                # 检查被回复的消息是否来自关联频道
+                if reply_msg.sender_chat:
+                    linked_id = await self._get_linked_channel_id(group_id, context)
+                    if linked_id is not None and reply_msg.sender_chat.id == linked_id:
+                        # 被回复的消息来自关联频道，检查用户回复内容
+                        if message.text and await self._is_legitimate_participation(message.text):
+                            logger.info(
+                                f"Skipping anti-spam: user {user_id} legitimately participating in "
+                                f"linked channel activity in group {group_id}"
+                            )
+                            return
+                        logger.debug(
+                            f"User {user_id} replied to linked channel message but content looks "
+                            f"suspicious, will check"
+                        )
 
             # 获取或创建用户信息
             user_info = await self.manager.get_or_create_user_info(
