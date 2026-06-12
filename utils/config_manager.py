@@ -192,6 +192,9 @@ class BotConfig:
         self.enable_user_cache = False
         self.user_cache_group_ids = []
 
+        # Guest Bot 配置
+        self.enable_guest_bot = False
+
         # 自定义脚本配置
         self.alerter_config = {}
         self.load_custom_scripts = False
@@ -501,6 +504,9 @@ class ConfigManager:
             self.config.user_cache_group_ids = [
                 int(gid.strip()) for gid in cache_group_ids_str.split(",") if gid.strip()
             ]
+
+        # Guest Bot 配置
+        self.config.enable_guest_bot = get_bool_env("ENABLE_GUEST_BOT")
 
         # 自定义脚本配置
         alerter_config_str = os.getenv("ALERTER_CONFIG", "{}")

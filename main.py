@@ -163,8 +163,29 @@ def load_commands():
             logger.error(f"加载命令模块 {name} 失败: {e}")
 
 
-def setup_handlers(application: Application):
+def setup_handlers(application: Application, config):
     """设置命令处理器"""
+
+    # ========================================
+    # Guest Bot处理器（如果启用）- 必须最先注册
+    # ========================================
+    if config.enable_guest_bot:
+        from handlers.guest_bot_handler import GuestBotHandler
+        from handlers.guest_bot_middleware import GuestBotMiddleware
+
+        # 从bot_data获取user_manager
+        user_cache_manager = application.bot_data.get("user_cache_manager")
+
+        guest_bot_handler = GuestBotHandler(
+            user_manager=user_cache_manager,
+            config=config
+        )
+
+        # 注册middleware（group=-100确保最先执行）
+        guest_bot_middleware = GuestBotMiddleware(guest_bot_handler)
+        application.add_handler(guest_bot_middleware, group=-100)
+
+        logger.info("✅ Guest Bot enabled (using existing permission system)")
 
     # 动态加载所有命令
     load_commands()
@@ -258,6 +279,14 @@ def setup_handlers(application: Application):
 async def setup_application(application: Application, config) -> None:
     """异步设置应用"""
     logger.info(" 开始初始化机器人应用...")
+
+    # ========================================
+    # 安装Guest Bot patches（必须在所有handler之前）
+    # ========================================
+    if config.enable_guest_bot:
+        from utils.guest_bot_wrapper import install_guest_bot_patches
+        install_guest_bot_patches()
+        logger.info("✅ Guest Bot patches installed")
 
     # ========================================
     # 第零步：检查并初始化数据库
@@ -877,7 +906,7 @@ async def setup_application(application: Application, config) -> None:
     # 第五步：设置命令处理器
     # ========================================
     logger.info("🔧 设置命令处理器...")
-    setup_handlers(application)
+    setup_handlers(application, config)
     logger.info("✅ 命令处理器设置完成")
 
     # ========================================
