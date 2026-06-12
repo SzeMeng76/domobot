@@ -342,6 +342,7 @@ def _wrap_bot_send_message(original_func):
 def install_guest_bot_patches():
     """安装Guest Bot补丁，使reply方法支持guest query（包含媒体中转）"""
     global _original_bot_send_message
+    from telegram.ext import ExtBot
 
     # Patch Message类的方法
     Message.reply_text = _guest_aware_reply_text
@@ -350,9 +351,11 @@ def install_guest_bot_patches():
     Message.reply_document = _guest_aware_reply_document
     Message.reply_video = _guest_aware_reply_video
 
-    # Patch Bot类的send方法
+    # Patch Bot类和ExtBot类的send方法（都要patch，因为实例可能用ExtBot）
     _original_bot_send_message = Bot.send_message
-    Bot.send_message = _wrap_bot_send_message(_original_bot_send_message)
+    wrapped = _wrap_bot_send_message(_original_bot_send_message)
+    Bot.send_message = wrapped
+    ExtBot.send_message = wrapped
 
     logger.info("✅ Guest Bot patches installed (with media staging support)")
 
