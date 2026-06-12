@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 # 用contextvars存储当前请求的guest_query_id，线程/协程安全
 # 在middleware里设置，wrapper里读取，无需修改任何命令代码
 _current_guest_query_id: ContextVar[str | None] = ContextVar('guest_query_id', default=None)
+# 第一次answer_guest_query后存inline_message_id，后续用editMessageText
+_current_inline_message_id: ContextVar[str | None] = ContextVar('inline_message_id', default=None)
 
 # 保存原始方法
 _original_reply_text = Message.reply_text
@@ -157,25 +159,46 @@ async def _guest_aware_reply_video(self, video, *args, **kwargs):
 
 
 async def _send_guest_response(guest_query_id: str, bot, text: str, **kwargs):
-    """统一的Guest Bot文本响应发送函数"""
+    """统一的Guest Bot文本响应发送函数
+
+    第一次调用：answer_guest_query发送消息，存储inline_message_id
+    后续调用：editMessageText编辑消息（同一个guest_query只能answer一次）
+    """
     from telegram import InlineQueryResultArticle, InputTextMessageContent
 
-    # 构建InputTextMessageContent
     parse_mode = kwargs.get('parse_mode')
     disable_web_page_preview = kwargs.get('disable_web_page_preview', False)
+    reply_markup = kwargs.get('reply_markup')
 
+    # 检查是否已经有inline_message_id（说明已经answer过了）
+    inline_message_id = _current_inline_message_id.get()
+    if inline_message_id:
+        # 后续调用：用editMessageText编辑消息
+        try:
+            from telegram import InputTextMessageContent
+            await bot.edit_message_text(
+                inline_message_id=inline_message_id,
+                text=text,
+                parse_mode=parse_mode,
+                reply_markup=reply_markup,
+            )
+            logger.info(f"Edited guest query message via inline_message_id")
+            return None
+        except Exception as e:
+            logger.error(f"Failed to edit guest query message: {e}")
+            raise
+
+    # 第一次调用：answer_guest_query
     input_content = InputTextMessageContent(
         message_text=text,
         parse_mode=parse_mode,
         disable_web_page_preview=disable_web_page_preview
     )
-
-    # 构建InlineQueryResultArticle
     result = InlineQueryResultArticle(
-        id=guest_query_id[:64],  # ID最多64字节
+        id=guest_query_id[:64],
         title="Response",
         input_message_content=input_content,
-        reply_markup=kwargs.get('reply_markup')
+        reply_markup=reply_markup
     )
 
     try:
@@ -183,6 +206,10 @@ async def _send_guest_response(guest_query_id: str, bot, text: str, **kwargs):
             guest_query_id=guest_query_id,
             result=result
         )
+        # 存储inline_message_id供后续编辑使用
+        if sent_msg and hasattr(sent_msg, 'inline_message_id') and sent_msg.inline_message_id:
+            _current_inline_message_id.set(sent_msg.inline_message_id)
+            logger.info(f"Stored inline_message_id for future edits: {sent_msg.inline_message_id}")
         logger.info(f"Successfully sent guest query text response")
         return sent_msg
     except Exception as e:

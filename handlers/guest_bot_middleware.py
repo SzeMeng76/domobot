@@ -40,8 +40,9 @@ class GuestBotMiddleware(BaseHandler):
         context.user_data.pop('guest_caller_chat', None)
 
         # 清除contextvars里的guest_query_id
-        from utils.guest_bot_wrapper import _current_guest_query_id
+        from utils.guest_bot_wrapper import _current_guest_query_id, _current_inline_message_id
         _current_guest_query_id.set(None)
+        _current_inline_message_id.set(None)
 
         # 检查是否是guest bot消息
         if not self.guest_bot_handler.is_guest_bot_message(update):
