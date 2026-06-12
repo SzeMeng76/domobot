@@ -438,7 +438,8 @@ def _wrap_bot_send_media(media_type: str, original_func):
     """包装bot.send_photo/audio/video/document以支持guest bot"""
     async def wrapper(*args, **kwargs):
         guest_query_id = _current_guest_query_id.get()
-        if guest_query_id:
+        inline_message_id = _current_inline_message_id.get()
+        if guest_query_id or inline_message_id:
             bot = args[0] if args and isinstance(args[0], (Bot, ExtBot)) else None
             if bot:
                 media = kwargs.get(media_type) or (args[2] if len(args) > 2 else None)
@@ -447,7 +448,7 @@ def _wrap_bot_send_media(media_type: str, original_func):
                 if media and user_id:
                     logger.info(f"Redirecting bot.send_{media_type} to guest media")
                     extra = {k: v for k, v in kwargs.items() if k not in (media_type, 'caption', 'chat_id')}
-                    success = await _send_guest_media(bot, guest_query_id, user_id, media_type, media, caption, **extra)
+                    success = await _send_guest_media(bot, guest_query_id or '', user_id, media_type, media, caption, **extra)
                     if success:
                         return GuestMessageProxy(bot, _current_inline_message_id.get() or '')
         return await original_func(*args, **kwargs)

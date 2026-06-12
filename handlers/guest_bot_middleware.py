@@ -47,7 +47,15 @@ class GuestBotMiddleware(BaseHandler):
 
         # 检查是否是guest bot消息
         if not self.guest_bot_handler.is_guest_bot_message(update):
-            return None  # 不是guest bot消息，继续
+            # 检查是否是来自inline message的callback_query（guest bot按钮点击）
+            if (update.callback_query and
+                update.callback_query.inline_message_id and
+                update.callback_query.from_user):
+                from utils.guest_bot_wrapper import _current_inline_message_id, _current_guest_user_id
+                _current_inline_message_id.set(update.callback_query.inline_message_id)
+                _current_guest_user_id.set(update.callback_query.from_user.id)
+                logger.debug(f"Inline callback detected, inline_message_id={update.callback_query.inline_message_id}")
+            return None  # 继续处理
 
         # 进行权限检查和context注入
         authorized = await self.guest_bot_handler.process_guest_message(update, context)
