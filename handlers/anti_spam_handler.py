@@ -303,8 +303,8 @@ class AntiSpamHandler:
             return False
 
         # 方法1：guest_query_id 是 Bot API 10.0 的权威标识字段
-        # PTB 22.7 尚未解析此字段，通过 api_kwargs 读取原始数据
-        guest_query_id = message.api_kwargs.get("guest_query_id") if message.api_kwargs else None
+        # PTB 22.8+ 已正式支持此字段
+        guest_query_id = message.guest_query_id
 
         if guest_query_id:
             logger.info(f"Guest bot message detected in group {group_id} via guest_query_id, deleting")
@@ -314,9 +314,10 @@ class AntiSpamHandler:
                 logger.error(f"Failed to delete guest bot message: {e}")
 
             # 尝试删除触发此 guest bot 的 @mention 消息
-            caller = message.api_kwargs.get("guest_bot_caller_user") or {}
-            caller_id = caller.get("id") if isinstance(caller, dict) else None
-            if caller_id:
+            # PTB 22.8+ 已正式支持 guest_bot_caller_user 字段
+            caller_user = message.guest_bot_caller_user
+            if caller_user:
+                caller_id = caller_user.id
                 trigger_msg_id = _pop_recent_message(group_id, caller_id)
                 if trigger_msg_id:
                     try:
@@ -540,6 +541,27 @@ class AntiSpamHandler:
 
                 detection_result, detection_time_ms = await self.detector.detect_photo(
                     photo_url, user_info, caption
+                )
+
+            # 联系人消息检测
+            elif message.contact and config.get('check_text', True):
+                message_type = 'contact'
+                contact = message.contact
+                # 构建联系人信息文本进行检测
+                contact_name = contact.first_name
+                if contact.last_name:
+                    contact_name += f" {contact.last_name}"
+
+                message_text = f"[分享联系人]\n姓名: {contact_name}\n电话: {contact.phone_number}"
+
+                # 如果有vcard，也包含进来
+                if contact.vcard:
+                    message_text += f"\nvCard: {contact.vcard}"
+
+                logger.info(f"Detecting shared contact: {contact_name} ({contact.phone_number})")
+
+                detection_result, detection_time_ms = await self.detector.detect_text(
+                    message_text, user_info
                 )
 
             # 检测失败
