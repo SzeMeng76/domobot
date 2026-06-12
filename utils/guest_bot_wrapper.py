@@ -278,28 +278,29 @@ async def _send_guest_media(bot: Bot, guest_query_id: str, user_id: int, media_t
     from telegram import InlineQueryResultArticle, InputTextMessageContent, InputMediaPhoto, InputMediaDocument, InputMediaVideo, InputMediaAudio
 
     try:
-        # 步骤1：发送占位文本，获得inline_message_id
-        placeholder = InputTextMessageContent(
-            message_text=f"🔄 正在加载{_media_type_cn(media_type)}..."
-        )
-
-        result = InlineQueryResultArticle(
-            id=guest_query_id[:64],
-            title="Loading...",
-            input_message_content=placeholder
-        )
-
-        logger.info(f"Sending placeholder for guest query {guest_query_id}")
-        sent_msg = await bot.answer_guest_query(guest_query_id, result)
-
-        # 获取inline_message_id
-        inline_message_id = sent_msg.inline_message_id if hasattr(sent_msg, 'inline_message_id') else None
+        # 检查是否已经有inline_message_id（loading消息已经answer过了）
+        inline_message_id = _current_inline_message_id.get()
 
         if not inline_message_id:
-            logger.error("Failed to get inline_message_id from answer_guest_query")
-            return False
+            # 步骤1：发送占位文本，获得inline_message_id
+            placeholder = InputTextMessageContent(
+                message_text=f"🔄 正在加载{_media_type_cn(media_type)}..."
+            )
+            result = InlineQueryResultArticle(
+                id=guest_query_id[:64],
+                title="Loading...",
+                input_message_content=placeholder
+            )
+            logger.info(f"Sending placeholder for guest query {guest_query_id}")
+            sent_msg = await bot.answer_guest_query(guest_query_id, result)
+            inline_message_id = sent_msg.inline_message_id if hasattr(sent_msg, 'inline_message_id') else None
+            if inline_message_id:
+                _current_inline_message_id.set(inline_message_id)
+                logger.info(f"Got inline_message_id: {inline_message_id}")
 
-        logger.info(f"Got inline_message_id: {inline_message_id}")
+        if not inline_message_id:
+            logger.error("Failed to get inline_message_id")
+            return False
 
         # 步骤2：暂存到私聊获取file_id
         logger.info(f"Staging {media_type} to private chat {user_id}")
