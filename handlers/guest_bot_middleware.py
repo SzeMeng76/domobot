@@ -53,6 +53,17 @@ class GuestBotMiddleware(BaseHandler):
         # 让后续的CommandHandler、ConversationHandler等能识别
         update._unfreeze()
         update.message = update.guest_message
+
+        # 修复命令文本：去掉 @botname 前缀，让CommandHandler能识别
+        # Guest message格式: "@mengpricebot /help" -> 需要改成 "/help"
+        if update.message.text and update.message.text.startswith('@'):
+            # 找到第一个空格后的内容
+            parts = update.message.text.split(maxsplit=1)
+            if len(parts) > 1:
+                # 使用object.__setattr__绕过frozen限制
+                object.__setattr__(update.message, 'text', parts[1])
+                logger.debug(f"Stripped bot mention from command text: '{parts[1]}'")
+
         update._freeze()
 
         # 继续到后续handler
