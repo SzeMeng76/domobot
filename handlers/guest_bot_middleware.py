@@ -25,7 +25,7 @@ class GuestBotMiddleware(BaseHandler):
 
     def check_update(self, update: object) -> bool:
         """检查是否应该处理此update"""
-        return isinstance(update, Update) and update.message is not None
+        return isinstance(update, Update) and update.guest_message is not None
 
     async def _process(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
@@ -47,7 +47,7 @@ class GuestBotMiddleware(BaseHandler):
 
         # 授权通过，注入guest context到message对象
         from utils.guest_bot_wrapper import inject_guest_context_to_message
-        inject_guest_context_to_message(update.message, context)
+        inject_guest_context_to_message(update.guest_message, context)
 
         # 继续到后续handler
         return None

@@ -56,8 +56,8 @@ class GuestBotHandler:
     def is_guest_bot_message(self, update: Update) -> bool:
         """检查是否是Guest Bot消息"""
         return (
-            update.message is not None and
-            update.message.guest_query_id is not None
+            update.guest_message is not None and
+            update.guest_message.guest_query_id is not None
         )
 
     async def process_guest_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -68,7 +68,7 @@ class GuestBotHandler:
             True 表示是guest bot消息且已处理授权检查，后续handler可以继续
             False 表示不是guest bot消息或权限不足已拦截
         """
-        message = update.message
+        message = update.guest_message
         if not message or not message.guest_query_id:
             return False
 
