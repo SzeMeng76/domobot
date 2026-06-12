@@ -441,6 +441,32 @@ def _wrap_bot_send_media(media_type: str, original_func):
     return wrapper
 
 
+def _wrap_bot_send_media_group(original_func):
+    """包装bot.send_media_group，guest bot模式下只发第一张图"""
+    async def wrapper(*args, **kwargs):
+        guest_query_id = _current_guest_query_id.get()
+        if guest_query_id:
+            bot = args[0] if args and isinstance(args[0], (Bot, ExtBot)) else None
+            if bot:
+                media_list = kwargs.get('media') or (args[2] if len(args) > 2 else None)
+                user_id = _current_guest_user_id.get()
+                if media_list and user_id:
+                    # 只取第一个媒体
+                    first = media_list[0]
+                    total = len(media_list)
+                    media_type = type(first).__name__.lower().replace('inputmedia', '')
+                    media = getattr(first, 'media', None)
+                    caption = getattr(first, 'caption', '') or ''
+                    if total > 1:
+                        caption = f"{caption}\n\n📎 共{total}张，仅显示第1张" if caption else f"📎 共{total}张，仅显示第1张"
+                    logger.info(f"Redirecting send_media_group to guest media (first of {total})")
+                    success = await _send_guest_media(bot, guest_query_id, user_id, media_type, media, caption)
+                    if success:
+                        return [GuestMessageProxy(bot, _current_inline_message_id.get() or '')]
+        return await original_func(*args, **kwargs)
+    return wrapper
+
+
 def install_guest_bot_patches():
     """安装Guest Bot补丁，使reply方法支持guest query（包含媒体中转）"""
     global _original_bot_send_message
@@ -465,6 +491,11 @@ def install_guest_bot_patches():
         wrapped_media = _wrap_bot_send_media(media_type, original)
         setattr(Bot, f'send_{media_type}', wrapped_media)
         setattr(ExtBot, f'send_{media_type}', wrapped_media)
+
+    # Patch Bot.send_media_group（多图，只发第一张）
+    wrapped_group = _wrap_bot_send_media_group(Bot.send_media_group)
+    Bot.send_media_group = wrapped_group
+    ExtBot.send_media_group = wrapped_group
 
     logger.info("✅ Guest Bot patches installed (with media staging support)")
 
