@@ -49,5 +49,11 @@ class GuestBotMiddleware(BaseHandler):
         from utils.guest_bot_wrapper import inject_guest_context_to_message
         inject_guest_context_to_message(update.guest_message, context)
 
+        # 关键修复：把guest_message复制到update.message
+        # 让后续的CommandHandler、ConversationHandler等能识别
+        update._unfreeze()
+        update.message = update.guest_message
+        update._freeze()
+
         # 继续到后续handler
         return None
