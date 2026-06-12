@@ -73,8 +73,8 @@ class GuestBotHandler:
             return False
 
         guest_query_id = message.guest_query_id
-        caller_user = message.guest_bot_caller_user
-        caller_chat = message.guest_bot_caller_chat
+        caller_user = message.from_user
+        caller_chat = message.chat
 
         if not caller_user:
             logger.warning("Guest bot message without caller_user, ignoring")
