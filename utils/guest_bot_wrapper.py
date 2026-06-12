@@ -20,6 +20,8 @@ logger = logging.getLogger(__name__)
 _current_guest_query_id: ContextVar[str | None] = ContextVar('guest_query_id', default=None)
 # 第一次answer_guest_query后存inline_message_id，后续用editMessageText
 _current_inline_message_id: ContextVar[str | None] = ContextVar('inline_message_id', default=None)
+# 当前guest用户的user_id，用于媒体私聊中转
+_current_guest_user_id: ContextVar[int | None] = ContextVar('guest_user_id', default=None)
 
 # 保存原始方法
 _original_reply_text = Message.reply_text
@@ -420,6 +422,25 @@ def _wrap_bot_send_message(original_func):
     return wrapper
 
 
+def _wrap_bot_send_media(media_type: str, original_func):
+    """包装bot.send_photo/audio/video/document以支持guest bot"""
+    async def wrapper(*args, **kwargs):
+        guest_query_id = _current_guest_query_id.get()
+        if guest_query_id:
+            bot = args[0] if args and isinstance(args[0], (Bot, ExtBot)) else None
+            if bot:
+                media = kwargs.get(media_type) or (args[2] if len(args) > 2 else None)
+                caption = kwargs.get('caption', '')
+                user_id = _current_guest_user_id.get()
+                if media and user_id:
+                    logger.info(f"Redirecting bot.send_{media_type} to guest media")
+                    success = await _send_guest_media(bot, guest_query_id, user_id, media_type, media, caption)
+                    if success:
+                        return GuestMessageProxy(bot, _current_inline_message_id.get() or '')
+        return await original_func(*args, **kwargs)
+    return wrapper
+
+
 def install_guest_bot_patches():
     """安装Guest Bot补丁，使reply方法支持guest query（包含媒体中转）"""
     global _original_bot_send_message
@@ -437,6 +458,13 @@ def install_guest_bot_patches():
     wrapped = _wrap_bot_send_message(_original_bot_send_message)
     Bot.send_message = wrapped
     ExtBot.send_message = wrapped
+
+    # Patch Bot.send_photo/audio/video/document
+    for media_type in ('photo', 'audio', 'video', 'document'):
+        original = getattr(Bot, f'send_{media_type}')
+        wrapped_media = _wrap_bot_send_media(media_type, original)
+        setattr(Bot, f'send_{media_type}', wrapped_media)
+        setattr(ExtBot, f'send_{media_type}', wrapped_media)
 
     logger.info("✅ Guest Bot patches installed (with media staging support)")
 
