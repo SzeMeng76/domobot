@@ -30,6 +30,45 @@ _original_reply_audio = Message.reply_audio
 _original_bot_send_message = None
 
 
+class GuestMessageProxy:
+    """
+    代理对象，模拟Message对象的edit_text/edit_caption等方法
+    用于guest bot模式下，命令代码调用message.edit_text()时，
+    实际上通过editMessageText编辑inline message
+    """
+    def __init__(self, bot, inline_message_id: str, chat_id=None, message_id=None):
+        self._bot = bot
+        self._inline_message_id = inline_message_id
+        self.chat_id = chat_id
+        self.message_id = message_id or 0
+
+    async def edit_text(self, text: str, **kwargs):
+        try:
+            await self._bot.edit_message_text(
+                inline_message_id=self._inline_message_id,
+                text=text,
+                parse_mode=kwargs.get('parse_mode'),
+                reply_markup=kwargs.get('reply_markup'),
+            )
+            logger.debug(f"GuestMessageProxy.edit_text: edited inline message")
+        except Exception as e:
+            if 'not modified' in str(e).lower():
+                pass  # 内容相同，忽略
+            else:
+                logger.error(f"GuestMessageProxy.edit_text failed: {e}")
+
+    async def edit_caption(self, caption: str, **kwargs):
+        await self.edit_text(caption, **kwargs)
+
+    async def delete(self):
+        pass  # guest模式下不能删除inline message，忽略
+
+    async def reply_text(self, text: str, **kwargs):
+        guest_query_id = _current_guest_query_id.get()
+        if guest_query_id:
+            return await _send_guest_response(guest_query_id, self._bot, text, **kwargs)
+
+
 async def _guest_aware_reply_text(self, text: str, *args, **kwargs):
     """支持Guest Bot的reply_text"""
     if hasattr(self, '_guest_query_id') and self._guest_query_id:
@@ -175,7 +214,6 @@ async def _send_guest_response(guest_query_id: str, bot, text: str, **kwargs):
     if inline_message_id:
         # 后续调用：用editMessageText编辑消息
         try:
-            from telegram import InputTextMessageContent
             await bot.edit_message_text(
                 inline_message_id=inline_message_id,
                 text=text,
@@ -183,8 +221,10 @@ async def _send_guest_response(guest_query_id: str, bot, text: str, **kwargs):
                 reply_markup=reply_markup,
             )
             logger.info(f"Edited guest query message via inline_message_id")
-            return None
+            return GuestMessageProxy(bot, inline_message_id)
         except Exception as e:
+            if 'not modified' in str(e).lower():
+                return GuestMessageProxy(bot, inline_message_id)
             logger.error(f"Failed to edit guest query message: {e}")
             raise
 
@@ -207,10 +247,15 @@ async def _send_guest_response(guest_query_id: str, bot, text: str, **kwargs):
             result=result
         )
         # 存储inline_message_id供后续编辑使用
+        inline_msg_id = None
         if sent_msg and hasattr(sent_msg, 'inline_message_id') and sent_msg.inline_message_id:
-            _current_inline_message_id.set(sent_msg.inline_message_id)
-            logger.info(f"Stored inline_message_id for future edits: {sent_msg.inline_message_id}")
+            inline_msg_id = sent_msg.inline_message_id
+            _current_inline_message_id.set(inline_msg_id)
+            logger.info(f"Stored inline_message_id for future edits: {inline_msg_id}")
         logger.info(f"Successfully sent guest query text response")
+        # 返回GuestMessageProxy，让命令代码可以调用edit_text等方法
+        if inline_msg_id:
+            return GuestMessageProxy(bot, inline_msg_id)
         return sent_msg
     except Exception as e:
         logger.error(f"Failed to send guest query response: {e}")
