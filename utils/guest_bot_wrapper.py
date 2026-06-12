@@ -361,14 +361,17 @@ def inject_guest_context_to_message(message: Message, context: ContextTypes.DEFA
     """
     将guest context信息注入到Message对象
 
+    Note: Message对象是frozen的，不能动态添加属性。
+    guest_query_id已经存储在context.user_data中，无需注入到message对象。
+
     Args:
         message: Message对象
         context: Context对象（包含user_data）
     """
+    # No-op: context.user_data已经包含guest_query_id，无需注入到message
     if context.user_data.get('is_guest_bot_call'):
-        message._guest_query_id = context.user_data.get('guest_query_id')
-        message._guest_caller_chat = context.user_data.get('guest_caller_chat')
-        logger.debug(f"Injected guest context to message {message.message_id}")
+        logger.debug(f"Guest context available in context.user_data for message {message.message_id}")
+    pass
 
 
 def inject_guest_context_to_kwargs(kwargs: dict, context: ContextTypes.DEFAULT_TYPE):
