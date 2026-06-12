@@ -351,28 +351,34 @@ async def _stage_media_to_private(bot: Bot, user_id: int, media_type: str, media
     """
     暂存媒体到用户私聊，获取file_id，然后删除消息
 
+    临时清除_current_guest_query_id避免死循环（send_photo等已被patch）
+
     Returns:
         file_id或None
     """
     try:
         staging_caption = f"🔄 正在准备{_media_type_cn(media_type)}..."
 
-        # 根据类型发送
-        msg = None
-        if media_type == 'photo':
-            msg = await bot.send_photo(chat_id=user_id, photo=media, caption=staging_caption)
-            file_id = msg.photo[-1].file_id if msg.photo else None
-        elif media_type == 'audio':
-            msg = await bot.send_audio(chat_id=user_id, audio=media, caption=staging_caption)
-            file_id = msg.audio.file_id if msg.audio else None
-        elif media_type == 'document':
-            msg = await bot.send_document(chat_id=user_id, document=media, caption=staging_caption)
-            file_id = msg.document.file_id if msg.document else None
-        elif media_type == 'video':
-            msg = await bot.send_video(chat_id=user_id, video=media, caption=staging_caption)
-            file_id = msg.video.file_id if msg.video else None
-        else:
-            return None
+        # 临时清除guest_query_id，让send_*走原始路径（私聊发送不走guest bot）
+        token = _current_guest_query_id.set(None)
+        try:
+            msg = None
+            if media_type == 'photo':
+                msg = await bot.send_photo(chat_id=user_id, photo=media, caption=staging_caption)
+                file_id = msg.photo[-1].file_id if msg and msg.photo else None
+            elif media_type == 'audio':
+                msg = await bot.send_audio(chat_id=user_id, audio=media, caption=staging_caption)
+                file_id = msg.audio.file_id if msg and msg.audio else None
+            elif media_type == 'document':
+                msg = await bot.send_document(chat_id=user_id, document=media, caption=staging_caption)
+                file_id = msg.document.file_id if msg and msg.document else None
+            elif media_type == 'video':
+                msg = await bot.send_video(chat_id=user_id, video=media, caption=staging_caption)
+                file_id = msg.video.file_id if msg and msg.video else None
+            else:
+                return None
+        finally:
+            _current_guest_query_id.reset(token)
 
         if not file_id or not msg:
             return None
@@ -385,6 +391,10 @@ async def _stage_media_to_private(bot: Bot, user_id: int, media_type: str, media
             logger.debug(f"Deleted staging message {msg.message_id}")
         except Exception as e:
             logger.warning(f"Failed to delete staging message: {e}")
+
+        return file_id
+
+        return file_id
 
         return file_id
 
