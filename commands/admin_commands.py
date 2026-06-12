@@ -698,7 +698,7 @@ class AdminPanelHandler:
 
             # 3秒后自动删除面板
             await _schedule_deletion(
-                chat_id=query.message.chat_id, message_id=query.message.message_id, delay=3, context=context
+                chat_id=(query.message.chat_id if query.message else None), message_id=(query.message.message_id if query.message else None), delay=3, context=context
             )
 
             # 删除用户的初始命令消息（如果存在）

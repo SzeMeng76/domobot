@@ -350,7 +350,7 @@ async def cleancache_callback_handler(update: Update, context: ContextTypes.DEFA
         
         # 调度删除机器人回复消息
         from utils.message_manager import _schedule_deletion
-        await _schedule_deletion(context, query.message.chat_id, query.message.message_id, 60)
+        await _schedule_deletion(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 60)
         
         logger.info(f"通过回调清理缓存: {service}, 结果: {success}")
 

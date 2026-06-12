@@ -89,3 +89,13 @@ async def safe_answer_callback_query(
             logger.warning(f"回调查询已过期: {error_msg}")
             return False
         raise
+
+
+def get_query_chat_id(query: CallbackQuery) -> int | None:
+    """安全获取callback query的chat_id，inline message时返回None"""
+    return query.message.chat_id if query.message else None
+
+
+def get_query_message_id(query: CallbackQuery) -> int | None:
+    """安全获取callback query的message_id，inline message时返回None"""
+    return query.message.message_id if query.message else None

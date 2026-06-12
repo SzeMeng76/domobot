@@ -1939,8 +1939,8 @@ async def _execute_flight_search(update: Update, context: ContextTypes.DEFAULT_T
             error_msg = "❌ 航班服务暂不可用"
             if callback_query:
                 await callback_query.edit_message_text(error_msg)
-                await _schedule_auto_delete(context, callback_query.message.chat_id, 
-                                          callback_query.message.message_id, 5)
+                await _schedule_auto_delete(context, callback_(query.message.chat_id if query.message else None), 
+                                          callback_(query.message.message_id if query.message else None), 5)
             else:
                 await message.edit_text(error_msg)
                 await _schedule_auto_delete(context, message.chat_id, message.message_id, 5)
@@ -2176,8 +2176,8 @@ async def _execute_flight_search(update: Update, context: ContextTypes.DEFAULT_T
                     reply_markup=reply_markup
                 )
                 config = get_config()
-                await _schedule_auto_delete(context, callback_query.message.chat_id, 
-                                          callback_query.message.message_id, 
+                await _schedule_auto_delete(context, callback_(query.message.chat_id if query.message else None), 
+                                          callback_(query.message.message_id if query.message else None), 
                                           getattr(config, 'auto_delete_delay', 600))
             else:
                 await message.edit_text(
@@ -2202,8 +2202,8 @@ async def _execute_flight_search(update: Update, context: ContextTypes.DEFAULT_T
                 text=error_msg,
                 reply_markup=reply_markup
             )
-            await _schedule_auto_delete(context, callback_query.message.chat_id, 
-                                      callback_query.message.message_id, 
+            await _schedule_auto_delete(context, callback_(query.message.chat_id if query.message else None), 
+                                      callback_(query.message.message_id if query.message else None), 
                                       getattr(config, 'auto_delete_delay', 600))
         else:
             await message.edit_text(
@@ -3213,7 +3213,7 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         if not full_data:
             await query.edit_message_text("❌ 链接已过期，请重新输入")
             config = get_config()
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
             return
         
         if full_data.startswith("flight_quick_search:"):
@@ -3363,7 +3363,7 @@ async def flight_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         if not full_data:
             await query.edit_message_text("❌ 链接已过期，请重新搜索")
             config = get_config()
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
             return
         
         # 解析完整数据并转发到相应处理器
@@ -3602,7 +3602,7 @@ async def _show_price_insights(query: CallbackQuery, context: ContextTypes.DEFAU
                 reply_markup=reply_markup
             )
             config = get_config()
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 
                                       getattr(config, 'auto_delete_delay', 600))
             
     except Exception as e:
@@ -3618,7 +3618,7 @@ async def _show_price_insights(query: CallbackQuery, context: ContextTypes.DEFAU
             reply_markup=reply_markup
         )
         config = get_config()
-        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+        await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 
                                   getattr(config, 'auto_delete_delay', 600))
 
 async def _show_booking_options(query: CallbackQuery, context: ContextTypes.DEFAULT_TYPE, 
@@ -3968,7 +3968,7 @@ async def _show_booking_options(query: CallbackQuery, context: ContextTypes.DEFA
                 reply_markup=reply_markup
             )
             config = get_config()
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 
                                       getattr(config, 'auto_delete_delay', 600))
             
     except Exception as e:
@@ -3984,7 +3984,7 @@ async def _show_booking_options(query: CallbackQuery, context: ContextTypes.DEFA
             reply_markup=reply_markup
         )
         config = get_config()
-        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+        await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 
                                   getattr(config, 'auto_delete_delay', 600))
 
 # =============================================================================

@@ -210,8 +210,8 @@ async def cancel_session_deletions(session_id: str, context: ContextTypes.DEFAUL
 
 async def _schedule_deletion(
     context: ContextTypes.DEFAULT_TYPE,
-    chat_id: int,
-    message_id: int,
+    chat_id: int | None,
+    message_id: int | None,
     delay: int,
     session_id: str | None = None
 ) -> bool:
@@ -220,14 +220,16 @@ async def _schedule_deletion(
 
     Args:
         context: Bot 上下文
-        chat_id: 聊天ID
-        message_id: 消息ID
+        chat_id: 聊天ID（None时跳过，用于inline message）
+        message_id: 消息ID（None时跳过）
         delay: 延迟秒数
         session_id: 会话ID（可选）
 
     Returns:
         是否成功调度
     """
+    if chat_id is None or message_id is None:
+        return False
     try:
         if context and hasattr(context, "bot_data"):
             scheduler = context.bot_data.get("message_delete_scheduler")

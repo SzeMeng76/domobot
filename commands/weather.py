@@ -1183,7 +1183,7 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
             )
             # 调度删除错误消息
             from utils.message_manager import _schedule_deletion
-            await _schedule_deletion(context, query.message.chat_id, query.message.message_id, 10)
+            await _schedule_deletion(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 10)
             return
 
         # 处理 weather_chart_temp_location 格式
@@ -1216,7 +1216,7 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
             )
             # 调度删除错误消息
             from utils.message_manager import _schedule_deletion
-            await _schedule_deletion(context, query.message.chat_id, query.message.message_id, 10)  # 错误消息10秒后删除
+            await _schedule_deletion(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 10)  # 错误消息10秒后删除
             return
 
         location_id = location_data['id']
@@ -1391,7 +1391,7 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
                         while True:
                             try:
                                 await context.bot.send_chat_action(
-                                    chat_id=query.message.chat_id,
+                                    chat_id=(query.message.chat_id if query.message else None),
                                     action=ChatAction.TYPING
                                 )
                                 await asyncio.sleep(4)
@@ -1492,14 +1492,14 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
                         if chart_bytes:
                             # 发送图片
                             photo_msg = await context.bot.send_photo(
-                                chat_id=query.message.chat_id,
+                                chat_id=(query.message.chat_id if query.message else None),
                                 photo=InputFile(io.BytesIO(chart_bytes), filename=f"{location}_temp.png"),
                                 caption=f"📈 {location_name} 未来24小时温度趋势"
                             )
                             # 设置自动删除
                             from utils.message_manager import _schedule_deletion
                             config = get_config()
-                            await _schedule_deletion(context, query.message.chat_id, photo_msg.message_id, config.auto_delete_delay)
+                            await _schedule_deletion(context, (query.message.chat_id if query.message else None), photo_msg.message_id, config.auto_delete_delay)
                             await query.answer("✅ 图表已发送")
                             return
                         else:
@@ -1519,14 +1519,14 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
                         if chart_bytes:
                             # 发送图片
                             photo_msg = await context.bot.send_photo(
-                                chat_id=query.message.chat_id,
+                                chat_id=(query.message.chat_id if query.message else None),
                                 photo=InputFile(io.BytesIO(chart_bytes), filename=f"{location}_rain.png"),
                                 caption=f"🌧️ {location_name} 未来24小时降水趋势"
                             )
                             # 设置自动删除
                             from utils.message_manager import _schedule_deletion
                             config = get_config()
-                            await _schedule_deletion(context, query.message.chat_id, photo_msg.message_id, config.auto_delete_delay)
+                            await _schedule_deletion(context, (query.message.chat_id if query.message else None), photo_msg.message_id, config.auto_delete_delay)
                             await query.answer("✅ 图表已发送")
                             return
                         else:
@@ -1550,7 +1550,7 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
             )
             # 调度删除错误消息
             from utils.message_manager import _schedule_deletion
-            await _schedule_deletion(context, query.message.chat_id, query.message.message_id, 10)
+            await _schedule_deletion(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 10)
             return
 
         # 发送结果
@@ -1572,7 +1572,7 @@ async def weather_callback_handler(update: Update, context: ContextTypes.DEFAULT
         )
         # 调度删除错误消息
         from utils.message_manager import _schedule_deletion
-        await _schedule_deletion(context, query.message.chat_id, query.message.message_id, 10)
+        await _schedule_deletion(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 10)
 
 async def typhoon_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """处理台风追踪的回调"""
@@ -1677,7 +1677,7 @@ async def typhoon_callback_handler(update: Update, context: ContextTypes.DEFAULT
             )
             # 调度删除错误消息
             from utils.message_manager import _schedule_deletion
-            await _schedule_deletion(context, query.message.chat_id, query.message.message_id, 10)
+            await _schedule_deletion(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 10)
 
     except Exception as e:
         logging.error(f"台风回调处理失败: {e}")
@@ -1689,7 +1689,7 @@ async def typhoon_callback_handler(update: Update, context: ContextTypes.DEFAULT
         )
         # 调度删除错误消息
         from utils.message_manager import _schedule_deletion
-        await _schedule_deletion(context, query.message.chat_id, query.message.message_id, 10)
+        await _schedule_deletion(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 10)
 
 command_factory.register_command(
     "tq",

@@ -1041,7 +1041,7 @@ async def _execute_nearby_search(update: Update, context: ContextTypes.DEFAULT_T
                     reply_markup=reply_markup
                 )
                 config = get_config()
-                await _schedule_auto_delete(context, callback_query.message.chat_id, callback_query.message.message_id, config.auto_delete_delay)
+                await _schedule_auto_delete(context, callback_(query.message.chat_id if query.message else None), callback_(query.message.message_id if query.message else None), config.auto_delete_delay)
             else:
                 await message.edit_text(
                     text=error_msg,
@@ -1073,7 +1073,7 @@ async def _execute_nearby_search(update: Update, context: ContextTypes.DEFAULT_T
                 text=error_msg,
                 reply_markup=reply_markup
             )
-            await _schedule_auto_delete(context, callback_query.message.chat_id, callback_query.message.message_id, config.auto_delete_delay)
+            await _schedule_auto_delete(context, callback_(query.message.chat_id if query.message else None), callback_(query.message.message_id if query.message else None), config.auto_delete_delay)
         else:
             await message.edit_text(
                 text=error_msg,
@@ -1112,7 +1112,7 @@ async def _execute_location_search(update: Update, context: ContextTypes.DEFAULT
             error_msg = "❌ 地图服务暂不可用"
             if callback_query:
                 await _safe_edit_message(callback_query, error_msg)
-                await _schedule_auto_delete(context, callback_query.message.chat_id, callback_query.message.message_id, 5)
+                await _schedule_auto_delete(context, callback_(query.message.chat_id if query.message else None), callback_(query.message.message_id if query.message else None), 5)
             else:
                 await message.edit_text(error_msg)
                 await _schedule_auto_delete(context, message.chat_id, message.message_id, 5)
@@ -1240,7 +1240,7 @@ async def _execute_location_search(update: Update, context: ContextTypes.DEFAULT
                     reply_markup=reply_markup
                 )
                 config = get_config()
-                await _schedule_auto_delete(context, callback_query.message.chat_id, callback_query.message.message_id, config.auto_delete_delay)
+                await _schedule_auto_delete(context, callback_(query.message.chat_id if query.message else None), callback_(query.message.message_id if query.message else None), config.auto_delete_delay)
             else:
                 await message.edit_text(
                     text=error_msg,
@@ -1263,7 +1263,7 @@ async def _execute_location_search(update: Update, context: ContextTypes.DEFAULT
                 text=error_msg,
                 reply_markup=reply_markup
             )
-            await _schedule_auto_delete(context, callback_query.message.chat_id, callback_query.message.message_id, config.auto_delete_delay)
+            await _schedule_auto_delete(context, callback_(query.message.chat_id if query.message else None), callback_(query.message.message_id if query.message else None), config.auto_delete_delay)
         else:
             await message.edit_text(
                 text=error_msg,
@@ -1856,7 +1856,7 @@ async def _safe_edit_message(query, text, reply_markup=None, parse_mode=None):
             if len(text) > 1024:
                 # Caption太长，删除照片改用纯文本消息
                 logger.warning(f"Caption太长 ({len(text)} 字符)，删除照片改用文本消息")
-                chat_id = query.message.chat_id
+                chat_id = (query.message.chat_id if query.message else None)
                 await query.message.delete()
                 return await query.message.get_bot().send_message(
                     chat_id=chat_id,
@@ -1892,7 +1892,7 @@ async def _safe_edit_message(query, text, reply_markup=None, parse_mode=None):
                 if len(text) > 1024:
                     # Caption太长，删除照片改用纯文本消息
                     logger.warning(f"Caption太长 ({len(text)} 字符)，删除照片改用文本消息")
-                    chat_id = query.message.chat_id
+                    chat_id = (query.message.chat_id if query.message else None)
                     await query.message.delete()
                     return await query.message.get_bot().send_message(
                         chat_id=chat_id,
@@ -1916,7 +1916,7 @@ async def _safe_edit_message(query, text, reply_markup=None, parse_mode=None):
             # Caption太长，删除照片改用纯文本消息
             logger.warning(f"Caption太长，删除照片改用文本消息")
             try:
-                chat_id = query.message.chat_id
+                chat_id = (query.message.chat_id if query.message else None)
                 await query.message.delete()
                 return await query.message.get_bot().send_message(
                     chat_id=chat_id,
@@ -2109,7 +2109,7 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         if query.message.photo:
             await query.message.delete()
             sent_msg = await query.message.get_bot().send_message(
-                chat_id=query.message.chat_id,
+                chat_id=(query.message.chat_id if query.message else None),
                 text=f"📍 请选择要搜索的服务类型:\n\n位置: {lat:.6f}, {lng:.6f}",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
@@ -2124,7 +2124,7 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             )
             # 为编辑后的消息添加自动删除
             config = get_config()
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), config.auto_delete_delay)
     
     elif data.startswith("map_search_nearby:"):
         parts = data.split(":", 4)
@@ -2145,7 +2145,7 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         if not full_data:
             await _safe_edit_message(query, "❌ 链接已过期，请重新搜索")
             config = get_config()
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
             return
         
         # 解析完整数据并转发到相应处理器
@@ -2195,7 +2195,7 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             if query.message.photo:
                 await query.message.delete()
                 sent_msg = await query.message.get_bot().send_message(
-                    chat_id=query.message.chat_id,
+                    chat_id=(query.message.chat_id if query.message else None),
                     text=f"📍 请选择要搜索的服务类型:\n\n位置: {lat:.6f}, {lng:.6f}",
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
@@ -2210,7 +2210,7 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 )
                 # 为编辑后的消息添加自动删除
                 config = get_config()
-                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
+                await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), config.auto_delete_delay)
             
         elif full_data.startswith("route_to_coords:"):
             route_data = full_data.replace("route_to_coords:", "")
@@ -2249,7 +2249,7 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             if query.message.photo:
                 await query.message.delete()
                 sent_msg = await query.message.get_bot().send_message(
-                    chat_id=query.message.chat_id,
+                    chat_id=(query.message.chat_id if query.message else None),
                     text=f"🛣️ 路线规划到: {destination_name}\n\n请输入起点地址或发送位置信息",
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
@@ -2264,7 +2264,7 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 )
                 # 为编辑后的消息添加自动删除
                 config = get_config()
-                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
+                await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), config.auto_delete_delay)
 
         elif full_data.startswith("search_nearby:"):
             # 处理附近搜索（从短ID解析）
@@ -2443,7 +2443,7 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                     photo_url = location_data['photos'][0]
                     try:
                         sent_msg = await query.message.get_bot().send_photo(
-                            chat_id=query.message.chat_id,
+                            chat_id=(query.message.chat_id if query.message else None),
                             photo=photo_url,
                             caption=foldable_text_with_markdown_v2(result_text),
                             parse_mode="MarkdownV2",
@@ -2456,7 +2456,7 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                         logger.warning(f"发送照片失败，fallback 到纯文本: {e}")
                         # 照片发送失败，fallback 到纯文本
                         sent_msg = await query.message.get_bot().send_message(
-                            chat_id=query.message.chat_id,
+                            chat_id=(query.message.chat_id if query.message else None),
                             text=foldable_text_with_markdown_v2(result_text),
                             parse_mode="MarkdownV2",
                             reply_markup=reply_markup
@@ -2467,7 +2467,7 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 else:
                     # 没有照片，发送纯文本
                     sent_msg = await query.message.get_bot().send_message(
-                        chat_id=query.message.chat_id,
+                        chat_id=(query.message.chat_id if query.message else None),
                         text=foldable_text_with_markdown_v2(result_text),
                         parse_mode="MarkdownV2",
                         reply_markup=reply_markup
@@ -2485,7 +2485,7 @@ async def map_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                         [InlineKeyboardButton("🔙 返回主菜单", callback_data="map_main_menu")]
                     ])
                 )
-                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, config.auto_delete_delay)
+                await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), config.auto_delete_delay)
     
     elif data.startswith("map_route_to:"):
         destination = data.split(":", 1)[1]

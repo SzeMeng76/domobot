@@ -179,7 +179,7 @@ async def googleplay_callback_handler(
         try:
             await query.message.delete()
             user_message_id = int(parts[1])
-            await delete_user_command(context, query.message.chat_id, user_message_id)
+            await delete_user_command(context, (query.message.chat_id if query.message else None), user_message_id)
         except Exception as e:
             logger.error(f"取消操作失败: {e}")
         return
@@ -195,7 +195,7 @@ async def googleplay_callback_handler(
         return
 
     # 从缓存中获取搜索结果
-    cache_key = f"google_play:search:{query.message.chat_id}:{user_message_id}"
+    cache_key = f"google_play:search:{(query.message.chat_id if query.message else None)}:{user_message_id}"
     search_data = await service.cache_manager.load_cache(
         cache_key, subdirectory="google_play"
     )
@@ -205,7 +205,7 @@ async def googleplay_callback_handler(
             "❌ 搜索结果已过期，请重新搜索",
             reply_markup=None,
         )
-        await delete_user_command(context, query.message.chat_id, user_message_id)
+        await delete_user_command(context, (query.message.chat_id if query.message else None), user_message_id)
         return
 
     search_results = search_data.get("results", [])
@@ -222,7 +222,7 @@ async def googleplay_callback_handler(
     # 查询应用详情
     await service._query_app_details(
         context,
-        query.message.chat_id,
+        (query.message.chat_id if query.message else None),
         user_message_id,
         app_id,
         app_title,

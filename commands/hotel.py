@@ -1420,7 +1420,7 @@ async def hotel_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         try:
             await query.edit_message_text("❌ 已取消酒店搜索")
             config = get_config()
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
         except:
             pass
         hotel_session_manager.remove_session(user_id)
@@ -1432,7 +1432,7 @@ async def hotel_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         if not session_data or (step not in ['location_selection', 'enhanced_location_selection']):
             config = get_config()
             await query.edit_message_text("❌ 会话已过期，请重新搜索")
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
             return
         
         # 解析选择的位置索引
@@ -1442,7 +1442,7 @@ async def hotel_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         if not full_data_id:
             config = get_config()
             await query.edit_message_text("❌ 数据已过期，请重新搜索")
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
             return
         
         # 解析数据ID: location_input_area_index_date_input
@@ -1450,7 +1450,7 @@ async def hotel_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         if len(parts) < 3:
             config = get_config()
             await query.edit_message_text("❌ 数据格式错误，请重新搜索")
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
             return
         
         location_input = parts[0]
@@ -1464,7 +1464,7 @@ async def hotel_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         if area_index >= len(areas):
             config = get_config()
             await query.edit_message_text("❌ 选择无效，请重新搜索")
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
             return
         
         selected_area = areas[area_index]
@@ -1478,7 +1478,7 @@ async def hotel_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         if not session_data or (step not in ['smart_suggestions', 'enhanced_location_selection']):
             config = get_config()
             await query.edit_message_text("❌ 会话已过期，请重新搜索")
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
             return
         
         # 解析选择的建议
@@ -1488,7 +1488,7 @@ async def hotel_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         if not full_data_id:
             config = get_config()
             await query.edit_message_text("❌ 数据已过期，请重新搜索")
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
             return
         
         # 解析数据ID格式: query_date_input_index
@@ -1496,7 +1496,7 @@ async def hotel_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         if len(parts) < 2:
             config = get_config()
             await query.edit_message_text("❌ 数据格式错误，请重新搜索")
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
             return
         
         query_date_part = parts[0]
@@ -1516,7 +1516,7 @@ async def hotel_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         if suggestion_index >= len(suggestions):
             config = get_config()
             await query.edit_message_text("❌ 选择无效，请重新搜索")
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
             return
         
         # 使用建议的查询
@@ -1536,7 +1536,7 @@ async def hotel_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             foldable_text_v2("🔄 请使用 /hotel 命令重新搜索酒店\n\n格式: /hotel <位置> [日期]")
         )
         config = get_config()
-        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+        await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 
                                   getattr(config, 'auto_delete_delay', 600))
         hotel_session_manager.remove_session(user_id)
     
@@ -1546,7 +1546,7 @@ async def hotel_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         await query.edit_message_text(
             "🔄 请使用 /hotel 命令重新搜索酒店\n\n格式: /hotel <位置> [日期]"
         )
-        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+        await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 
                                   getattr(config, 'auto_delete_delay', 600))
         hotel_session_manager.remove_session(user_id)
     
@@ -1555,7 +1555,7 @@ async def hotel_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         if not session_data or 'hotels_data' not in session_data:
             config = get_config()
             await query.edit_message_text("❌ 会话已过期，请重新搜索")
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 
                                       getattr(config, 'auto_delete_delay', 600))
             return
         
@@ -1608,7 +1608,7 @@ async def hotel_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         if not session_data or 'hotels_data' not in session_data:
             config = get_config()
             await query.edit_message_text("❌ 会话已过期，请重新搜索")
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 
                                       getattr(config, 'auto_delete_delay', 600))
             return
         
@@ -1715,7 +1715,7 @@ async def _handle_pagination(query: CallbackQuery, session_data: Dict, context: 
         if not session_data or 'hotels_data' not in session_data:
             config = get_config()
             await query.edit_message_text("❌ 会话已过期，请重新搜索")
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
             return
         
         current_page = session_data.get('current_page', 0)
@@ -1796,7 +1796,7 @@ async def _handle_pagination(query: CallbackQuery, session_data: Dict, context: 
                     [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
                 ])
             )
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 
                                       getattr(config, 'auto_delete_delay', 600))
         except Exception as nested_e:
             logger.error(f"分页错误处理失败: {nested_e}")
@@ -1866,7 +1866,7 @@ async def _process_hotel_search_with_location(query: CallbackQuery, location_que
             await query.edit_message_text(
                 foldable_text_v2(f"😔 未找到酒店\n\n位置: {location_query}\n日期: {check_in_date} - {check_out_date}")
             )
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 
                                       getattr(config, 'auto_delete_delay', 600))
             hotel_session_manager.remove_session(user_id)
             return
@@ -1918,7 +1918,7 @@ async def _process_hotel_search_with_location(query: CallbackQuery, location_que
         
         # 更新会话数据 - 保存完整的搜索信息
         session_data = {
-            'message_id': query.message.message_id,
+            'message_id': (query.message.message_id if query.message else None),
             'hotels_data': hotels_data,
             'search_params': search_params,
             'current_page': summary_result['current_page'],
@@ -1931,7 +1931,7 @@ async def _process_hotel_search_with_location(query: CallbackQuery, location_que
         logger.error(f"酒店搜索处理失败: {e}")
         config = get_config()
         await query.edit_message_text(f"🚫 搜索失败: {str(e)}")
-        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+        await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 
                                   getattr(config, 'auto_delete_delay', 600))
         hotel_session_manager.remove_session(user_id)
 
@@ -1942,7 +1942,7 @@ async def _sort_hotels_by_price(query: CallbackQuery, session_data: Dict, contex
     if not session_data or 'hotels_data' not in session_data:
         config = get_config()
         await query.edit_message_text("❌ 会话已过期，请重新搜索")
-        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+        await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 
                                   getattr(config, 'auto_delete_delay', 600))
         return
     
@@ -2047,7 +2047,7 @@ async def _sort_hotels_by_rating(query: CallbackQuery, session_data: Dict, conte
     if not session_data or 'hotels_data' not in session_data:
         config = get_config()
         await query.edit_message_text("❌ 会话已过期，请重新搜索")
-        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+        await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 
                                   getattr(config, 'auto_delete_delay', 600))
         return
     
@@ -2119,7 +2119,7 @@ async def _show_detailed_hotel_list(query: CallbackQuery, session_data: Dict, co
     if not session_data or 'hotels_data' not in session_data:
         config = get_config()
         await query.edit_message_text("❌ 会话已过期，请重新搜索")
-        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+        await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 
                                   getattr(config, 'auto_delete_delay', 600))
         return
     
@@ -2150,14 +2150,14 @@ async def _show_detailed_hotel_list(query: CallbackQuery, session_data: Dict, co
         else:
             config = get_config()
             await query.edit_message_text("❌ 生成详细列表失败，请稍后重试")
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 
                                       getattr(config, 'auto_delete_delay', 600))
             
     except Exception as e:
         logger.error(f"生成详细酒店列表失败: {e}")
         config = get_config()
         await query.edit_message_text("❌ 生成详细列表失败，请稍后重试")
-        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+        await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 
                                   getattr(config, 'auto_delete_delay', 600))
 
 async def _show_hotel_map_view(query: CallbackQuery, session_data: Dict, context: ContextTypes.DEFAULT_TYPE):
@@ -2166,7 +2166,7 @@ async def _show_hotel_map_view(query: CallbackQuery, session_data: Dict, context
         if not session_data or 'hotels_data' not in session_data:
             config = get_config()
             await query.edit_message_text("❌ 会话已过期，请重新搜索")
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 
                                       getattr(config, 'auto_delete_delay', 600))
             return
         
@@ -2183,7 +2183,7 @@ async def _show_hotel_map_view(query: CallbackQuery, session_data: Dict, context
                     [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
                 ])
             )
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 
                                       getattr(config, 'auto_delete_delay', 600))
             return
         
@@ -2218,7 +2218,7 @@ async def _show_hotel_map_view(query: CallbackQuery, session_data: Dict, context
                     [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
                 ])
             )
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 
                                       getattr(config, 'auto_delete_delay', 600))
         except Exception as nested_e:
             logger.error(f"地图错误处理失败: {nested_e}")
@@ -2462,7 +2462,7 @@ async def _show_brand_filter(query: CallbackQuery, session_data: Dict, context: 
         if not session_data:
             config = get_config()
             await query.edit_message_text("❌ 会话已过期，请重新搜索")
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
             return
         
         # 常见酒店品牌ID（基于SerpAPI文档）
@@ -2501,7 +2501,7 @@ async def _show_brand_filter(query: CallbackQuery, session_data: Dict, context: 
                     [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
                 ])
             )
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 
                                       getattr(config, 'auto_delete_delay', 600))
         except Exception as nested_e:
             logger.error(f"品牌筛选错误处理失败: {nested_e}")
@@ -2512,7 +2512,7 @@ async def _show_special_service_filter(query: CallbackQuery, session_data: Dict,
         if not session_data:
             config = get_config()
             await query.edit_message_text("❌ 会话已过期，请重新搜索")
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
             return
         
         service_options = [
@@ -2547,7 +2547,7 @@ async def _show_special_service_filter(query: CallbackQuery, session_data: Dict,
                     [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
                 ])
             )
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 
                                       getattr(config, 'auto_delete_delay', 600))
         except Exception as nested_e:
             logger.error(f"特殊服务筛选错误处理失败: {nested_e}")
@@ -2558,7 +2558,7 @@ async def _show_vacation_rental_filter(query: CallbackQuery, session_data: Dict,
         if not session_data:
             config = get_config()
             await query.edit_message_text("❌ 会话已过期，请重新搜索")
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
             return
         
         keyboard = [
@@ -2596,7 +2596,7 @@ async def _show_vacation_rental_filter(query: CallbackQuery, session_data: Dict,
                     [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
                 ])
             )
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 
                                       getattr(config, 'auto_delete_delay', 600))
         except Exception as nested_e:
             logger.error(f"度假租赁筛选错误处理失败: {nested_e}")
@@ -2607,7 +2607,7 @@ async def _show_property_type_filter(query: CallbackQuery, session_data: Dict, c
         if not session_data:
             config = get_config()
             await query.edit_message_text("❌ 会话已过期，请重新搜索")
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
             return
         
         # 基于Google Hotels API文档的物业类型
@@ -2645,7 +2645,7 @@ async def _show_property_type_filter(query: CallbackQuery, session_data: Dict, c
                     [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
                 ])
             )
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 
                                       getattr(config, 'auto_delete_delay', 600))
         except Exception as nested_e:
             logger.error(f"物业类型筛选错误处理失败: {nested_e}")
@@ -2680,7 +2680,7 @@ async def _show_amenities_filter(query: CallbackQuery, session_data: Dict, conte
         if not session_data:
             config = get_config()
             await query.edit_message_text("❌ 会话已过期，请重新搜索")
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
             return
         
         # 常见设施选项（基于SerpAPI文档）
@@ -2721,7 +2721,7 @@ async def _show_amenities_filter(query: CallbackQuery, session_data: Dict, conte
                     [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
                 ])
             )
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 
                                       getattr(config, 'auto_delete_delay', 600))
         except Exception as nested_e:
             logger.error(f"设施筛选错误处理失败: {nested_e}")
@@ -2733,7 +2733,7 @@ async def _apply_filter_and_research(query: CallbackQuery, session_data: Dict, c
     if not session_data or 'search_params' not in session_data:
         config = get_config()
         await query.edit_message_text("❌ 会话已过期，请重新搜索")
-        await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+        await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
         return
     
     # 解析筛选类型
@@ -2988,7 +2988,7 @@ async def _show_price_filter(query: CallbackQuery, session_data: Dict, context: 
         if not session_data:
             config = get_config()
             await query.edit_message_text("❌ 会话已过期，请重新搜索")
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
             return
         
         price_options = [
@@ -3024,7 +3024,7 @@ async def _show_price_filter(query: CallbackQuery, session_data: Dict, context: 
                     [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
                 ])
             )
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 
                                       getattr(config, 'auto_delete_delay', 600))
         except Exception as nested_e:
             logger.error(f"价格筛选错误处理失败: {nested_e}")
@@ -3035,7 +3035,7 @@ async def _show_rating_filter(query: CallbackQuery, session_data: Dict, context:
         if not session_data:
             config = get_config()
             await query.edit_message_text("❌ 会话已过期，请重新搜索")
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
             return
         
         rating_options = [
@@ -3070,7 +3070,7 @@ async def _show_rating_filter(query: CallbackQuery, session_data: Dict, context:
                     [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
                 ])
             )
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 
                                       getattr(config, 'auto_delete_delay', 600))
         except Exception as nested_e:
             logger.error(f"评分筛选错误处理失败: {nested_e}")
@@ -3081,7 +3081,7 @@ async def _show_class_filter(query: CallbackQuery, session_data: Dict, context: 
         if not session_data:
             config = get_config()
             await query.edit_message_text("❌ 会话已过期，请重新搜索")
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
             return
         
         class_options = [
@@ -3117,7 +3117,7 @@ async def _show_class_filter(query: CallbackQuery, session_data: Dict, context: 
                     [InlineKeyboardButton("❌ 关闭", callback_data="hotel_cancel")]
                 ])
             )
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 
                                       getattr(config, 'auto_delete_delay', 600))
         except Exception as nested_e:
             logger.error(f"星级筛选错误处理失败: {nested_e}")

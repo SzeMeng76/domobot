@@ -657,16 +657,16 @@ async def steam_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                         # 调度删除
                         success = await _schedule_deletion(
                             context,
-                            query.message.chat_id,
-                            query.message.message_id,
+                            (query.message.chat_id if query.message else None),
+                            (query.message.message_id if query.message else None),
                             delay=config.auto_delete_delay,
                             session_id=detail_session_id
                         )
 
                         if success:
-                            logger.info(f"✅ 调度删除Steam价格详情: chat_id={query.message.chat_id}, message_id={query.message.message_id}, delay={config.auto_delete_delay}秒")
+                            logger.info(f"✅ 调度删除Steam价格详情: chat_id={(query.message.chat_id if query.message else None)}, message_id={(query.message.message_id if query.message else None)}, delay={config.auto_delete_delay}秒")
                         else:
-                            logger.error(f"❌ 调度删除失败: chat_id={query.message.chat_id}, message_id={query.message.message_id}")
+                            logger.error(f"❌ 调度删除失败: chat_id={(query.message.chat_id if query.message else None)}, message_id={(query.message.message_id if query.message else None)}")
                     except Exception as schedule_error:
                         logger.error(f"调度删除时发生异常: {schedule_error}", exc_info=True)
 

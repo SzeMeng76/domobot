@@ -611,7 +611,7 @@ async def ytm_download_callback(update: Update, context: ContextTypes.DEFAULT_TY
     if not video_id:
         return
 
-    chat_id = query.message.chat_id
+    chat_id = (query.message.chat_id if query.message else None)
     status_msg = await context.bot.send_message(chat_id=chat_id, text="🎵 处理中...")
     await _download_and_send(video_id, chat_id, context, status_message=status_msg)
 
@@ -665,11 +665,11 @@ async def ytm_lyric_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     if not lyrics:
         no_lyric = await context.bot.send_message(
-            chat_id=query.message.chat_id, text="❌ 该歌曲暂无歌词"
+            chat_id=(query.message.chat_id if query.message else None), text="❌ 该歌曲暂无歌词"
         )
         config = get_config()
         if config.auto_delete_delay > 0:
-            await _schedule_deletion(context, query.message.chat_id, no_lyric.message_id, min(config.auto_delete_delay, 30))
+            await _schedule_deletion(context, (query.message.chat_id if query.message else None), no_lyric.message_id, min(config.auto_delete_delay, 30))
         return
 
     name = detail["name"] if detail else video_id
@@ -684,13 +684,13 @@ async def ytm_lyric_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         tmp_path.write_text(lyrics, encoding="utf-8")
         with open(tmp_path, "rb") as f:
             sent = await context.bot.send_document(
-                chat_id=query.message.chat_id,
+                chat_id=(query.message.chat_id if query.message else None),
                 document=InputFile(f, filename=filename),
                 caption=f"📝 {_esc(name)} - {_esc(artists)}",
                 parse_mode="HTML",
             )
         if config.auto_delete_delay > 0:
-            await _schedule_deletion(context, query.message.chat_id, sent.message_id, config.auto_delete_delay)
+            await _schedule_deletion(context, (query.message.chat_id if query.message else None), sent.message_id, config.auto_delete_delay)
     finally:
         tmp_path.unlink(missing_ok=True)
 

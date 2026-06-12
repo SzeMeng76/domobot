@@ -502,7 +502,7 @@ async def kugou_download_callback(update: Update, context: ContextTypes.DEFAULT_
             pass
         return
 
-    chat_id = query.message.chat_id
+    chat_id = (query.message.chat_id if query.message else None)
     status_msg = await context.bot.send_message(chat_id=chat_id, text="🎵 处理中...")
     await _download_and_send_kugou(meta, chat_id, context, status_message=status_msg)
 
@@ -537,11 +537,11 @@ async def kugou_lyric_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             await _cache_manager.set(lyric_key, lyric, ttl=cfg.kugou_lyric_cache_duration)
 
     if not lyric:
-        no_lyric = await context.bot.send_message(chat_id=query.message.chat_id, text="❌ 酷狗暂无歌词")
+        no_lyric = await context.bot.send_message(chat_id=(query.message.chat_id if query.message else None), text="❌ 酷狗暂无歌词")
         cfg = get_config()
         if cfg.auto_delete_delay > 0:
             await _schedule_deletion(
-                context, query.message.chat_id, no_lyric.message_id,
+                context, (query.message.chat_id if query.message else None), no_lyric.message_id,
                 min(cfg.auto_delete_delay, 30),
             )
         return
@@ -554,14 +554,14 @@ async def kugou_lyric_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         tmp_path.write_text(lyric, encoding="utf-8")
         with open(tmp_path, "rb") as f:
             sent = await context.bot.send_document(
-                chat_id=query.message.chat_id,
+                chat_id=(query.message.chat_id if query.message else None),
                 document=InputFile(f, filename=filename),
                 caption=f"📝 {_escape_html(name)} - {_escape_html(artists)} (酷狗)",
                 parse_mode="HTML",
             )
         cfg = get_config()
         if cfg.auto_delete_delay > 0:
-            await _schedule_deletion(context, query.message.chat_id, sent.message_id, cfg.auto_delete_delay)
+            await _schedule_deletion(context, (query.message.chat_id if query.message else None), sent.message_id, cfg.auto_delete_delay)
     finally:
         try:
             tmp_path.unlink(missing_ok=True)

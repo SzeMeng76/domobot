@@ -924,7 +924,7 @@ async def handle_app_search_callback(
         await safe_delete_message(query.message)
         await send_error(
             context,
-            query.message.chat_id,
+            (query.message.chat_id if query.message else None),
             foldable_text_v2(error_message),
             parse_mode="MarkdownV2",
         )
@@ -1049,9 +1049,9 @@ async def handle_app_search_callback(
             user_search_sessions[user_id] = {
                 "query": final_query,
                 "search_data": search_data_for_session,
-                "message_id": query.message.message_id,
+                "message_id": (query.message.message_id if query.message else None),
                 "user_specified_countries": session.get("user_specified_countries"),
-                "chat_id": query.message.chat_id,
+                "chat_id": (query.message.chat_id if query.message else None),
                 "session_id": session.get("session_id"),
                 "created_at": datetime.now(),
             }
@@ -1100,7 +1100,7 @@ async def handle_app_search_callback(
             await safe_delete_message(query.message)
             await send_info(
                 context,
-                query.message.chat_id,
+                (query.message.chat_id if query.message else None),
                 foldable_text_v2(close_message),
                 parse_mode="MarkdownV2",
             )
@@ -1117,7 +1117,7 @@ async def handle_app_search_callback(
             try:
                 await send_error(
                     context,
-                    query.message.chat_id,
+                    (query.message.chat_id if query.message else None),
                     foldable_text_v2("❌ 操作失败，请重新搜索。"),
                     parse_mode="MarkdownV2",
                 )
@@ -1132,7 +1132,7 @@ async def handle_app_search_callback(
         try:
             await send_error(
                 context,
-                query.message.chat_id,
+                (query.message.chat_id if query.message else None),
                 foldable_text_v2(error_message),
                 parse_mode="MarkdownV2",
             )
@@ -1206,21 +1206,21 @@ async def show_app_details(
         detail_session_id = f"app_details_{user_id}_{int(time.time())}"
 
         # 记录调试信息
-        logger.info(f"准备调度删除: chat_id={query.message.chat_id}, message_id={query.message.message_id}, session_id={detail_session_id}, delay={config.auto_delete_delay}")
+        logger.info(f"准备调度删除: chat_id={(query.message.chat_id if query.message else None)}, message_id={(query.message.message_id if query.message else None)}, session_id={detail_session_id}, delay={config.auto_delete_delay}")
 
         # 调度删除（使用新的 session_id）
         success = await _schedule_deletion(
             context,
-            query.message.chat_id,
-            query.message.message_id,
+            (query.message.chat_id if query.message else None),
+            (query.message.message_id if query.message else None),
             delay=config.auto_delete_delay,
             session_id=detail_session_id  # 使用新的 session_id
         )
 
         if not success:
-            logger.error(f"❌ 调度删除失败: chat_id={query.message.chat_id}, message_id={query.message.message_id}")
+            logger.error(f"❌ 调度删除失败: chat_id={(query.message.chat_id if query.message else None)}, message_id={(query.message.message_id if query.message else None)}")
         else:
-            logger.info(f"✅ 调度删除成功: chat_id={query.message.chat_id}, message_id={query.message.message_id}, delay={config.auto_delete_delay}秒")
+            logger.info(f"✅ 调度删除成功: chat_id={(query.message.chat_id if query.message else None)}, message_id={(query.message.message_id if query.message else None)}, delay={config.auto_delete_delay}秒")
 
     except Exception as e:
         logger.error(f"显示应用详情时发生错误: {e}", exc_info=True)

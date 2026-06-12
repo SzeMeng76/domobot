@@ -1864,7 +1864,7 @@ async def _execute_ranking(update: Update, context: ContextTypes.DEFAULT_TYPE, r
             )
             
             # 错误消息5秒后删除
-            await _schedule_auto_delete(context, callback_query.message.chat_id, callback_query.message.message_id, 5)
+            await _schedule_auto_delete(context, callback_(query.message.chat_id if query.message else None), callback_(query.message.message_id if query.message else None), 5)
             
     except Exception as e:
         logger.error(f"获取{title}时发生错误: {e}", exc_info=True)
@@ -2060,7 +2060,7 @@ async def finance_stock_detail_callback(update: Update, context: ContextTypes.DE
                     foldable_text_v2("❌ 股票信息已过期，请重新查询"),
                     parse_mode="MarkdownV2"
                 )
-                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+                await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
                 return
             
             # 执行股票查询
@@ -2342,7 +2342,7 @@ async def finance_analyst_callback(update: Update, context: ContextTypes.DEFAULT
                     foldable_text_v2("❌ 股票信息已过期，请重新查询"),
                     parse_mode="MarkdownV2"
                 )
-                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+                await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
                 return
             
             # 获取分析师评级数据
@@ -2377,7 +2377,7 @@ async def finance_analyst_callback(update: Update, context: ContextTypes.DEFAULT
                     parse_mode="MarkdownV2", 
                     reply_markup=reply_markup
                 )
-                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+                await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
             
     except Exception as e:
         logger.error(f"处理分析师评级回调时发生错误: {e}", exc_info=True)
@@ -2407,7 +2407,7 @@ async def finance_valuation_callback(update: Update, context: ContextTypes.DEFAU
                     foldable_text_v2("❌ 股票信息已过期，请重新查询"),
                     parse_mode="MarkdownV2"
                 )
-                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+                await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
                 return
 
             # 获取估值指标数据
@@ -2442,7 +2442,7 @@ async def finance_valuation_callback(update: Update, context: ContextTypes.DEFAU
                     parse_mode="MarkdownV2",
                     reply_markup=reply_markup
                 )
-                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+                await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
 
     except Exception as e:
         logger.error(f"处理估值指标回调时发生错误: {e}", exc_info=True)
@@ -2486,7 +2486,7 @@ async def finance_financial_callback(update: Update, context: ContextTypes.DEFAU
                 foldable_text_v2("❌ 股票信息已过期，请重新查询"),
                 parse_mode="MarkdownV2"
             )
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
             return
         
         # 获取财务报表数据
@@ -2526,7 +2526,7 @@ async def finance_financial_callback(update: Update, context: ContextTypes.DEFAU
                 parse_mode="MarkdownV2",
                 reply_markup=reply_markup
             )
-            await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+            await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
         
     except Exception as e:
         logger.error(f"处理财务报表回调时发生错误: {e}", exc_info=True)
@@ -2556,7 +2556,7 @@ async def finance_earnings_callback(update: Update, context: ContextTypes.DEFAUL
                     foldable_text_v2("❌ 股票信息已过期，请重新查询"),
                     parse_mode="MarkdownV2"
                 )
-                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+                await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
                 return
 
             # 获取财报日期数据
@@ -2595,7 +2595,7 @@ async def finance_earnings_callback(update: Update, context: ContextTypes.DEFAUL
                     parse_mode="MarkdownV2",
                     reply_markup=reply_markup
                 )
-                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+                await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
 
     except Exception as e:
         logger.error(f"处理财报日期回调时发生错误: {e}", exc_info=True)
@@ -2625,7 +2625,7 @@ async def finance_dividends_callback(update: Update, context: ContextTypes.DEFAU
                     foldable_text_v2("❌ 股票信息已过期，请重新查询"),
                     parse_mode="MarkdownV2"
                 )
-                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+                await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
                 return
 
             # 获取分红拆股数据
@@ -2664,7 +2664,7 @@ async def finance_dividends_callback(update: Update, context: ContextTypes.DEFAU
                     parse_mode="MarkdownV2",
                     reply_markup=reply_markup
                 )
-                await _schedule_auto_delete(context, query.message.chat_id, query.message.message_id, 5)
+                await _schedule_auto_delete(context, (query.message.chat_id if query.message else None), (query.message.message_id if query.message else None), 5)
 
     except Exception as e:
         logger.error(f"处理分红拆股回调时发生错误: {e}", exc_info=True)

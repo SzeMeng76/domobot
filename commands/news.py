@@ -975,7 +975,7 @@ async def news_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
             # 发送最终结果作为自动删除的文本消息（无按钮）
             await send_message_with_auto_delete(
                 context,
-                query.message.chat_id,
+                (query.message.chat_id if query.message else None),
                 message,
                 parse_mode='Markdown'
             )
@@ -1018,7 +1018,7 @@ async def news_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
                 # 发送最终结果作为自动删除的文本消息（无按钮）
                 await send_message_with_auto_delete(
                     context,
-                    query.message.chat_id,
+                    (query.message.chat_id if query.message else None),
                     message,
                     parse_mode='Markdown'
                 )

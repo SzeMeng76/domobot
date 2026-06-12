@@ -663,7 +663,7 @@ async def music_download_callback(update: Update, context: ContextTypes.DEFAULT_
     except (ValueError, IndexError):
         return
 
-    chat_id = query.message.chat_id
+    chat_id = (query.message.chat_id if query.message else None)
 
     status_msg = await context.bot.send_message(chat_id=chat_id, text="🎵 处理中...")
 
@@ -706,11 +706,11 @@ async def music_lyric_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
     if not lyric:
         no_lyric_msg = await context.bot.send_message(
-            chat_id=query.message.chat_id, text="❌ 该歌曲暂无歌词"
+            chat_id=(query.message.chat_id if query.message else None), text="❌ 该歌曲暂无歌词"
         )
         config = get_config()
         if config.auto_delete_delay > 0:
-            await _schedule_deletion(context, query.message.chat_id, no_lyric_msg.message_id, min(config.auto_delete_delay, 30))
+            await _schedule_deletion(context, (query.message.chat_id if query.message else None), no_lyric_msg.message_id, min(config.auto_delete_delay, 30))
         return
 
     name = detail["name"] if detail else str(song_id)
@@ -723,14 +723,14 @@ async def music_lyric_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         tmp_path.write_text(lyric, encoding="utf-8")
         with open(tmp_path, "rb") as f:
             sent_cb_lyric = await context.bot.send_document(
-                chat_id=query.message.chat_id,
+                chat_id=(query.message.chat_id if query.message else None),
                 document=InputFile(f, filename=filename),
                 caption=f"📝 {_escape_html(name)} - {_escape_html(artists)}",
                 parse_mode="HTML",
             )
         config = get_config()
         if config.auto_delete_delay > 0:
-            await _schedule_deletion(context, query.message.chat_id, sent_cb_lyric.message_id, config.auto_delete_delay)
+            await _schedule_deletion(context, (query.message.chat_id if query.message else None), sent_cb_lyric.message_id, config.auto_delete_delay)
     finally:
         try:
             tmp_path.unlink(missing_ok=True)
