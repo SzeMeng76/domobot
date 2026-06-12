@@ -424,12 +424,20 @@ def _wrap_bot_send_message(original_func):
     async def wrapper(*args, **kwargs):
         # 优先使用显式传入的_guest_query_id，其次用contextvars里的
         guest_query_id = kwargs.pop('_guest_query_id', None) or _current_guest_query_id.get()
+        inline_message_id = _current_inline_message_id.get()
         if guest_query_id:
             text = kwargs.pop('text', None)
             bot = args[0] if args and isinstance(args[0], (Bot, ExtBot)) else None
             if bot and text:
                 logger.info(f"Redirecting bot.send_message to guest query {guest_query_id}")
                 return await _send_guest_response(guest_query_id, bot, text, **kwargs)
+        elif inline_message_id:
+            # callback模式：用editMessageText替换当前inline message
+            text = kwargs.pop('text', None)
+            bot = args[0] if args and isinstance(args[0], (Bot, ExtBot)) else None
+            if bot and text:
+                logger.info(f"Redirecting bot.send_message to editMessageText via inline_message_id")
+                return GuestMessageProxy(bot, inline_message_id)
         return await original_func(*args, **kwargs)
     return wrapper
 
