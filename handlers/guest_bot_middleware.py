@@ -39,6 +39,10 @@ class GuestBotMiddleware(BaseHandler):
         context.user_data.pop('guest_query_id', None)
         context.user_data.pop('guest_caller_chat', None)
 
+        # 清除contextvars里的guest_query_id
+        from utils.guest_bot_wrapper import _current_guest_query_id
+        _current_guest_query_id.set(None)
+
         # 检查是否是guest bot消息
         if not self.guest_bot_handler.is_guest_bot_message(update):
             return None  # 不是guest bot消息，继续
@@ -51,8 +55,12 @@ class GuestBotMiddleware(BaseHandler):
             return True  # 停止后续handler
 
         # 授权通过，注入guest context到message对象
-        from utils.guest_bot_wrapper import inject_guest_context_to_message
+        from utils.guest_bot_wrapper import inject_guest_context_to_message, _current_guest_query_id
         inject_guest_context_to_message(update.guest_message, context)
+
+        # 设置contextvars，让所有send_message调用都能拦截（包括没有注入_guest_query_id的）
+        guest_query_id = context.user_data.get('guest_query_id')
+        _current_guest_query_id.set(guest_query_id)
 
         # 关键修复：把guest_message复制到update.message
         # 让后续的CommandHandler、ConversationHandler等能识别

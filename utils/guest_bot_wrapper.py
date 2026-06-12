@@ -8,11 +8,16 @@ Guest Bot Wrapper - 拦截并重定向bot响应到guest query
 3. 用editMessageMedia替换占位文本为媒体
 """
 import logging
+from contextvars import ContextVar
 from telegram import Message, Bot
 from telegram.ext import ContextTypes, ExtBot
 from telegram.error import TelegramError
 
 logger = logging.getLogger(__name__)
+
+# 用contextvars存储当前请求的guest_query_id，线程/协程安全
+# 在middleware里设置，wrapper里读取，无需修改任何命令代码
+_current_guest_query_id: ContextVar[str | None] = ContextVar('guest_query_id', default=None)
 
 # 保存原始方法
 _original_reply_text = Message.reply_text
@@ -328,7 +333,8 @@ def _media_type_cn(media_type: str) -> str:
 def _wrap_bot_send_message(original_func):
     """包装bot.send_message以支持guest_query_id参数"""
     async def wrapper(*args, **kwargs):
-        guest_query_id = kwargs.pop('_guest_query_id', None)
+        # 优先使用显式传入的_guest_query_id，其次用contextvars里的
+        guest_query_id = kwargs.pop('_guest_query_id', None) or _current_guest_query_id.get()
         if guest_query_id:
             text = kwargs.pop('text', None)
             bot = args[0] if args and isinstance(args[0], (Bot, ExtBot)) else None
