@@ -1,7 +1,7 @@
 """
 Guest Bot Handler - 允许bot在未加入的群组中响应@mention
 支持所有现有命令功能，无需重新实现
-使用现有的用户白名单系统进行权限控制
+使用现有的用户权限系统进行权限控制
 """
 import logging
 from telegram import Update, Message
@@ -13,32 +13,39 @@ logger = logging.getLogger(__name__)
 class GuestBotHandler:
     """Guest Bot处理器 - 拦截并转发到现有命令处理器"""
 
-    def __init__(self, user_manager, owner_id: int | None = None):
+    def __init__(self, user_manager, config):
         """
         初始化Guest Bot处理器
 
         Args:
-            user_manager: MySQLUserManager实例（用于检查白名单）
-            owner_id: Bot所有者ID（总是有权限）
+            user_manager: MySQLUserManager实例（用于检查权限）
+            config: BotConfig实例（获取super_admin_ids）
         """
         self.user_manager = user_manager
-        self.owner_id = owner_id
+        self.config = config
         self._guest_context_storage = {}  # 存储 message_id -> (guest_query_id, caller_chat)
-        logger.info("GuestBotHandler initialized with existing user whitelist system")
+        logger.info("GuestBotHandler initialized with existing permission system")
 
     def is_user_allowed(self, user_id: int) -> bool:
         """检查用户是否有权限使用Guest Bot功能"""
-        if self.owner_id and user_id == self.owner_id:
-            return True
-        # 使用现有的白名单系统（需要异步调用，在process_guest_message中处理）
-        return False  # 这里返回False，实际检查在async方法中
+        # 这里返回False，实际检查在async方法中
+        return False
 
     async def is_user_allowed_async(self, user_id: int) -> bool:
-        """异步检查用户权限（使用现有白名单系统）"""
-        if self.owner_id and user_id == self.owner_id:
+        """异步检查用户权限（使用现有权限系统）"""
+        # 1. 检查是否是super admin
+        if user_id in self.config.super_admin_ids:
             return True
 
-        # 使用现有的用户白名单系统
+        # 2. 检查是否是admin
+        try:
+            is_admin = await self.user_manager.is_admin(user_id)
+            if is_admin:
+                return True
+        except Exception as e:
+            logger.error(f"Failed to check admin status for user {user_id}: {e}")
+
+        # 3. 检查是否在白名单中
         try:
             is_whitelisted = await self.user_manager.is_whitelisted(user_id)
             return is_whitelisted
