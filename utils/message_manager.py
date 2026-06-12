@@ -35,6 +35,7 @@ async def send_message_with_auto_delete(
 ) -> object | None:
     """
     统一的消息发送+自动删除函数
+    自动支持Guest Bot模式
 
     Args:
         context: Bot 上下文
@@ -49,12 +50,21 @@ async def send_message_with_auto_delete(
         发送的消息对象，如果发送失败则返回None
     """
     try:
+        # Guest Bot支持：注入guest_query_id
+        from utils.guest_bot_wrapper import inject_guest_context_to_kwargs
+        inject_guest_context_to_kwargs(kwargs, context)
+
         # 发送消息
         sent_message = await context.bot.send_message(
             chat_id=chat_id,
             text=text,
             **kwargs
         )
+
+        # Guest Bot模式下，answer_guest_query不支持自动删除，直接返回
+        if context.user_data.get('is_guest_bot_call'):
+            logger.debug(f"Guest Bot消息已发送（无自动删除）")
+            return sent_message
 
         # 确定删除延迟
         if custom_delay is not None:
