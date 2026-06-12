@@ -24,8 +24,8 @@ class GuestBotMiddleware(BaseHandler):
         self.guest_bot_handler = guest_bot_handler
 
     def check_update(self, update: object) -> bool:
-        """检查是否应该处理此update"""
-        return isinstance(update, Update) and update.guest_message is not None
+        """检查是否应该处理此update - 所有update都需要处理以清除旧的guest标记"""
+        return isinstance(update, Update)
 
     async def _process(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """

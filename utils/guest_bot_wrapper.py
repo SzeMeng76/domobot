@@ -330,7 +330,7 @@ def _wrap_bot_send_message(original_func):
     async def wrapper(*args, **kwargs):
         guest_query_id = kwargs.pop('_guest_query_id', None)
         if guest_query_id:
-            text = kwargs.get('text')
+            text = kwargs.pop('text', None)
             bot = args[0] if args and isinstance(args[0], (Bot, ExtBot)) else None
             if bot and text:
                 logger.info(f"Redirecting bot.send_message to guest query {guest_query_id}")
