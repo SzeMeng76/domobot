@@ -34,6 +34,11 @@ class GuestBotMiddleware(BaseHandler):
         Returns:
             None表示继续处理，其他值表示终止
         """
+        # 重要：先清除旧的guest标记，避免污染
+        context.user_data.pop('is_guest_bot_call', None)
+        context.user_data.pop('guest_query_id', None)
+        context.user_data.pop('guest_caller_chat', None)
+
         # 检查是否是guest bot消息
         if not self.guest_bot_handler.is_guest_bot_message(update):
             return None  # 不是guest bot消息，继续
