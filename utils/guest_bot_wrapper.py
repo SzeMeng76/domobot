@@ -324,19 +324,21 @@ async def _send_guest_media(bot: Bot, guest_query_id: str, user_id: int, media_t
 
         # 构建InputMedia对象
         input_media = None
+        parse_mode = kwargs.get('parse_mode')
         if media_type == 'photo':
-            input_media = InputMediaPhoto(media=file_id, caption=caption)
+            input_media = InputMediaPhoto(media=file_id, caption=caption, parse_mode=parse_mode)
         elif media_type == 'audio':
-            input_media = InputMediaAudio(media=file_id, caption=caption)
+            input_media = InputMediaAudio(media=file_id, caption=caption, parse_mode=parse_mode)
         elif media_type == 'document':
-            input_media = InputMediaDocument(media=file_id, caption=caption)
+            input_media = InputMediaDocument(media=file_id, caption=caption, parse_mode=parse_mode)
         elif media_type == 'video':
-            input_media = InputMediaVideo(media=file_id, caption=caption)
+            input_media = InputMediaVideo(media=file_id, caption=caption, parse_mode=parse_mode)
 
-        # 编辑消息，替换为媒体（在群组中显示！）
+        # 编辑消息，替换为媒体（在群组中显示！），带上reply_markup
         await bot.edit_message_media(
             inline_message_id=inline_message_id,
-            media=input_media
+            media=input_media,
+            reply_markup=kwargs.get('reply_markup')
         )
 
         logger.info(f"Successfully sent {media_type} via guest bot (displayed in group)")
@@ -444,7 +446,8 @@ def _wrap_bot_send_media(media_type: str, original_func):
                 user_id = _current_guest_user_id.get()
                 if media and user_id:
                     logger.info(f"Redirecting bot.send_{media_type} to guest media")
-                    success = await _send_guest_media(bot, guest_query_id, user_id, media_type, media, caption)
+                    extra = {k: v for k, v in kwargs.items() if k not in (media_type, 'caption', 'chat_id')}
+                    success = await _send_guest_media(bot, guest_query_id, user_id, media_type, media, caption, **extra)
                     if success:
                         return GuestMessageProxy(bot, _current_inline_message_id.get() or '')
         return await original_func(*args, **kwargs)
