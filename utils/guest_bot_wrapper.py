@@ -41,6 +41,7 @@ class GuestMessageProxy:
         self._inline_message_id = inline_message_id
         self.chat_id = chat_id
         self.message_id = message_id or 0
+        self.text = None  # 跟踪最后发送的文本，避免重复编辑
 
     async def edit_text(self, text: str, **kwargs):
         try:
@@ -50,6 +51,7 @@ class GuestMessageProxy:
                 parse_mode=kwargs.get('parse_mode'),
                 reply_markup=kwargs.get('reply_markup'),
             )
+            self.text = text  # 更新缓存的文本
             logger.debug(f"GuestMessageProxy.edit_text: edited inline message")
         except Exception as e:
             if 'not modified' in str(e).lower():
