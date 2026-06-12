@@ -60,14 +60,31 @@ class GuestBotMiddleware(BaseHandler):
         update.message = update.guest_message
 
         # 修复命令文本：去掉 @botname 前缀，让CommandHandler能识别
-        # Guest message格式: "@mengpricebot /help" -> 需要改成 "/help"
+        # Guest message格式: "@mengpricebot /help args" -> "/help args"
+        # 同时修复entities的offset，filters.COMMAND要求bot_command entity offset=0
         if update.message.text and update.message.text.startswith('@'):
-            # 找到第一个空格后的内容
             parts = update.message.text.split(maxsplit=1)
             if len(parts) > 1:
-                # 使用object.__setattr__绕过frozen限制
-                object.__setattr__(update.message, 'text', parts[1])
-                logger.debug(f"Stripped bot mention from command text: '{parts[1]}'")
+                mention_len = len(parts[0]) + 1  # "@botname "的长度
+                new_text = parts[1]
+                object.__setattr__(update.message, 'text', new_text)
+
+                # 修复entities：去掉mention entity，调整其他entity的offset
+                if update.message.entities:
+                    from telegram import MessageEntity
+                    new_entities = []
+                    for entity in update.message.entities:
+                        if entity.type == 'mention':
+                            continue  # 去掉mention entity
+                        new_offset = entity.offset - mention_len
+                        if new_offset >= 0:
+                            new_entities.append(MessageEntity(
+                                type=entity.type,
+                                offset=new_offset,
+                                length=entity.length,
+                            ))
+                    object.__setattr__(update.message, 'entities', tuple(new_entities))
+                logger.debug(f"Stripped bot mention, new text: '{new_text}'")
 
         update._freeze()
 
