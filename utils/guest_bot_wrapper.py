@@ -44,6 +44,7 @@ class GuestMessageProxy:
         self.chat_id = chat_id
         self.message_id = message_id or 0
         self.text = None  # 跟踪最后发送的文本，避免重复编辑
+        self.chat = None  # inline message没有chat对象
 
     async def edit_text(self, text: str, **kwargs):
         try:
