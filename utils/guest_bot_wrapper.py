@@ -361,8 +361,9 @@ async def _stage_media_to_private(bot: Bot, user_id: int, media_type: str, media
     try:
         staging_caption = f"🔄 正在准备{_media_type_cn(media_type)}..."
 
-        # 临时清除guest_query_id，让send_*走原始路径（私聊发送不走guest bot）
-        token = _current_guest_query_id.set(None)
+        # 临时清除所有guest contextvars，让send_*走原始路径（私聊发送）
+        token1 = _current_guest_query_id.set(None)
+        token2 = _current_inline_message_id.set(None)
         try:
             msg = None
             if media_type == 'photo':
@@ -380,7 +381,8 @@ async def _stage_media_to_private(bot: Bot, user_id: int, media_type: str, media
             else:
                 return None
         finally:
-            _current_guest_query_id.reset(token)
+            _current_guest_query_id.reset(token1)
+            _current_inline_message_id.reset(token2)
 
         if not file_id or not msg:
             return None
