@@ -832,6 +832,27 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
                 pyrogram_helper = getattr(_adapter, 'pyrogram_helper', None)
 
                 if pyrogram_helper and pyrogram_helper.is_started:
+                    # Guest bot模式：直接edit_inline_media
+                    from utils.guest_bot_wrapper import _current_inline_message_id
+                    inline_message_id = _current_inline_message_id.get()
+                    if not chat_id and inline_message_id:
+                        try:
+                            logger.info(f"🚀 Guest bot: Pyrogram edit_inline_video上传")
+                            await pyrogram_helper.edit_inline_video(
+                                inline_message_id=inline_message_id,
+                                video_path=str(video_path),
+                                caption=caption,
+                                width=media.width or 0,
+                                height=media.height or 0,
+                                duration=media.duration or 0,
+                                thumb=thumb_url,
+                                reply_markup=reply_markup,
+                                parse_mode="MarkdownV2",
+                            )
+                            return None
+                        except Exception as e:
+                            logger.warning(f"⚠️ Guest bot edit_inline_video失败: {e}")
+
                     # 使用Pyrogram发送大视频
                     from utils.pyrogram_client import PyrogramHelper
 
@@ -948,6 +969,27 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
     # 文件大小正常（<=50MB），优先 Pyrogram，失败 fallback python-telegram-bot
     pyrogram_helper = getattr(_adapter, 'pyrogram_helper', None)
     if pyrogram_helper and pyrogram_helper.is_started:
+        # Guest bot模式：直接edit_inline_media
+        from utils.guest_bot_wrapper import _current_inline_message_id
+        inline_message_id = _current_inline_message_id.get()
+        if not chat_id and inline_message_id:
+            try:
+                logger.info(f"🚀 Guest bot: Pyrogram edit_inline_video上传")
+                await pyrogram_helper.edit_inline_video(
+                    inline_message_id=inline_message_id,
+                    video_path=str(video_path),
+                    caption=caption,
+                    width=media.width or 0,
+                    height=media.height or 0,
+                    duration=media.duration or 0,
+                    thumb=getattr(parse_result.media, 'thumb_url', None) if parse_result and hasattr(parse_result, 'media') else None,
+                    reply_markup=reply_markup,
+                    parse_mode="MarkdownV2",
+                )
+                return None
+            except Exception as e:
+                logger.warning(f"⚠️ Guest bot edit_inline_video失败: {e}")
+
         try:
             logger.info(f"🚀 使用 Pyrogram 上传 {video_size_mb:.1f}MB 视频")
             video_msg = await pyrogram_helper.send_large_video(

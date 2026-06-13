@@ -218,8 +218,29 @@ async def _download_and_send_music(
             file_size_mb = audio_path.stat().st_size / (1024 * 1024)
 
             sent_msg = None
+
+            # Guest bot模式：用Pyrogram edit_inline_media直接上传（支持大文件）
+            from utils.guest_bot_wrapper import _current_inline_message_id
+            inline_message_id = _current_inline_message_id.get()
+            if not chat_id and inline_message_id and _pyrogram_helper and _pyrogram_helper.is_started:
+                try:
+                    logger.info(f"🚀 Guest bot: Pyrogram edit_inline_audio上传 {file_size_mb:.1f}MB")
+                    await _pyrogram_helper.edit_inline_audio(
+                        inline_message_id=inline_message_id,
+                        audio_path=str(audio_path),
+                        caption=caption,
+                        duration=detail.get("duration", 0),
+                        performer=detail.get("artists", ""),
+                        title=detail.get("name", ""),
+                        thumb=str(thumb_path) if cover_downloaded else None,
+                        reply_markup=keyboard,
+                        parse_mode="HTML",
+                    )
+                    return True
+                except Exception as e:
+                    logger.warning(f"⚠️ Guest bot Pyrogram上传失败: {e}")
+
             # 优先使用 Pyrogram 上传（更稳定，支持大文件）
-            # 参考 social_parser 的瀑布流：Pyrogram → python-telegram-bot fallback
             if _pyrogram_helper and _pyrogram_helper.is_started:
                 try:
                     logger.info(f"🚀 使用 Pyrogram 上传 {file_size_mb:.1f}MB 音频")

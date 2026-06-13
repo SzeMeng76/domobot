@@ -688,6 +688,23 @@ async def _send_reddit_media(context, chat_id, post, caption, reply_markup, upda
                     msg = await _send_video_link()
                     return [msg]
 
+                # Guest bot模式：用Pyrogram edit_inline_media直接上传视频
+                from utils.guest_bot_wrapper import _current_inline_message_id
+                inline_message_id = _current_inline_message_id.get()
+                if not chat_id and inline_message_id and _pyrogram_helper and _pyrogram_helper.is_started:
+                    try:
+                        logger.info(f"🚀 Guest bot: Pyrogram edit_inline_video上传 {video_size_mb:.1f}MB")
+                        await _pyrogram_helper.edit_inline_video(
+                            inline_message_id=inline_message_id,
+                            video_path=str(video_path),
+                            caption=caption,
+                            reply_markup=reply_markup,
+                            parse_mode="MarkdownV2",
+                        )
+                        return []
+                    except Exception as e:
+                        logger.warning(f"⚠️ Guest bot Pyrogram视频上传失败: {e}")
+
                 # <=2GB: 优先 Pyrogram，失败 fallback python-telegram-bot
                 if _pyrogram_helper and _pyrogram_helper.is_started:
                     try:

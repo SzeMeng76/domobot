@@ -192,6 +192,27 @@ async def _download_and_send(
 
             sent_msg = None
 
+            # guest bot模式下（chat_id=None），用Pyrogram直接edit_inline_media上传（支持大文件）
+            from utils.guest_bot_wrapper import _current_inline_message_id
+            inline_message_id = _current_inline_message_id.get()
+            if not chat_id and inline_message_id and _pyrogram_helper and _pyrogram_helper.is_started:
+                try:
+                    logger.info(f"🚀 Guest bot模式: Pyrogram edit_inline_media上传 {file_size_mb:.1f}MB 音频")
+                    await _pyrogram_helper.edit_inline_audio(
+                        inline_message_id=inline_message_id,
+                        audio_path=str(audio_path),
+                        caption=caption,
+                        duration=duration or detail.get("duration", 0),
+                        performer=artists,
+                        title=name,
+                        thumb=str(thumb_path) if cover_downloaded else None,
+                        reply_markup=keyboard,
+                        parse_mode="HTML",
+                    )
+                    return True
+                except Exception as e:
+                    logger.warning(f"⚠️ Pyrogram edit_inline_audio失败: {e}")
+
             # 优先 Pyrogram（更稳定，支持大文件）
             if _pyrogram_helper and _pyrogram_helper.is_started:
                 try:

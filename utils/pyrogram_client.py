@@ -708,6 +708,159 @@ class PyrogramHelper:
             logger.error(f"❌ Pyrogram上传音频失败: {e}")
             raise
 
+    async def edit_inline_audio(
+        self,
+        inline_message_id: str,
+        audio_path: str,
+        caption: str = "",
+        duration: int = 0,
+        performer: str = None,
+        title: str = None,
+        thumb: str = None,
+        reply_markup=None,
+        parse_mode: str = None,
+    ) -> bool:
+        """
+        用Pyrogram直接上传大音频并替换inline message（支持>50MB）
+        不需要私聊中转，直接用edit_inline_media上传本地文件
+        """
+        if not self.is_started or not self.client:
+            raise RuntimeError("Pyrogram client not started")
+
+        try:
+            from pyrogram import types as pyrogram_types
+            from pyrogram import enums
+
+            # 处理thumb
+            thumb_path = None
+            if thumb and not thumb.startswith(('http://', 'https://')):
+                from pathlib import Path
+                if Path(thumb).exists():
+                    thumb_path = thumb
+
+            # 转换parse_mode
+            pyrogram_parse_mode = None
+            if parse_mode:
+                if parse_mode.lower() in ("html",):
+                    pyrogram_parse_mode = enums.ParseMode.HTML
+                elif parse_mode.lower() in ("markdown", "markdownv2"):
+                    pyrogram_parse_mode = enums.ParseMode.MARKDOWN
+
+            # 转换reply_markup
+            pyrogram_reply_markup = None
+            if reply_markup:
+                from pyrogram.types import InlineKeyboardMarkup as PyroMarkup
+                from pyrogram.types import InlineKeyboardButton as PyroButton
+                keyboard = []
+                for row in reply_markup.inline_keyboard:
+                    button_row = []
+                    for button in row:
+                        if button.url:
+                            button_row.append(PyroButton(button.text, url=button.url))
+                        elif button.callback_data:
+                            button_row.append(PyroButton(button.text, callback_data=button.callback_data))
+                    if button_row:
+                        keyboard.append(button_row)
+                if keyboard:
+                    pyrogram_reply_markup = PyroMarkup(keyboard)
+
+            media = pyrogram_types.InputMediaAudio(
+                media=audio_path,
+                caption=caption,
+                parse_mode=pyrogram_parse_mode,
+                duration=duration,
+                performer=performer,
+                title=title,
+                thumb=thumb_path,
+            )
+
+            logger.info(f"📤 Pyrogram edit_inline_media 上传音频: {audio_path}")
+            result = await self.client.edit_inline_media(
+                inline_message_id=inline_message_id,
+                media=media,
+                reply_markup=pyrogram_reply_markup,
+            )
+            logger.info(f"✅ Pyrogram inline音频上传成功")
+            return result
+
+        except Exception as e:
+            logger.error(f"❌ Pyrogram edit_inline_audio失败: {e}")
+            raise
+
+    async def edit_inline_video(
+        self,
+        inline_message_id: str,
+        video_path: str,
+        caption: str = "",
+        duration: int = 0,
+        width: int = 0,
+        height: int = 0,
+        thumb: str = None,
+        reply_markup=None,
+        parse_mode: str = None,
+    ) -> bool:
+        """用Pyrogram直接上传大视频并替换inline message（支持>50MB）"""
+        if not self.is_started or not self.client:
+            raise RuntimeError("Pyrogram client not started")
+
+        try:
+            from pyrogram import types as pyrogram_types
+            from pyrogram import enums
+
+            thumb_path = None
+            if thumb and not thumb.startswith(('http://', 'https://')):
+                from pathlib import Path
+                if Path(thumb).exists():
+                    thumb_path = thumb
+
+            pyrogram_parse_mode = None
+            if parse_mode:
+                if parse_mode.lower() == "html":
+                    pyrogram_parse_mode = enums.ParseMode.HTML
+                elif parse_mode.lower() in ("markdown", "markdownv2"):
+                    pyrogram_parse_mode = enums.ParseMode.MARKDOWN
+
+            pyrogram_reply_markup = None
+            if reply_markup:
+                from pyrogram.types import InlineKeyboardMarkup as PyroMarkup
+                from pyrogram.types import InlineKeyboardButton as PyroButton
+                keyboard = []
+                for row in reply_markup.inline_keyboard:
+                    button_row = []
+                    for button in row:
+                        if button.url:
+                            button_row.append(PyroButton(button.text, url=button.url))
+                        elif button.callback_data:
+                            button_row.append(PyroButton(button.text, callback_data=button.callback_data))
+                    if button_row:
+                        keyboard.append(button_row)
+                if keyboard:
+                    pyrogram_reply_markup = PyroMarkup(keyboard)
+
+            media = pyrogram_types.InputMediaVideo(
+                media=video_path,
+                caption=caption,
+                parse_mode=pyrogram_parse_mode,
+                duration=duration,
+                width=width,
+                height=height,
+                thumb=thumb_path,
+                supports_streaming=True,
+            )
+
+            logger.info(f"📤 Pyrogram edit_inline_media 上传视频: {video_path}")
+            result = await self.client.edit_inline_media(
+                inline_message_id=inline_message_id,
+                media=media,
+                reply_markup=pyrogram_reply_markup,
+            )
+            logger.info(f"✅ Pyrogram inline视频上传成功")
+            return result
+
+        except Exception as e:
+            logger.error(f"❌ Pyrogram edit_inline_video失败: {e}")
+            raise
+
     async def get_deleted_members(self, chat_id: int) -> list[dict]:
         """
         获取群组中所有已注销的账号
