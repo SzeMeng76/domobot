@@ -544,6 +544,26 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_text = "请稍等，正在查询用户信息..."
     sent_message = await send_search_result(context, chat.id, reply_text)
 
+    from utils.guest_bot_wrapper import GuestMessageProxy
+
+    async def edit_reply(text: str, parse_mode: str | None = None):
+        if isinstance(sent_message, GuestMessageProxy):
+            await sent_message.edit_text(text, parse_mode=parse_mode)
+        elif sent_message:
+            await context.bot.edit_message_text(
+                chat_id=chat.id,
+                message_id=sent_message.message_id,
+                text=text,
+                parse_mode=parse_mode,
+            )
+
+    async def schedule_delete(delay: int):
+        if isinstance(sent_message, GuestMessageProxy):
+            return
+        if sent_message:
+            from utils.message_manager import _schedule_deletion
+            await _schedule_deletion(context, chat.id, sent_message.message_id, delay)
+
     try:
         target_user = None
         target_user_id = None
@@ -598,35 +618,19 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # 如果两种方式都失败了，返回错误
                 if not target_user_id:
                     safe_username = safe_format_username(username)
-                    try:
-                        await context.bot.edit_message_text(
-                            chat_id=chat.id,
-                            message_id=sent_message.message_id,
-                            text=f"❌ 未找到用户 @{safe_username}\n\n"
-                                 "💡 *可能原因*:\n"
-                                 "• 用户名拼写错误\n"
-                                 "• 用户名不存在或已被更改\n"
-                                 "• 用户隐私设置限制查询\n\n"
-                                 "✅ *建议*:\n"
-                                 "• 检查用户名拼写是否正确\n"
-                                 "• 使用数字ID查询: `/when 123456789`\n"
-                                 "• 回复用户消息后使用 `/when`",
-                            parse_mode="Markdown"
-                        )
-                    except Exception:
-                        # 如果Markdown失败，使用纯文本
-                        await context.bot.edit_message_text(
-                            chat_id=chat.id,
-                            message_id=sent_message.message_id,
-                            text=f"❌ 未找到用户 @{username}\n\n"
-                                 "建议:\n"
-                                 "• 检查用户名拼写\n"
-                                 "• 使用数字ID查询\n"
-                                 "• 回复用户消息后使用 /when"
-                        )
-                    # 调度删除机器人回复消息
-                    from utils.message_manager import _schedule_deletion
-                    await _schedule_deletion(context, chat.id, sent_message.message_id, 180)
+                    await edit_reply(
+                        f"❌ 未找到用户 @{safe_username}\n\n"
+                        "💡 *可能原因*:\n"
+                        "• 用户名拼写错误\n"
+                        "• 用户名不存在或已被更改\n"
+                        "• 用户隐私设置限制查询\n\n"
+                        "✅ *建议*:\n"
+                        "• 检查用户名拼写是否正确\n"
+                        "• 使用数字ID查询: `/when 123456789`\n"
+                        "• 回复用户消息后使用 `/when`",
+                        parse_mode="Markdown"
+                    )
+                    await schedule_delete(180)
                     return
             # 处理纯用户名（不带@）
             elif not param.isdigit() and re.match(r'^[a-zA-Z0-9_]+$', param):
@@ -655,51 +659,30 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # 如果两种方式都失败了，返回错误
                 if not target_user_id:
                     safe_param = safe_format_username(param)
-                    try:
-                        await context.bot.edit_message_text(
-                            chat_id=chat.id,
-                            message_id=sent_message.message_id,
-                            text=f"❌ 未找到用户 {safe_param}\n\n"
-                                 "💡 *提示*: 用户名查询支持以下格式:\n"
-                                 "• `/when @username`\n"
-                                 "• `/when username`\n"
-                                 "• `/when 123456789` (数字ID)\n\n"
-                                 "如果用户名查询失败，建议使用数字ID查询",
-                            parse_mode="Markdown"
-                        )
-                    except Exception:
-                        # 如果Markdown失败，使用纯文本
-                        await context.bot.edit_message_text(
-                            chat_id=chat.id,
-                            message_id=sent_message.message_id,
-                            text=f"❌ 未找到用户 {param}\n\n"
-                                 "提示: 用户名查询支持以下格式:\n"
-                                 "• /when @username\n"
-                                 "• /when username\n"
-                                 "• /when 123456789 (数字ID)\n\n"
-                                 "如果用户名查询失败，建议使用数字ID查询"
-                        )
-                    # 调度删除机器人回复消息
-                    from utils.message_manager import _schedule_deletion
-                    await _schedule_deletion(context, chat.id, sent_message.message_id, 180)
+                    await edit_reply(
+                        f"❌ 未找到用户 {safe_param}\n\n"
+                        "💡 *提示*: 用户名查询支持以下格式:\n"
+                        "• `/when @username`\n"
+                        "• `/when username`\n"
+                        "• `/when 123456789` (数字ID)\n\n"
+                        "如果用户名查询失败，建议使用数字ID查询",
+                        parse_mode="Markdown"
+                    )
+                    await schedule_delete(180)
                     return
             else:
-                await context.bot.edit_message_text(
-                    chat_id=chat.id,
-                    message_id=sent_message.message_id,
-                    text="❌ 不支持的查询格式\n\n"
-                         "✅ *支持的查询方式*:\n"
-                         "• 回复某个用户的消息后使用 `/when`\n"
-                         "• 使用数字ID: `/when 123456789`\n"
-                         "• 使用用户名: `/when @username` 或 `/when username`\n\n"
-                         "💡 *获取用户ID方法*:\n"
-                         "• 让用户私聊机器人发送 `/id`\n"
-                         "• 回复用户消息后发送 `/id`",
+                await edit_reply(
+                    "❌ 不支持的查询格式\n\n"
+                    "✅ *支持的查询方式*:\n"
+                    "• 回复某个用户的消息后使用 `/when`\n"
+                    "• 使用数字ID: `/when 123456789`\n"
+                    "• 使用用户名: `/when @username` 或 `/when username`\n\n"
+                    "💡 *获取用户ID方法*:\n"
+                    "• 让用户私聊机器人发送 `/id`\n"
+                    "• 回复用户消息后发送 `/id`",
                     parse_mode="Markdown"
                 )
-                # 调度删除机器人回复消息
-                from utils.message_manager import _schedule_deletion
-                await _schedule_deletion(context, chat.id, sent_message.message_id, 180)
+                await schedule_delete(180)
                 return
 
         # 方法3: 如果没有回复也没有参数，查询自己
@@ -709,18 +692,14 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # 如果没有获取到任何用户信息
         if not target_user_id:
-            await context.bot.edit_message_text(
-                chat_id=chat.id,
-                message_id=sent_message.message_id,
-                text="请使用以下方式查询用户信息：\n"
-                     "• 回复某个用户的消息后使用 `/when`\n"
-                     "• 使用数字ID: `/when 123456789`\n"
-                     "• 使用用户名: `/when @username` 或 `/when username`\n\n"
-                     "💡 如需获取用户ID，可使用 `/id` 命令"
+            await edit_reply(
+                "请使用以下方式查询用户信息：\n"
+                "• 回复某个用户的消息后使用 `/when`\n"
+                "• 使用数字ID: `/when 123456789`\n"
+                "• 使用用户名: `/when @username` 或 `/when username`\n\n"
+                "💡 如需获取用户ID，可使用 `/id` 命令"
             )
-            # 调度删除机器人回复消息
-            from utils.message_manager import _schedule_deletion
-            await _schedule_deletion(context, chat.id, sent_message.message_id, 180)
+            await schedule_delete(180)
             return
 
         # 尝试获取完整用户信息（如果 Pyrogram 可用）
@@ -929,26 +908,14 @@ async def when_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"⚠️ *注意*: 注册日期为基于用户ID的估算值，仅供参考"
             )
 
-        await context.bot.edit_message_text(
-            chat_id=chat.id,
-            message_id=sent_message.message_id,
-            text=result_text,
-            parse_mode="Markdown"
-        )
+        await edit_reply(result_text, parse_mode="Markdown")
 
         # 调度删除机器人回复消息
-        from utils.message_manager import _schedule_deletion
-        await _schedule_deletion(context, chat.id, sent_message.message_id, 180)  # 3分钟后删除结果
+        await schedule_delete(180)  # 3分钟后删除结果
 
     except Exception as e:
-        await context.bot.edit_message_text(
-            chat_id=chat.id,
-            message_id=sent_message.message_id,
-            text=f"查询失败: {str(e)}"
-        )
-        # 调度删除错误消息
-        from utils.message_manager import _schedule_deletion
-        await _schedule_deletion(context, chat.id, sent_message.message_id, 5)  # 5秒后删除错误
+        await edit_reply(f"查询失败: {str(e)}")
+        await schedule_delete(5)  # 5秒后删除错误
 
 
 async def handle_inline_when_query(query: str, context: ContextTypes.DEFAULT_TYPE):
