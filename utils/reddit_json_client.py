@@ -124,10 +124,10 @@ class RedditJsonClient:
         self.cooldown_until: float = 0.0  # 冷却结束时间（monotonic time）
         self.semaphore = asyncio.Semaphore(concurrency)  # 并发控制
 
-        # HTTP/3 支持检测（自动降级机制）
-        self.http3_available: bool = True  # 默认尝试 HTTP/3
-        self.http3_failed_count: int = 0  # HTTP/3 失败计数
-        self.http3_disable_threshold: int = 3  # 连续失败 3 次后禁用 HTTP/3
+        # WARP SOCKS5 不支持 UDP，HTTP/3(QUIC) 无法工作，直接禁用
+        self.http3_available: bool = False
+        self.http3_failed_count: int = 0
+        self.http3_disable_threshold: int = 3
 
     def is_available(self) -> bool:
         """检查是否可用（未在冷却期）"""
