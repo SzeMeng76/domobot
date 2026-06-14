@@ -215,8 +215,8 @@ class RedditJsonClient:
             try:
                 session = await self._get_session()
                 # 完整的浏览器 headers，模拟真实浏览器行为
+                # 不传 User-Agent，让 curl_cffi 根据 impersonate 自动注入匹配的 UA
                 headers = {
-                    'User-Agent': self.user_agent,
                     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
                     'Accept-Language': 'en-US,en;q=0.5',
                     'Accept-Encoding': 'gzip, deflate, br',
@@ -263,15 +263,13 @@ class RedditJsonClient:
 
                 # Circuit breaker: 处理 429/403
                 if response.status_code in (429, 403):
-                    self._set_cooldown(response.status_code, response)
-
-                    # 如果是 403 且允许重试，尝试轮换浏览器
+                    # 403 先尝试轮换浏览器重试，重试失败再设冷却期
                     if response.status_code == 403 and retry_on_403 and self.rotate_browser:
                         logger.warning(f"⚠️ 收到 403 响应，尝试轮换浏览器重试...")
                         await self._rotate_browser()
-                        return await self._make_request(url, retry_on_403=False)  # 只重试一次
+                        return await self._make_request(url, retry_on_403=False)
 
-                    # 抛出异常让上层处理（可能回退到 OAuth）
+                    self._set_cooldown(response.status_code, response)
                     raise Exception(f"Reddit API {response.status_code}: 已进入冷却期")
 
                 response.raise_for_status()
