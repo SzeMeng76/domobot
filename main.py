@@ -590,10 +590,22 @@ async def setup_application(application: Application, config) -> None:
     auto_parse_handler.set_adapter(parse_adapter)
 
     # 初始化 Reddit 客户端
-    # 支持 OAuth 和 JSON 两种模式，通过环境变量 REDDIT_API_MODE 控制
-    # REDDIT_API_MODE=oauth (默认) 或 json
-    reddit_client = None
+    # 支持 OAuth、JSON、fetchlayer 三种模式，通过环境变量 REDDIT_API_MODE 控制
+    # REDDIT_API_MODE=oauth (默认) 或 json 或 fetchlayer
+    reddit_client: object = None
     reddit_api_mode = os.getenv("REDDIT_API_MODE", "oauth").lower()
+
+    if reddit_api_mode == "fetchlayer":
+        # FetchLayer 模式：直接使用 FetchLayer API，无需 WARP 代理
+        try:
+            from utils.reddit_json_client import FetchLayerClient
+            fetchlayer_api_key = os.getenv("FETCHLAYER_API_KEY")
+            if not fetchlayer_api_key:
+                raise ValueError("FETCHLAYER_API_KEY 未配置")
+            reddit_client = FetchLayerClient(api_key=fetchlayer_api_key)
+            logger.info(f"✅ Reddit FetchLayer 客户端已初始化")
+        except Exception as e:
+            logger.error(f"❌ Reddit FetchLayer 客户端初始化失败: {e}")
 
     if reddit_api_mode == "json":
         # JSON 模式：使用 curl_cffi 伪装 TLS 指纹 + WARP 代理
@@ -603,7 +615,8 @@ async def setup_application(application: Application, config) -> None:
             reddit_client = RedditJsonClient(
                 user_agent=user_agent,
                 proxy="socks5://warp:1080",  # WARP SOCKS5 代理（Docker 服务名）
-                rotate_browser=True  # 启用浏览器轮询
+                rotate_browser=True,  # 启用浏览器轮询
+                fetchlayer_api_key=os.getenv("FETCHLAYER_API_KEY"),
             )
             logger.info(f"✅ Reddit JSON 客户端已初始化 (TLS 指纹伪装 + WARP 代理 + 浏览器轮询)")
         except Exception as e:

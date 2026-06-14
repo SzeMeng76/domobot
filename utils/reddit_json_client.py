@@ -108,10 +108,13 @@ class RedditJsonClient:
         user_agent: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         proxy: Optional[str] = None,
         rotate_browser: bool = True,
-        concurrency: int = 6
+        concurrency: int = 6,
+        fetchlayer_api_key: Optional[str] = None,
     ):
         if not CURL_CFFI_AVAILABLE:
             raise ImportError("curl_cffi is required for RedditJsonClient. Install with: pip install curl_cffi")
+
+        self._fetchlayer = FetchLayerClient(fetchlayer_api_key) if fetchlayer_api_key else None
 
         self.user_agent = user_agent
         self.proxy = proxy
@@ -345,6 +348,7 @@ class RedditJsonClient:
 
     async def get_post_by_url(self, url: str) -> Optional[RedditPost]:
         """通过 URL 获取帖子"""
+        original_url = url
         try:
             # 处理 URL：确保 .json 在查询参数之前
             if '?' in url:
@@ -365,6 +369,10 @@ class RedditJsonClient:
 
         except Exception as e:
             logger.error(f"获取帖子失败 ({url}): {e}")
+            # FetchLayer fallback
+            if self._fetchlayer:
+                logger.info(f"🔄 尝试 FetchLayer fallback: {original_url[:60]}...")
+                return await self._fetchlayer.get_post_by_url(original_url)
             return None
 
     async def get_hot_posts(self, subreddit: Optional[str] = None, limit: int = 10) -> List[RedditPost]:
@@ -478,4 +486,164 @@ class RedditJsonClient:
     @staticmethod
     def get_url_hash(url: str) -> str:
         """生成 URL 的哈希值"""
+        return hashlib.md5(url.encode()).hexdigest()[:16]
+
+
+class FetchLayerClient:
+    """FetchLayer API 客户端，作为 Reddit JSON 客户端的 fallback"""
+
+    BASE_URL = "https://fetchlayer.dev/api/reddit"
+
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self._headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+
+    async def get_post_by_url(self, url: str) -> Optional[RedditPost]:
+        """通过 URL 获取帖子"""
+        import httpx
+        from datetime import datetime, timezone
+
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                response = await client.post(
+                    f"{self.BASE_URL}/post",
+                    headers=self._headers,
+                    json={"url": url}
+                )
+                response.raise_for_status()
+                data = response.json()
+
+            if data.get("error"):
+                logger.error(f"FetchLayer 返回错误: {data['error']}")
+                return None
+
+            # 解析 createdAt 为 Unix timestamp
+            created_utc = 0.0
+            created_at = data.get("createdAt")
+            if created_at:
+                try:
+                    dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                    created_utc = dt.timestamp()
+                except Exception:
+                    pass
+
+            # 解析媒体
+            is_video = False
+            video_url = ""
+            preview_image_url = ""
+            gallery_items = []
+
+            for item in data.get("media", []):
+                media_type = item.get("type", "")
+                if media_type == "video":
+                    is_video = True
+                    video_url = item.get("url", "")
+                elif media_type == "image":
+                    img_url = item.get("url", "")
+                    if img_url:
+                        gallery_items.append(img_url)
+
+            if gallery_items and not is_video:
+                preview_image_url = gallery_items[0]
+
+            permalink = data.get("permalink", url)
+            # 确保 permalink 是完整 URL
+            if permalink.startswith("/"):
+                permalink = f"https://www.reddit.com{permalink}"
+            # old.reddit.com → www.reddit.com
+            permalink = permalink.replace("old.reddit.com", "www.reddit.com")
+
+            return RedditPost(
+                id=data.get("id", ""),
+                title=data.get("title", ""),
+                author=data.get("author", "[deleted]"),
+                subreddit=data.get("subreddit", ""),
+                score=data.get("score", 0) or 0,
+                num_comments=data.get("commentCount", 0) or 0,
+                url=data.get("url", url),
+                permalink=permalink,
+                created_utc=created_utc,
+                is_self=not is_video and not gallery_items,
+                selftext=data.get("bodyText", ""),
+                is_video=is_video,
+                video_url=video_url,
+                preview_image_url=preview_image_url,
+                gallery_items=gallery_items,
+            )
+
+        except Exception as e:
+            logger.error(f"FetchLayer 获取帖子失败 ({url}): {e}")
+            return None
+
+    def _parse_item(self, item: Dict[str, Any]) -> RedditPost:
+        """解析 community-posts 里的单个 item"""
+        from datetime import datetime
+        created_utc = 0.0
+        created_at = item.get("createdAt")
+        if created_at:
+            try:
+                dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                created_utc = dt.timestamp()
+            except Exception:
+                pass
+
+        permalink = item.get("permalink", "")
+        if permalink.startswith("/"):
+            permalink = f"https://www.reddit.com{permalink}"
+        permalink = permalink.replace("old.reddit.com", "www.reddit.com")
+
+        return RedditPost(
+            id=item.get("id", ""),
+            title=item.get("title", ""),
+            author=item.get("author", "[deleted]"),
+            subreddit=item.get("subreddit", ""),
+            score=item.get("score", 0) or 0,
+            num_comments=item.get("commentCount", 0) or 0,
+            url=item.get("url", ""),
+            permalink=permalink,
+            created_utc=created_utc,
+            is_self=False,
+            selftext="",
+        )
+
+    async def _get_community_posts(self, subreddit: Optional[str], sort: str, time_filter: Optional[str], limit: int) -> List[RedditPost]:
+        import httpx
+        try:
+            payload: Dict[str, Any] = {"sort": sort, "limit": limit}
+            if subreddit:
+                payload["subreddit"] = subreddit
+            if time_filter:
+                payload["time"] = time_filter
+            async with httpx.AsyncClient(timeout=15) as client:
+                response = await client.post(
+                    f"{self.BASE_URL}/community-posts",
+                    headers=self._headers,
+                    json=payload
+                )
+                response.raise_for_status()
+                data = response.json()
+            posts = [self._parse_item(item) for item in data.get("items", [])]
+            logger.info(f"✅ FetchLayer 获取到 {len(posts)} 个帖子 (sort={sort})")
+            return posts
+        except Exception as e:
+            logger.error(f"FetchLayer community-posts 失败: {e}")
+            return []
+
+    async def get_hot_posts(self, subreddit: Optional[str] = None, limit: int = 10) -> List[RedditPost]:
+        return await self._get_community_posts(subreddit, "hot", None, limit)
+
+    async def get_top_posts(self, subreddit: Optional[str] = None, time_filter: str = 'day', limit: int = 10) -> List[RedditPost]:
+        return await self._get_community_posts(subreddit, "top", time_filter, limit)
+
+    async def get_new_posts(self, subreddit: Optional[str] = None, limit: int = 10) -> List[RedditPost]:
+        return await self._get_community_posts(subreddit, "new", None, limit)
+
+    async def close(self):
+        pass
+
+    @staticmethod
+    def get_url_hash(url: str) -> str:
         return hashlib.md5(url.encode()).hexdigest()[:16]
