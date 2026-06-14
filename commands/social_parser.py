@@ -396,11 +396,20 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     # 提取所有支持的 URL
     urls = await _adapter.extract_all_urls(text)
-    if not urls:
+
+    # 单独提取 Reddit URL（ParseHub 不支持 Reddit，需要走专用客户端）
+    import re as _re
+    _url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+(?:\?[^\s<>"{}|\\^`\[\]]*)?(?:#[^\s<>"{}|\\^`\[\]]*)?'
+    reddit_urls = [
+        u for u in _re.findall(_url_pattern, text)
+        if 'reddit.com' in u and u not in urls
+    ]
+
+    if not urls and not reddit_urls:
         await send_error(
             context,
             chat_id,
-            "❌ 未检测到支持的平台链接\n\n支持：抖音、B站、YouTube、TikTok、小红书、Twitter等20+平台"
+            "❌ 未检测到支持的平台链接\n\n支持：抖音、B站、YouTube、TikTok、小红书、Twitter、Reddit等20+平台"
         )
         if update.message:
             await delete_user_command(context, chat_id, update.message.message_id)
@@ -411,11 +420,89 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     tasks = [
         _handle_single_parse(url, user_id, chat_id, group_id, context, reply_msg_id)
         for url in urls
+    ] + [
+        _handle_reddit_parse(url, user_id, chat_id, context)
+        for url in reddit_urls
     ]
     await asyncio.gather(*tasks)
 
     if update.message:
         await delete_user_command(context, chat_id, update.message.message_id)
+
+
+async def _handle_reddit_parse(
+    url: str,
+    user_id: int,
+    chat_id: int,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    """处理 /parse 命令中的 Reddit URL"""
+    from commands.reddit_command import (
+        _reddit_client, _ai_summarizer, _cache_manager,
+        _escape_markdown, _format_timestamp, _send_reddit_media,
+    )
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    from utils.config_manager import get_config
+
+    if not _reddit_client:
+        await send_error(context, chat_id, "❌ Reddit 功能未初始化")
+        return
+
+    status_msg = await context.bot.send_message(chat_id=chat_id, text="🔄 解析中...")
+
+    try:
+        post = await _reddit_client.get_post_by_url(url)
+        if not post:
+            await status_msg.delete()
+            await send_error(context, chat_id, "❌ 获取 Reddit 帖子失败，请检查链接是否正确")
+            return
+
+        await status_msg.edit_text("📥 下载中...")
+
+        caption_parts = [
+            f"**{_escape_markdown(post.title)}**",
+            f"👤 u/{_escape_markdown(post.author)} \\| 📊 {post.score} ⬆️ \\| 💬 {post.num_comments}",
+            f"📍 r/{_escape_markdown(post.subreddit)} \\| 🕐 {_escape_markdown(_format_timestamp(post.created_utc))}",
+        ]
+        if post.is_self and post.selftext:
+            preview = post.selftext[:500] + ("..." if len(post.selftext) > 500 else "")
+            caption_parts.append(f"\n{_escape_markdown(preview)}")
+        caption_parts.append(f"🔗 [原帖链接]({post.permalink})")
+        caption_parts.append("📱 平台: REDDIT")
+        caption = "\n".join(caption_parts)
+
+        from utils.reddit_client import RedditClient
+        url_hash = RedditClient.get_url_hash(post.permalink)
+        buttons = [[InlineKeyboardButton("🔗 原帖链接", url=post.permalink)]]
+        config = get_config()
+        if config and config.enable_ai_summary and _ai_summarizer:
+            buttons[0].append(InlineKeyboardButton("📝 AI总结", callback_data=f"reddit_summary_{url_hash}"))
+            if _cache_manager:
+                await _cache_manager.set(
+                    f"reddit_summary:{url_hash}",
+                    {
+                        'url': post.permalink, 'title': post.title, 'content': post.selftext,
+                        'author': post.author, 'subreddit': post.subreddit,
+                        'score': post.score, 'num_comments': post.num_comments,
+                        'created_utc': post.created_utc,
+                    },
+                    ttl=86400,
+                    subdirectory="reddit"
+                )
+        reply_markup = InlineKeyboardMarkup(buttons)
+
+        await status_msg.edit_text("📤 上传中...")
+        sent_messages = await _send_reddit_media(context, chat_id, post, caption, reply_markup)
+        await status_msg.delete()
+
+        if sent_messages and config:
+            for msg in sent_messages:
+                await _schedule_deletion(context, chat_id, msg.message_id, config.auto_delete_delay)
+
+    except Exception as e:
+        logger.error(f"Reddit 解析失败: {e}", exc_info=True)
+        await status_msg.delete()
+        await send_error(context, chat_id, f"❌ Reddit 解析失败: {str(e)}")
 
 
 async def _handle_single_parse(
