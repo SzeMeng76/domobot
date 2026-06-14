@@ -118,7 +118,7 @@ class RedditJsonClient:
         self.base_url = "https://www.reddit.com"
         self.rotate_browser = rotate_browser  # 是否轮询浏览器
         self.session: Optional[AsyncSession] = None
-        self.current_browser = random.choice(BROWSER_POOL)  # 随机选择初始浏览器
+        self.current_browser = 'chrome146'  # 优先用最新 Chrome，被识别率最低
 
         # Circuit breaker 状态
         self.cooldown_until: float = 0.0  # 冷却结束时间（monotonic time）
@@ -198,8 +198,9 @@ class RedditJsonClient:
             await self.session.close()
             self.session = None
 
-        # 随机选择新浏览器（排除当前浏览器）
-        available = [b for b in BROWSER_POOL if b != self.current_browser]
+        # 优先从最新 Chrome 里选，全部用过再扩大到全池
+        chrome_latest = [b for b in BROWSER_POOL if b.startswith('chrome1') and b != self.current_browser]
+        available = chrome_latest if chrome_latest else [b for b in BROWSER_POOL if b != self.current_browser]
         self.current_browser = random.choice(available)
         logger.info(f"🔄 切换浏览器指纹: {self.current_browser}")
 
