@@ -206,9 +206,9 @@ def setup_handlers(application: Application, config):
             anti_spam_handler.handle_new_member
         ))
 
-        # 注册群组消息处理器（文本和图片）
+        # 注册群组消息处理器（文本、图片、联系人卡片）
         application.add_handler(MessageHandler(
-            filters.ChatType.GROUPS & (filters.TEXT | filters.PHOTO) & ~filters.COMMAND,
+            filters.ChatType.GROUPS & (filters.TEXT | filters.PHOTO | filters.CONTACT) & ~filters.COMMAND,
             anti_spam_handler.handle_message
         ))
 

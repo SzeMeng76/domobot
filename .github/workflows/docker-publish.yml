@@ -7,29 +7,31 @@ on:
     tags:
       - 'v*.*.*'
     branches:
-      - 'mydev' # 增加了这一行
-      - 'main' # 增加了这一行
-      - 'dev' # 增加了这一行      
+      - 'mydev'
+      - 'main'
+      - 'dev'
   workflow_dispatch:
 
-# 定义一个 job
 jobs:
-  build-and-push:
-    # 运行在最新的 ubuntu 系统上
-    runs-on: ubuntu-latest
-    # 授予 job 的权限
+  # 第一阶段：AMD64 和 ARM64 并行原生构建，各自推送到 GHCR（不 push 完整 manifest）
+  build:
+    strategy:
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
 
-    # job 的执行步骤
     steps:
-      # 第一步：拉取代码
       - name: Check out the repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
-      # 第二步：提取版本号，并判断是否为正式发布
-      - name: Extract version and release status
+      - name: Extract version
         id: extract_version
         run: |
           if [[ $GITHUB_REF == refs/tags/* ]]; then
@@ -40,71 +42,124 @@ jobs:
             echo "IS_RELEASE=false" >> $GITHUB_ENV
           fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "Version is: $VERSION"
 
-      # 第三步：动态生成 Docker 镜像的标签 (已更新为总是包含 latest)
-      - name: Generate Docker tags
+      - name: Generate image name
         id: meta
         run: |
-          # 强制将所有相关名称转为小写，以符合 Docker 命名规范
-          DOCKERHUB_USER_LOWER=$(echo "${{ secrets.DOCKERHUB_USERNAME }}" | tr '[:upper:]' '[:lower:]')
-          REPO_NAME_LOWER=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
-          DOCKER_IMAGE_DOCKERHUB="$DOCKERHUB_USER_LOWER/$REPO_NAME_LOWER"
           GHCR_REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          DOCKER_IMAGE_GHCR="ghcr.io/$GHCR_REPO_LOWER"
+          echo "image=ghcr.io/$GHCR_REPO_LOWER" >> $GITHUB_OUTPUT
+          # 平台标识符用于 digest artifact 名（斜线替换为横线）
+          PLATFORM_SLUG=$(echo "${{ matrix.platform }}" | tr '/' '-')
+          echo "platform_slug=$PLATFORM_SLUG" >> $GITHUB_OUTPUT
 
-          # 新增的智能判断逻辑 (只推送到GHCR)
-          if [[ $GITHUB_REF == refs/tags/* ]]; then
-            # 如果是发布 (打tag)，就使用 latest 和版本号标签
-            echo "是正式发布，使用 latest 和版本号标签: ${{ env.VERSION }}"
-            TAGS="$DOCKER_IMAGE_GHCR:latest,$DOCKER_IMAGE_GHCR:${{ env.VERSION }}"
-          else
-            # 如果是推送到分支 (比如 mydev)，就使用分支名作为标签
-            BRANCH_NAME=${GITHUB_REF#refs/heads/}
-            echo "是开发分支推送，使用分支名 '${BRANCH_NAME}' 作为标签"
-            TAGS="$DOCKER_IMAGE_GHCR:${BRANCH_NAME}"
-          fi
-
-          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
-          echo "Generated tags: ${TAGS}"
-
-          # 输出 cache ref (用于 buildx)
-          echo "cache-ref=$DOCKER_IMAGE_GHCR:buildcache" >> $GITHUB_OUTPUT
-
-      # 第四步：设置 QEMU，用于多平台构建
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      # 第五步：登录到 Docker Hub (在 buildx 之前登录，避免 rate limit)
       - name: Log in to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 第六步：设置 Docker Buildx，新一代的构建工具
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: |
-            image=moby/buildkit:latest
-            network=host
-
-      # 第七步：登录到 GitHub Container Registry (GHCR)
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 第八步：构建并推送 Docker 镜像
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+        with:
+          driver-opts: |
+            image=moby/buildkit:latest
+            network=host
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v7
         with:
           context: .
+          platforms: ${{ matrix.platform }}
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          platforms: linux/amd64,linux/arm64
-          cache-from: type=registry,ref=${{ steps.meta.outputs.cache-ref }}
-          cache-to: type=registry,ref=${{ steps.meta.outputs.cache-ref }},mode=max
+          outputs: type=image,name=${{ steps.meta.outputs.image }},push-by-digest=true,name-canonical=true
+          cache-from: type=registry,ref=${{ steps.meta.outputs.image }}:buildcache-${{ steps.meta.outputs.platform_slug }}
+          cache-to: type=registry,ref=${{ steps.meta.outputs.image }}:buildcache-${{ steps.meta.outputs.platform_slug }},mode=max
+
+      # digest 传给下一个 job
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ steps.meta.outputs.platform_slug }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # 第二阶段：merge 两个平台的 digest，推送最终 manifest
+  merge:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digest-*
+          merge-multiple: true
+
+      - name: Generate tags
+        id: meta
+        run: |
+          GHCR_REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          DOCKERHUB_USER_LOWER=$(echo "${{ secrets.DOCKERHUB_USERNAME }}" | tr '[:upper:]' '[:lower:]')
+          REPO_NAME_LOWER=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
+          GHCR_IMAGE="ghcr.io/$GHCR_REPO_LOWER"
+
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+            TAGS="$GHCR_IMAGE:latest $GHCR_IMAGE:$VERSION"
+          else
+            BRANCH_NAME=${GITHUB_REF#refs/heads/}
+            TAGS="$GHCR_IMAGE:${BRANCH_NAME}"
+          fi
+
+          echo "tags=$TAGS" >> $GITHUB_OUTPUT
+          echo "image=$GHCR_IMAGE" >> $GITHUB_OUTPUT
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Create and push manifest
+        working-directory: /tmp/digests
+        run: |
+          IMAGE="${{ steps.meta.outputs.image }}"
+          # 构建 --amend 参数列表
+          AMENDS=""
+          for digest in *; do
+            AMENDS="$AMENDS --amend $IMAGE@sha256:$digest"
+          done
+          # 为每个 tag 创建并推送 manifest
+          for tag in ${{ steps.meta.outputs.tags }}; do
+            docker buildx imagetools create $AMENDS --tag "$tag"
+            echo "Pushed manifest: $tag"
+          done
