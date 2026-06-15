@@ -1,6 +1,6 @@
 # --- STAGE 1: Builder ---
 # 使用一个完整的、非 slim 的 Python 3.12 镜像作为"构建器"
-FROM python:3.12 as builder
+FROM python:3.12 AS builder
 
 # 设置工作目录
 WORKDIR /app
