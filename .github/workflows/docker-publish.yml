@@ -153,13 +153,13 @@ jobs:
         working-directory: /tmp/digests
         run: |
           IMAGE="${{ steps.meta.outputs.image }}"
-          # 构建 --amend 参数列表
-          AMENDS=""
+          # 把所有 digest 作为 SOURCE 参数
+          SOURCES=""
           for digest in *; do
-            AMENDS="$AMENDS --amend $IMAGE@sha256:$digest"
+            SOURCES="$SOURCES $IMAGE@sha256:$digest"
           done
           # 为每个 tag 创建并推送 manifest
           for tag in ${{ steps.meta.outputs.tags }}; do
-            docker buildx imagetools create $AMENDS --tag "$tag"
+            docker buildx imagetools create --tag "$tag" $SOURCES
             echo "Pushed manifest: $tag"
           done
