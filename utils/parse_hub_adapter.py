@@ -356,20 +356,24 @@ class ParseHubAdapter:
                         else:
                             logger.warning(f"⚠️ [XHS] 图片需要大陆代理，但未配置 XHS_IMAGE_PROXY 环境变量")
 
-                download_result = await asyncio.wait_for(
-                    result.download(path=self.temp_dir, proxy=download_proxy),
-                    timeout=60 * 30,  # 30分钟
-                )
-            except TimeoutError:
-                logger.warning(f"媒体下载超时（>30分钟）: {url[:50]}...")
                 download_result = None
-            except Exception as download_error:
-                # 下载失败（例如小红书CDN URL过期），但解析成功
-                logger.warning(f"媒体下载失败但解析成功: {download_error}")
-                download_result = None
+                for download_attempt in range(1, 4):  # 最多3次（1次+2次重试）
+                    try:
+                        download_result = await asyncio.wait_for(
+                            result.download(path=self.temp_dir, proxy=download_proxy),
+                            timeout=60 * 30,  # 30分钟
+                        )
+                        break
+                    except TimeoutError:
+                        logger.warning(f"媒体下载超时（>30分钟）(尝试 {download_attempt}/3): {url[:50]}...")
+                        break  # 超时不重试
+                    except Exception as _e:
+                        logger.warning(f"媒体下载失败 (尝试 {download_attempt}/3): {_e}")
+                        if download_attempt < 3:
+                            await asyncio.sleep(1)
 
                 # 小红书CDN URL会快速过期，下载失败时尝试用TikHub重新解析
-                if platform_id in ('xiaohongshu', 'xhs'):
+                if download_result is None and platform_id in ('xiaohongshu', 'xhs'):
                     tikhub_api_key = os.getenv("TIKHUB_API_KEY")
                     if tikhub_api_key:
                         logger.info(f"🔄 [XHS] CDN下载失败，尝试TikHub重新解析...")
@@ -385,6 +389,10 @@ class ParseHubAdapter:
                         except Exception as tikhub_error:
                             logger.error(f"❌ [XHS] TikHub重新解析也失败: {tikhub_error}")
                             download_result = None
+
+            except Exception as download_error:
+                logger.warning(f"媒体下载失败但解析成功: {download_error}")
+                download_result = None
 
             parse_time = time.time() - start_time
 

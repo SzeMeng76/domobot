@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 from uuid import uuid4
 
-from telegram import Update, InlineQueryResultArticle, InlineQueryResultPhoto, InlineQueryResultCachedVideo, InlineQueryResultCachedPhoto, InputTextMessageContent, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, InlineQueryResultArticle, InlineQueryResultPhoto, InlineQueryResultCachedVideo, InlineQueryResultCachedPhoto, InputTextMessageContent, InlineKeyboardMarkup, InlineKeyboardButton, LinkPreviewOptions
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
@@ -20,6 +20,8 @@ from utils.media_helpers import get_media_dimensions
 from commands.social_parser import get_url_hash
 
 logger = logging.getLogger(__name__)
+
+LINK_ICON_URL = "https://i.iij.li/i/20260627/6a3fb12066abb.png"
 
 # 全局缓存：存储解析结果（5分钟TTL）
 _parse_cache: Dict[str, Dict[str, Any]] = {}
@@ -322,6 +324,18 @@ async def handle_inline_parse_query(
             thumb_url = None
 
         # 根据类型返回不同的结果
+        raw_link_result = InlineQueryResultArticle(
+            id=str(uuid4()),
+            title="原始链接",
+            description=display_url,
+            input_message_content=InputTextMessageContent(
+                display_url, link_preview_options=LinkPreviewOptions(is_disabled=True)
+            ),
+            thumbnail_url=LINK_ICON_URL,
+            thumbnail_width=72,
+            thumbnail_height=72,
+        )
+
         if isinstance(parse_result, RichTextParseResult):
             # 富文本 → 提示将发布到 Telegraph
             result_id = f"parse_richtext_{uuid4()}"
@@ -378,6 +392,7 @@ async def handle_inline_parse_query(
             keyboard = InlineKeyboardMarkup(buttons)
 
             return [
+                raw_link_result,
                 InlineQueryResultArticle(
                     id=result_id,
                     title=f"📰 {title}",
@@ -461,6 +476,7 @@ async def handle_inline_parse_query(
             if not is_article:
                 # 有有效缩略图 → 使用 InlineQueryResultArticle（更可靠）
                 return [
+                    raw_link_result,
                     InlineQueryResultArticle(
                         id=result_id,
                         title=f"🎬 视频 {title}",
@@ -476,6 +492,7 @@ async def handle_inline_parse_query(
                 # 无缩略图（WebP等不支持的格式） → 使用 InlineQueryResultArticle
                 logger.info(f"[Inline Parse] 无有效缩略图，使用 Article 类型: {title[:30]}")
                 return [
+                    raw_link_result,
                     InlineQueryResultArticle(
                         id=result_id,
                         title=f"🎬 视频 {title}",
@@ -767,6 +784,7 @@ async def handle_inline_parse_query(
                         )
                     )
 
+            results.insert(0, raw_link_result)
             return results if results else [
                 InlineQueryResultArticle(
                     id=str(uuid4()),
@@ -779,6 +797,7 @@ async def handle_inline_parse_query(
             ]
         else:
             return [
+                raw_link_result,
                 InlineQueryResultArticle(
                     id=str(uuid4()),
                     title=f"📄 {title}",
