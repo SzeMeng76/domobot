@@ -244,7 +244,7 @@ class RedditJsonClient:
                             response = await session.get(url, headers=headers, timeout=15, http_version=http_version)
                             # HTTP/3 成功，重置失败计数
                             if self.http3_failed_count > 0:
-                                logger.info(f"✅ HTTP/3 恢复正常，重置失败计数")
+                                logger.info("✅ HTTP/3 恢复正常，重置失败计数")
                                 self.http3_failed_count = 0
                         except Exception as e:
                             # HTTP/3 失败，尝试降级到 HTTP/2
@@ -256,7 +256,7 @@ class RedditJsonClient:
                                 logger.warning(f"🚫 HTTP/3 连续失败 {self.http3_disable_threshold} 次，切换到 HTTP/2")
 
                             # 降级到 HTTP/2 重试
-                            logger.info(f"🔄 降级到 HTTP/2 重试...")
+                            logger.info("🔄 降级到 HTTP/2 重试...")
                             response = await session.get(url, headers=headers, timeout=15)
                     else:
                         # 当前浏览器不支持 HTTP/3，直接使用 HTTP/2
@@ -269,7 +269,7 @@ class RedditJsonClient:
                 if response.status_code in (429, 403):
                     # 403 先尝试轮换浏览器重试，重试失败再设冷却期
                     if response.status_code == 403 and retry_on_403 and self.rotate_browser:
-                        logger.warning(f"⚠️ 收到 403 响应，尝试轮换浏览器重试...")
+                        logger.warning("⚠️ 收到 403 响应，尝试轮换浏览器重试...")
                         await self._rotate_browser()
                         return await self._make_request(url, retry_on_403=False)
 
@@ -504,7 +504,7 @@ class FetchLayerClient:
     async def get_post_by_url(self, url: str) -> Optional[RedditPost]:
         """通过 URL 获取帖子"""
         import httpx
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         try:
             async with httpx.AsyncClient(timeout=15) as client:
@@ -640,6 +640,72 @@ class FetchLayerClient:
 
     async def get_new_posts(self, subreddit: Optional[str] = None, limit: int = 10) -> List[RedditPost]:
         return await self._get_community_posts(subreddit, "new", None, limit)
+
+    async def get_post_by_id(self, post_id: str) -> Optional[RedditPost]:
+        """通过 ID 获取帖子（构建 permalink 后调用 get_post_by_url）"""
+        clean_id = post_id.replace('t3_', '')
+        url = f"https://www.reddit.com/comments/{clean_id}/"
+        return await self.get_post_by_url(url)
+
+    async def get_comments(self, post_id: str, limit: int = 10, sort: str = 'top') -> List[RedditComment]:
+        """通过 post endpoint 获取评论（FetchLayer 返回完整评论树）"""
+        import httpx
+        from datetime import datetime
+
+        clean_id = post_id.replace('t3_', '')
+        url = f"https://www.reddit.com/comments/{clean_id}/"
+
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                response = await client.post(
+                    f"{self.BASE_URL}/post",
+                    headers=self._headers,
+                    json={"url": url}
+                )
+                response.raise_for_status()
+                data = response.json()
+
+            if data.get("error") or data.get("blocked"):
+                logger.error(f"FetchLayer 获取评论失败: {data.get('error') or data.get('blockReason')}")
+                return []
+
+            raw_comments = data.get("comments", [])
+
+            # 只取顶层评论（depth=0 或 parentFullname 为 None）
+            top_level = [c for c in raw_comments if c.get("depth", 0) == 0 or c.get("parentFullname") is None]
+
+            if sort == 'top':
+                top_level.sort(key=lambda c: c.get("score") or 0, reverse=True)
+
+            comments = []
+            for c in top_level[:limit]:
+                created_utc = 0.0
+                created_at = c.get("createdAt")
+                if created_at:
+                    try:
+                        dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                        created_utc = dt.timestamp()
+                    except Exception:
+                        pass
+
+                body = c.get("bodyText", "")
+                if not body:
+                    continue
+
+                comments.append(RedditComment(
+                    id=c.get("id", ""),
+                    author=c.get("author", "[deleted]"),
+                    body=body,
+                    score=c.get("score") or 0,
+                    created_utc=created_utc,
+                ))
+
+            logger.info(f"✅ FetchLayer 获取到 {len(comments)} 条评论")
+            return comments
+
+        except Exception as e:
+            logger.error(f"FetchLayer 获取评论失败 (post_id={post_id}): {e}")
+            return []
 
     async def close(self):
         pass
