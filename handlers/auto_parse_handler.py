@@ -72,6 +72,10 @@ async def auto_parse_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if not text:
         return
 
+    # 匿名管理员或频道联动发送的消息没有 from_user，跳过避免 AttributeError
+    if not update.effective_user:
+        return
+
     user_id = update.effective_user.id
     group_id = update.effective_chat.id
 
