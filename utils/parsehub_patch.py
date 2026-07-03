@@ -1104,11 +1104,20 @@ def patch_parsehub_yt_dlp():
 
         async def patched_parsehub_parse(self, url: str, *, proxy: str | None = None, cookie: str | dict | None = None):
             """Patched ParseHub.parse that skips get_raw_url for Facebook watch/?v= URLs"""
+            from parsehub.utils.helpers import SecretCookie
+
             parser = self._select_parser(url)
             if not parser:
                 raise ValueError("不支持的平台")
 
-            p = parser(proxy=proxy, cookie=cookie)
+            # BUG FIX: must wrap raw cookie in SecretCookie like the official implementation does
+            # (parsehub/__init__.py: `parser(proxy=proxy, cookie=SecretCookie(cookie))`).
+            # Passing the raw str/dict/None value directly sets self.cookie to that raw value,
+            # and every parser's .params/._parse calls self.cookie.get_value() expecting a
+            # SecretCookie object — when cookie=None (e.g. YouTube, which intentionally passes
+            # None here since its cookie goes through a separate cookiefile/env-var path), this
+            # crashes with "'NoneType' object has no attribute 'get_value'".
+            p = parser(proxy=proxy, cookie=SecretCookie(cookie))
 
             # Check if this is a Facebook watch/?v= URL
             if isinstance(p, FacebookParse) and "?v=" in url:
