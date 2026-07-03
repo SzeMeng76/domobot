@@ -988,14 +988,14 @@ def patch_parsehub_yt_dlp():
         # The new fetch_post_data method uses API endpoint which works without authentication
         logger.info("ℹ️ TieBa: No patch needed (2.0.15+ API works without Cookie)")
 
-        # Patch InstagramParser to support username/reel/ URL format and fix cookie passing
+        # Note: ParseHub 2.0.34+ removed instaloader entirely and rewrote Instagram
+        # parsing on top of a self-hosted InstagramAPI (GraphQL/v1). __match__ now
+        # natively supports reels/username paths, so that regex patch is no longer needed.
         from parsehub.parsers.parser.instagram import InstagramParser
-
-        # Update regex to support both /reel/xxx and username/reel/xxx
-        InstagramParser.__match__ = r"^(http(s)?://)(www\.|)instagram\.com/(p|reel|share|.*/p|.*/reel)/.*"
-        logger.info("✅ InstagramParser patched: Support username/reel/ URL format")
+        from parsehub.provider_api.instagram import InstagramAPI, InstagramMediaType
 
         # Patch Instagram parse method to pass cookie to _parse
+        # (ParseHub 2.0.39's official _do_parse still doesn't forward self.cookie to _parse)
         original_instagram_parse = InstagramParser._do_parse
 
         async def patched_instagram_parse(self, url: str):
@@ -1012,30 +1012,26 @@ def patch_parsehub_yt_dlp():
             logger.info(f"✅ [Instagram] Passing cookie to _parse: {bool(self.cookie)}")
             post = await self._parse(url, shortcode, self.cookie)
 
-            try:
-                dimensions: dict = post._field("dimensions")
-            except KeyError:
-                dimensions = {}
-            width, height = dimensions.get("width", 0) or 0, dimensions.get("height", 0) or 0
+            width, height = post.width, post.height
 
             k = {"title": post.title, "content": post.caption}
             match post.typename:
-                case "GraphSidecar":
+                case InstagramMediaType.SIDECAR:
                     media = [
                         VideoRef(url=i.video_url, thumb_url=i.display_url, width=i.width, height=i.height)
-                        if i.is_video
+                        if i.is_video and i.video_url
                         else ImageRef(url=i.display_url, width=i.width, height=i.height)
                         for i in post.get_sidecar_nodes()
                     ]
                     return MultimediaParseResult(media=media, **k)
-                case "GraphImage":
+                case InstagramMediaType.IMAGE:
                     return ImageParseResult(photo=[ImageRef(url=post.url, width=width, height=height)], **k)
-                case "GraphVideo":
+                case InstagramMediaType.VIDEO:
                     return VideoParseResult(
                         video=VideoRef(
-                            url=post.video_url,
+                            url=post.video_url or post.url,
                             thumb_url=post.url,
-                            duration=int(post.video_duration),
+                            duration=int(post.video_duration or 0),
                             width=width,
                             height=height,
                         ),
@@ -1047,30 +1043,25 @@ def patch_parsehub_yt_dlp():
         InstagramParser._do_parse = patched_instagram_parse
         logger.info("✅ InstagramParser patched: Fix cookie passing to _parse method")
 
-        # Patch MyInstaloaderContext to add better headers
-        from parsehub.provider_api.instagram import MyInstaloaderContext
-        import requests
+        # Patch InstagramAPI's HTTP client to use randomized UA + more anti-crawler headers
+        # (replaces the old MyInstaloaderContext header patch, removed with instaloader in 2.0.34+)
+        original_instagram_new_client = InstagramAPI._new_client
 
-        original_get_anonymous_session = MyInstaloaderContext.get_anonymous_session
-
-        def patched_get_anonymous_session(self) -> requests.Session:
+        def patched_instagram_new_client(self):
             from yt_dlp.utils.networking import random_user_agent
 
-            session = original_get_anonymous_session(self)
-            # Add more realistic headers with random UA (better anti-crawler)
-            session.headers.update({
+            client = original_instagram_new_client(self)
+            client.headers.update({
                 'User-Agent': random_user_agent(),
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
                 'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7',
-                'Referer': 'https://www.instagram.com/',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-Dest': 'empty',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Site': 'same-origin',
             })
-            return session
+            return client
 
-        MyInstaloaderContext.get_anonymous_session = patched_get_anonymous_session
-        logger.info("✅ MyInstaloaderContext patched: Enhanced headers for better compatibility")
+        InstagramAPI._new_client = patched_instagram_new_client
+        logger.info("✅ InstagramAPI patched: Enhanced headers for better compatibility")
 
         # Patch BiliParse to support bangumi/play/ URL format (番剧/影视)
         from parsehub.parsers.parser.bilibili import BiliParse

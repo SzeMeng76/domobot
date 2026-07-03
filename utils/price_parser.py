@@ -118,7 +118,14 @@ def detect_currency_from_context(currency_symbol: str, price_str: str, country_c
         if country_code in country_currency_map:
             return country_currency_map[country_code]
 
-    return CURRENCY_SYMBOL_TO_CODE.get(currency_symbol, "USD")
+    if currency_symbol in CURRENCY_SYMBOL_TO_CODE:
+        return CURRENCY_SYMBOL_TO_CODE[currency_symbol]
+
+    # 未在映射表中但形似 ISO 4217 三字母代码 (如 "NGN"、"CFA" 之外的新代码),直接视为货币代码
+    if re.fullmatch(r"[A-Z]{3}", currency_symbol):
+        return currency_symbol
+
+    return "USD"
 
 
 def extract_currency_and_price(price_str: str, country_code: str | None = None, service: str | None = None) -> tuple[str, float | None]:

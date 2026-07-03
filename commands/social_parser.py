@@ -152,13 +152,56 @@ logger = logging.getLogger(__name__)
 pillow_heif.register_heif_opener()
 
 
-def _convert_image_to_webp(image_path: Path) -> Path:
+async def _detect_image_format(file_path: Path) -> tuple[str, bool, str]:
+    """
+    探测图片真实格式（不依赖后缀名）
+
+    Returns:
+        (format: str, is_broken: bool, mode: str)
+        format: 图片格式（JPEG/PNG/HEIF/WEBP等）
+        is_broken: PIL是否打不开（损坏图片）
+        mode: 颜色模式（RGB/RGBA/P等），损坏图片返回空字符串
+    """
+    try:
+        with PILImage.open(file_path) as img:
+            return (img.format or "").upper(), False, img.mode
+    except OSError:
+        # PIL打不开，fallback用ffprobe探测
+        return await _probe_image_format(file_path), True, ""
+
+
+async def _probe_image_format(file_path: Path) -> str:
+    """用ffprobe探测PIL打不开的图片格式"""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "ffprobe",
+            "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=codec_name",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            str(file_path),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await proc.communicate()
+        codec = stdout.decode().strip().lower()
+        # 映射ffprobe编码名到常见格式名
+        return {"mjpeg": "JPEG", "jpeg": "JPEG", "png": "PNG", "webp": "WEBP"}.get(codec, codec.upper())
+    except Exception as e:
+        logger.warning(f"⚠️ ffprobe探测失败: {e}")
+        return "UNKNOWN"
+
+
+async def _convert_image_to_webp(image_path: Path) -> Path:
     """
     Convert image to WebP format for better Telegram compatibility.
     Handles heif, heic, avif and other formats that may cause Telegram image_process_failed error.
 
-    Reference: parse_hub_bot only converts HEIF/HEIC/AVIF to WebP, other formats are sent directly.
-    WebP is preferred over JPEG because it has smaller file size with better quality.
+    本次更新（基于parse_hub_bot 2026-07-03修复）:
+    - 不再依赖文件后缀判断，改用PIL探测真实格式（防止CDN返回格式诈骗文件）
+    - PIL打不开的损坏图片，fallback用ffprobe+ffmpeg强制转换为JPEG（之前会直接发送损坏文件导致失败）
+    - 检测到RGBA模式也强制转JPEG（历史上RGBA图传Telegram容易触发image_process_failed）
+    - 目标格式从WebP改为JPEG（更保守，兼容性更好）
 
     Args:
         image_path: Path to the image file
@@ -167,46 +210,44 @@ def _convert_image_to_webp(image_path: Path) -> Path:
         Path to the converted image (or original if no conversion needed)
     """
     try:
-        # Check file extension
-        suffix = image_path.suffix.lower()
+        # Step 1: 探测真实格式（不看后缀）
+        image_format, is_broken, image_mode = await _detect_image_format(image_path)
+        needs_convert = image_format not in {"PNG", "JPEG"}
+        needs_rgb = image_mode == "RGBA"
 
-        # JPG, PNG, WebP are directly supported by Telegram
-        # But verify actual content - XHS CDN may return HEIF with .jpg extension
-        if suffix in ['.jpg', '.jpeg', '.png', '.webp']:
-            try:
-                with PILImage.open(image_path) as img:
-                    if img.format in ('HEIF', 'HEIC', 'AVIF'):
-                        logger.info(f"🔄 Detected {img.format} content in {suffix} file, converting to WebP")
-                    else:
-                        return image_path
-            except Exception:
-                return image_path
-
-        # HEIF/HEIC/AVIF need conversion (Telegram doesn't support them)
-        elif suffix not in ['.heif', '.heic', '.avif']:
-            # Other formats: try to send directly first
+        if not needs_convert and not is_broken and not needs_rgb:
             return image_path
 
-        logger.info(f"🔄 Converting {suffix} image to WebP: {image_path.name}")
+        logger.info(f"🔄 图片需转换: format={image_format}, mode={image_mode}, broken={is_broken}")
 
-        # Open image with context manager to ensure proper resource cleanup
-        with PILImage.open(image_path) as img:
-            # Convert to RGBA if necessary (WebP supports transparency)
-            if img.mode not in ('RGBA', 'RGB'):
-                img = img.convert('RGBA')
+        # Step 2: 转换为JPEG
+        output = image_path.with_suffix('.jpg')
+        try:
+            # 先尝试PIL（损坏图会进except）
+            with PILImage.open(image_path) as pil_img:
+                img = pil_img.convert("RGB") if pil_img.mode != "RGB" else pil_img
+                img.save(output, format="JPEG", quality=95, optimize=True)
+            logger.info(f"✅ PIL转换完成: {image_path.name} -> {output.name}")
+        except OSError as e:
+            # PIL失败，用ffmpeg强制转换（能救大部分损坏图）
+            logger.warning(f"⚠️ PIL转换失败，尝试ffmpeg: {e}")
+            proc = await asyncio.create_subprocess_exec(
+                "ffmpeg",
+                "-v", "error",
+                "-i", str(image_path),
+                "-frames:v", "1",
+                "-q:v", "1",
+                "-y", str(output),
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await proc.communicate()
+            if proc.returncode != 0 or not output.exists() or output.stat().st_size == 0:
+                logger.error(f"❌ ffmpeg转换也失败: {stderr.decode()}")
+                return image_path  # 实在救不了，返回原图
+            logger.info(f"✅ ffmpeg转换完成: {image_path.name} -> {output.name}")
 
-            # Create new path with .webp extension
-            new_path = image_path.with_suffix('.webp')
-
-            # Save as WebP with high quality
-            img.save(new_path, 'WEBP', quality=95, method=6)
-
-        logger.info(f"✅ Image converted: {image_path.name} -> {new_path.name}")
-
-        # Note: Original file is preserved for debugging and will be cleaned up
-        # by the scheduled cleanup_temp_files() task (runs daily at UTC 4:00)
-
-        return new_path
+        return output
 
     except Exception as e:
         logger.error(f"❌ Image conversion failed: {e}, using original file")
@@ -1291,7 +1332,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
 
         try:
             # Step 1: Convert to WebP if needed to avoid Telegram image_process_failed error
-            converted_path = _convert_image_to_webp(original_path)
+            converted_path = await _convert_image_to_webp(original_path)
             if converted_path != original_path:
                 intermediates.append(converted_path)
 
@@ -1399,7 +1440,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                     original_path = Path(img.path)
 
                     # Step 1: Convert to WebP if needed to avoid Telegram image_process_failed error
-                    converted_path = _convert_image_to_webp(original_path)
+                    converted_path = await _convert_image_to_webp(original_path)
                     if converted_path != original_path:
                         intermediates.append(converted_path)
 
@@ -1511,7 +1552,7 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                 for img in media_list[:10]:
                     try:
                         original_path = Path(img.path)
-                        converted_path = _convert_image_to_webp(original_path)
+                        converted_path = await _convert_image_to_webp(original_path)
                         downscaled_path = _downscale_image(converted_path)
                         image_path = str(downscaled_path)
 
@@ -1718,7 +1759,7 @@ async def _send_multimedia(context: ContextTypes.DEFAULT_TYPE, chat_id: int, dow
 
             try:
                 # Process image (convert + downscale)
-                converted_path = _convert_image_to_webp(original_path)
+                converted_path = await _convert_image_to_webp(original_path)
                 if converted_path != original_path:
                     intermediates.append(converted_path)
 
