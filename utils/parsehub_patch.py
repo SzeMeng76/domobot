@@ -296,7 +296,7 @@ def patch_parsehub_yt_dlp():
 
         original_yt_video_download = YtVideoParseResult._do_download
 
-        async def patched_yt_video_download(self, *, output_dir, callback=None, callback_args=(), callback_kwargs=None, proxy=None, headers=None):
+        async def patched_yt_video_download(self, *, output_dir, callback=None, callback_args=(), callback_kwargs=None, proxy=None, headers=None, connections=4):
             """Patched _do_download that uses yt-dlp for YouTube (with pytubefix fallback)"""
             # 2.0.1: YtVideoParseResult.video (VideoRef) 存储在 self.media 中
             # 优先使用 self.dl.url (原始YouTube URL)，fallback 到 self.media.url 或 self.raw_url
@@ -313,7 +313,7 @@ def patch_parsehub_yt_dlp():
                 # Try yt-dlp first (primary method)
                 try:
                     logger.info(f"🎬 [yt-dlp] Attempting download with yt-dlp...")
-                    result = await original_yt_video_download(self, output_dir=output_dir, callback=callback, callback_args=callback_args, callback_kwargs=callback_kwargs, proxy=proxy, headers=headers)
+                    result = await original_yt_video_download(self, output_dir=output_dir, callback=callback, callback_args=callback_args, callback_kwargs=callback_kwargs, proxy=proxy, headers=headers, connections=connections)
                     logger.info(f"✅ [Patch] yt-dlp download completed successfully")
                     return result
                 except Exception as e:
@@ -406,7 +406,7 @@ def patch_parsehub_yt_dlp():
                         raise DownloadError(f"YouTube download failed: yt-dlp error: {e}, pytubefix error: {pytubefix_error}")
             else:
                 # Not a YouTube URL, use original yt-dlp download
-                return await original_yt_video_download(self, output_dir=output_dir, callback=callback, callback_args=callback_args, callback_kwargs=callback_kwargs, proxy=proxy, headers=headers)
+                return await original_yt_video_download(self, output_dir=output_dir, callback=callback, callback_args=callback_args, callback_kwargs=callback_kwargs, proxy=proxy, headers=headers, connections=connections)
 
         YtVideoParseResult._do_download = patched_yt_video_download
         logger.info("✅ YtVideoParseResult._do_download patched: use yt-dlp for YouTube (pytubefix fallback)")
