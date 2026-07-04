@@ -116,6 +116,13 @@ def patch_parsehub_yt_dlp():
                     logger.info(f"🌐 [Patch] Updated Facebook format selector to: {params['format']}")
                 logger.info(f"🌐 [Patch] Added Facebook headers (Referer/Origin)")
 
+            # YouTube/Bilibili format fix: use improved format selector with fallbacks
+            # Supports more video stream combinations (ParseHub 2.0.40 improvement)
+            if "youtube.com" in url_lower or "youtu.be" in url_lower or "bilibili.com" in url_lower or "b23.tv" in url_lower:
+                if "format" in params:
+                    params["format"] = "mp4+bestvideo[height<=1080]+bestaudio/mp4+bestvideo+bestaudio/mp4+best"
+                    logger.info(f"🎬 [Patch] Updated YouTube/Bilibili format selector to: {params['format']}")
+
             # 更新params（而不是覆盖）
             params["http_headers"] = http_headers
             logger.info(f"🔍 [Patch] Final http_headers: {http_headers}")
