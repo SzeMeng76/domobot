@@ -68,7 +68,7 @@ pandas==3.0.3  # Latest stable version as of May 2026
 # Social Media Parser (ParseHub) - 社交媒体解析功能
 parsehub~=2.0.40  # 社交媒体聚合解析器，支持20+平台 (2.0.40: 扩展ytdlp format选择器以兼容更多视频流/download_video异常捕获)
 cryptography>=49.0.0  # ParseHub依赖：用于小黑盒动态加密算法（RSA/AES/3DES）
-yt-dlp>=2026.6.9   # 2026.6.9: curl_cffi 0.15.x 原生支持、exec安全限制、CVE修复
+yt-dlp>=2026.7.4   # 2026.7.4: 最新稳定版，包含安全修复和提取器改进
 pytubefix>=10.10.1  # YouTube 下载库（10.10.1: improved nsig extraction for recent YouTube player variants）
 ytmusicapi>=1.12.1  # YouTube Music API（搜索、排行榜、歌词）1.12.0: get_song_credits国际化改进
 pillow>=12.3.0  # 图像处理库 (12.3.0: security fixes, WebP improvements)

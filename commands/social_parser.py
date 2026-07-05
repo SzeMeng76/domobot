@@ -212,6 +212,12 @@ async def _convert_image_to_webp(image_path: Path) -> Path:
     try:
         # Step 1: 探测真实格式（不看后缀）
         image_format, is_broken, image_mode = await _detect_image_format(image_path)
+
+        # 跳过 GIF 格式，直接返回原图（避免破坏动画）
+        if image_format == "GIF":
+            logger.info(f"🎬 检测到 GIF 格式，跳过转换保留动画")
+            return image_path
+
         needs_convert = image_format not in {"PNG", "JPEG"}
         needs_rgb = image_mode == "RGBA"
 
