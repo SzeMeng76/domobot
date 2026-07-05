@@ -91,8 +91,49 @@ async def send_from_cache(context, chat_id: int, cached: dict, caption: str,
     根据缓存内容直接用 file_id 发送，完全跳过下载/上传。
     返回发送的 Message 列表。
     """
+    from telegram import InputMediaPhoto, InputMediaVideo, InputMediaAnimation, ReplyParameters
+
     sent = []
     media_list = cached.get("media", [])
+
+    if not media_list:
+        return sent
+
+    # 检查是否全部为照片（可以使用媒体组）
+    all_photos = all(m["type"] == "photo" for m in media_list)
+
+    # 多张照片使用媒体组发送
+    if len(media_list) > 1 and all_photos:
+        media_group = []
+        for m in media_list:
+            media_group.append(InputMediaPhoto(media=m["file_id"]))
+
+        # 发送媒体组
+        try:
+            messages = await context.bot.send_media_group(
+                chat_id=chat_id,
+                media=media_group,
+                reply_parameters=reply_parameters
+            )
+            sent.extend(messages)
+
+            # 单独发送 caption + 按钮（reply 到最后一张图片）
+            if caption or reply_markup:
+                caption_msg = await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=caption,
+                    parse_mode=parse_mode,
+                    reply_parameters=ReplyParameters(message_id=messages[-1].message_id),
+                    reply_markup=reply_markup
+                )
+                sent.append(caption_msg)
+
+            return sent
+        except Exception as e:
+            logger.warning(f"⚠️ 媒体组发送失败，降级为逐个发送: {e}")
+            # 失败则继续走逐个发送逻辑
+
+    # 单个媒体或混合类型：逐个发送
     for i, m in enumerate(media_list):
         # 只在第一条消息附带 caption / reply_markup / reply
         cap = caption if i == 0 else None
