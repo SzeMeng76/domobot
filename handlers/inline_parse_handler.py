@@ -1051,6 +1051,42 @@ async def _handle_video_inline(
         if not display_url:
             display_url = url
 
+        # GIF 智能处理：检查是否应该跳过上传
+        from utils.gif_helper import should_skip_gif_upload, build_gif_download_buttons, get_gif_skip_message
+
+        if should_skip_gif_upload(parse_result):
+            # 跳过下载和上传，发送下载按钮
+            media = parse_result.media
+            media_refs = media if isinstance(media, list) else [media]
+            gif_count = len(media_refs)
+
+            skip_message = get_gif_skip_message(gif_count)
+            gif_buttons = build_gif_download_buttons(parse_result)
+
+            # 转换为 HTML 格式
+            from html import escape as html_escape
+            html_caption = html_escape(caption.replace('*', '').replace('_', '').replace('[', '').replace(']', ''))
+            html_skip_message = html_escape(skip_message)
+
+            # Helper: Article 类型用 edit_message_text
+            if is_article:
+                await context.bot.edit_message_text(
+                    inline_message_id=inline_message_id,
+                    text=f"{html_caption}\n\n{html_skip_message}",
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=gif_buttons
+                )
+            else:
+                await context.bot.edit_message_caption(
+                    inline_message_id=inline_message_id,
+                    caption=f"{html_caption}\n\n{html_skip_message}",
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=gif_buttons
+                )
+
+            logger.info(f"✅ [Inline] GIF 过多跳过上传，已发送下载按钮")
+            return
+
         # Helper: Article 类型用 edit_message_text，Photo 类型用 edit_message_caption
         async def _update_status(text: str, parse_mode=None):
             if is_article:
@@ -1251,10 +1287,38 @@ async def _handle_image_inline(
     parse_adapter,
     caption: str,
     url: str,
-    media_index: int = 0
+    media_index: int = 0,
+    reply_markup = None
 ) -> None:
     """处理图片 inline 结果"""
     try:
+        # GIF 智能处理：检查是否应该跳过上传
+        from utils.gif_helper import should_skip_gif_upload, build_gif_download_buttons, get_gif_skip_message
+
+        if should_skip_gif_upload(parse_result):
+            # 跳过下载和上传，发送下载按钮
+            media = parse_result.media
+            media_refs = media if isinstance(media, list) else [media]
+            gif_count = len(media_refs)
+
+            skip_message = get_gif_skip_message(gif_count)
+            gif_buttons = build_gif_download_buttons(parse_result)
+
+            # 转换为 HTML 格式
+            from html import escape as html_escape
+            html_caption = html_escape(caption.replace('*', '').replace('_', '').replace('[', '').replace(']', ''))
+            html_skip_message = html_escape(skip_message)
+
+            await context.bot.edit_message_text(
+                inline_message_id=inline_message_id,
+                text=f"{html_caption}\n\n{html_skip_message}",
+                parse_mode=ParseMode.HTML,
+                reply_markup=gif_buttons
+            )
+
+            logger.info(f"✅ [Inline] GIF 过多跳过上传，已发送下载按钮")
+            return
+
         # 更新状态
         await context.bot.edit_message_text(
             inline_message_id=inline_message_id,

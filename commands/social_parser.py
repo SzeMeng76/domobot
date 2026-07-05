@@ -818,6 +818,33 @@ async def _handle_single_parse(
 async def _send_media(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_parameters: ReplyParameters = None, reply_markup=None, parse_result=None):
     """发送媒体文件，返回发送的消息列表"""
     try:
+        # GIF 智能处理：检查是否应该跳过上传
+        from utils.gif_helper import should_skip_gif_upload, build_gif_download_buttons, get_gif_skip_message
+
+        if should_skip_gif_upload(parse_result):
+            # 跳过上传，发送下载按钮
+            media = parse_result.media
+            media_refs = media if isinstance(media, list) else [media]
+            gif_count = len(media_refs)
+
+            skip_message = get_gif_skip_message(gif_count)
+            gif_buttons = build_gif_download_buttons(parse_result)
+
+            @with_telegram_retry(max_retries=5)
+            async def _send_gif_skip():
+                return await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"{caption}\n\n{skip_message}",
+                    parse_mode="MarkdownV2",
+                    reply_parameters=reply_parameters,
+                    reply_markup=gif_buttons,
+                    disable_web_page_preview=True
+                )
+
+            msg = await _send_gif_skip()
+            logger.info(f"✅ GIF 过多跳过上传，已发送下载按钮")
+            return [msg]
+
         # 使用 parse_result（parsehub 2.0.0 不再存储在 download_result 中）
         pr = parse_result
         if isinstance(pr, VideoParseResult):

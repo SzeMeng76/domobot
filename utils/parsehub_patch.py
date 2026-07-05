@@ -759,10 +759,19 @@ def patch_parsehub_yt_dlp():
             from parsehub.types import VideoParseResult
             from parsehub.errors import ParseError
 
-            # Try official parser first
+            # Try official parser first (now supports Story/日常 with SignerPy)
             try:
-                return await original_douyin_parse(self, url)
+                result = await original_douyin_parse(self, url)
+                # 检查是否为Story/日常类型
+                if '/note/' in url:
+                    logger.info(f"✅ [Douyin] Story/日常解析成功 (官方API)")
+                return result
             except (ParseError, Exception) as e:
+                error_msg = str(e)
+                # 如果是SignerPy缺失错误，提示用户安装
+                if "SignerPy" in error_msg:
+                    logger.error(f"❌ [Douyin] 抖音Story/日常需要安装SignerPy: pip install SignerPy")
+                    raise ParseError("抖音Story/日常解析失败: 缺少SignerPy依赖，请运行 pip install SignerPy")
                 logger.warning(f"⚠️ [Douyin] Official parser failed: {e}, trying TikHub...")
 
             # Fallback to TikHub
@@ -771,12 +780,12 @@ def patch_parsehub_yt_dlp():
                 raise ParseError("官方解析失败且未配置TikHub API")
 
             try:
-                # Extract aweme_id from URL
+                # Extract aweme_id from URL (支持 /video/, /note/, modal_id 三种格式)
                 aweme_id_match = re.search(r'modal_id=(\d+)', url)
                 if not aweme_id_match:
                     aweme_id_match = re.search(r'/video/(\d+)', url)
                 if not aweme_id_match:
-                    aweme_id_match = re.search(r'/note/(\d+)', url)
+                    aweme_id_match = re.search(r'/note/(\d+)', url)  # Story/日常格式
 
                 if not aweme_id_match:
                     raise ParseError(f"无法从URL提取aweme_id: {url}")
