@@ -68,7 +68,7 @@ pandas==3.0.3  # Latest stable version as of May 2026
 # Social Media Parser (ParseHub) - 社交媒体解析功能
 parsehub~=2.0.41  # 社交媒体聚合解析器，支持20+平台 (2.0.41: 新增抖音日常/Story解析 + GIF智能处理支持)
 cryptography>=49.0.0  # ParseHub依赖：用于小黑盒动态加密算法（RSA/AES/3DES）
-SignerPy>=1.0.0  # ParseHub依赖：抖音日常/Story移动端API签名
+SignerPy>=0.12.0  # ParseHub依赖：抖音日常/Story移动端API签名
 yt-dlp>=2026.7.4   # 2026.7.4: 最新稳定版，包含安全修复和提取器改进
 pytubefix>=10.10.1  # YouTube 下载库（10.10.1: improved nsig extraction for recent YouTube player variants）
 ytmusicapi>=1.12.1  # YouTube Music API（搜索、排行榜、歌词）1.12.0: get_song_credits国际化改进
