@@ -19,8 +19,8 @@ from utils.parsehub_patch import patch_parsehub_yt_dlp
 patch_parsehub_yt_dlp()
 
 from parsehub import ParseHub
-from parsehub.config import GlobalConfig
 from parsehub.types import ParseResult, VideoParseResult, ImageParseResult, MultimediaParseResult
+from parsehub.utils.helpers import UA
 
 logger = logging.getLogger(__name__)
 
@@ -59,14 +59,9 @@ class ParseHubAdapter:
         self.temp_dir = Path(tempfile.gettempdir()) / "domobot_parse"
         self.temp_dir.mkdir(exist_ok=True)
 
-        # 配置 ParseHub GlobalConfig
-        if config:
-            # 配置伪装User-Agent（绕过反爬虫）
-            GlobalConfig.ua = (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-            )
-            logger.info(f"✅ 配置伪装User-Agent: Chrome/131.0.0.0")
+        # ParseHub 2.1.0+ 已将 UA 移至 utils.helpers.UA 常量，不再需要配置 GlobalConfig.ua
+        # UA 默认值: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+        logger.info(f"✅ ParseHub 使用内置 UA: Chrome/144.0.0.0")
 
     async def get_supported_platforms(self) -> List[str]:
         """获取支持的平台列表"""
@@ -257,7 +252,7 @@ class ParseHubAdapter:
 
             # 配置平台特定的headers（用于绕过反爬虫）
             download_headers = {
-                'User-Agent': GlobalConfig.ua,
+                'User-Agent': UA,
             }
 
             # 根据平台添加 Referer 和 Origin（类似内置代理的策略）
@@ -940,7 +935,7 @@ class ParseHubAdapter:
         params = {
             "quiet": True,
             "no_warnings": True,
-            "format": "best[height<=1080][ext=mp4]/best[height<=1080]/best",
+            "format": "best[res<=1080][ext=mp4]/best[res<=1080]/best",
             "outtmpl": str(output_dir / "video.%(ext)s"),
             "impersonate": ImpersonateTarget(),
             "proxy": dm_proxy,

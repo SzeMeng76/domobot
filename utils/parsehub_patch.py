@@ -112,7 +112,7 @@ def patch_parsehub_yt_dlp():
                 # Facebook format fix: use best available format (progressive or adaptive)
                 # Facebook videos are usually single-stream (progressive), not split audio/video
                 if "format" in params:
-                    params["format"] = "best[height<=1080]/best"
+                    params["format"] = "best[res<=1080]/best"
                     logger.info(f"🌐 [Patch] Updated Facebook format selector to: {params['format']}")
                 logger.info(f"🌐 [Patch] Added Facebook headers (Referer/Origin)")
 
@@ -120,7 +120,7 @@ def patch_parsehub_yt_dlp():
             # Supports more video stream combinations (ParseHub 2.0.40 improvement)
             if "youtube.com" in url_lower or "youtu.be" in url_lower or "bilibili.com" in url_lower or "b23.tv" in url_lower:
                 if "format" in params:
-                    params["format"] = "mp4+bestvideo[height<=1080]+bestaudio/mp4+bestvideo+bestaudio/mp4+best"
+                    params["format"] = "mp4+bestvideo[res<=1080]+bestaudio/mp4+bestvideo+bestaudio/mp4+best"
                     logger.info(f"🎬 [Patch] Updated YouTube/Bilibili format selector to: {params['format']}")
 
             # 更新params（而不是覆盖）
@@ -1106,11 +1106,11 @@ def patch_parsehub_yt_dlp():
             """Patched params property with Facebook-compatible format selector"""
             params = original_facebook_params(self)
             # Override format selector for Facebook (progressive video streams)
-            params["format"] = "best[height<=1080]/best"
+            params["format"] = "best[res<=1080]/best"
             return params
 
         FacebookParse.params = property(patched_facebook_params)
-        logger.info("✅ FacebookParse.params patched: Use compatible format selector (best[height<=1080]/best)")
+        logger.info("✅ FacebookParse.params patched: Use compatible format selector (best[res<=1080]/best)")
 
         # Patch ParseHub.parse to skip get_raw_url for Facebook watch/?v= URLs
         # Root cause: ParseHub.parse() calls get_raw_url() BEFORE calling parser.parse()

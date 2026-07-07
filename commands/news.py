@@ -92,6 +92,8 @@ NEWS_SOURCES = {
     'tencent-hot': '腾讯新闻综合早报',
     'qqvideo-tv-hotsearch': '腾讯视频电视剧热搜榜',
     'iqiyi-hot-ranklist': '爱奇艺热播榜',
+    'aihot': 'AIHOT',
+    'dongqiudi': '懂球帝',
     # 兼容性别名（保持原有源名称可用）
     'github': 'GitHub趋势',
     'v2ex': 'V2EX最新',
@@ -221,8 +223,9 @@ def create_news_sources_keyboard() -> InlineKeyboardMarkup:
     
     # 按类别分组显示新闻源（使用兼容名称，便于用户识别）
     categories = [
-        ("🔧 科技类", ['github', 'ithome', 'juejin', 'hackernews', 'solidot', 'sspai', 'ghxi', 'linuxdo', 'chongbuluo', 'freebuf', 'verge']),
-        ("💬 社交类", ['zhihu', 'weibo', 'v2ex', 'bilibili', 'douyin', 'tieba', 'kuaishou', 'coolapk', 'hupu']),
+        ("🔧 科技类", ['github', 'ithome', 'juejin', 'hackernews', 'solidot', 'sspai', 'ghxi', 'linuxdo', 'chongbuluo', 'freebuf', 'verge', 'aihot']),
+        ("💬 社交类", ['zhihu', 'weibo', 'v2ex', 'bilibili', 'douyin', 'tieba', 'kuaishou', 'coolapk']),
+        ("⚽ 体育类", ['hupu', 'dongqiudi']),
         ("💰 财经类", ['jin10', 'wallstreetcn', 'gelonghui', 'xueqiu', '36kr', '36kr-renqi', 'fastbull', 'mktnews', 'cls-telegraph', 'cls-depth', 'cls-hot']),
         ("📰 新闻类", ['toutiao', 'thepaper', 'ifeng', 'baidu', 'tencent-hot', 'cankaoxiaoxi', 'zaobao', 'sputniknewscn', 'kaopu']),
         ("📺 影视类", ['qqvideo-tv-hotsearch', 'iqiyi-hot-ranklist', 'douban']),
@@ -656,8 +659,9 @@ async def newslist_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # 按类别分组显示（使用兼容名称）
         categories = [
-            ("🔧 科技类", ['github', 'ithome', 'juejin', 'hackernews', 'solidot', 'sspai', 'ghxi', 'linuxdo', 'chongbuluo', 'freebuf', 'verge']),
-            ("💬 社交类", ['zhihu', 'weibo', 'v2ex', 'bilibili', 'douyin', 'tieba', 'kuaishou', 'coolapk', 'hupu']),
+            ("🔧 科技类", ['github', 'ithome', 'juejin', 'hackernews', 'solidot', 'sspai', 'ghxi', 'linuxdo', 'chongbuluo', 'freebuf', 'verge', 'aihot']),
+            ("💬 社交类", ['zhihu', 'weibo', 'v2ex', 'bilibili', 'douyin', 'tieba', 'kuaishou', 'coolapk']),
+            ("⚽ 体育类", ['hupu', 'dongqiudi']),
             ("💰 财经类", ['jin10', 'wallstreetcn', 'gelonghui', 'xueqiu', '36kr', '36kr-renqi', 'fastbull', 'mktnews', 'cls-telegraph', 'cls-depth', 'cls-hot']),
             ("📰 新闻类", ['toutiao', 'thepaper', 'ifeng', 'baidu', 'tencent-hot', 'cankaoxiaoxi', 'zaobao', 'sputniknewscn', 'kaopu']),
             ("📺 影视类", ['qqvideo-tv-hotsearch', 'iqiyi-hot-ranklist', 'douban']),
