@@ -102,7 +102,8 @@ def patch_parsehub_yt_dlp():
 
         async def fixed_yt_parse(self, url):
             try:
-                dl = await asyncio.wait_for(asyncio.to_thread(self._extract_info, url), timeout=30)
+                # ParseHub 2.1.0: _extract_info 已改为异步方法，直接 await 调用
+                dl = await asyncio.wait_for(self._extract_info(url), timeout=30)
             except TimeoutError as e:
                 from parsehub.errors import ParseError
                 raise ParseError("解析视频信息超时") from e
