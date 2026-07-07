@@ -37,218 +37,63 @@ def patch_parsehub_yt_dlp():
 
         logger.info("🔧 Starting ParseHub patch...")
 
-        def fixed_extract_info(self, url):
-            """Fixed _extract_info that passes cookies to yt-dlp and stores TikHub download URL"""
-            import re
-            import httpx
-            from yt_dlp import YoutubeDL
+        # ParseHub 2.1.0: cli_args 替代 params，使用子进程调用 yt-dlp
+        # 不再 patch _extract_info，而是 patch cli_args 和 get_cookie_text
 
-            params = self.params.copy()
+        # Patch YtParser.get_cookie_text to handle cookie from ParseConfig
+        original_get_cookie_text = YtParser.get_cookie_text
 
-            # Add proxy if configured
-            if self.proxy:
-                params["proxy"] = self.proxy
-
-            # JavaScript runtime配置：
-            # yt-dlp默认支持deno，会自动检测PATH中的deno
-            # 不需要手动配置js_runtimes (Dockerfile已安装deno并添加到PATH)
-
-            # Add headers (Referer/Origin) for anti-crawler
-            # yt-dlp需要这些headers才能绕过各平台的反爬虫检测
-            # 重要：不要覆盖params["http_headers"]，而是更新现有headers
-            # 参考: yt_dlp/YoutubeDL.py:742 - params['http_headers'] = HTTPHeaderDict(std_headers, self.params.get('http_headers'))
-            url_lower = url.lower()
-
-            # 获取现有headers（如果有的话），否则使用空dict
-            http_headers = params.get("http_headers", {})
-            if not isinstance(http_headers, dict):
-                http_headers = {}
-
-            # 不设置User-Agent，让yt-dlp使用random_user_agent()（更好的反爬虫）
-            # 参考: yt_dlp/utils/networking.py:162 - 'User-Agent': random_user_agent()
-
-            # 根据平台添加Referer和Origin（这些是必需的反爬虫headers）
-            if "youtube.com" in url_lower or "youtu.be" in url_lower:
-                http_headers.update({
-                    "Referer": "https://www.youtube.com/",
-                    "Origin": "https://www.youtube.com"
-                })
-                logger.info(f"🌐 [Patch] Added YouTube headers (Referer/Origin)")
-            elif "bilibili.com" in url_lower or "b23.tv" in url_lower:
-                http_headers.update({
-                    "Referer": "https://www.bilibili.com/",
-                    "Origin": "https://www.bilibili.com"
-                })
-                logger.info(f"🌐 [Patch] Added Bilibili headers (Referer/Origin)")
-            elif "twitter.com" in url_lower or "x.com" in url_lower:
-                http_headers.update({
-                    "Referer": "https://twitter.com/",
-                    "Origin": "https://twitter.com"
-                })
-                logger.info(f"🌐 [Patch] Added Twitter headers (Referer/Origin)")
-            elif "instagram.com" in url_lower:
-                http_headers.update({
-                    "Referer": "https://www.instagram.com/",
-                    "Origin": "https://www.instagram.com"
-                })
-                logger.info(f"🌐 [Patch] Added Instagram headers (Referer/Origin)")
-            elif "kuaishou.com" in url_lower:
-                http_headers.update({
-                    "Referer": "https://www.kuaishou.com/",
-                    "Origin": "https://www.kuaishou.com"
-                })
-                logger.info(f"🌐 [Patch] Added Kuaishou headers (Referer/Origin)")
-            elif "dailymotion.com" in url_lower:
-                http_headers.update({
-                    "Referer": "https://www.dailymotion.com/",
-                    "Origin": "https://www.dailymotion.com"
-                })
-                logger.info(f"🌐 [Patch] Added Dailymotion headers (Referer/Origin)")
-            elif "facebook.com" in url_lower or "fb.watch" in url_lower:
-                http_headers.update({
-                    "Referer": "https://www.facebook.com/",
-                    "Origin": "https://www.facebook.com"
-                })
-                # Facebook format fix: use best available format (progressive or adaptive)
-                # Facebook videos are usually single-stream (progressive), not split audio/video
-                if "format" in params:
-                    params["format"] = "best[res<=1080]/best"
-                    logger.info(f"🌐 [Patch] Updated Facebook format selector to: {params['format']}")
-                logger.info(f"🌐 [Patch] Added Facebook headers (Referer/Origin)")
-
-            # YouTube/Bilibili format fix: use improved format selector with fallbacks
-            # Supports more video stream combinations (ParseHub 2.0.40 improvement)
-            if "youtube.com" in url_lower or "youtu.be" in url_lower or "bilibili.com" in url_lower or "b23.tv" in url_lower:
-                if "format" in params:
-                    params["format"] = "mp4+bestvideo[res<=1080]+bestaudio/mp4+bestvideo+bestaudio/mp4+best"
-                    logger.info(f"🎬 [Patch] Updated YouTube/Bilibili format selector to: {params['format']}")
-
-            # 更新params（而不是覆盖）
-            params["http_headers"] = http_headers
-            logger.info(f"🔍 [Patch] Final http_headers: {http_headers}")
-
-            # YouTube特殊处理：使用专用代理和cookie（如果配置）
-            # YouTube 的 bot 检测非常严格，需要使用代理和cookie绕过
-            if "youtube.com" in url.lower() or "youtu.be" in url.lower():
-                youtube_proxy = os.getenv("YOUTUBE_PROXY")
-                if youtube_proxy:
-                    params["proxy"] = youtube_proxy
-                    logger.info(f"🌐 [Patch] Using YouTube proxy: {youtube_proxy[:30]}...")
-
-                # YouTube Cookie 支持：从环境变量读取 cookie 文件路径
-                # Cookie 可以帮助 yt-dlp 解析元数据，绕过登录验证
-                youtube_cookie_from_env = os.getenv("YOUTUBE_COOKIE")
-                if youtube_cookie_from_env and "cookiefile" not in params:
-                    logger.info(f"🍪 [Patch] YouTube cookie from env: {youtube_cookie_from_env}")
-                    if os.path.exists(youtube_cookie_from_env):
-                        params["cookiefile"] = youtube_cookie_from_env
-                        logger.info(f"🍪 [Patch] Using YouTube cookie file: {youtube_cookie_from_env}")
-                    else:
-                        logger.warning(f"⚠️ [Patch] YouTube cookie file not found: {youtube_cookie_from_env}")
-
-            # Add cookies if configured (FIX: YtParser doesn't handle cookies)
-            # 参考: yt_dlp/YoutubeDL.py:349 - cookiefile: File name or text stream from where cookies should be read
-
-            # 其他平台cookie处理（从ParseConfig传递）
-            # 只有在cookiefile还没设置时才处理
-            if self.cookie and "cookiefile" not in params:
-                logger.info(f"🍪 [Patch] Received cookie type: {type(self.cookie)}, value preview: {str(self.cookie)[:100]}")
-
-                # 根据cookie内容生成固定路径，避免重复创建临时文件
-                def _get_cookie_file(cookie_data, domain):
-                    """获取或创建固定路径的cookie文件"""
-                    import hashlib
-                    cookie_hash = hashlib.md5(str(cookie_data).encode()).hexdigest()[:8]
-                    cookie_dir = os.path.join(tempfile.gettempdir(), "parsehub_cookies")
-                    os.makedirs(cookie_dir, exist_ok=True)
-                    return os.path.join(cookie_dir, f"{domain.strip('.')}_{cookie_hash}.txt")
-
-                # 检查cookie类型：文件路径或字符串
-                if isinstance(self.cookie, str):
-                    logger.info(f"🍪 [Patch] Cookie is string, checking if file exists: {self.cookie}")
-                    # 判断是文件路径还是cookie字符串
-                    if os.path.exists(self.cookie):
-                        logger.info(f"🍪 [Patch] File exists! Setting cookiefile parameter")
-                        # Netscape文件路径，直接使用
-                        params["cookiefile"] = self.cookie
-                        logger.info(f"🍪 [Patch] Using cookie file: {self.cookie}")
-                    else:
-                        # Bilibili/Twitter等cookie字符串，解析后写固定路径文件
-                        logger.info(f"🍪 [Patch] Parsing cookie string (len={len(self.cookie)})")
-
-                        # 解析cookie字符串为dict
-                        cookie_dict = {}
-                        for item in self.cookie.split(';'):
-                            item = item.strip()
-                            if '=' in item:
-                                key, value = item.split('=', 1)
-                                cookie_dict[key.strip()] = value.strip()
-
-                        # 根据URL判断domain
-                        url_lower = url.lower()
-                        if "bili" in url_lower:
-                            domain = ".bilibili.com"
-                        elif "twitter.com" in url_lower or "x.com" in url_lower:
-                            domain = ".twitter.com"
-                        elif "instagram.com" in url_lower:
-                            domain = ".instagram.com"
-                        elif "kuaishou.com" in url_lower:
-                            domain = ".kuaishou.com"
-                        else:
-                            domain = ".example.com"
-
-                        # 写入固定路径Netscape格式文件（复用同一文件，下载阶段也能读取）
-                        cookie_path = _get_cookie_file(self.cookie, domain)
-                        with open(cookie_path, 'w') as f:
-                            f.write("# Netscape HTTP Cookie File\n")
-                            for key, value in cookie_dict.items():
-                                f.write(f"{domain}\tTRUE\t/\tFALSE\t0\t{key}\t{value}\n")
-
-                        params["cookiefile"] = cookie_path
-                        logger.info(f"🍪 [Patch] Cookie file ready for {domain}: {cookie_path}")
-
-                elif isinstance(self.cookie, dict):
-                    # ParseHub将cookie字符串转换为dict后传入，需要写Netscape文件
-                    logger.info(f"🍪 [Patch] Cookie is dict with {len(self.cookie)} keys")
-
-                    url_lower = url.lower()
-                    if "bili" in url_lower:
-                        domain = ".bilibili.com"
-                    elif "twitter.com" in url_lower or "x.com" in url_lower:
-                        domain = ".twitter.com"
-                    elif "instagram.com" in url_lower:
-                        domain = ".instagram.com"
-                    elif "kuaishou.com" in url_lower:
-                        domain = ".kuaishou.com"
-                    else:
-                        domain = ".example.com"
-
-                    cookie_path = _get_cookie_file(self.cookie, domain)
-                    with open(cookie_path, 'w') as f:
-                        f.write("# Netscape HTTP Cookie File\n")
-                        for key, value in self.cookie.items():
-                            f.write(f"{domain}\tTRUE\t/\tFALSE\t0\t{key}\t{value}\n")
-
-                    params["cookiefile"] = cookie_path
-                    logger.info(f"🍪 [Patch] Cookie file ready from dict for {domain}: {cookie_path}")
-
-            try:
-                with YoutubeDL(params) as ydl:
-                    result = ydl.extract_info(url, download=False)
-
-                # 将含有cookiefile等动态参数的params存回self，供下载阶段复用
-                self._patched_params = params
-
+        def patched_get_cookie_text(self) -> str | None:
+            """Patched get_cookie_text that handles cookies from ParseConfig"""
+            # 首先尝试原有逻辑（YouTube 特定处理）
+            result = original_get_cookie_text(self)
+            if result:
                 return result
-            except Exception as e:
-                error_msg = f"{type(e).__name__}: {str(e)}"
-                raise RuntimeError(error_msg) from None
 
-        # Apply YtParser patches
-        # Note: Don't patch params property - it breaks subtitle configs and other settings
-        # Only patch _extract_info method which handles js_runtimes internally
-        YtParser._extract_info = fixed_extract_info
-        logger.info("✅ YtParser patched: js_runtimes + cookie handling + headers")
+            # 处理从 ParseConfig 传递的 cookie
+            if not self.cookie:
+                return None
+
+            cookie_value = self.cookie.get_value() if hasattr(self.cookie, 'get_value') else self.cookie
+            if not cookie_value:
+                return None
+
+            # 如果是文件路径，直接读取文件内容
+            if isinstance(cookie_value, str) and os.path.exists(cookie_value):
+                logger.info(f"🍪 [Patch] Reading cookie from file: {cookie_value}")
+                with open(cookie_value, 'r') as f:
+                    return f.read()
+
+            # 如果是 cookie 字符串，需要判断平台并转换为 Netscape 格式
+            # 但在这里我们无法获取 URL，所以返回 None，让 ParseHub 使用原有逻辑
+            logger.info(f"🍪 [Patch] Cookie exists but not a file, skipping")
+            return None
+
+        YtParser.get_cookie_text = patched_get_cookie_text
+        logger.info("✅ YtParser.get_cookie_text patched for ParseHub 2.1.0")
+
+        # Patch YtbParse.get_cookie_text to support YOUTUBE_COOKIE environment variable
+        from parsehub.parsers.parser.youtube import YtbParse
+        original_ytb_get_cookie_text = YtbParse.get_cookie_text
+
+        def patched_ytb_get_cookie_text(self) -> str | None:
+            """Patched YouTube get_cookie_text that supports env var cookie file"""
+            # 首先尝试原有逻辑（从 self.cookie 读取）
+            result = original_ytb_get_cookie_text(self)
+            if result:
+                return result
+
+            # 尝试从环境变量读取 YouTube cookie 文件
+            youtube_cookie_file = os.getenv("YOUTUBE_COOKIE")
+            if youtube_cookie_file and os.path.exists(youtube_cookie_file):
+                logger.info(f"🍪 [Patch] Using YouTube cookie from env: {youtube_cookie_file}")
+                with open(youtube_cookie_file, 'r') as f:
+                    return f.read()
+
+            return None
+
+        YtbParse.get_cookie_text = patched_ytb_get_cookie_text
+        logger.info("✅ YtbParse.get_cookie_text patched: support YOUTUBE_COOKIE env var")
 
         # Patch YtParser._parse to handle missing 'description' field (e.g. bangumi)
         import asyncio
@@ -275,7 +120,6 @@ def patch_parsehub_yt_dlp():
                 dl = entries[0]
                 url = dl.get("webpage_url", url)
             return YtVideoInfo(
-                raw_video_info=dl,
                 title=dl.get("title", ""),
                 description=dl.get("description", ""),
                 thumbnail=dl.get("thumbnail", ""),
@@ -283,7 +127,7 @@ def patch_parsehub_yt_dlp():
                 url=url,
                 width=dl.get("width", 0),
                 height=dl.get("height", 0),
-                paramss=getattr(self, '_patched_params', self.params),
+                info_json=dl,  # ParseHub 2.1.0: 使用 info_json 而非 paramss
             )
 
         YtParser._parse = fixed_yt_parse
@@ -1097,20 +941,19 @@ def patch_parsehub_yt_dlp():
         FacebookParse.__match__ = r"^(http(s)?://)?.+facebook.com/(watch/?\?v|share/[v,r]|.+/videos/|reel/).*"
         logger.info("✅ FacebookParse patched: Support watch/?v= URL format (with optional slash)")
 
-        # Patch FacebookParse params property to use compatible format selector
-        # Note: params is a @property that returns a new dict each time
-        # We need to override the property itself, not modify the dict
-        original_facebook_params = FacebookParse.params.fget
+        # Patch FacebookParse cli_args property to use compatible format selector
+        # ParseHub 2.1.0: cli_args 替代 params，返回 CLI 参数列表
+        original_facebook_cli_args = FacebookParse.cli_args.fget
 
-        def patched_facebook_params(self) -> dict:
-            """Patched params property with Facebook-compatible format selector"""
-            params = original_facebook_params(self)
-            # Override format selector for Facebook (progressive video streams)
-            params["format"] = "best[res<=1080]/best"
-            return params
+        def patched_facebook_cli_args(self) -> list[str]:
+            """Patched cli_args property with Facebook-compatible format selector"""
+            args = original_facebook_cli_args(self).copy()
+            # Add format selector for Facebook (progressive video streams)
+            args.extend(["--format", "best[res<=1080]/best"])
+            return args
 
-        FacebookParse.params = property(patched_facebook_params)
-        logger.info("✅ FacebookParse.params patched: Use compatible format selector (best[res<=1080]/best)")
+        FacebookParse.cli_args = property(patched_facebook_cli_args)
+        logger.info("✅ FacebookParse.cli_args patched: Use compatible format selector (best[res<=1080]/best)")
 
         # Patch ParseHub.parse to skip get_raw_url for Facebook watch/?v= URLs
         # Root cause: ParseHub.parse() calls get_raw_url() BEFORE calling parser.parse()
