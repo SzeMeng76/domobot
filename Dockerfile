@@ -21,6 +21,7 @@ FROM python:3.12-slim
 # 参考: ParseHub README.md - Ubuntu 24 依赖
 # 添加 Deno 用于 yt-dlp JavaScript runtime (YouTube解析需要，yt-dlp默认支持deno)
 # 添加中文字体支持（用于天气图表可视化）
+# 添加 libjemalloc2 优化内存分配性能（图像/视频处理场景）
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglx-mesa0 \
@@ -31,6 +32,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxrender1 \
     libgomp1 \
     libfontconfig1 \
+    libjemalloc2 \
     ffmpeg \
     curl \
     unzip \
@@ -42,6 +44,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 添加Deno到PATH (yt-dlp会自动检测)
 ENV DENO_INSTALL="/root/.deno"
 ENV PATH="$DENO_INSTALL/bin:$PATH"
+# 预加载 jemalloc 提升内存分配性能
+ENV LD_PRELOAD=libjemalloc.so.2
 
 # 设置工作目录
 WORKDIR /app
