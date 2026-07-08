@@ -1123,9 +1123,10 @@ class AdminPanelHandler:
 
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
-                balance_resp, proxy_resp = await asyncio.gather(
+                balance_resp, proxy_resp, resident_resp = await asyncio.gather(
                     client.get(f"https://geonix.com/personal/api/v1/{xhsimage_key}/balance/get"),
                     client.get(f"https://geonix.com/personal/api/v1/{xhsimage_key}/proxy/list"),
+                    client.get(f"https://geonix.com/personal/api/v1/{xhsimage_key}/resident/lists"),
                 )
 
             if balance_resp.status_code != 200 or proxy_resp.status_code != 200:
@@ -1133,6 +1134,7 @@ class AdminPanelHandler:
 
             balance_data = balance_resp.json()
             proxy_data = proxy_resp.json()
+            resident_data = resident_resp.json() if resident_resp.status_code == 200 else {"status": "success", "data": []}
 
             if balance_data.get("status") != "success" or proxy_data.get("status") != "success":
                 raise ValueError("API返回错误状态")
@@ -1145,7 +1147,8 @@ class AdminPanelHandler:
             ipv6_list = proxies.get("ipv6", [])
             mobile_list = proxies.get("mobile", [])
             isp_list = proxies.get("isp", [])
-            resident_list = proxies.get("resident", [])
+            # Residential 代理来自单独的 API
+            resident_list = resident_data.get("data", []) if resident_data.get("status") == "success" else []
 
             total_proxies = len(ipv4_list) + len(ipv6_list) + len(mobile_list) + len(isp_list) + len(resident_list)
 
@@ -1199,6 +1202,19 @@ class AdminPanelHandler:
                 if len(ipv4_list) > 5:
                     text += f"  ...还有 {len(ipv4_list) - 5} 个代理\n"
 
+            # 显示 Residential 代理详情
+            if resident_list:
+                text += "\n📋 *Residential 代理详情*\n"
+                for proxy in resident_list[:3]:  # 显示前3个
+                    title = proxy.get("title", "N/A")
+                    login = proxy.get("login", "N/A")
+                    text += f"  🏠 `{title}`\n"
+                    text += f"     登录: `{login}`\n"
+                    text += f"     主机: `res.geonix.com:10000`\n"
+
+                if len(resident_list) > 3:
+                    text += f"  ...还有 {len(resident_list) - 3} 个代理\n"
+
         except Exception as e:
             logger.error(f"XHSImage API fetch failed: {e}")
             text = f"❌ 获取XHSImage用量失败\n\n`{e}`"
@@ -1230,12 +1246,13 @@ class AdminPanelHandler:
 
         try:
             # 获取所有类型的代理
-            proxy_types = ["ipv4", "ipv6", "mobile", "isp", "resident"]
             text = "📥 *XHSImage 代理凭证*\n" + "─" * 28 + "\n\n"
 
             has_proxies = False
 
             async with httpx.AsyncClient(timeout=15.0) as client:
+                # 获取 IPv4, IPv6, Mobile, ISP 代理
+                proxy_types = ["ipv4", "ipv6", "mobile", "isp"]
                 for proxy_type in proxy_types:
                     try:
                         # 使用txt格式获取代理信息（格式：用户:密码@IP:端口）
@@ -1269,12 +1286,40 @@ class AdminPanelHandler:
                         logger.debug(f"获取 {proxy_type} 代理失败: {e}")
                         continue
 
+                # 获取 Residential 代理（使用不同的 API）
+                try:
+                    resident_resp = await client.get(
+                        f"https://geonix.com/personal/api/v1/{xhsimage_key}/resident/lists"
+                    )
+
+                    if resident_resp.status_code == 200:
+                        resident_data = resident_resp.json()
+                        if resident_data.get("status") == "success":
+                            resident_list = resident_data.get("data", [])
+                            if resident_list:
+                                has_proxies = True
+                                text += f"🔹 *RESIDENT* ({len(resident_list)}个)\n"
+                                for proxy in resident_list[:3]:  # 显示前3个
+                                    title = proxy.get("title", "N/A")
+                                    login = proxy.get("login", "N/A")
+                                    password = proxy.get("password", "N/A")
+                                    rotation = proxy.get("rotation", 3600)
+
+                                    text += f"```\n标题: {title}\n主机: res.geonix.com\n端口: 10000-10999\n用户: {login}\n密码: {password}\n轮换: {rotation}秒\n```\n"
+
+                                if len(resident_list) > 3:
+                                    text += f"  ...还有 {len(resident_list) - 3} 个代理\n"
+                                text += "\n"
+                except Exception as e:
+                    logger.debug(f"获取 resident 代理失败: {e}")
+
             if not has_proxies:
                 text += "📭 暂无可用代理\n"
             else:
                 text += "\n💡 *使用说明*\n"
-                text += "• HTTP代理格式: `http://用户:密码@IP:端口`\n"
-                text += "• SOCKS5代理格式: `socks5://用户:密码@IP:端口`\n"
+                text += "• IPv4/IPv6/Mobile/ISP: `http(s)://用户:密码@IP:端口`\n"
+                text += "• Residential: `http(s)://用户:密码@res.geonix.com:10000`\n"
+                text += "• 支持国家/城市定向: `用户_c_US_city_New-York`\n"
 
         except Exception as e:
             logger.error(f"XHSImage download API failed: {e}")
