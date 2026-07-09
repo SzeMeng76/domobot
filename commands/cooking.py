@@ -87,7 +87,7 @@ def get_full_recipe_id(short_recipe_id: str) -> Optional[str]:
 class CookingService:
     """烹饪菜谱服务类"""
     
-    RECIPES_URL = "https://raw.githubusercontent.com/SzeMeng76/HowToCook/refs/heads/master/all_recipes.json"
+    RECIPES_URL = "https://cdn.jsdelivr.net/gh/SzeMeng76/HowToCook@master/all_recipes.json"
     
     def __init__(self):
         self.recipes_data = []

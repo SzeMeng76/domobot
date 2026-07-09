@@ -30,7 +30,7 @@ def set_dependencies(c_manager, h_client):
     httpx_client = h_client
 
 # GitHub raw URL for electricity price data
-GLOBAL_DATA_URL = "https://raw.githubusercontent.com/SzeMeng76/fuel-price-tracker/refs/heads/master/global_fuel_prices_processed.json"
+GLOBAL_DATA_URL = "https://cdn.jsdelivr.net/gh/SzeMeng76/fuel-price-tracker@master/global_fuel_prices_processed.json"
 
 # Mapping from GlobalPetrolPrices country codes to ISO 2-letter codes
 COUNTRY_CODE_MAPPING = {

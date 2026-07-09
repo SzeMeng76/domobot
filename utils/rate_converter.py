@@ -26,34 +26,35 @@ class RateConverter:
         self._lock = asyncio.Lock()
 
         # GitHub 数据源配置（免费，每8小时更新）
+        # 使用 jsDelivr CDN 避免 GitHub raw 的 429 rate limit
         self.github_sources = [
             {
                 "name": "Coinbase",
-                "url": "https://raw.githubusercontent.com/DyAxy/NewExchangeRatesTable/refs/heads/main/data/coinbase.json",
+                "url": "https://cdn.jsdelivr.net/gh/DyAxy/NewExchangeRatesTable@main/data/coinbase.json",
                 "cache_key": "github_coinbase",
                 "cache_duration": 28800  # 8小时
             },
             {
                 "name": "Neutrino",
-                "url": "https://raw.githubusercontent.com/DyAxy/NewExchangeRatesTable/refs/heads/main/data/neutrino.json",
+                "url": "https://cdn.jsdelivr.net/gh/DyAxy/NewExchangeRatesTable@main/data/neutrino.json",
                 "cache_key": "github_neutrino",
                 "cache_duration": 28800
             },
             {
                 "name": "UnionPay",
-                "url": "https://raw.githubusercontent.com/DyAxy/NewExchangeRatesTable/refs/heads/main/data/unionpay.json",
+                "url": "https://cdn.jsdelivr.net/gh/DyAxy/NewExchangeRatesTable@main/data/unionpay.json",
                 "cache_key": "github_unionpay",
                 "cache_duration": 28800
             },
             {
                 "name": "Visa",
-                "url": "https://raw.githubusercontent.com/SzeMeng76/NewExchangeRatesTable/refs/heads/main/data/visa.json",
+                "url": "https://cdn.jsdelivr.net/gh/SzeMeng76/NewExchangeRatesTable@main/data/visa.json",
                 "cache_key": "github_visa",
                 "cache_duration": 28800
             },
             {
                 "name": "Wise",
-                "url": "https://raw.githubusercontent.com/DyAxy/NewExchangeRatesTable/refs/heads/main/data/wise.json",
+                "url": "https://cdn.jsdelivr.net/gh/DyAxy/NewExchangeRatesTable@main/data/wise.json",
                 "cache_key": "github_wise",
                 "cache_duration": 28800
             }

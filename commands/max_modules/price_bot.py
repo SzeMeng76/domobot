@@ -399,7 +399,7 @@ COUNTRY_CODES_CN = {
 }
 class MaxPriceBot(PriceQueryService):
     PRICE_URL = (
-        "https://raw.githubusercontent.com/SzeMeng76/hbo-max-global-prices/refs/heads/main/max_prices_cny_sorted.json"
+        "https://cdn.jsdelivr.net/gh/SzeMeng76/hbo-max-global-prices@main/max_prices_cny_sorted.json"
     )
 
     async def _fetch_data(self, context: ContextTypes.DEFAULT_TYPE) -> dict[str, Any] | None:

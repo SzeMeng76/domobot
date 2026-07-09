@@ -30,8 +30,8 @@ def set_dependencies(c_manager, h_client):
     httpx_client = h_client
 
 # GitHub raw URLs for fuel price data
-CHINA_DATA_URL = "https://raw.githubusercontent.com/SzeMeng76/fuel-price-tracker/refs/heads/master/china_fuel_prices.json"
-GLOBAL_DATA_URL = "https://raw.githubusercontent.com/SzeMeng76/fuel-price-tracker/refs/heads/master/global_fuel_prices_processed.json"
+CHINA_DATA_URL = "https://cdn.jsdelivr.net/gh/SzeMeng76/fuel-price-tracker@master/china_fuel_prices.json"
+GLOBAL_DATA_URL = "https://cdn.jsdelivr.net/gh/SzeMeng76/fuel-price-tracker@master/global_fuel_prices_processed.json"
 
 # Mapping from GlobalPetrolPrices country codes to ISO 2-letter codes
 COUNTRY_CODE_MAPPING = {

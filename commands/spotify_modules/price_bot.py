@@ -2,7 +2,7 @@
 Spotify 价格查询机器人类
 
 提供 Spotify 订阅价格查询功能
-数据源: https://raw.githubusercontent.com/SzeMeng76/spotify-prices
+数据源: https://cdn.jsdelivr.net/gh/SzeMeng76/spotify-prices@main
 """
 
 import logging
@@ -408,7 +408,7 @@ COUNTRY_CODES_CN = {
 
 class SpotifyPriceBot(PriceQueryService):
     PRICE_URL = (
-        "https://raw.githubusercontent.com/SzeMeng76/spotify-prices/refs/heads/main/spotify_prices_cny_sorted.json"
+        "https://cdn.jsdelivr.net/gh/SzeMeng76/spotify-prices@main/spotify_prices_cny_sorted.json"
     )
 
     async def _fetch_data(self, context: ContextTypes.DEFAULT_TYPE) -> dict[str, Any] | None:

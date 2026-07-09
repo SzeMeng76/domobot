@@ -35,7 +35,7 @@ TELEGRAPH_API_URL = "https://api.telegra.ph"
 class TLDManager:
     """TLD数据管理器 - 直接从GitHub获取数据"""
     
-    TLD_URL = "https://raw.githubusercontent.com/SzeMeng76/iana_tld_list/refs/heads/master/data/tld.json"
+    TLD_URL = "https://cdn.jsdelivr.net/gh/SzeMeng76/iana_tld_list@master/data/tld.json"
     
     def __init__(self):
         self._tld_data = None

@@ -26,7 +26,7 @@ PLAN_DISPLAY = {
 class XboxPriceBot(PriceQueryService):
     """Manages Xbox Game Pass price data fetching, caching, and formatting."""
 
-    PRICE_URL = "https://raw.githubusercontent.com/SzeMeng76/xbox-gamepass-prices/refs/heads/master/xbox_gamepass_prices_processed.json"
+    PRICE_URL = "https://cdn.jsdelivr.net/gh/SzeMeng76/xbox-gamepass-prices@master/xbox_gamepass_prices_processed.json"
 
     async def _fetch_data(self, context: ContextTypes.DEFAULT_TYPE) -> dict | None:
         headers = {

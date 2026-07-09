@@ -2,7 +2,7 @@
 Netflix 价格查询机器人类
 
 提供 Netflix 订阅价格查询功能
-数据源: https://raw.githubusercontent.com/SzeMeng76/netflix-pricing-scraper
+数据源: https://cdn.jsdelivr.net/gh/SzeMeng76/netflix-pricing-scraper@main
 """
 
 import logging
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 class NetflixPriceBot(PriceQueryService):
-    PRICE_URL = "https://raw.githubusercontent.com/SzeMeng76/netflix-pricing-scraper/refs/heads/main/netflix_prices_processed.json"
+    PRICE_URL = "https://cdn.jsdelivr.net/gh/SzeMeng76/netflix-pricing-scraper@main/netflix_prices_processed.json"
 
     async def _fetch_data(self, context: ContextTypes.DEFAULT_TYPE) -> dict[str, Any] | None:
         """Fetches Netflix price data from the specified URL."""

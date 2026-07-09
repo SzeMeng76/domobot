@@ -24,8 +24,8 @@ def set_dependencies(c_manager, h_client):
 
 # BIN查询API配置
 BIN_API_URL = "https://api.dy.ax/v1/finance/bin"
-COUNTRY_DATA_URL = "https://raw.githubusercontent.com/umpirsky/country-list/master/data/zh_CN/country.json"
-CURRENCY_DATA_URL = "https://raw.githubusercontent.com/umpirsky/currency-list/refs/heads/master/data/zh_CN/currency.json"
+COUNTRY_DATA_URL = "https://cdn.jsdelivr.net/gh/umpirsky/country-list@master/data/zh_CN/country.json"
+CURRENCY_DATA_URL = "https://cdn.jsdelivr.net/gh/umpirsky/currency-list@master/data/zh_CN/currency.json"
 
 class BINMapping:
     """映射类，用于转换API返回的英文值为中文显示"""

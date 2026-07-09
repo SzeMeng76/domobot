@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class DisneyPriceBot(PriceQueryService):
     """Manages Disney+ price data fetching, caching, and formatting."""
 
-    PRICE_URL = "https://raw.githubusercontent.com/SzeMeng76/disneyplus-prices/refs/heads/main/disneyplus_prices_processed.json"
+    PRICE_URL = "https://cdn.jsdelivr.net/gh/SzeMeng76/disneyplus-prices@main/disneyplus_prices_processed.json"
 
     async def _fetch_data(self, context: ContextTypes.DEFAULT_TYPE) -> dict | None:
         """Fetches Disney+ price data from the specified URL."""
