@@ -275,6 +275,7 @@ class BotConfig:
         self.douyin_cookie = None
         self.tiktok_cookie = None
         self.xhs_cookie = None
+        self.zhihu_cookie = None  # 知乎Cookie字符串（需要登录）
 
         # Reddit API 配置
         self.reddit_client_id = ""
@@ -638,6 +639,10 @@ class ConfigManager:
         self.config.xhs_cookie = os.getenv("XHS_COOKIE", None)
         if self.config.xhs_cookie:
             logger.info(f"✅ XHS cookie配置: {self.config.xhs_cookie[:50]}...")
+
+        self.config.zhihu_cookie = os.getenv("ZHIHU_COOKIE", None)
+        if self.config.zhihu_cookie:
+            logger.info(f"✅ Zhihu cookie配置: {self.config.zhihu_cookie[:50]}...")
 
         # YouTube Cookie: 保持Netscape文件路径字符串（不解析，直接传给yt-dlp）
         self.config.youtube_cookie = os.getenv("YOUTUBE_COOKIE", None)

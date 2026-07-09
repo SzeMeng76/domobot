@@ -213,7 +213,7 @@ class ParseHubAdapter:
             downloader_proxy = proxy or (self.config.downloader_proxy if self.config else None)
 
             # 根据平台选择 Cookie（ParseConfig会自动将字符串转换为dict）
-            # 支持：Twitter, Instagram, Bilibili, Kuaishou, YouTube (通过patch), Tieba
+            # 支持：Twitter, Instagram, Bilibili, Kuaishou, YouTube (通过patch), Tieba, Zhihu
             # 不支持：Facebook (基于yt-dlp，ParseHub库限制)
             platform_cookie = None
             if self.config:
@@ -242,6 +242,9 @@ class ParseHubAdapter:
                 elif platform_id in ('xiaohongshu', 'xhs') and self.config.xhs_cookie:
                     platform_cookie = self.config.xhs_cookie
                     logger.info(f"✅ 使用XHS cookie: {platform_cookie[:50]}...")
+                elif platform_id == 'zhihu' and self.config.zhihu_cookie:
+                    platform_cookie = self.config.zhihu_cookie
+                    logger.info(f"✅ 使用Zhihu cookie: {platform_cookie[:50]}...")
                 elif platform_id == 'youtube' and self.config.youtube_cookie:
                     # YouTube cookie是文件路径，不能传给ParseConfig（会被解析成dict）
                     # 直接在parsehub_patch.py中通过环境变量 YOUTUBE_COOKIE 读取
