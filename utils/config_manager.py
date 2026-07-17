@@ -276,6 +276,7 @@ class BotConfig:
         self.tiktok_cookie = None
         self.xhs_cookie = None
         self.zhihu_cookie = None  # 知乎Cookie字符串（需要登录）
+        self.threads_cookie = None  # Threads Cookie字符串（与Instagram共用Meta登录后端，用于解锁登录墙帖子）
 
         # Reddit API 配置
         self.reddit_client_id = ""
@@ -643,6 +644,10 @@ class ConfigManager:
         self.config.zhihu_cookie = os.getenv("ZHIHU_COOKIE", None)
         if self.config.zhihu_cookie:
             logger.info(f"✅ Zhihu cookie配置: {self.config.zhihu_cookie[:50]}...")
+
+        self.config.threads_cookie = os.getenv("THREADS_COOKIE", None)
+        if self.config.threads_cookie:
+            logger.info(f"✅ Threads cookie配置: {self.config.threads_cookie[:50]}...")
 
         # YouTube Cookie: 保持Netscape文件路径字符串（不解析，直接传给yt-dlp）
         self.config.youtube_cookie = os.getenv("YOUTUBE_COOKIE", None)
