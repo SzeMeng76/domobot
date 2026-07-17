@@ -19,7 +19,7 @@ class SpamDetectionResult:
         self.spam_score = spam_score  # 0-100
         self.spam_reason = spam_reason
         self.spam_mock_text = spam_mock_text
-        self.is_spam = state == 1 and spam_score >= 80
+        self.is_spam = state == 1
 
     def to_dict(self) -> Dict:
         return {
