@@ -19,8 +19,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # 从 price_parser 的货币映射表动态构建脚注价格提取正则
+# 补充 "円"（日元），price_parser 里未收录但页面上会以后缀形式出现
 # 按长度降序排列，避免 "HK$" 被 "$" 先匹配
-_sorted_symbols = sorted(CURRENCY_SYMBOL_TO_CODE.keys(), key=len, reverse=True)
+_sorted_symbols = sorted({*CURRENCY_SYMBOL_TO_CODE.keys(), "円"}, key=len, reverse=True)
 _escaped_symbols = [re.escape(s) for s in _sorted_symbols]
 _all_symbols_pattern = "|".join(_escaped_symbols)
 
@@ -44,6 +45,71 @@ def _clean_price_text(text: str) -> str:
     text = _PERIOD_SUFFIX_RE.sub("", text).strip()
     text = re.sub(r"^月額\s*", "", text).strip()
     return text
+
+
+# 标记"试用期结束后正式月费"的多语言关键词
+_REGULAR_PRICE_MARKER_RE = re.compile(
+    r"then\b|"
+    r"その後は?(?:月額)?|"
+    r"試用期後[，,]?\s*每月收費|"
+    r"随后每月收費?|"
+    r"after.*?free",
+    re.IGNORECASE,
+)
+
+# 试用期时长（阿拉伯数字或中文数字 + 月份单位）
+_TRIAL_PERIOD_RE = re.compile(
+    r"([\d一二三四五六七八九十]+)\s*(?:개월|か月|個月|个月|months?|Monate?)",
+    re.IGNORECASE,
+)
+
+_CN_NUM_MAP = {"一": "1", "二": "2", "三": "3", "四": "4", "五": "5",
+               "六": "6", "七": "7", "八": "8", "九": "9", "十": "10"}
+
+
+def _normalize_trial_period(raw: str) -> str:
+    """把中文数字（三）转换为阿拉伯数字（3），阿拉伯数字原样返回"""
+    return raw if raw.isdigit() else _CN_NUM_MAP.get(raw, raw)
+
+
+def _build_trial_note(before_text: str, price_re: "re.Pattern[str]") -> str | None:
+    """从"标记词之前"的文本中提取试用价+试用期，构造"首3个月试用价 HK$18"提示
+
+    price_re: 用于匹配试用价格 token 的正则（不同货币格式不同）
+    """
+    trial_price_match = price_re.search(before_text)
+    if not trial_price_match:
+        return None
+    trial_price = re.sub(r"\*+\s*\d*$|\s*\*+$", "", trial_price_match.group(0).strip()).strip()
+    if not trial_price:
+        return None
+
+    period_match = _TRIAL_PERIOD_RE.search(before_text)
+    if period_match:
+        period = _normalize_trial_period(period_match.group(1))
+        return f"首{period}个月试用价 {trial_price}"
+    return f"试用价 {trial_price}"
+
+
+def _extract_regular_price_from_text(price_text: str) -> tuple[str | None, str | None]:
+    """从"试用X个月仅需P1，之后每月P2"格式中提取 (正式月费P2, 试用说明)。
+
+    找不到标记词时返回 (None, None)（由调用方 fallback 到旧逻辑）。
+    """
+    marker = _REGULAR_PRICE_MARKER_RE.search(price_text)
+    if not marker:
+        return None, None
+    before, after = price_text[: marker.start()], price_text[marker.start():]
+    price_match = _FOOTNOTE_PRICE_RE.search(after)
+    if not price_match:
+        return None, None
+    raw = price_match.group(0).strip()
+    # 去掉脚注标记，如 "HK$78**" → "HK$78"
+    raw = re.sub(r"\*+\s*\d*$|\s*\*+$", "", raw).strip()
+    if not raw:
+        return None, None
+    trial_note = _build_trial_note(before, _FOOTNOTE_PRICE_RE)
+    return raw, trial_note
 
 
 async def parse_apple_music_prices(
@@ -128,11 +194,22 @@ async def _parse_apple_music_cn(
             if plan_name_elem and price_elem:
                 plan_name = plan_name_elem.get_text(strip=True)
                 price_text = price_elem.get_text(strip=True)
-                # Extract price from "仅需 RMB 11/月" format
-                price_match = re.search(r"(RMB\s*\d+)/月", price_text)
-                if price_match:
-                    price_str = f"{price_match.group(1)}/月"
-                    result_lines.append(f"• {plan_name}计划: {price_str}")
+                # 优先提取"随后每月收费 RMB X"中的正式月费
+                marker = re.search(r"随后每月收费\s*", price_text)
+                m = re.search(r"(RMB\s*[\d,]+)", price_text[marker.end():]) if marker else None
+                if not m:
+                    m = re.search(r"(RMB\s*[\d,]+)/月", price_text)
+                if m:
+                    price_str = f"{m.group(1)}/月"
+                    line = f"• {plan_name}计划: {price_str}"
+                    if marker:
+                        trial_note = _build_trial_note(
+                            price_text[: marker.start()],
+                            re.compile(r"RMB\s*[\d,]+"),
+                        )
+                        if trial_note:
+                            line += f"（{trial_note}）"
+                    result_lines.append(line)
                     parsed_any = True
 
     # Fallback to old structure if new layout didn't work
@@ -213,16 +290,14 @@ async def _parse_apple_music_standard(
                 )
                 price_text = price_elem.get_text(strip=True)
 
-                # 清理价格文本，去掉促销后缀和月费标记
-                cleaned = _clean_price_text(price_text)
-
-                # 用动态正则提取价格 token（货币符号+数字），
-                # 过滤掉 "Try it free for 1 month" 等促销文案
-                price_match = _FOOTNOTE_PRICE_RE.search(cleaned)
-                if not price_match:
-                    continue
-
-                price_str = price_match.group(0).strip()
+                # 优先提取"试用期后"的正式月费；若无该模式再 fallback 清理文本
+                price_str, trial_note = _extract_regular_price_from_text(price_text)
+                if not price_str:
+                    cleaned = _clean_price_text(price_text)
+                    price_match = _FOOTNOTE_PRICE_RE.search(cleaned)
+                    if not price_match:
+                        continue
+                    price_str = price_match.group(0).strip()
 
                 # 用通用价格解析器验证
                 _, price_value = extract_currency_and_price(
@@ -236,6 +311,8 @@ async def _parse_apple_music_standard(
                             price_str, country_code
                         )
                         line += cny_price_str
+                    if trial_note:
+                        line += f"（{trial_note}）"
                     result_lines.append(line)
                     parsed_any = True
 
