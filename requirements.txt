@@ -62,7 +62,7 @@ feedparser==6.0.12
 googletrans==4.0.2
 
 # Yahoo Finance API
-yfinance==1.5.1  # 最新版本：chunked fundamentals fallback、valuation改用timeseries API、price repair修复
+yfinance==1.5.2  # 最新版本
 pandas==3.0.3  # Latest stable version as of May 2026
 
 # Social Media Parser (ParseHub) - 社交媒体解析功能
