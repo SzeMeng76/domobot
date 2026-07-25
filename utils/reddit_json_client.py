@@ -65,6 +65,34 @@ COOLDOWN_JITTER_MIN = 5
 COOLDOWN_JITTER_MAX = 15
 
 
+async def expand_reddit_short_url(url: str) -> str:
+    """展开 Reddit 分享短链接 (/r/xxx/s/yyy)，返回真实的 comments 链接
+
+    短链接是 www.reddit.com 专属的重定向功能，old.reddit.com 不支持，
+    直接请求会被重定向到登录/submit 页面，导致误判为帖子不存在/已删除。
+    必须先展开再交给后续逻辑（curl_cffi 抓取 / FetchLayer fallback）。
+    """
+    if '/s/' not in url:
+        return url
+
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.get(
+                url,
+                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'},
+                follow_redirects=False,
+            )
+            location = response.headers.get('location')
+            if location:
+                logger.info(f"🔗 短链接已展开: {url} -> {location}")
+                return location
+    except Exception as e:
+        logger.warning(f"⚠️ 短链接展开失败 ({url}): {e}")
+
+    return url
+
+
 @dataclass
 class RedditPost:
     """Reddit 帖子数据类"""
@@ -346,31 +374,9 @@ class RedditJsonClient:
             logger.error(f"获取帖子失败 (ID: {post_id}): {e}")
             return None
 
-    async def _expand_short_url(self, url: str) -> str:
-        """展开 Reddit 分享短链接 (/r/xxx/s/yyy)，返回真实的 comments 链接
-
-        短链接是 www.reddit.com 专属的重定向功能，old.reddit.com 不支持，
-        必须先展开再交给后续逻辑（curl_cffi 抓取 / FetchLayer fallback），
-        否则会被误判为帖子不存在/已删除
-        """
-        if '/s/' not in url:
-            return url
-
-        try:
-            session = await self._get_session()
-            response = await session.get(url, timeout=15, allow_redirects=False)
-            location = response.headers.get('location')
-            if location:
-                logger.info(f"🔗 短链接已展开: {url} -> {location}")
-                return location
-        except Exception as e:
-            logger.warning(f"⚠️ 短链接展开失败 ({url}): {e}")
-
-        return url
-
     async def get_post_by_url(self, url: str) -> Optional[RedditPost]:
         """通过 URL 获取帖子"""
-        url = await self._expand_short_url(url)
+        url = await expand_reddit_short_url(url)
         original_url = url
         try:
             # 处理 URL：确保 .json 在查询参数之前
@@ -529,6 +535,8 @@ class FetchLayerClient:
         import httpx
         from datetime import datetime
 
+        url = await expand_reddit_short_url(url)
+
         try:
             async with httpx.AsyncClient(timeout=15) as client:
                 response = await client.post(
@@ -541,6 +549,10 @@ class FetchLayerClient:
 
             if data.get("error"):
                 logger.error(f"FetchLayer 返回错误: {data['error']}")
+                return None
+
+            if data.get("blocked"):
+                logger.error(f"FetchLayer 请求被拦截 ({url}): {data.get('blockReason')}")
                 return None
 
             # 解析 createdAt 为 Unix timestamp
