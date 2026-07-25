@@ -346,8 +346,31 @@ class RedditJsonClient:
             logger.error(f"获取帖子失败 (ID: {post_id}): {e}")
             return None
 
+    async def _expand_short_url(self, url: str) -> str:
+        """展开 Reddit 分享短链接 (/r/xxx/s/yyy)，返回真实的 comments 链接
+
+        短链接是 www.reddit.com 专属的重定向功能，old.reddit.com 不支持，
+        必须先展开再交给后续逻辑（curl_cffi 抓取 / FetchLayer fallback），
+        否则会被误判为帖子不存在/已删除
+        """
+        if '/s/' not in url:
+            return url
+
+        try:
+            session = await self._get_session()
+            response = await session.get(url, timeout=15, allow_redirects=False)
+            location = response.headers.get('location')
+            if location:
+                logger.info(f"🔗 短链接已展开: {url} -> {location}")
+                return location
+        except Exception as e:
+            logger.warning(f"⚠️ 短链接展开失败 ({url}): {e}")
+
+        return url
+
     async def get_post_by_url(self, url: str) -> Optional[RedditPost]:
         """通过 URL 获取帖子"""
+        url = await self._expand_short_url(url)
         original_url = url
         try:
             # 处理 URL：确保 .json 在查询参数之前
