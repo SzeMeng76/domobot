@@ -597,12 +597,16 @@ async def setup_application(application: Application, config) -> None:
 
     if reddit_api_mode == "fetchlayer":
         # FetchLayer 模式：直接使用 FetchLayer API，无需 WARP 代理
+        # 但展开 /s/ 分享短链接需要直连 reddit.com，VPS 数据中心 IP 常被拦截，仍需走 WARP
         try:
             from utils.reddit_json_client import FetchLayerClient
             fetchlayer_api_key = os.getenv("FETCHLAYER_API_KEY")
             if not fetchlayer_api_key:
                 raise ValueError("FETCHLAYER_API_KEY 未配置")
-            reddit_client = FetchLayerClient(api_key=fetchlayer_api_key)
+            reddit_client = FetchLayerClient(
+                api_key=fetchlayer_api_key,
+                short_url_proxy="socks5://warp:1080",  # WARP SOCKS5 代理（Docker 服务名）
+            )
             logger.info(f"✅ Reddit FetchLayer 客户端已初始化")
         except Exception as e:
             logger.error(f"❌ Reddit FetchLayer 客户端初始化失败: {e}")

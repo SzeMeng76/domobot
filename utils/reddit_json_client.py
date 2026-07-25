@@ -65,23 +65,31 @@ COOLDOWN_JITTER_MIN = 5
 COOLDOWN_JITTER_MAX = 15
 
 
-async def expand_reddit_short_url(url: str) -> str:
+async def expand_reddit_short_url(url: str, proxy: Optional[str] = None) -> str:
     """展开 Reddit 分享短链接 (/r/xxx/s/yyy)，返回真实的 comments 链接
 
     短链接是 www.reddit.com 专属的重定向功能，old.reddit.com 不支持，
     直接请求会被重定向到登录/submit 页面，导致误判为帖子不存在/已删除。
     必须先展开再交给后续逻辑（curl_cffi 抓取 / FetchLayer fallback）。
+
+    VPS 数据中心 IP 直连 reddit.com 常被反爬拦截，因此这一步始终走 WARP 代理，
+    即使 FetchLayer 模式本身不需要代理。用 curl_cffi（浏览器 TLS 指纹伪装）而不是
+    httpx，因为 httpx 走 SOCKS5 代理需要额外的 socksio 依赖，项目里没有安装。
     """
     if '/s/' not in url:
         return url
 
-    import httpx
+    if not CURL_CFFI_AVAILABLE:
+        logger.warning("⚠️ curl_cffi 未安装，无法展开短链接")
+        return url
+
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            response = await client.get(
+        proxies = {"http": proxy, "https": proxy} if proxy else None
+        async with AsyncSession(impersonate='chrome124', proxies=proxies) as session:
+            response = await session.get(
                 url,
-                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'},
-                follow_redirects=False,
+                timeout=15,
+                allow_redirects=False,
             )
             location = response.headers.get('location')
             if location:
@@ -376,7 +384,7 @@ class RedditJsonClient:
 
     async def get_post_by_url(self, url: str) -> Optional[RedditPost]:
         """通过 URL 获取帖子"""
-        url = await expand_reddit_short_url(url)
+        url = await expand_reddit_short_url(url, proxy=self.proxy)
         original_url = url
         try:
             # 处理 URL：确保 .json 在查询参数之前
@@ -523,19 +531,21 @@ class FetchLayerClient:
 
     BASE_URL = "https://fetchlayer.dev/api/reddit"
 
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, short_url_proxy: Optional[str] = None):
         self.api_key = api_key
         self._headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
+        # 展开 /s/ 短链接时用的代理（VPS 直连 reddit.com 常被拦截，FetchLayer API 本身不需要代理）
+        self.short_url_proxy = short_url_proxy
 
     async def get_post_by_url(self, url: str) -> Optional[RedditPost]:
         """通过 URL 获取帖子"""
         import httpx
         from datetime import datetime
 
-        url = await expand_reddit_short_url(url)
+        url = await expand_reddit_short_url(url, proxy=self.short_url_proxy)
 
         try:
             async with httpx.AsyncClient(timeout=15) as client:
