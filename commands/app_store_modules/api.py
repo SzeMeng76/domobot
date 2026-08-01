@@ -4,6 +4,7 @@ App Store 网页搜索 API 封装
 负责 App Store 网页搜索和应用详情页面获取
 """
 
+import asyncio
 import logging
 import re
 from typing import Dict, Optional, Tuple
@@ -15,6 +16,11 @@ from bs4 import BeautifulSoup
 from .constants import MINIMAL_HEADERS, WEB_SEARCH_LIMIT
 
 logger = logging.getLogger(__name__)
+
+# Apple 服务端偶发抖动（502/503/504），值得重试；404 是明确的"未上架"，不重试
+RETRYABLE_STATUS_CODES = {502, 503, 504}
+FETCH_MAX_RETRIES = 2
+FETCH_RETRY_DELAY_SECONDS = 1.0
 
 
 def detect_platform_from_url(url: str) -> Optional[str]:
@@ -72,37 +78,56 @@ class AppStoreWebAPI:
         """
         url = f"https://apps.apple.com/{country_code.lower()}/app/id{app_id}"
 
-        try:
-            # 增加超时时间，优化重定向处理
-            async with httpx.AsyncClient(
-                follow_redirects=True,
-                verify=False,
-                timeout=httpx.Timeout(20.0, connect=10.0)
-            ) as client:
-                logger.info(f"获取应用页面: {url}")
-                response = await client.get(url, headers=MINIMAL_HEADERS)
-                response.raise_for_status()
+        for attempt in range(FETCH_MAX_RETRIES + 1):
+            try:
+                # 增加超时时间，优化重定向处理
+                async with httpx.AsyncClient(
+                    follow_redirects=True,
+                    verify=False,
+                    timeout=httpx.Timeout(20.0, connect=10.0)
+                ) as client:
+                    logger.info(f"获取应用页面: {url}")
+                    response = await client.get(url, headers=MINIMAL_HEADERS)
+                    response.raise_for_status()
 
-                # 记录重定向信息
-                if response.history:
-                    logger.info(f"经过 {len(response.history)} 次重定向，最终 URL: {response.url}")
+                    # 记录重定向信息
+                    if response.history:
+                        logger.info(f"经过 {len(response.history)} 次重定向，最终 URL: {response.url}")
 
-                return (response.text, str(response.url))
+                    return (response.text, str(response.url))
 
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 404:
-                logger.info(f"App 'id{app_id}' 在 {country_code} 未上架 (404)")
-            else:
-                logger.error(f"HTTP 错误 {e.response.status_code}: {url}")
-            return None
+            except httpx.HTTPStatusError as e:
+                status_code = e.response.status_code
+                if status_code == 404:
+                    logger.info(f"App 'id{app_id}' 在 {country_code} 未上架 (404)")
+                    return None
 
-        except httpx.RequestError as e:
-            logger.error(f"网络请求失败: {url} - {e}")
-            return None
+                if status_code in RETRYABLE_STATUS_CODES and attempt < FETCH_MAX_RETRIES:
+                    logger.warning(
+                        f"HTTP 错误 {status_code}（可能是临时抖动），{FETCH_RETRY_DELAY_SECONDS}s 后重试 "
+                        f"({attempt + 1}/{FETCH_MAX_RETRIES}): {url}"
+                    )
+                    await asyncio.sleep(FETCH_RETRY_DELAY_SECONDS)
+                    continue
 
-        except Exception as e:
-            logger.error(f"未知错误: {url} - {e}")
-            return None
+                logger.error(f"HTTP 错误 {status_code}: {url}")
+                return None
+
+            except httpx.RequestError as e:
+                if attempt < FETCH_MAX_RETRIES:
+                    logger.warning(
+                        f"网络请求失败（重试 {attempt + 1}/{FETCH_MAX_RETRIES}）: {url} - {e}"
+                    )
+                    await asyncio.sleep(FETCH_RETRY_DELAY_SECONDS)
+                    continue
+                logger.error(f"网络请求失败: {url} - {e}")
+                return None
+
+            except Exception as e:
+                logger.error(f"未知错误: {url} - {e}")
+                return None
+
+        return None
 
     @staticmethod
     async def search_apps_by_web(
