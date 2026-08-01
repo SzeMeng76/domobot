@@ -166,7 +166,11 @@ def extract_currency_and_price(price_str: str, country_code: str | None = None, 
         try:
             # For USD prices, always use en_US locale to avoid parsing issues
             # (e.g., nl_SR treats "." as thousands separator, turning "0.99" into "99")
-            if detected_currency_code == "USD":
+            # Google Play IAP range strings (from Sensor Tower / google_play_scraper) are
+            # always formatted in en_US style regardless of the queried country's locale,
+            # so parsing them with the country's own locale silently swaps decimal/group
+            # separators (e.g. "1,749.88" parsed as es_BO becomes 1.74988).
+            if detected_currency_code == "USD" or service == "google_play":
                 locale_str = "en_US"
             else:
                 locale_str = SUPPORTED_COUNTRIES.get(country_code, {}).get("locale", "en_US")

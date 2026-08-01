@@ -147,10 +147,10 @@ class GooglePlayService:
         # 使用 price_parser 解析价格 (支持 Babel + 正则回退)
         try:
             currency1, min_price = extract_currency_and_price(
-                min_price_part, country_code
+                min_price_part, country_code, service="google_play"
             )
             currency2, max_price = extract_currency_and_price(
-                max_price_part, country_code
+                max_price_part, country_code, service="google_play"
             )
 
             # 验证价格有效性
