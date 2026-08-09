@@ -837,14 +837,14 @@ async def _handle_ip_query_with_ipdata(update: Update, context: ContextTypes.DEF
     longitude = ipdata_data.get("longitude", 0)
     postal = ipdata_data.get("postal", "")
 
-    # ASN 信息
-    asn_data = ipdata_data.get("asn", {})
+    # ASN 信息（ipdata.co 对部分 IP 会返回 "asn": null，而不是省略该字段）
+    asn_data = ipdata_data.get("asn") or {}
     asn = asn_data.get("asn", "")
     asn_name = asn_data.get("name", "未知")
     asn_type = asn_data.get("type", "")
 
     # Threat 信息
-    threat_data = ipdata_data.get("threat", {})
+    threat_data = ipdata_data.get("threat") or {}
     is_tor = threat_data.get("is_tor", False)
     is_proxy = threat_data.get("is_proxy", False)
     is_datacenter = threat_data.get("is_datacenter", False)
@@ -854,8 +854,8 @@ async def _handle_ip_query_with_ipdata(update: Update, context: ContextTypes.DEF
     is_threat = threat_data.get("is_threat", False)
     blocklists = threat_data.get("blocklists", [])
 
-    # 获取 scores（如果有的话，付费版才有）
-    scores = threat_data.get("scores", {})
+    # 获取 scores（如果有的话，付费版才有；可能显式为 null）
+    scores = threat_data.get("scores") or {}
     vpn_score = scores.get("vpn_score", 0)
     proxy_score = scores.get("proxy_score", 0)
     threat_score = scores.get("threat_score", 0)

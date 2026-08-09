@@ -62,26 +62,28 @@ async def googleplay_command(
 
     # Parse arguments
     query = args_list[0]
-    user_country = None
     lang_code = DEFAULT_LANGUAGE_CODE.lower()
 
-    if len(args_list) > 1:
-        # 尝试使用统一国家映射工具解析（支持国家代码、中文名、英文名）
-        from utils.country_mapper import get_country_code
+    # 尝试使用统一国家映射工具解析（支持国家代码、中文名、英文名）
+    from utils.country_mapper import get_country_code
 
-        resolved_country = get_country_code(args_list[1])
-        if resolved_country:
-            user_country = resolved_country
-            if len(args_list) > 2:
-                lang_code = args_list[2].lower()
-        else:
-            # 如果不是国家参数，则视为语言代码
-            lang_code = args_list[1].lower()
-
+    # 从第2个参数开始，尽量多地解析出国家代码（支持一次查询多个国家）
     countries_to_search = []
-    if user_country:
-        countries_to_search.append(user_country)
-        search_info = f"区域: {user_country}, 语: {lang_code}"
+    idx = 1
+    while idx < len(args_list):
+        resolved_country = get_country_code(args_list[idx])
+        if resolved_country and resolved_country not in countries_to_search:
+            countries_to_search.append(resolved_country)
+            idx += 1
+        else:
+            break
+
+    # 国家参数之后剩余的第一个参数视为语言代码
+    if idx < len(args_list):
+        lang_code = args_list[idx].lower()
+
+    if countries_to_search:
+        search_info = f"区域: {', '.join(countries_to_search)}, 语: {lang_code}"
     else:
         countries_to_search = DEFAULT_SEARCH_COUNTRIES
         search_info = f"区域: {', '.join(countries_to_search)}, 语言: {lang_code}"
