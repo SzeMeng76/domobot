@@ -966,7 +966,9 @@ async def _handle_ip_query_with_ipdata(update: Update, context: ContextTypes.DEF
     if blocklists:
         result_text += f"📋 *黑名单*: {len(blocklists)} 个\n"
         for bl in blocklists[:3]:  # 只显示前3个
-            result_text += f"  • {bl.get('name', 'Unknown')} ({bl.get('type', 'unknown')})\n"
+            bl_name = escape_markdown(bl.get('name', 'Unknown'))
+            bl_type = escape_markdown(bl.get('type', 'unknown'))
+            result_text += f"  • {bl_name} ({bl_type})\n"
 
     result_text += f"\n📍 *地理位置*\n"
     result_text += f"• 位置: {location}\n"
