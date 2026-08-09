@@ -28,8 +28,8 @@ def escape_markdown(text: str) -> str:
     """转义 Telegram Markdown 特殊字符（仅转义基础 Markdown 模式需要的字符）"""
     if not text:
         return ""
-    # Telegram 基础 Markdown 模式只需要转义: _ * [ ]
-    special_chars = r"_*[]"
+    # Telegram 基础 Markdown 模式需要转义: _ * [ ] `
+    special_chars = r"_*[]`"
     return re.sub(f'([{re.escape(special_chars)}])', r'\\\1', str(text))
 
 def set_dependencies(c_manager, h_client):
@@ -1027,7 +1027,7 @@ async def _handle_ip_query_with_ipdata(update: Update, context: ContextTypes.DEF
                     category_names = [category_map.get(cat, f"类别{cat}") for cat in categories]
                     category_str = ", ".join(category_names) if category_names else "未分类"
 
-                    result_text += f"{i}. `{escape_markdown(date_str)}` - {category_str}\n"
+                    result_text += f"{i}. `{escape_markdown(date_str)}` - {escape_markdown(category_str)}\n"
                     if comment:
                         # 限制评论长度
                         comment_short = comment[:50] + "..." if len(comment) > 50 else comment
@@ -1244,7 +1244,7 @@ async def _handle_ip_query_with_ipapi(update: Update, context: ContextTypes.DEFA
                 category_names = [category_map.get(cat, f"类别{cat}") for cat in categories]
                 category_str = ", ".join(category_names) if category_names else "未分类"
 
-                result_text += f"{i}. `{date_str}` - {category_str}\n"
+                result_text += f"{i}. `{escape_markdown(date_str)}` - {escape_markdown(category_str)}\n"
                 if comment:
                     # 限制评论长度
                     comment_short = comment[:50] + "..." if len(comment) > 50 else comment
