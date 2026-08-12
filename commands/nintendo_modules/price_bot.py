@@ -189,6 +189,40 @@ class NintendoSwitchPriceBot(PriceQueryService):
             error_message = f"❌ 错误：未能加载 {self.service_name} 价格数据。请稍后再试或检查日志。"
             return foldable_text_v2(error_message)
 
+        # 如果没有参数，显示全球个人12月套餐排行榜
+        if not query_list:
+            return await self.get_top_cheapest(top_n=10)
+
+        # 处理特殊关键词
+        query = " ".join(query_list).lower()
+
+        # 处理家庭套餐排行榜
+        if query in ["family", "家庭", "家庭套餐", "f"]:
+            # 返回家庭套餐排行榜
+            if "_top_10_cheapest_family_12month" in self.data:
+                plans = self.data["_top_10_cheapest_family_12month"]
+                if not plans:
+                    return foldable_text_v2("❌ 暂无家庭套餐数据")
+
+                lines = ["*🏆 Nintendo Switch Online 全球最便宜家庭套餐 TOP 10*\n"]
+                lines.append("*套餐类型：* 家庭套餐 \\(12个月\\)\n")
+
+                for i, plan in enumerate(plans[:10], 1):
+                    country = escape_markdown_v2(plan.get("country_name", "Unknown"))
+                    price_cny = plan.get("price_cny_per_month", 0)
+                    total_cny = plan.get("price_cny_total", 0)
+                    original_price = escape_markdown_v2(f'{plan.get("currency", "")} {plan.get("amount", 0)}')
+
+                    lines.append(
+                        f"{i}\\. *{country}*\n"
+                        f"   💰 *¥{price_cny:.2f}/月* \\| 总价 ¥{total_cny:.2f}\n"
+                        f"   原价：{original_price}\n"
+                    )
+
+                lines.append("\n_💡 提示：输入国家代码查看该国所有套餐，如 /nt US_")
+                return foldable_text_v2("\n".join(lines))
+            return foldable_text_v2("❌ 暂无家庭套餐数据")
+
         result_messages = []
         not_found = []
 
