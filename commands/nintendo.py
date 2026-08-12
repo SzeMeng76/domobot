@@ -1,90 +1,100 @@
-"""
-/nt command - Query Nintendo Switch Online subscription prices globally
-参考 disney_plus.py 的架构实现
-"""
-
 import logging
+
 from telegram import Update
-from telegram.ext import CommandHandler, ContextTypes
-from telegram.constants import ParseMode
+from telegram.ext import ContextTypes
+
+from utils.cache_commands import delegate_to_service_handler
+from utils.command_factory import command_factory
+from utils.permissions import Permission
 
 logger = logging.getLogger(__name__)
 
 
-async def nintendo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """处理 /nt 命令"""
-    if not update.message:
-        return
-
-    user_id = update.effective_user.id if update.effective_user else "Unknown"
-    logger.info(f"User {user_id} triggered /nt with args: {context.args}")
-
-    bot_instance = context.bot_data.get("nintendo_price_bot")
-    if not bot_instance:
-        await update.message.reply_text(
-            "❌ Nintendo Switch Online 价格查询服务未初始化",
-            parse_mode=ParseMode.MARKDOWN_V2
-        )
-        return
-
-    args = context.args if context.args else []
-    args_str = " ".join(args) if args else ""
-
-    result = await nintendo_execute(args_str, bot_instance=bot_instance)
-
-    await update.message.reply_text(
-        result["message"],
-        parse_mode=ParseMode.MARKDOWN_V2
+async def nintendo_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handles the /nt command."""
+    await delegate_to_service_handler(
+        update,
+        context,
+        service_key="nintendo_price_bot",
+        service_display_name="Nintendo Switch Online",
     )
 
 
-async def nintendo_inline_execute(args_str: str, bot_instance=None):
-    """inline query 执行函数"""
-    return await nintendo_execute(args_str, bot_instance=bot_instance)
+# Register commands
+command_factory.register_command("nt", nintendo_command, permission=Permission.NONE, description="Nintendo Switch Online订阅价格查询")
+
+logger.info("Nintendo Switch Online 命令已注册")
 
 
-async def nintendo_execute(args_str: str, bot_instance=None):
-    """核心执行逻辑"""
-    if not bot_instance:
+# =============================================================================
+# Inline 执行入口
+# =============================================================================
+
+async def nintendo_inline_execute(args: str, bot_instance=None) -> dict:
+    """
+    Inline Query 执行入口 - 提供完整的 Nintendo Switch Online 价格查询功能
+
+    Args:
+        args: 用户输入的参数字符串，如 "US" 或 "美国"，为空则返回 Top 10
+
+    Returns:
+        dict: {
+            "success": bool,
+            "title": str,
+            "message": str,
+            "description": str,
+            "error": str | None
+        }
+    """
+    nintendo_price_bot = bot_instance
+    if not nintendo_price_bot:
         return {
             "success": False,
-            "title": "服务未初始化",
-            "message": "❌ Nintendo Switch Online 价格查询服务未初始化"
+            "title": "❌ 服务未初始化",
+            "message": "Nintendo Switch Online 查询服务未初始化，请联系管理员",
+            "description": "服务未初始化",
+            "error": "Nintendo Switch Online 服务未初始化"
         }
-
-    args = args_str.strip().split() if args_str.strip() else []
 
     try:
-        if not args:
-            # 无参数：显示 Individual + Family TOP 10
-            message = await bot_instance.get_top_rankings()
-        elif args[0].lower() in ["individual", "个人", "ind", "i"]:
-            # Individual 12个月套餐 TOP 10
-            message = await bot_instance.get_individual_ranking()
-        elif args[0].lower() in ["family", "家庭", "fam", "f"]:
-            # Family 12个月套餐 TOP 10
-            message = await bot_instance.get_family_ranking()
-        else:
-            # 查询指定国家
-            country_codes = [arg.upper() for arg in args]
-            message = await bot_instance.query_countries(country_codes)
+        # 加载数据
+        await nintendo_price_bot.load_or_fetch_data(None)
 
-        return {
-            "success": True,
-            "title": "Nintendo Switch Online",
-            "message": message
-        }
+        if not args or not args.strip():
+            # 无参数：返回 Top 10 最便宜的国家（Individual 12个月）
+            result = await nintendo_price_bot.get_top_cheapest()
+            return {
+                "success": True,
+                "title": "🎮 Nintendo Switch Online 全球最低价排名",
+                "message": result,
+                "description": "Nintendo Switch Online Individual 12个月套餐全球最低价 Top 10",
+                "error": None
+            }
+        else:
+            # 有参数：查询指定国家
+            query_list = args.strip().split()
+            result = await nintendo_price_bot.query_prices(query_list)
+
+            # 构建简短描述
+            if len(query_list) == 1:
+                short_desc = f"Nintendo Switch Online {query_list[0]} 订阅价格"
+            else:
+                short_desc = f"Nintendo Switch Online {', '.join(query_list[:3])} 等地区价格"
+
+            return {
+                "success": True,
+                "title": f"🎮 Nintendo Switch Online 价格查询",
+                "message": result,
+                "description": short_desc,
+                "error": None
+            }
+
     except Exception as e:
-        logger.error(f"Nintendo execute error: {e}", exc_info=True)
+        logger.error(f"Inline Nintendo Switch Online query failed: {e}")
         return {
             "success": False,
-            "title": "查询失败",
-            "message": f"❌ 查询失败：{str(e)}"
+            "title": "❌ 查询失败",
+            "message": f"查询 Nintendo Switch Online 价格失败: {str(e)}",
+            "description": "查询失败",
+            "error": str(e)
         }
-
-
-def get_handlers():
-    """返回命令处理器列表"""
-    return [
-        CommandHandler("nt", nintendo_command),
-    ]
