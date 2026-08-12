@@ -96,10 +96,23 @@ class NintendoSwitchPriceBot(PriceQueryService):
                 if plan == plans_in_group[1]:  # This is the more expensive one
                     is_expansion = True
 
-            # Build display name
-            display_plan_type = f"{plan_type} + Expansion Pack" if is_expansion else plan_type
+            # Translate to Chinese
+            plan_type_cn = "个人" if plan_type == "Individual" else "家庭" if plan_type == "Family" else plan_type
 
-            # Don't escape price numbers - only escape plan type and duration text
+            # Build display name
+            display_plan_type = f"{plan_type_cn}套餐 + 扩展包" if is_expansion else f"{plan_type_cn}套餐"
+
+            # Duration in Chinese
+            if duration_months == 1:
+                duration_cn = "1个月"
+            elif duration_months == 3:
+                duration_cn = "3个月"
+            elif duration_months == 12:
+                duration_cn = "12个月"
+            else:
+                duration_cn = duration
+
+            # Don't escape price numbers
             original_price = f"{currency} {amount:.2f}" if amount else "N/A"
             cny_price = f"¥ {price_cny_total:.2f}" if price_cny_total else "N/A"
 
@@ -108,7 +121,7 @@ class NintendoSwitchPriceBot(PriceQueryService):
             else:
                 per_month_text = ""
 
-            lines.append(f"  • {display_plan_type} - {duration}: {original_price} ≈ {cny_price}{per_month_text}")
+            lines.append(f"  • {display_plan_type} - {duration_cn}: {original_price} ≈ {cny_price}{per_month_text}")
 
         return "\n".join(lines)
 
@@ -140,7 +153,7 @@ class NintendoSwitchPriceBot(PriceQueryService):
             error_msg = f"未能找到 {self.service_name} 排名数据。"
             return foldable_text_v2(error_msg)
 
-        message_lines = [f"*🏆 {self.service_name} 全球最低价格排名 \\(Individual 12个月套餐\\)*"]
+        message_lines = [f"*🏆 {self.service_name} 全球最低价格排名 (个人套餐 12个月)*"]
         message_lines.append("")
 
         for idx, plan in enumerate(cheapest_data, 1):
@@ -157,8 +170,8 @@ class NintendoSwitchPriceBot(PriceQueryService):
 
             original_price = f"{currency} {amount:.2f}"
 
-            message_lines.append(f"{rank_emoji} {country_name_cn} \\({country_code}\\) {country_flag}")
-            message_lines.append(f"💰 {original_price} ≈ ¥{price_cny_total:.2f} \\(¥{price_cny_per_month:.2f}/月\\)")
+            message_lines.append(f"{rank_emoji} {country_name_cn} ({country_code}) {country_flag}")
+            message_lines.append(f"💰 {original_price} ≈ ¥{price_cny_total:.2f} (¥{price_cny_per_month:.2f}/月)")
 
             if idx < len(cheapest_data):
                 message_lines.append("")
