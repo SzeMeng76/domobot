@@ -63,11 +63,11 @@ class NintendoSwitchPriceBot(PriceQueryService):
         if not price_info or not isinstance(price_info, list):
             return None
 
-        # Get country name from first plan
-        country_name = price_info[0].get("country_name", country_code) if price_info else country_code
+        # Get Chinese country name from SUPPORTED_COUNTRIES
+        country_name_cn = SUPPORTED_COUNTRIES.get(country_code.upper(), {}).get("name", country_code)
         country_flag = get_country_flag(country_code)
 
-        lines = [f"📍 国家/地区: {country_flag} {escape_v2(country_name)} ({country_code.upper()})"]
+        lines = [f"📍 国家/地区: {country_flag} {country_name_cn} ({country_code.upper()})"]
 
         for plan in price_info:
             plan_type = plan.get("plan_type", "Unknown")
@@ -77,6 +77,7 @@ class NintendoSwitchPriceBot(PriceQueryService):
             price_cny_total = plan.get("price_cny_total", 0)
             price_cny_per_month = plan.get("price_cny_per_month", 0)
 
+            # Don't escape price numbers - only escape plan type and duration text
             original_price = f"{currency} {amount:.2f}" if amount else "N/A"
             cny_price = f"¥ {price_cny_total:.2f}" if price_cny_total else "N/A"
 
@@ -85,7 +86,7 @@ class NintendoSwitchPriceBot(PriceQueryService):
             else:
                 per_month_text = ""
 
-            lines.append(f"  • {escape_v2(plan_type)} - {escape_v2(duration)}: {escape_v2(original_price)} ≈ {escape_v2(cny_price)}{escape_v2(per_month_text)}")
+            lines.append(f"  • {plan_type} - {duration}: {original_price} ≈ {cny_price}{per_month_text}")
 
         return "\n".join(lines)
 
@@ -122,7 +123,8 @@ class NintendoSwitchPriceBot(PriceQueryService):
 
         for idx, plan in enumerate(cheapest_data, 1):
             country_code = plan.get("country_code", "").upper()
-            country_name = plan.get("country_name", country_code)
+            # Use Chinese country name from SUPPORTED_COUNTRIES
+            country_name_cn = SUPPORTED_COUNTRIES.get(country_code, {}).get("name", country_code)
             country_flag = get_country_flag(country_code)
             rank_emoji = get_rank_emoji(idx)
 
@@ -133,8 +135,8 @@ class NintendoSwitchPriceBot(PriceQueryService):
 
             original_price = f"{currency} {amount:.2f}"
 
-            message_lines.append(f"{rank_emoji} {escape_v2(country_name)} \\({country_code}\\) {country_flag}")
-            message_lines.append(f"💰 {escape_v2(original_price)} ≈ ¥{price_cny_total:.2f} \\(¥{price_cny_per_month:.2f}/月\\)")
+            message_lines.append(f"{rank_emoji} {country_name_cn} \\({country_code}\\) {country_flag}")
+            message_lines.append(f"💰 {original_price} ≈ ¥{price_cny_total:.2f} \\(¥{price_cny_per_month:.2f}/月\\)")
 
             if idx < len(cheapest_data):
                 message_lines.append("")
