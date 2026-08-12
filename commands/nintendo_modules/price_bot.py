@@ -198,36 +198,39 @@ class NintendoSwitchPriceBot(PriceQueryService):
 
         # 处理家庭套餐排行榜
         if query in ["family", "家庭", "家庭套餐", "f"]:
-            # 返回家庭套餐排行榜
             if "_top_10_cheapest_family_12month" in self.data:
                 plans = self.data["_top_10_cheapest_family_12month"]
                 if not plans:
                     return foldable_text_v2("❌ 暂无家庭套餐数据")
 
-                lines = ["*🏆 Nintendo Switch Online 全球最便宜家庭套餐 TOP 10*"]
-                lines.append("*套餐类型：* 家庭套餐 (12个月)")
-                lines.append("")
+                message_lines = [f"*🏆 {self.service_name} 全球最低价格排名 (家庭套餐 12个月)*"]
+                message_lines.append("")
 
-                for i, plan in enumerate(plans[:10], 1):
-                    country = plan.get("country_name", "Unknown")
+                for idx, plan in enumerate(plans[:top_n], 1):
                     country_code = plan.get("country_code", "").upper()
+                    country_name_cn = SUPPORTED_COUNTRIES.get(country_code, {}).get("name", country_code)
                     country_flag = get_country_flag(country_code)
-                    rank_emoji = get_rank_emoji(i)
-                    price_cny = plan.get("price_cny_per_month", 0)
-                    total_cny = plan.get("price_cny_total", 0)
+                    rank_emoji = get_rank_emoji(idx)
+
                     currency = plan.get("currency", "")
                     amount = plan.get("amount", 0)
+                    price_cny_total = plan.get("price_cny_total", 0)
+                    price_cny_per_month = plan.get("price_cny_per_month", 0)
+
                     original_price = f"{currency} {amount:.2f}"
 
-                    lines.append(f"{rank_emoji} {country} ({country_code}) {country_flag}")
-                    lines.append(f"💰 {original_price} ≈ ¥{total_cny:.2f} (¥{price_cny:.2f}/月)")
+                    message_lines.append(f"{rank_emoji} {country_name_cn} ({country_code}) {country_flag}")
+                    message_lines.append(f"💰 {original_price} ≈ ¥{price_cny_total:.2f} (¥{price_cny_per_month:.2f}/月)")
 
-                    if i < len(plans[:10]):
-                        lines.append("")
+                    if idx < len(plans[:top_n]):
+                        message_lines.append("")
 
-                lines.append("")
-                lines.append("_💡 提示：输入国家代码查看该国所有套餐，如 /nt US_")
-                return foldable_text_with_markdown_v2("\n".join(lines))
+                if self.cache_timestamp:
+                    message_lines.append("")
+                    message_lines.append(format_cache_timestamp(self.cache_timestamp))
+
+                body_text = "\n".join(message_lines).strip()
+                return foldable_text_with_markdown_v2(body_text)
             return foldable_text_v2("❌ 暂无家庭套餐数据")
 
         result_messages = []
