@@ -71,23 +71,36 @@ async def nintendo_inline_execute(args: str, bot_instance=None) -> dict:
                 "error": None
             }
         else:
-            # 有参数：查询指定国家
-            query_list = args.strip().split()
-            result = await nintendo_price_bot.query_prices(query_list)
-
-            # 构建简短描述
-            if len(query_list) == 1:
-                short_desc = f"Nintendo Switch Online {query_list[0]} 订阅价格"
+            # 有参数：检查是否查询家庭套餐排行榜
+            args_lower = args.strip().lower()
+            if args_lower in ["family", "家庭"]:
+                # 返回家庭套餐排行榜
+                result = await nintendo_price_bot.get_top_cheapest_family()
+                return {
+                    "success": True,
+                    "title": "🎮 Nintendo Switch Online 家庭套餐全球最低价排名",
+                    "message": result,
+                    "description": "Nintendo Switch Online Family 12个月套餐全球最低价 Top 10",
+                    "error": None
+                }
             else:
-                short_desc = f"Nintendo Switch Online {', '.join(query_list[:3])} 等地区价格"
+                # 查询指定国家
+                query_list = args.strip().split()
+                result = await nintendo_price_bot.query_prices(query_list)
 
-            return {
-                "success": True,
-                "title": f"🎮 Nintendo Switch Online 价格查询",
-                "message": result,
-                "description": short_desc,
-                "error": None
-            }
+                # 构建简短描述
+                if len(query_list) == 1:
+                    short_desc = f"Nintendo Switch Online {query_list[0]} 订阅价格"
+                else:
+                    short_desc = f"Nintendo Switch Online {', '.join(query_list[:3])} 等地区价格"
+
+                return {
+                    "success": True,
+                    "title": f"🎮 Nintendo Switch Online 价格查询",
+                    "message": result,
+                    "description": short_desc,
+                    "error": None
+                }
 
     except Exception as e:
         logger.error(f"Inline Nintendo Switch Online query failed: {e}")
