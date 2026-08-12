@@ -69,24 +69,46 @@ class NintendoSwitchPriceBot(PriceQueryService):
 
         lines = [f"📍 国家/地区: {country_flag} {country_name_cn} ({country_code.upper()})"]
 
+        # Group plans by (plan_type, duration_months) to detect Expansion Pack
+        grouped_plans = {}
+        for plan in price_info:
+            key = (plan.get("plan_type"), plan.get("duration_months"))
+            if key not in grouped_plans:
+                grouped_plans[key] = []
+            grouped_plans[key].append(plan)
+
+        # Sort plans by display order
         for plan in price_info:
             plan_type = plan.get("plan_type", "Unknown")
             duration = plan.get("duration", "Unknown")
+            duration_months = plan.get("duration_months", 1)
             currency = plan.get("currency", "")
             amount = plan.get("amount", 0)
             price_cny_total = plan.get("price_cny_total", 0)
             price_cny_per_month = plan.get("price_cny_per_month", 0)
 
+            # Check if this is Expansion Pack (more expensive duplicate)
+            key = (plan_type, duration_months)
+            is_expansion = False
+            if len(grouped_plans[key]) == 2:
+                # Two plans with same type and duration - compare prices
+                plans_in_group = sorted(grouped_plans[key], key=lambda p: p.get("amount", 0))
+                if plan == plans_in_group[1]:  # This is the more expensive one
+                    is_expansion = True
+
+            # Build display name
+            display_plan_type = f"{plan_type} + Expansion Pack" if is_expansion else plan_type
+
             # Don't escape price numbers - only escape plan type and duration text
             original_price = f"{currency} {amount:.2f}" if amount else "N/A"
             cny_price = f"¥ {price_cny_total:.2f}" if price_cny_total else "N/A"
 
-            if plan.get("duration_months", 1) > 1:
+            if duration_months > 1:
                 per_month_text = f" (¥ {price_cny_per_month:.2f}/月)"
             else:
                 per_month_text = ""
 
-            lines.append(f"  • {plan_type} - {duration}: {original_price} ≈ {cny_price}{per_month_text}")
+            lines.append(f"  • {display_plan_type} - {duration}: {original_price} ≈ {cny_price}{per_month_text}")
 
         return "\n".join(lines)
 
