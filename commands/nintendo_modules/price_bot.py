@@ -206,7 +206,7 @@ class NintendoSwitchPriceBot(PriceQueryService):
                 message_lines = [f"*🏆 {self.service_name} 全球最低价格排名 (家庭套餐 12个月)*"]
                 message_lines.append("")
 
-                for idx, plan in enumerate(plans[:top_n], 1):
+                for idx, plan in enumerate(plans[:10], 1):
                     country_code = plan.get("country_code", "").upper()
                     country_name_cn = SUPPORTED_COUNTRIES.get(country_code, {}).get("name", country_code)
                     country_flag = get_country_flag(country_code)
@@ -222,7 +222,7 @@ class NintendoSwitchPriceBot(PriceQueryService):
                     message_lines.append(f"{rank_emoji} {country_name_cn} ({country_code}) {country_flag}")
                     message_lines.append(f"💰 {original_price} ≈ ¥{price_cny_total:.2f} (¥{price_cny_per_month:.2f}/月)")
 
-                    if idx < len(plans[:top_n]):
+                    if idx < len(plans[:10]):
                         message_lines.append("")
 
                 if self.cache_timestamp:
