@@ -183,55 +183,53 @@ class NintendoSwitchPriceBot(PriceQueryService):
         body_text = "\n".join(message_lines).strip()
         return foldable_text_with_markdown_v2(body_text)
 
+    async def get_top_cheapest_family(self, top_n: int = 10) -> str:
+        """Gets the top N cheapest Family 12-month plans."""
+        if not self.data:
+            error_msg = f"❌ 错误：未能加载 {self.service_name} 价格数据。请稍后再试或检查日志。"
+            return foldable_text_v2(error_msg)
+
+        # Use pre-sorted data from _top_10_cheapest_family_12month
+        if "_top_10_cheapest_family_12month" in self.data:
+            cheapest_data = self.data["_top_10_cheapest_family_12month"][:top_n]
+        else:
+            error_msg = f"未能找到 {self.service_name} 家庭套餐排名数据。"
+            return foldable_text_v2(error_msg)
+
+        message_lines = [f"*🏆 {self.service_name} 全球最低价格排名 (家庭套餐 12个月)*"]
+        message_lines.append("")
+
+        for idx, plan in enumerate(cheapest_data, 1):
+            country_code = plan.get("country_code", "").upper()
+            country_name_cn = SUPPORTED_COUNTRIES.get(country_code, {}).get("name", country_code)
+            country_flag = get_country_flag(country_code)
+            rank_emoji = get_rank_emoji(idx)
+
+            currency = plan.get("currency", "")
+            amount = plan.get("amount", 0)
+            price_cny_total = plan.get("price_cny_total", 0)
+            price_cny_per_month = plan.get("price_cny_per_month", 0)
+
+            original_price = f"{currency} {amount:.2f}"
+
+            message_lines.append(f"{rank_emoji} {country_name_cn} ({country_code}) {country_flag}")
+            message_lines.append(f"💰 {original_price} ≈ ¥{price_cny_total:.2f} (¥{price_cny_per_month:.2f}/月)")
+
+            if idx < len(cheapest_data):
+                message_lines.append("")
+
+        if self.cache_timestamp:
+            message_lines.append("")
+            message_lines.append(format_cache_timestamp(self.cache_timestamp))
+
+        body_text = "\n".join(message_lines).strip()
+        return foldable_text_with_markdown_v2(body_text)
+
     async def query_prices(self, query_list: list[str]) -> str:
         """Queries prices for a list of specified countries."""
         if not self.data:
             error_message = f"❌ 错误：未能加载 {self.service_name} 价格数据。请稍后再试或检查日志。"
             return foldable_text_v2(error_message)
-
-        # 如果没有参数，显示全球个人12月套餐排行榜
-        if not query_list:
-            return await self.get_top_cheapest(top_n=10)
-
-        # 处理特殊关键词
-        query = " ".join(query_list).lower()
-
-        # 处理家庭套餐排行榜
-        if query in ["family", "家庭", "家庭套餐", "f"]:
-            if "_top_10_cheapest_family_12month" in self.data:
-                plans = self.data["_top_10_cheapest_family_12month"]
-                if not plans:
-                    return foldable_text_v2("❌ 暂无家庭套餐数据")
-
-                message_lines = [f"*🏆 {self.service_name} 全球最低价格排名 (家庭套餐 12个月)*"]
-                message_lines.append("")
-
-                for idx, plan in enumerate(plans[:10], 1):
-                    country_code = plan.get("country_code", "").upper()
-                    country_name_cn = SUPPORTED_COUNTRIES.get(country_code, {}).get("name", country_code)
-                    country_flag = get_country_flag(country_code)
-                    rank_emoji = get_rank_emoji(idx)
-
-                    currency = plan.get("currency", "")
-                    amount = plan.get("amount", 0)
-                    price_cny_total = plan.get("price_cny_total", 0)
-                    price_cny_per_month = plan.get("price_cny_per_month", 0)
-
-                    original_price = f"{currency} {amount:.2f}"
-
-                    message_lines.append(f"{rank_emoji} {country_name_cn} ({country_code}) {country_flag}")
-                    message_lines.append(f"💰 {original_price} ≈ ¥{price_cny_total:.2f} (¥{price_cny_per_month:.2f}/月)")
-
-                    if idx < len(plans[:10]):
-                        message_lines.append("")
-
-                if self.cache_timestamp:
-                    message_lines.append("")
-                    message_lines.append(format_cache_timestamp(self.cache_timestamp))
-
-                body_text = "\n".join(message_lines).strip()
-                return foldable_text_with_markdown_v2(body_text)
-            return foldable_text_v2("❌ 暂无家庭套餐数据")
 
         result_messages = []
         not_found = []
