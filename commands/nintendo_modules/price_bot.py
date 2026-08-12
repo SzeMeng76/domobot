@@ -7,7 +7,7 @@ import logging
 from typing import Dict, List, Optional
 from telegram.ext import ContextTypes
 
-from utils.country_data import get_country_name, get_country_flag
+from utils.country_data import get_country_flag
 from utils.formatter import escape_markdown_v2
 from utils.price_formatter import format_price_cny
 from utils.price_query_service import PriceQueryService
@@ -166,7 +166,6 @@ class NintendoSwitchPriceBot(PriceQueryService):
             plans = by_country.get(country_code_upper, [])
 
             if not plans:
-                country_name_display = get_country_name(country_code_upper)
                 lines.append(f"❌ {escape_markdown_v2(country_code_upper)}: 未找到数据")
                 continue
 
