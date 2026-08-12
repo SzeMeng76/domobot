@@ -6,7 +6,7 @@ import httpx
 from telegram.ext import ContextTypes
 
 from utils.country_data import SUPPORTED_COUNTRIES, get_country_flag
-from utils.formatter import foldable_text_v2, foldable_text_with_markdown_v2, escape_v2
+from utils.formatter import foldable_text_v2, foldable_text_with_markdown_v2
 from utils.price_formatter import get_rank_emoji, format_cache_timestamp
 from utils.price_query_service import PriceQueryService
 
@@ -204,23 +204,30 @@ class NintendoSwitchPriceBot(PriceQueryService):
                 if not plans:
                     return foldable_text_v2("❌ 暂无家庭套餐数据")
 
-                lines = ["*🏆 Nintendo Switch Online 全球最便宜家庭套餐 TOP 10*\n"]
-                lines.append("*套餐类型：* 家庭套餐 \\(12个月\\)\n")
+                lines = ["*🏆 Nintendo Switch Online 全球最便宜家庭套餐 TOP 10*"]
+                lines.append("*套餐类型：* 家庭套餐 (12个月)")
+                lines.append("")
 
                 for i, plan in enumerate(plans[:10], 1):
-                    country = escape_markdown_v2(plan.get("country_name", "Unknown"))
+                    country = plan.get("country_name", "Unknown")
+                    country_code = plan.get("country_code", "").upper()
+                    country_flag = get_country_flag(country_code)
+                    rank_emoji = get_rank_emoji(i)
                     price_cny = plan.get("price_cny_per_month", 0)
                     total_cny = plan.get("price_cny_total", 0)
-                    original_price = escape_markdown_v2(f'{plan.get("currency", "")} {plan.get("amount", 0)}')
+                    currency = plan.get("currency", "")
+                    amount = plan.get("amount", 0)
+                    original_price = f"{currency} {amount:.2f}"
 
-                    lines.append(
-                        f"{i}\\. *{country}*\n"
-                        f"   💰 *¥{price_cny:.2f}/月* \\| 总价 ¥{total_cny:.2f}\n"
-                        f"   原价：{original_price}\n"
-                    )
+                    lines.append(f"{rank_emoji} {country} ({country_code}) {country_flag}")
+                    lines.append(f"💰 {original_price} ≈ ¥{total_cny:.2f} (¥{price_cny:.2f}/月)")
 
-                lines.append("\n_💡 提示：输入国家代码查看该国所有套餐，如 /nt US_")
-                return foldable_text_v2("\n".join(lines))
+                    if i < len(plans[:10]):
+                        lines.append("")
+
+                lines.append("")
+                lines.append("_💡 提示：输入国家代码查看该国所有套餐，如 /nt US_")
+                return foldable_text_with_markdown_v2("\n".join(lines))
             return foldable_text_v2("❌ 暂无家庭套餐数据")
 
         result_messages = []
@@ -266,7 +273,7 @@ class NintendoSwitchPriceBot(PriceQueryService):
         if not_found:
             raw_message_parts.append("")
             not_found_str = ", ".join(not_found)
-            raw_message_parts.append(f"❌ 未找到以下地区的价格信息：{escape_v2(not_found_str)}")
+            raw_message_parts.append(f"❌ 未找到以下地区的价格信息：{not_found_str}")
 
         if self.cache_timestamp:
             raw_message_parts.append("")
