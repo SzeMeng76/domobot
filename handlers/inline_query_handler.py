@@ -467,6 +467,7 @@ class InlineQueryHandler:
 • `netflix$` - Netflix全球价格排名
 • `spotify$` - Spotify全球价格排名
 • `disney$` - Disney+全球价格排名
+• `nt$` - Nintendo Switch Online全球价格排名
 • `xbox$` - Xbox Game Pass全球价格排名
 • `max$` - HBO Max全球价格排名
 • `appleservices icloud$` - Apple服务价格
@@ -568,6 +569,8 @@ class InlineQueryHandler:
             "netflix": "🎬 Netflix - 添加 $ 执行查询",
             "spotify": "🎵 Spotify - 添加 $ 执行查询",
             "disney": "🎪 Disney+ - 添加 $ 执行查询",
+            "nt": "🎮 Nintendo Switch Online - 添加 $ 执行查询",
+            "nintendo": "🎮 Nintendo Switch Online - 添加 $ 执行查询",
             "xbox": "🎮 Xbox Game Pass - 添加 $ 执行查询",
             "max": "📺 HBO Max - 添加 $ 执行查询",
             "appleservices": "🍎 Apple服务 - 添加 $ 执行查询",
@@ -628,6 +631,8 @@ class InlineQueryHandler:
             "netflix": {"icon": "🎬", "title": "Netflix", "desc": "订阅价格"},
             "spotify": {"icon": "🎵", "title": "Spotify", "desc": "订阅价格"},
             "disney": {"icon": "🎪", "title": "Disney+", "desc": "订阅价格"},
+            "nt": {"icon": "🎮", "title": "Nintendo Switch Online", "desc": "订阅价格"},
+            "nintendo": {"icon": "🎮", "title": "Nintendo Switch Online", "desc": "订阅价格"},
             "xbox": {"icon": "🎮", "title": "Xbox Game Pass", "desc": "订阅价格"},
             "max": {"icon": "📺", "title": "HBO Max", "desc": "订阅价格"},
             "appleservices": {"icon": "🍎", "title": "Apple服务", "desc": "订阅价格"},

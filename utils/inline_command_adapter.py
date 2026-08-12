@@ -43,6 +43,8 @@ class InlineCommandAdapter:
             "steam": self._handle_steam,
             "netflix": self._handle_netflix,
             "disney": self._handle_disney,
+            "nt": self._handle_nintendo,
+            "nintendo": self._handle_nintendo,
             "spotify": self._handle_spotify,
             "max": self._handle_max,
             "crypto": self._handle_crypto,
@@ -195,6 +197,20 @@ class InlineCommandAdapter:
 
         bot_instance = self.context.bot_data.get("disney_price_bot")
         result = await disney_inline_execute(args, bot_instance=bot_instance)
+
+        if result["success"]:
+            return (result["message"], ParseMode.MARKDOWN_V2, None)
+        else:
+            error_message = f"❌ *{result['title']}*\n\n{result['message']}"
+            return (foldable_text_with_markdown_v2(error_message), ParseMode.MARKDOWN_V2, None)
+
+    async def _handle_nintendo(self, args: str) -> Tuple[str, ParseMode, None]:
+        """处理 Nintendo Switch Online 价格查询 - 调用完整的 nintendo 功能"""
+        from commands.nintendo import nintendo_inline_execute
+        from utils.formatter import foldable_text_with_markdown_v2
+
+        bot_instance = self.context.bot_data.get("nintendo_price_bot")
+        result = await nintendo_inline_execute(args, bot_instance=bot_instance)
 
         if result["success"]:
             return (result["message"], ParseMode.MARKDOWN_V2, None)

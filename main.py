@@ -502,6 +502,18 @@ async def setup_application(application: Application, config) -> None:
     except Exception as e:
         logger.error(f"❌ Disney+ 机器人初始化失败: {e}")
 
+    # 初始化 Nintendo Switch Online 价格查询机器人（使用新的模块化架构）
+    try:
+        from commands.nintendo_modules import init_nintendo_bot
+        init_nintendo_bot(
+            application=application,
+            cache_manager=cache_manager,
+            rate_converter=rate_converter,
+            smart_cache_manager=smart_cache_manager,
+        )
+    except Exception as e:
+        logger.error(f"❌ Nintendo Switch Online 机器人初始化失败: {e}")
+
     # 初始化 Xbox Game Pass 价格查询机器人（使用新的模块化架构）
     try:
         from commands.xbox_modules import init_xbox_bot
@@ -720,6 +732,11 @@ async def setup_application(application: Application, config) -> None:
     if config.disney_weekly_cleanup:
         await task_scheduler.add_weekly_cache_cleanup("disney_plus", "disney_plus", weekday=6, hour=5, minute=0)
         logger.info(" 已配置 Disney+ 每周日UTC 5:00 定时清理")
+        cleanup_tasks_added += 1
+
+    if config.nintendo_weekly_cleanup:
+        await task_scheduler.add_weekly_cache_cleanup("nintendo", "nintendo", weekday=6, hour=5, minute=0)
+        logger.info(" 已配置 Nintendo Switch Online 每周日UTC 5:00 定时清理")
         cleanup_tasks_added += 1
 
     if config.xbox_weekly_cleanup:
