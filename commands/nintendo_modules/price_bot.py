@@ -226,10 +226,14 @@ class NintendoSwitchPriceBot(PriceQueryService):
         return foldable_text_with_markdown_v2(body_text)
 
     async def query_prices(self, query_list: list[str]) -> str:
-        """Queries prices for a list of specified countries."""
+        """Queries prices for a list of specified countries or plan types."""
         if not self.data:
             error_message = f"❌ 错误：未能加载 {self.service_name} 价格数据。请稍后再试或检查日志。"
             return foldable_text_v2(error_message)
+
+        # Check if user wants family plan ranking
+        if len(query_list) == 1 and query_list[0].lower() in ["family", "家庭"]:
+            return await self.get_top_cheapest_family()
 
         result_messages = []
         not_found = []
