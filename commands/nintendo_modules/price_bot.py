@@ -1,5 +1,4 @@
 import logging
-import re
 from typing import Any
 
 import httpx
@@ -17,7 +16,7 @@ logger = logging.getLogger(__name__)
 class NintendoSwitchPriceBot(PriceQueryService):
     """Manages Nintendo Switch Online price data fetching, caching, and formatting."""
 
-    PRICE_URL = "https://cdn.jsdelivr.net/gh/SzeMeng76/nintendo-switch-online-prices@main/nintendo_prices_cny_sorted.json"
+    PRICE_URL = "https://raw.githubusercontent.com/SzeMeng76/nintendo-switch-online-prices/refs/heads/main/nintendo_prices_cny_sorted.json"
 
     async def _fetch_data(self, context: ContextTypes.DEFAULT_TYPE) -> dict | None:
         """Fetches Nintendo Switch Online price data from the specified URL."""
@@ -69,15 +68,6 @@ class NintendoSwitchPriceBot(PriceQueryService):
 
         lines = [f"📍 国家/地区: {country_flag} {country_name_cn} ({country_code.upper()})"]
 
-        # Group plans by (plan_type, duration_months) to detect Expansion Pack
-        grouped_plans = {}
-        for plan in price_info:
-            key = (plan.get("plan_type"), plan.get("duration_months"))
-            if key not in grouped_plans:
-                grouped_plans[key] = []
-            grouped_plans[key].append(plan)
-
-        # Sort plans by display order
         for plan in price_info:
             plan_type = plan.get("plan_type", "Unknown")
             duration = plan.get("duration", "Unknown")
@@ -86,21 +76,13 @@ class NintendoSwitchPriceBot(PriceQueryService):
             amount = plan.get("amount", 0)
             price_cny_total = plan.get("price_cny_total", 0)
             price_cny_per_month = plan.get("price_cny_per_month", 0)
-
-            # Check if this is Expansion Pack (more expensive duplicate)
-            key = (plan_type, duration_months)
-            is_expansion = False
-            if len(grouped_plans[key]) == 2:
-                # Two plans with same type and duration - compare prices
-                plans_in_group = sorted(grouped_plans[key], key=lambda p: p.get("amount", 0))
-                if plan == plans_in_group[1]:  # This is the more expensive one
-                    is_expansion = True
+            has_expansion_pack = plan.get("has_expansion_pack", False)
 
             # Translate to Chinese
             plan_type_cn = "个人" if plan_type == "Individual" else "家庭" if plan_type == "Family" else plan_type
 
             # Build display name
-            display_plan_type = f"{plan_type_cn}套餐 + 扩展包" if is_expansion else f"{plan_type_cn}套餐"
+            display_plan_type = f"{plan_type_cn}套餐 + 扩展包" if has_expansion_pack else f"{plan_type_cn}套餐"
 
             # Duration in Chinese
             if duration_months == 1:
@@ -131,13 +113,33 @@ class NintendoSwitchPriceBot(PriceQueryService):
             return None
 
         for plan in country_data:
-            if plan.get("plan_type") == "Individual" and plan.get("duration_months") == 12:
+            if (
+                plan.get("plan_type") == "Individual"
+                and plan.get("duration_months") == 12
+                and not plan.get("has_expansion_pack")
+            ):
                 price_cny_per_month = plan.get("price_cny_per_month")
                 if price_cny_per_month:
                     try:
                         return float(price_cny_per_month)
                     except (ValueError, TypeError):
                         continue
+        return None
+
+    def _find_plan(
+        self, country_code: str, plan_type: str, duration_months: int, has_expansion_pack: bool
+    ) -> dict | None:
+        """Finds a specific plan entry for a country from by_country data."""
+        country_plans = self.data.get("by_country", {}).get(country_code.upper())
+        if not country_plans:
+            return None
+        for plan in country_plans:
+            if (
+                plan.get("plan_type") == plan_type
+                and plan.get("duration_months") == duration_months
+                and bool(plan.get("has_expansion_pack")) == has_expansion_pack
+            ):
+                return plan
         return None
 
     async def get_top_cheapest(self, top_n: int = 10) -> str:
@@ -172,6 +174,16 @@ class NintendoSwitchPriceBot(PriceQueryService):
 
             message_lines.append(f"{rank_emoji} {country_name_cn} ({country_code}) {country_flag}")
             message_lines.append(f"💰 {original_price} ≈ ¥{price_cny_total:.2f} (¥{price_cny_per_month:.2f}/月)")
+
+            expansion_plan = self._find_plan(country_code, "Individual", 12, has_expansion_pack=True)
+            if expansion_plan:
+                exp_currency = expansion_plan.get("currency", "")
+                exp_amount = expansion_plan.get("amount", 0)
+                exp_cny_total = expansion_plan.get("price_cny_total", 0)
+                exp_cny_per_month = expansion_plan.get("price_cny_per_month", 0)
+                message_lines.append(
+                    f"🎯 +扩展包: {exp_currency} {exp_amount:.2f} ≈ ¥{exp_cny_total:.2f} (¥{exp_cny_per_month:.2f}/月)"
+                )
 
             if idx < len(cheapest_data):
                 message_lines.append("")
@@ -214,6 +226,16 @@ class NintendoSwitchPriceBot(PriceQueryService):
 
             message_lines.append(f"{rank_emoji} {country_name_cn} ({country_code}) {country_flag}")
             message_lines.append(f"💰 {original_price} ≈ ¥{price_cny_total:.2f} (¥{price_cny_per_month:.2f}/月)")
+
+            expansion_plan = self._find_plan(country_code, "Family", 12, has_expansion_pack=True)
+            if expansion_plan:
+                exp_currency = expansion_plan.get("currency", "")
+                exp_amount = expansion_plan.get("amount", 0)
+                exp_cny_total = expansion_plan.get("price_cny_total", 0)
+                exp_cny_per_month = expansion_plan.get("price_cny_per_month", 0)
+                message_lines.append(
+                    f"🎯 +扩展包: {exp_currency} {exp_amount:.2f} ≈ ¥{exp_cny_total:.2f} (¥{exp_cny_per_month:.2f}/月)"
+                )
 
             if idx < len(cheapest_data):
                 message_lines.append("")
