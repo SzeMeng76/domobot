@@ -62,7 +62,7 @@ feedparser==6.0.14
 googletrans==4.0.2
 
 # Yahoo Finance API
-yfinance==1.5.2  # 最新版本
+yfinance[repair]==1.6.0  # 最新版本，repair extra 启用价格异常修复（scipy>=1.6.3）
 pandas==3.0.5
 
 # Social Media Parser (ParseHub) - 社交媒体解析功能
