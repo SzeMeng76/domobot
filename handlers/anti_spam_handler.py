@@ -4,6 +4,7 @@ AI反垃圾消息处理器
 """
 import logging
 import asyncio
+import re
 import time
 from datetime import datetime
 from telegram import Update, ChatMember
@@ -11,6 +12,12 @@ from telegram.ext import ContextTypes
 from telegram.constants import ChatMemberStatus
 
 logger = logging.getLogger(__name__)
+
+# 消息整体（去除首尾空白后）只是一个或多个 @bot 用户名，没有任何其他文字。
+# Telegram bot 用户名规则：以字母开头、5-32位、必须以 bot 结尾（大小写不限）。
+# 正常人 @自己的 bot 测试功能时一定会附带指令/问题；只有诱导 guest bot 自动回复广告
+# 的钓鱼消息才会通篇只有一个光秃秃的 @xxxbot。
+_BARE_BOT_MENTION_RE = re.compile(r'^@[A-Za-z][A-Za-z0-9_]{3,30}bot$', re.IGNORECASE)
 
 # TTL缓存：追踪最近消息，用于删除触发 guest bot 的 @mention 消息
 # key: (chat_id, user_id) -> (message_id, timestamp)
@@ -263,6 +270,102 @@ class AntiSpamHandler:
         logger.debug(f"Long reply ({text_len} chars) to linked channel, will check")
         return False
 
+    def _is_bare_bot_mention(self, text: str) -> bool:
+        """
+        判断消息是否只有一个/多个 @bot 用户名，没有任何其他文字内容。
+
+        典型钓鱼手法：发一条只有 "@xxxBOT" 的消息去触发该 bot 的 guest bot
+        自动回复广告，消息本身不含任何广告关键词，绕过 AI 语义检测。
+        正常用户 @自己的或群里的 bot 时几乎一定会附带指令/问题，不会只留一个用户名。
+        """
+        if not text:
+            return False
+        tokens = text.split()
+        if not tokens:
+            return False
+        return all(_BARE_BOT_MENTION_RE.match(t) for t in tokens)
+
+    async def _take_spam_action(self, context: ContextTypes.DEFAULT_TYPE, group_id: int,
+                                user_id: int, username: str, message,
+                                message_type: str, message_text: str,
+                                spam_score: int, spam_reason: str, spam_mock_text: str,
+                                detection_time_ms: int = 0):
+        """
+        对判定为垃圾的消息执行统一处理：记录日志、更新统计、删除消息、封禁用户、发送通知。
+        供 AI 检测（_detect_and_process）和确定性规则（如纯 @bot 消息）共用。
+        """
+        await self.manager.log_detection(
+            user_id, group_id, username, message_type, message_text or '',
+            spam_score, spam_reason, spam_mock_text, True, True, detection_time_ms
+        )
+        await self.manager.update_stats(group_id, spam_detected=True, user_banned=True)
+
+        # 删除原始消息
+        message_deleted = False
+        try:
+            await message.delete()
+            message_deleted = True
+            logger.info(f"Deleted spam message from user {user_id} in group {group_id}")
+        except Exception as e:
+            logger.error(f"Failed to delete message: {e}")
+
+        # 尝试封禁用户
+        user_banned = False
+        try:
+            await context.bot.ban_chat_member(group_id, user_id)
+            user_banned = True
+            logger.info(f"Banned user {user_id} in group {group_id}")
+        except Exception as e:
+            logger.warning(f"Failed to ban user {user_id}: {e} (bot may lack ban permission)")
+
+        if not user_banned and not message_deleted:
+            logger.error(f"Failed to take any action against spam from user {user_id}")
+            return
+
+        if user_banned:
+            notification_text = (
+                f"🚫 检测到垃圾广告并已封禁\n\n"
+                f"👤 用户: {username}\n"
+                f"📊 垃圾分数: {spam_score}/100\n"
+                f"📝 原因: {spam_reason}\n"
+                f"💬 评论: {spam_mock_text}"
+            )
+        else:
+            notification_text = (
+                f"⚠️ 检测到垃圾广告，已删除消息\n\n"
+                f"👤 用户: {username}\n"
+                f"📊 垃圾分数: {spam_score}/100\n"
+                f"📝 原因: {spam_reason}\n"
+                f"💬 评论: {spam_mock_text}\n\n"
+                f"❌ 无法封禁用户（可能缺少封禁权限）\n"
+                f"💡 请给予机器人封禁权限以完整保护群组"
+            )
+
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+        reply_markup = None
+        if user_banned:
+            keyboard = [[
+                InlineKeyboardButton(
+                    "✅ 解禁此用户",
+                    callback_data=f"antispam_unban:{user_id}"
+                )
+            ]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+        notification = await context.bot.send_message(
+            chat_id=group_id,
+            text=notification_text,
+            reply_markup=reply_markup
+        )
+
+        config = await self.manager.get_group_config(group_id) or {}
+        auto_delete_delay = config.get('auto_delete_delay', 120)
+        await asyncio.sleep(auto_delete_delay)
+        try:
+            await notification.delete()
+        except Exception as e:
+            logger.error(f"Failed to delete notification: {e}")
+
     async def handle_new_member(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """处理新成员加入"""
         try:
@@ -406,6 +509,24 @@ class AntiSpamHandler:
 
             # 跳过管理员消息
             if await self.is_admin(update, context):
+                return
+
+            # 纯 @bot 用户名消息（无其他任何文字）：确定性规则，直接判垃圾并处理，
+            # 不进 should_check_user 的老用户/已验证豁免，也不需要 AI 语义判断。
+            # 原因见 _is_bare_bot_mention 的说明。
+            if message and message.text and self._is_bare_bot_mention(message.text):
+                username = update.effective_user.username or update.effective_user.first_name
+                logger.info(
+                    f"Bare bot mention detected from user {user_id} in group {group_id}: "
+                    f"{message.text!r}"
+                )
+                await self._take_spam_action(
+                    context, group_id, user_id, username, message,
+                    message_type='text', message_text=message.text,
+                    spam_score=100,
+                    spam_reason="消息只有 @bot 用户名，没有任何其他内容，典型的诱导 bot 自动回复广告的钓鱼手法",
+                    spam_mock_text="就一个用户名，话都不会说，先出去冷静冷静。"
+                )
                 return
 
             # 回复关联频道消息的特殊处理
@@ -569,104 +690,33 @@ class AntiSpamHandler:
                 logger.error("Detection failed, skipping")
                 return
 
-            # 记录日志
-            await self.manager.log_detection(
-                user_id, group_id, username, message_type, message_text or '',
-                detection_result.spam_score, detection_result.spam_reason,
-                detection_result.spam_mock_text, detection_result.is_spam,
-                detection_result.is_spam, detection_time_ms
-            )
-
-            # 更新统计
-            await self.manager.update_stats(
-                group_id,
-                spam_detected=detection_result.is_spam,
-                user_banned=detection_result.is_spam
-            )
-
             # 如果不是垃圾，标记用户已验证
             if not detection_result.is_spam:
                 await self.manager.mark_user_verified(user_id, group_id)
                 logger.info(f"User {user_id} passed verification")
                 return
 
-            # 是垃圾，执行处理
+            # 是垃圾，判断是否达到处理阈值
             spam_score = detection_result.spam_score
             threshold = config.get('spam_score_threshold', 80)
 
             if spam_score >= threshold:
-                # 删除原始消息
-                message_deleted = False
-                try:
-                    await message.delete()
-                    message_deleted = True
-                    logger.info(f"Deleted spam message from user {user_id} in group {group_id}")
-                except Exception as e:
-                    logger.error(f"Failed to delete message: {e}")
-
-                # 尝试封禁用户
-                user_banned = False
-                ban_error_msg = None
-                try:
-                    await context.bot.ban_chat_member(group_id, user_id)
-                    user_banned = True
-                    logger.info(f"Banned user {user_id} in group {group_id}")
-                except Exception as e:
-                    ban_error_msg = str(e)
-                    logger.warning(f"Failed to ban user {user_id}: {e} (bot may lack ban permission)")
-
-                # 发送通知消息
-                if user_banned:
-                    notification_text = (
-                        f"🚫 检测到垃圾广告并已封禁\n\n"
-                        f"👤 用户: {username}\n"
-                        f"📊 垃圾分数: {spam_score}/100\n"
-                        f"📝 原因: {detection_result.spam_reason}\n"
-                        f"💬 评论: {detection_result.spam_mock_text}\n"
-                        f"⏱️ 检测耗时: {detection_time_ms}ms"
-                    )
-                elif message_deleted:
-                    notification_text = (
-                        f"⚠️ 检测到垃圾广告，已删除消息\n\n"
-                        f"👤 用户: {username}\n"
-                        f"📊 垃圾分数: {spam_score}/100\n"
-                        f"📝 原因: {detection_result.spam_reason}\n"
-                        f"💬 评论: {detection_result.spam_mock_text}\n"
-                        f"⏱️ 检测耗时: {detection_time_ms}ms\n\n"
-                        f"❌ 无法封禁用户（可能缺少封禁权限）\n"
-                        f"💡 请给予机器人封禁权限以完整保护群组"
-                    )
-                else:
-                    # 既无法删除消息也无法封禁，只记录日志不发通知
-                    logger.error(f"Failed to take any action against spam from user {user_id}")
-                    return
-
-                # 创建按钮（只在成功封禁时显示解禁按钮）
-                from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-                reply_markup = None
-                if user_banned:
-                    keyboard = [[
-                        InlineKeyboardButton(
-                            "✅ 解禁此用户",
-                            callback_data=f"antispam_unban:{user_id}"
-                        )
-                    ]]
-                    reply_markup = InlineKeyboardMarkup(keyboard)
-
-                # 发送通知
-                notification = await context.bot.send_message(
-                    chat_id=group_id,
-                    text=notification_text,
-                    reply_markup=reply_markup
+                await self._take_spam_action(
+                    context, group_id, user_id, username, message,
+                    message_type=message_type, message_text=message_text,
+                    spam_score=spam_score,
+                    spam_reason=detection_result.spam_reason,
+                    spam_mock_text=detection_result.spam_mock_text,
+                    detection_time_ms=detection_time_ms
                 )
-
-                # 设置自动删除
-                auto_delete_delay = config.get('auto_delete_delay', 120)
-                await asyncio.sleep(auto_delete_delay)
-                try:
-                    await notification.delete()
-                except Exception as e:
-                    logger.error(f"Failed to delete notification: {e}")
+            else:
+                # 未达阈值，只记录日志和统计，不处理
+                await self.manager.log_detection(
+                    user_id, group_id, username, message_type, message_text or '',
+                    spam_score, detection_result.spam_reason,
+                    detection_result.spam_mock_text, True, False, detection_time_ms
+                )
+                await self.manager.update_stats(group_id, spam_detected=True, user_banned=False)
 
         except Exception as e:
             logger.error(f"Failed in _detect_and_process: {e}")
