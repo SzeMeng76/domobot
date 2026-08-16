@@ -177,9 +177,6 @@ class AntiSpamManager:
 
     async def should_check_user(self, user_info: Dict, config: Dict) -> bool:
         """判断是否需要对用户进行AI检测"""
-        if user_info.get('is_verified'):
-            return False
-
         joined_time = user_info.get('joined_time')
         if not joined_time:
             return True
@@ -188,7 +185,11 @@ class AntiSpamManager:
         speech_count = user_info.get('number_of_speeches', 0)
         verification_times = user_info.get('verification_times', 0)
 
-        # 根据配置判断是否需要检测
+        # 根据配置判断是否需要检测：入群天数、发言次数、验证次数三个门槛任一未达标都继续检测。
+        # 注意：不能只看 is_verified —— 它在通过任意一次检测后就会被置为 True，
+        # 若把它当成独立的永久放行条件，账号只需先发一条无害消息骗过一次检测，
+        # 之后发任何广告都会被直接跳过（连 AI 都不会看）。verification_times 才是
+        # 「已通过验证的次数」，必须叠加天数+发言数一起达标才允许免检。
         if days_since_join < config.get('joined_time_threshold', 3):
             return True
         if speech_count < config.get('speech_count_threshold', 3):
