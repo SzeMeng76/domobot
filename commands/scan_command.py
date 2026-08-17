@@ -985,7 +985,7 @@ async def _handle_ip_query_with_ipdata(update: Update, context: ContextTypes.DEF
         result_text += f"• ASN: {asn}\n"
 
     if asn_type:
-        result_text += f"• 类型: {asn_type.upper()}\n"
+        result_text += f"• 类型: {escape_markdown(asn_type.upper())}\n"
 
     # 添加 AbuseIPDB 的滥用报告（补充信息）
     if abuseipdb_data:
