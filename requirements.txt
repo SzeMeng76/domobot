@@ -6,18 +6,18 @@ kurigram>=2.2.24
 tgcrypto>=1.2.5  # Speeds up Kurigram
 
 # Environment Configuration
-python-dotenv>=1.2.2  # ParseHub requires >=1.0.1
+python-dotenv>=1.2.3  # ParseHub requires >=1.0.1
 
 # HTTP Requests
 httpx==0.28.1
 brotli==1.2.0  # Required for Brotli decompression (App Store uses br encoding)
 
 # OpenAI API (for AI Anti-Spam)
-openai==3.0.0
+openai==3.3.1
 
 # Web Scraping
 beautifulsoup4>=4.15.0  # ParseHub requires >=4.12.3, yfinance requires >=4.11.1
-lxml>=6.1.1  # 6.x兼容确认: html.clean已拆分, 由 lxml-html-clean 提供向后兼容shim; 6.1.1修复安全漏洞
+lxml>=6.1.2  # 6.x兼容确认: html.clean已拆分, 由 lxml-html-clean 提供向后兼容shim; 6.1.1修复安全漏洞
 
 # Google Play Scraper
 google-play-scraper==1.2.7
@@ -69,7 +69,7 @@ pandas==3.0.5
 parsehub~=2.1.11  # 社交媒体聚合解析器，支持20+平台 (2.1.11: 升级yt-dlp依赖到2026.8.18开发版)
 cryptography>=50.0.0  # ParseHub依赖：用于小黑盒动态加密算法（RSA/AES/3DES）
 SignerPy>=0.12.0  # ParseHub依赖：抖音日常/Story移动端API签名
-yt-dlp>=2026.8.18.122307.dev0   # 2026.8.18: 最新dev版，与ParseHub 2.1.11保持一致
+yt-dlp>=2026.8.19   # 2026.8.19: 最新稳定版
 pytubefix>=10.11.0  # YouTube 下载库
 ytmusicapi>=1.12.2  # YouTube Music API（搜索、排行榜、歌词）1.12.2: 最新稳定版
 pillow>=12.3.0  # 图像处理库 (12.3.0: security fixes, WebP improvements)
