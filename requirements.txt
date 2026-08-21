@@ -2,7 +2,7 @@
 python-telegram-bot[all]==22.8
 
 # Kurigram (actively maintained Pyrogram fork, for MTProto API: DC ID detection, large file upload, inline media edit)
-kurigram>=2.2.24
+kurigram>=2.2.25
 tgcrypto>=1.2.5  # Speeds up Kurigram
 
 # Environment Configuration
@@ -66,7 +66,7 @@ yfinance[repair]==1.6.0  # 最新版本，repair extra 启用价格异常修复�
 pandas==3.0.5
 
 # Social Media Parser (ParseHub) - 社交媒体解析功能
-parsehub~=2.1.11  # 社交媒体聚合解析器，支持20+平台 (2.1.11: 升级yt-dlp依赖到2026.8.18开发版)
+parsehub~=2.2.0  # 社交媒体聚合解析器，支持20+平台 (2.2.0: 新增豆瓣话题解析器)
 cryptography>=50.0.0  # ParseHub依赖：用于小黑盒动态加密算法（RSA/AES/3DES）
 SignerPy>=0.12.0  # ParseHub依赖：抖音日常/Story移动端API签名
 yt-dlp>=2026.8.19   # 2026.8.19: 最新稳定版

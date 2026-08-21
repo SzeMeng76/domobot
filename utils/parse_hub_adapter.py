@@ -19,7 +19,7 @@ from utils.parsehub_patch import patch_parsehub_yt_dlp
 patch_parsehub_yt_dlp()
 
 from parsehub import ParseHub
-from parsehub.types import ParseResult, VideoParseResult, ImageParseResult, MultimediaParseResult
+from parsehub.types import ParseResult, VideoParseResult, ImageParseResult, MultimediaParseResult, RichTextParseResult
 from parsehub.utils.helpers import UA
 
 logger = logging.getLogger(__name__)
@@ -815,6 +815,8 @@ class ParseHubAdapter:
             return "image"
         elif isinstance(result, MultimediaParseResult):
             return "multimedia"
+        elif isinstance(result, RichTextParseResult):
+            return "richtext"
         else:
             return "unknown"
 
