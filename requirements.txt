@@ -13,7 +13,7 @@ httpx==0.28.1
 brotli==1.2.0  # Required for Brotli decompression (App Store uses br encoding)
 
 # OpenAI API (for AI Anti-Spam)
-openai==3.3.1
+openai==3.6.0
 
 # Web Scraping
 beautifulsoup4>=4.15.0  # ParseHub requires >=4.12.3, yfinance requires >=4.11.1
@@ -66,14 +66,15 @@ yfinance[repair]==1.6.0  # 最新版本，repair extra 启用价格异常修复�
 pandas==3.0.5
 
 # Social Media Parser (ParseHub) - 社交媒体解析功能
-parsehub~=2.2.0  # 社交媒体聚合解析器，支持20+平台 (2.2.0: 新增豆瓣话题解析器)
-cryptography>=50.0.0  # ParseHub依赖：用于小黑盒动态加密算法（RSA/AES/3DES）
+parsehub~=2.2.1  # 社交媒体聚合解析器，支持20+平台 (2.2.1: xhs 重定向异常处理完善, 豆瓣图集/富文本分支, httpx[socks] 依赖)
+socksio>=1.0.0  # httpx SOCKS5 代理支持 (parsehub 2.2.1+ 依赖 httpx[socks])
+cryptography>=50.0.1  # ParseHub依赖：用于小黑盒动态加密算法（RSA/AES/3DES）
 SignerPy>=0.12.0  # ParseHub依赖：抖音日常/Story移动端API签名
 yt-dlp>=2026.8.19   # 2026.8.19: 最新稳定版
 pytubefix>=10.11.0  # YouTube 下载库
 ytmusicapi>=1.12.2  # YouTube Music API（搜索、排行榜、歌词）1.12.2: 最新稳定版
 pillow>=12.3.0  # 图像处理库 (12.3.0: security fixes, WebP improvements)
-pillow-heif>=1.5.0  # HEIF/HEIC 图片格式支持
+pillow-heif>=1.6.0  # HEIF/HEIC 图片格式支持
 lxml-html-clean>=0.4.5  # HTML 清理工具
 markdown>=3.10.3  # Markdown 转换器
 pyyaml>=6.0.3  # YAML配置文件解析

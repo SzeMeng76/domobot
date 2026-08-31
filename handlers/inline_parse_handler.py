@@ -1000,6 +1000,10 @@ async def _handle_richtext_inline(
             md_content = md_content.replace("mmbiz.qpic.cn", "qpic.cn.in/mmbiz.qpic.cn")
         elif parse_result.platform.id == 'coolapk':
             md_content = md_content.replace("image.coolapk.com", "qpic.cn.in/image.coolapk.com")
+        elif parse_result.platform.id == 'douban':
+            # 豆瓣图片分片域名 img1~imgN.doubanio.com
+            import re
+            md_content = re.sub(r"img\d+\.doubanio\.com", r"qpic.cn.in/\g<0>", md_content)
 
         html_content = markdown(md_content)
 

@@ -1242,7 +1242,12 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
                 logger.info(f"检测到{source_label}，自动发布到Telegraph")
                 if parse_result.markdown_content:
                     from markdown import markdown
-                    html_content = markdown(parse_result.markdown_content.replace("mmbiz.qpic.cn", "qpic.cn.in/mmbiz.qpic.cn"))
+                    import re
+                    md_content = parse_result.markdown_content.replace("mmbiz.qpic.cn", "qpic.cn.in/mmbiz.qpic.cn")
+                    # 豆瓣图片分片域名 img1~imgN.doubanio.com
+                    if 'douban' in raw_url:
+                        md_content = re.sub(r"img\d+\.doubanio\.com", r"qpic.cn.in/\g<0>", md_content)
+                    html_content = markdown(md_content)
                     html_content = clean_article_html(html_content)  # 清理 HTML
                     telegraph_url = await _adapter.publish_to_telegraph(parse_result, html_content)
 
