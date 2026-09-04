@@ -23,6 +23,7 @@ class BotConfig:
 
         self.cmc_api_key: str = ""
         self.bin_api_key: str = ""
+        self.bincheck_rapidapi_keys: list = []  # 支持多个 API Key 轮询
         self.abuseipdb_api_keys: list = []  # 支持多个 API Key 轮询
         self.ipdata_api_keys: list = []  # ipdata.co API Keys 轮询
 
@@ -542,6 +543,8 @@ class ConfigManager:
 
         self.config.cmc_api_key = os.getenv("CMC_API_KEY", "")
         self.config.bin_api_key = os.getenv("BIN_API_KEY", "")
+        bincheck_keys_str = os.getenv("BINCHECK_RAPIDAPI_KEYS", "")
+        self.config.bincheck_rapidapi_keys = [key.strip() for key in bincheck_keys_str.split(",") if key.strip()]
         # AbuseIPDB API Keys（支持多个，逗号分隔）
         abuseipdb_keys_str = os.getenv("ABUSEIPDB_API_KEYS", os.getenv("ABUSEIPDB_API_KEY", ""))
         self.config.abuseipdb_api_keys = [key.strip() for key in abuseipdb_keys_str.split(",") if key.strip()]

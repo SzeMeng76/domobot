@@ -1,5 +1,4 @@
 import logging
-import json
 from typing import Optional, Dict
 
 from telegram import Update
@@ -16,6 +15,7 @@ from utils.message_manager import send_message_with_auto_delete, delete_user_com
 # 全局变量
 cache_manager = None
 httpx_client = None
+_bincheck_key_index = 0  # Bincheck RapidAPI Key 轮询索引
 
 def set_dependencies(c_manager, h_client):
     global cache_manager, httpx_client
@@ -24,6 +24,8 @@ def set_dependencies(c_manager, h_client):
 
 # BIN查询API配置
 BIN_API_URL = "https://api.dy.ax/v1/finance/bin"
+BINCHECK_RAPIDAPI_URL = "https://fraud-signals-bin-ip-email-phone-sanctions-risk-api.p.rapidapi.com/bin-lookup"
+BINLIST_URL = "https://lookup.binlist.net"
 COUNTRY_DATA_URL = "https://cdn.jsdelivr.net/gh/umpirsky/country-list@master/data/zh_CN/country.json"
 CURRENCY_DATA_URL = "https://cdn.jsdelivr.net/gh/umpirsky/currency-list@master/data/zh_CN/currency.json"
 
@@ -82,8 +84,93 @@ async def get_currency_data() -> Dict:
         logging.error(f"获取货币数据异常: {e}")
     return {}
 
+async def get_bin_info_from_bincheck(bin_number: str) -> Optional[Dict]:
+    """从Bincheck RapidAPI获取BIN信息，多Key轮询"""
+    global _bincheck_key_index
+    config = get_config()
+    if not config.bincheck_rapidapi_keys:
+        logging.debug("Bincheck RapidAPI Keys 未配置，跳过")
+        return None
+    try:
+        api_key = config.bincheck_rapidapi_keys[_bincheck_key_index % len(config.bincheck_rapidapi_keys)]
+        _bincheck_key_index += 1
+        headers = {
+            "Content-Type": "application/json",
+            "x-rapidapi-host": "fraud-signals-bin-ip-email-phone-sanctions-risk-api.p.rapidapi.com",
+            "x-rapidapi-key": api_key,
+        }
+        response = await httpx_client.get(
+            BINCHECK_RAPIDAPI_URL,
+            headers=headers,
+            params={"bin": bin_number},
+            timeout=10,
+        )
+        if response.status_code == 200:
+            data = response.json()
+            bin_info = data.get("BIN", {})
+            if not bin_info or not data.get("success"):
+                logging.warning(f"Bincheck RapidAPI 返回空数据: {data}")
+                return None
+            country = bin_info.get("country", {})
+            issuer = bin_info.get("issuer", {})
+            converted = {
+                "data": {
+                    "card_brand": bin_info.get("scheme", ""),
+                    "card_type": bin_info.get("type", ""),
+                    "card_category": bin_info.get("level", ""),
+                    "country": country.get("name", ""),
+                    "country_code": country.get("alpha2", ""),
+                    "currency_code": country.get("currency", ""),
+                    "issuer": issuer.get("name", ""),
+                    "is_prepaid": bin_info.get("is_prepaid") == "true",
+                    "is_commercial": bin_info.get("is_commercial") == "true",
+                },
+                "source": "bincheck"
+            }
+            return converted
+        elif response.status_code == 429:
+            logging.warning("Bincheck RapidAPI 请求频率超限")
+        else:
+            logging.warning(f"Bincheck RapidAPI 请求失败: HTTP {response.status_code}")
+    except Exception as e:
+        logging.error(f"Bincheck RapidAPI 请求异常: {e}")
+    return None
+
+async def get_bin_info_from_binlist(bin_number: str) -> Optional[Dict]:
+    """从Binlist API获取BIN信息"""
+    try:
+        headers = {"Accept-Version": "3"}
+        response = await httpx_client.get(f"{BINLIST_URL}/{bin_number}", headers=headers, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            # 转换为统一格式
+            converted = {
+                "data": {
+                    "card_brand": (data.get("scheme", "") or data.get("brand", "")).upper(),
+                    "card_type": (data.get("type", "")).upper(),
+                    "card_category": data.get("brand", ""),
+                    "country": data.get("country", {}).get("name", ""),
+                    "country_code": data.get("country", {}).get("alpha2", ""),
+                    "currency_code": data.get("country", {}).get("currency", ""),
+                    "issuer": data.get("bank", {}).get("name", ""),
+                    "is_prepaid": data.get("prepaid"),
+                    "is_commercial": "BUSINESS" in (data.get("brand", "") or "").upper() or "CORPORATE" in (data.get("brand", "") or "").upper(),
+                },
+                "source": "binlist"
+            }
+            return converted
+        elif response.status_code == 404:
+            logging.warning(f"Binlist未找到BIN: {bin_number}")
+        elif response.status_code == 429:
+            logging.warning(f"Binlist请求频率超限")
+        else:
+            logging.warning(f"Binlist请求失败: HTTP {response.status_code}")
+    except Exception as e:
+        logging.error(f"Binlist请求异常: {e}")
+    return None
+
 async def get_bin_info(bin_number: str) -> Optional[Dict]:
-    """从API获取BIN信息，并缓存结果"""
+    """从API获取BIN信息，并缓存结果。优先级: DY API > Bincheck > Binlist"""
     cache_key = f"bin_{bin_number}"
     cached_data = await cache_manager.load_cache(cache_key, subdirectory="bin")
     if cached_data:
@@ -91,41 +178,57 @@ async def get_bin_info(bin_number: str) -> Optional[Dict]:
         return cached_data
 
     config = get_config()
-    if not config.bin_api_key:
-        logging.error("BIN API Key 未配置")
-        return None
 
-    headers = {"Accept": "application/json"}
-    params = {"number": bin_number, "apiKey": config.bin_api_key}
+    # 1. 优先尝试DY API（如果配置了key）
+    if config.bin_api_key:
+        headers = {"Accept": "application/json"}
+        params = {"number": bin_number, "apiKey": config.bin_api_key}
 
-    try:
-        response = await httpx_client.get(BIN_API_URL, headers=headers, params=params, timeout=20)
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("data"):
-                await cache_manager.save_cache(cache_key, data, subdirectory="bin")
-                return data
+        try:
+            response = await httpx_client.get(BIN_API_URL, headers=headers, params=params, timeout=20)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("data"):
+                    data["source"] = "dy"
+                    await cache_manager.save_cache(cache_key, data, subdirectory="bin")
+                    return data
+                else:
+                    logging.warning(f"DY API 返回空数据: {data}")
+            elif response.status_code == 400:
+                logging.warning(f"DY API 请求参数错误: {bin_number}, response: {response.text}")
+            elif response.status_code == 401:
+                logging.warning(f"DY API 认证失败, response: {response.text}")
+            elif response.status_code == 429:
+                logging.warning(f"DY API 请求频率超限, response: {response.text}")
             else:
-                logging.warning(f"BIN API 返回空数据: {data}")
-        elif response.status_code == 400:
-            logging.warning(f"BIN API 请求参数错误: {bin_number}, response: {response.text}")
-        elif response.status_code == 401:
-            logging.warning(f"BIN API 认证失败, response: {response.text}")
-        elif response.status_code == 429:
-            logging.warning(f"BIN API 请求频率超限, response: {response.text}")
-        else:
-            logging.warning(f"BIN API 请求失败: HTTP {response.status_code}, response: {response.text}")
-    except Exception as e:
-        logging.error(f"BIN API 请求异常: {e}")
+                logging.warning(f"DY API 请求失败: HTTP {response.status_code}, response: {response.text}")
+        except Exception as e:
+            logging.error(f"DY API 请求异常: {e}")
+
+    # 2. Fallback 到 Bincheck
+    logging.info(f"尝试使用 Bincheck 查询BIN: {bin_number}")
+    bincheck_data = await get_bin_info_from_bincheck(bin_number)
+    if bincheck_data:
+        await cache_manager.save_cache(cache_key, bincheck_data, subdirectory="bin")
+        return bincheck_data
+
+    # 3. 最后 Fallback 到 Binlist
+    logging.info(f"尝试使用 Binlist 查询BIN: {bin_number}")
+    binlist_data = await get_bin_info_from_binlist(bin_number)
+    if binlist_data:
+        await cache_manager.save_cache(cache_key, binlist_data, subdirectory="bin")
+        return binlist_data
+
     return None
 
 def format_bin_data(bin_number: str, data: Dict, country_data: Dict, currency_data: Dict) -> str:
     """格式化BIN数据"""
     bin_data = data.get("data", {})
+    source = data.get("source", "dy")
     safe_bin = escape_markdown(bin_number, version=2)
-    
+
     lines = [f"🔢 *BIN卡头: {safe_bin}*"]
-    
+
     # 卡片品牌
     brand = bin_data.get("card_brand", "")
     if brand in BINMapping.brand:
@@ -133,7 +236,7 @@ def format_bin_data(bin_number: str, data: Dict, country_data: Dict, currency_da
     if brand:
         safe_brand = escape_markdown(brand, version=2)
         lines.append(f"💳 品牌: `{safe_brand}`")
-    
+
     # 卡片类型
     card_type = bin_data.get("card_type", "")
     if card_type in BINMapping.card_type:
@@ -141,15 +244,15 @@ def format_bin_data(bin_number: str, data: Dict, country_data: Dict, currency_da
     if card_type:
         safe_type = escape_markdown(card_type, version=2)
         lines.append(f"🔖 类型: `{safe_type}`")
-    
+
     # 卡片等级
     category = bin_data.get("card_category", "")
     if category:
         safe_category = escape_markdown(category, version=2)
         lines.append(f"💹 等级: `{safe_category}`")
-    
+
     lines.append("")  # 空行分隔
-    
+
     # 国家信息
     country = bin_data.get("country", "")
     country_code = bin_data.get("country_code", "")
@@ -158,7 +261,7 @@ def format_bin_data(bin_number: str, data: Dict, country_data: Dict, currency_da
     if country:
         safe_country = escape_markdown(country, version=2)
         lines.append(f"🗺 国家: `{safe_country}`")
-    
+
     # 货币信息
     currency_code = bin_data.get("currency_code", "")
     if currency_code:
@@ -167,29 +270,31 @@ def format_bin_data(bin_number: str, data: Dict, country_data: Dict, currency_da
             currency_name = currency_data[currency_code]
         safe_currency = escape_markdown(currency_name, version=2)
         lines.append(f"💸 货币: `{safe_currency}`")
-    
+
     # 发卡银行
     issuer = bin_data.get("issuer", "")
     if issuer:
         safe_issuer = escape_markdown(issuer, version=2)
         lines.append(f"🏦 银行: `{safe_issuer}`")
-    
+
     lines.append("")  # 空行分隔
-    
+
     # 预付卡信息
     is_prepaid = bin_data.get("is_prepaid")
     if is_prepaid is not None:
         prepaid_status = "✓" if is_prepaid else "×"
         lines.append(f"💰 预付卡: `{prepaid_status}`")
-    
+
     # 商业卡信息
     is_commercial = bin_data.get("is_commercial")
     if is_commercial is not None:
         commercial_status = "✓" if is_commercial else "×"
         lines.append(f"🧾 商业卡: `{commercial_status}`")
-    
-    lines.append("\n_数据来源: DY API_")
-    
+
+    # 数据来源
+    source_text = {"dy": "DY API", "bincheck": "Bincheck", "binlist": "Binlist"}.get(source, "未知")
+    lines.append(f"\n_数据来源: {source_text}_")
+
     return "\n".join(lines)
 
 async def bin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -239,11 +344,7 @@ async def bin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if bin_data:
         result_text = format_bin_data(bin_number, bin_data, country_data, currency_data)
     else:
-        config = get_config()
-        if not config.bin_api_key:
-            result_text = f"❌ BIN API Key 未配置，请联系管理员。"
-        else:
-            result_text = f"❌ 无法获取BIN *{safe_bin}* 的信息，请检查号码是否正确或稍后重试。"
+        result_text = f"❌ 无法获取BIN *{safe_bin}* 的信息，请检查号码是否正确或稍后重试。"
 
     await message.edit_text(
         foldable_text_with_markdown_v2(result_text),
@@ -357,21 +458,12 @@ async def bin_inline_execute(args: str) -> dict:
         currency_data = await get_currency_data()
 
         if not bin_data:
-            config = get_config()
-            if not config.bin_api_key:
-                return {
-                    "success": False,
-                    "title": "❌ API未配置",
-                    "message": "BIN API Key 未配置，请联系管理员",
-                    "description": "BIN API未配置",
-                    "error": "API Key 未配置"
-                }
             return {
                 "success": False,
                 "title": f"❌ 未找到 {bin_number}",
                 "message": f"无法获取BIN *{escape_markdown(bin_number, version=2)}* 的信息\n\n请检查号码是否正确",
                 "description": f"未找到BIN {bin_number} 的信息",
-                "error": "API 返回空数据"
+                "error": "所有API均返回空数据"
             }
 
         # 格式化结果
