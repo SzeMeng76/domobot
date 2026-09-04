@@ -38,10 +38,34 @@ class BINMapping:
         'CHINA UNION PAY': '银联',
         'CHINA UNION': '银联',
     }
-    
+
     card_type = {
         'CREDIT': '贷记',
         'DEBIT': '借记',
+        'PREPAID': '预付',
+        'CHARGE': '签账',
+    }
+
+    card_category = {
+        'CLASSIC': 'Classic',
+        'GOLD': '金卡',
+        'PLATINUM': '白金',
+        'SIGNATURE': 'Signature',
+        'INFINITE': 'Infinite',
+        'WORLD': 'World',
+        'STANDARD': '标准',
+        'BUSINESS': '商务',
+        'CORPORATE': '企业',
+        'PREMIUM': '尊享',
+        'VISA CLASSIC': 'Visa Classic',
+        'VISA GOLD': 'Visa 金卡',
+        'VISA PLATINUM': 'Visa 白金',
+        'VISA SIGNATURE': 'Visa Signature',
+        'VISA INFINITE': 'Visa Infinite',
+        'MASTERCARD STANDARD': 'Mastercard 标准',
+        'MASTERCARD GOLD': 'Mastercard 金卡',
+        'MASTERCARD PLATINUM': 'Mastercard 白金',
+        'MASTERCARD WORLD': 'Mastercard World',
     }
 
 async def get_country_data() -> Dict:
@@ -238,7 +262,7 @@ def format_bin_data(bin_number: str, data: Dict, country_data: Dict, currency_da
         lines.append(f"💳 品牌: `{safe_brand}`")
 
     # 卡片类型
-    card_type = bin_data.get("card_type", "")
+    card_type = bin_data.get("card_type", "").upper()
     if card_type in BINMapping.card_type:
         card_type = BINMapping.card_type[card_type]
     if card_type:
@@ -247,6 +271,9 @@ def format_bin_data(bin_number: str, data: Dict, country_data: Dict, currency_da
 
     # 卡片等级
     category = bin_data.get("card_category", "")
+    category_upper = category.upper()
+    if category_upper in BINMapping.card_category:
+        category = BINMapping.card_category[category_upper]
     if category:
         safe_category = escape_markdown(category, version=2)
         lines.append(f"💹 等级: `{safe_category}`")
