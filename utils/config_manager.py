@@ -543,7 +543,7 @@ class ConfigManager:
 
         self.config.cmc_api_key = os.getenv("CMC_API_KEY", "")
         self.config.bin_api_key = os.getenv("BIN_API_KEY", "")
-        bincheck_keys_str = os.getenv("BINCHECK_RAPIDAPI_KEYS", "")
+        bincheck_keys_str = os.getenv("BINCHECK_RAPIDAPI_KEYS", "") or os.getenv("BINCHECK_RAPIDAPI_KEY", "")
         self.config.bincheck_rapidapi_keys = [key.strip() for key in bincheck_keys_str.split(",") if key.strip()]
         # AbuseIPDB API Keys（支持多个，逗号分隔）
         abuseipdb_keys_str = os.getenv("ABUSEIPDB_API_KEYS", os.getenv("ABUSEIPDB_API_KEY", ""))
