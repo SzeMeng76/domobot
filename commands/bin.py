@@ -185,7 +185,7 @@ async def get_bin_info(bin_number: str) -> Optional[Dict]:
         params = {"number": bin_number, "apiKey": config.bin_api_key}
 
         try:
-            response = await httpx_client.get(BIN_API_URL, headers=headers, params=params, timeout=20)
+            response = await httpx_client.get(BIN_API_URL, headers=headers, params=params, timeout=8)
             if response.status_code == 200:
                 data = response.json()
                 if data.get("data"):
