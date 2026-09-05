@@ -218,10 +218,12 @@ class AppStoreWebAPI:
                     seen_ids.add(app_id)
 
                     # 提取应用名称
-                    # 优先从 aria-label 获取（格式: "View AppName"）
+                    # 优先从 aria-label 获取（Apple 新版网页直接包含应用名称）
                     aria_label = link.get("aria-label", "")
-                    if aria_label.startswith("View "):
-                        app_name = aria_label[5:]  # 去掉 "View " 前缀
+                    if aria_label and aria_label.strip():
+                        # 新版：直接使用 aria-label（如 "微信"）
+                        # 旧版：去掉 "View " 前缀（如 "View WeChat" -> "WeChat"）
+                        app_name = aria_label[5:] if aria_label.startswith("View ") else aria_label
                     else:
                         # 备用: 从 h3 标签获取（不依赖 Svelte 类名）
                         h3_tag = link.find("h3")
