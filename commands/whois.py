@@ -233,8 +233,9 @@ class WhoisService:
         # 优先使用 whois21（快速且解析能力强）
         if self._whois21:
             try:
+                # whois21 2.0+ 构造函数不再自动查询，需手动调用 query()
                 whois_obj = await asyncio.wait_for(
-                    asyncio.to_thread(self._whois21.WHOIS, domain),
+                    asyncio.to_thread(self._whois21.query, domain),
                     timeout=10.0
                 )
                 if whois_obj.success:

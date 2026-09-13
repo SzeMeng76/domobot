@@ -2,7 +2,7 @@
 python-telegram-bot[all]==22.8
 
 # Kurigram (actively maintained Pyrogram fork, for MTProto API: DC ID detection, large file upload, inline media edit)
-kurigram>=2.2.25
+kurigram>=2.2.26
 tgcrypto>=1.2.5  # Speeds up Kurigram
 
 # Environment Configuration
@@ -13,11 +13,11 @@ httpx==0.28.1
 brotli==1.2.0  # Required for Brotli decompression (App Store uses br encoding)
 
 # OpenAI API (for AI Anti-Spam)
-openai==3.6.0
+openai==3.13.0
 
 # Web Scraping
 beautifulsoup4>=4.15.0  # ParseHub requires >=4.12.3, yfinance requires >=4.11.1
-lxml>=6.1.2  # 6.x兼容确认: html.clean已拆分, 由 lxml-html-clean 提供向后兼容shim; 6.1.1修复安全漏洞
+lxml>=6.1.3  # 6.x兼容确认: html.clean已拆分, 由 lxml-html-clean 提供向后兼容shim; 6.1.1修复安全漏洞
 
 # Google Play Scraper
 google-play-scraper==1.2.7
@@ -39,14 +39,14 @@ simple-justwatch-python-api==1.3.1
 
 # Timezone Support
 tzlocal==5.4.4
-tzdata==2026.3
+tzdata==2026.4
 backports.zoneinfo==0.2.1; python_version<"3.9"
 
 # WHOIS Query Libraries
 ipwhois==1.3.0
-whois21==1.4.7
+whois21==2.0.2
 python-whois==0.9.6
-asyncwhois>=1.1.13
+asyncwhois>=1.1.14
 whodap>=0.1.16  # RDAP support for asyncwhois
 
 # DNS Query Library
@@ -62,7 +62,7 @@ feedparser==6.0.14
 googletrans==4.0.2
 
 # Yahoo Finance API
-yfinance[repair]==1.6.0  # 最新版本，repair extra 启用价格异常修复（scipy>=1.6.3）
+yfinance[repair]==1.7.0  # 最新版本，repair extra 启用价格异常修复（scipy>=1.6.3）
 pandas==3.0.5
 
 # Social Media Parser (ParseHub) - 社交媒体解析功能
@@ -71,10 +71,10 @@ socksio>=1.0.0  # httpx SOCKS5 代理支持 (parsehub 2.2.1+ 依赖 httpx[socks]
 cryptography>=50.0.1  # ParseHub依赖：用于小黑盒动态加密算法（RSA/AES/3DES）
 SignerPy>=0.12.0  # ParseHub依赖：抖音日常/Story移动端API签名
 yt-dlp>=2026.8.19   # 2026.8.19: 最新稳定版
-pytubefix>=10.11.0  # YouTube 下载库
+pytubefix>=11.1.0  # YouTube 下载库
 ytmusicapi>=1.12.2  # YouTube Music API（搜索、排行榜、歌词）1.12.2: 最新稳定版
 pillow>=12.3.0  # 图像处理库 (12.3.0: security fixes, WebP improvements)
-pillow-heif>=1.6.0  # HEIF/HEIC 图片格式支持
+pillow-heif>=1.7.0  # HEIF/HEIC 图片格式支持
 lxml-html-clean>=0.4.5  # HTML 清理工具
 markdown>=3.10.3  # Markdown 转换器
 pyyaml>=6.0.3  # YAML配置文件解析
@@ -92,7 +92,7 @@ aiofiles>=25.1.0  # 异步文件读取（图片base64转换）
 
 # Reddit API (使用 httpx，原生支持 SOCKS5 代理)
 # curl-cffi for TLS fingerprinting (JSON endpoint bypass)
-curl-cffi==0.16.0  # v0.16.0: 最新稳定版，改进HTTP/3支持和TLS指纹
+curl-cffi==0.16.3  # v0.16.3: 最新稳定版，改进HTTP/3支持和TLS指纹
 
 # Weather Visualization (天气图表可视化)
-matplotlib>=3.11.1  # 图表绘制库
+matplotlib>=3.11.2  # 图表绘制库
