@@ -108,7 +108,8 @@ docker-compose down
 | `BOT_TOKEN`                 | **（必需）** 来自 @BotFather 的 Telegram Bot Token。                         |                         |
 | `SUPER_ADMIN_ID`            | **（必需）** 拥有所有权限的机器人主要所有者的用户ID。                       |                         |
 | `CMC_API_KEY`               | **（可选）** CoinMarketCap的API Key，用于启用 `/crypto` 命令。                  |                         |
-| `BIN_API_KEY`               | **（可选）** DY.AX的API Key，用于启用 `/bin` 命令。                         |                         |
+| `BIN_API_URL`               | **（可选）** `/bin` 命令的主查询接口地址（GET `?num=`），未设置则直接走 Bincheck/Binlist 兜底。 |                         |
+| `BIN_API_KEY`               | **（可选）** `BIN_API_URL` 对应的密钥，作为 `apiKey` 查询参数发送。          |                         |
 | `TMDB_API_KEY`              | **（可选）** TMDB的API Key，用于启用 `/movie` 和 `/tv` 命令。               |                         |
 | `TRAKT_API_KEY`             | **（可选）** Trakt的API Key，用于增强电影/电视剧统计和热门趋势数据。        |                         |
 | `GOOGLE_MAPS_API_KEY`       | **（可选）** Google Maps的API Key，用于 `/map` 命令（英文用户）。          |                         |
@@ -509,7 +510,7 @@ docker-compose down
 3.  **权限错误:** 确保用户在白名单或管理员列表中。
 4.  **命令无响应:** 检查日志文件以查找错误。
 5.  **天气命令失败:** 请确保在 `.env` 文件中正确设置了 `QWEATHER_API_KEY`，并且该密钥是有效的。
-6.  **BIN查询失败:** 请确保在 `.env` 文件中正确设置了 `BIN_API_KEY`，并且你的API配额充足。
+6.  **BIN查询失败:** 请确保在 `.env` 文件中正确设置了 `BIN_API_URL`（如需鉴权还需设置 `BIN_API_KEY`），或直接依赖 Bincheck/Binlist 兜底。
 
 #### 调试技巧
 1.  设置 `LOG_LEVEL=DEBUG` 以获取详细日志。
@@ -679,7 +680,7 @@ docker-compose down
 - **智能缓存系统** 提升性能表现
 - **统一缓存管理** 通过 `/cleancache bin` 命令
 - **中文本地化支持** 卡片品牌和国家名称中文显示
-- **环境变量配置** 通过 `BIN_API_KEY` 进行配置
+- **环境变量配置** 通过 `BIN_API_URL` / `BIN_API_KEY` 进行配置
 
 </details>
 
@@ -688,7 +689,7 @@ docker-compose down
 - **OpenAI API:** 用于基于GPT-4o-mini模型的AI反垃圾检测
 - **CoinMarketCap API:** 用于加密货币价格数据
 - **CoinGecko API:** 用于加密货币排行榜、热门币种和市场数据（免费套餐，无需API密钥）
-- **DY.AX BIN API:** 用于信用卡BIN信息查询
+- **可配置BIN查询接口**（`BIN_API_URL`）：用于信用卡BIN信息查询
 - **TMDB API:** 用于电影和电视剧信息查询，集成Telegraph支持
 - **Trakt API:** 用于增强电影/电视剧统计、热门趋势数据和社区洞察
 - **JustWatch API:** 用于流媒体平台排行榜、图表和平台可用性数据

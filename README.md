@@ -108,7 +108,8 @@ All configurations are managed via the `.env` file. You must copy `.env.example`
 | `BOT_TOKEN`                 | **(Required)** Your Telegram Bot Token from @BotFather.                     |                         |
 | `SUPER_ADMIN_ID`            | **(Required)** The User ID of the main bot owner with all permissions.      |                         |
 | `CMC_API_KEY`               | **(Optional)** API Key from CoinMarketCap for the `/crypto` command.        |                         |
-| `BIN_API_KEY`               | **(Optional)** API Key from DY.AX for the `/bin` command.                   |                         |
+| `BIN_API_URL`               | **(Optional)** Primary BIN lookup endpoint for the `/bin` command (GET `?num=`). Falls back to Bincheck/Binlist if unset. |                         |
+| `BIN_API_KEY`               | **(Optional)** API key for `BIN_API_URL`, sent as the `apiKey` query param.  |                         |
 | `TMDB_API_KEY`              | **(Optional)** API Key from TMDB for the `/movie` and `/tv` commands.       |                         |
 | `TRAKT_API_KEY`             | **(Optional)** API Key from Trakt for enhanced movie/TV statistics and trending data. |                         |
 | `GOOGLE_MAPS_API_KEY`       | **(Optional)** API Key from Google Maps for the `/map` command (English users). |                         |
@@ -523,7 +524,7 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 3.  **Permission Errors:** Ensure the user is in the whitelist or admin list.
 4.  **Commands Not Responding:** Check the log file for errors.
 5.  **Weather Command Fails:** Ensure the `QWEATHER_API_KEY` is set correctly in your `.env` file and that it's a valid key.
-6.  **BIN Lookup Fails:** Ensure the `BIN_API_KEY` is set correctly in your `.env` file and that you have sufficient API quota.
+6.  **BIN Lookup Fails:** Ensure `BIN_API_URL` (and `BIN_API_KEY` if required) is set correctly in your `.env` file, or rely on the Bincheck/Binlist fallback.
 
 #### Debugging Tips
 
@@ -684,7 +685,7 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 - **Smart caching system** for improved performance
 - **Unified cache management** via `/cleancache bin` command
 - **Chinese localization support** for card brands and countries
-- **Environment variable configuration** via `BIN_API_KEY`
+- **Environment variable configuration** via `BIN_API_URL` / `BIN_API_KEY`
 
 </details>
 
@@ -693,7 +694,7 @@ Place Python scripts in the `custom_scripts/` directory and set `LOAD_CUSTOM_SCR
 - **OpenAI API:** For AI-powered spam detection with GPT-4o-mini model
 - **CoinMarketCap API:** For cryptocurrency price data
 - **CoinGecko API:** For cryptocurrency rankings, trending coins, and market data (free tier, no API key required)
-- **DY.AX BIN API:** For credit card BIN information lookup
+- **Configurable BIN API** (`BIN_API_URL`): For credit card BIN information lookup
 - **TMDB API:** For movie and TV show information with Telegraph integration
 - **Trakt API:** For enhanced movie/TV statistics, trending data, and community insights
 - **JustWatch API:** For streaming platform rankings, charts, and platform availability data

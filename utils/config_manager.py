@@ -22,6 +22,7 @@ class BotConfig:
         self.caiyun_api_token: str = ""
 
         self.cmc_api_key: str = ""
+        self.bin_api_url: str = ""
         self.bin_api_key: str = ""
         self.bincheck_rapidapi_keys: list = []  # 支持多个 API Key 轮询
         self.abuseipdb_api_keys: list = []  # 支持多个 API Key 轮询
@@ -542,6 +543,7 @@ class ConfigManager:
         self.config.caiyun_api_token = os.getenv("CAIYUN_API_TOKEN", "")
 
         self.config.cmc_api_key = os.getenv("CMC_API_KEY", "")
+        self.config.bin_api_url = os.getenv("BIN_API_URL", "")
         self.config.bin_api_key = os.getenv("BIN_API_KEY", "")
         bincheck_keys_str = os.getenv("BINCHECK_RAPIDAPI_KEYS", "") or os.getenv("BINCHECK_RAPIDAPI_KEY", "")
         self.config.bincheck_rapidapi_keys = [key.strip() for key in bincheck_keys_str.split(",") if key.strip()]

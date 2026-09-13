@@ -23,7 +23,6 @@ def set_dependencies(c_manager, h_client):
     httpx_client = h_client
 
 # BIN查询API配置
-BIN_API_URL = "https://api.dy.ax/v1/finance/bin"
 BINCHECK_RAPIDAPI_URL = "https://fraud-signals-bin-ip-email-phone-sanctions-risk-api.p.rapidapi.com/bin-lookup"
 BINLIST_URL = "https://lookup.binlist.net"
 COUNTRY_DATA_URL = "https://cdn.jsdelivr.net/gh/umpirsky/country-list@master/data/zh_CN/country.json"
@@ -201,33 +200,45 @@ async def get_bin_info(bin_number: str) -> Optional[Dict]:
         logging.info(f"使用缓存的BIN数据: {bin_number}")
         return cached_data
 
+    # 1. 优先尝试DY API（如果配置了URL）
     config = get_config()
-
-    # 1. 优先尝试DY API（如果配置了key）
-    if config.bin_api_key:
-        headers = {"Accept": "application/json"}
-        params = {"number": bin_number, "apiKey": config.bin_api_key}
-
+    if config.bin_api_url:
         try:
-            response = await httpx_client.get(BIN_API_URL, headers=headers, params=params, timeout=8)
+            headers = {"Accept": "application/json"}
+            params = {"num": bin_number}
+            if config.bin_api_key:
+                params["apiKey"] = config.bin_api_key
+
+            response = await httpx_client.get(config.bin_api_url, headers=headers, params=params, timeout=8)
             if response.status_code == 200:
-                data = response.json()
-                if data.get("data"):
-                    data["source"] = "dy"
-                    await cache_manager.save_cache(cache_key, data, subdirectory="bin")
-                    return data
+                raw = response.json()
+                if raw.get("valid"):
+                    converted = {
+                        "data": {
+                            "card_brand": raw.get("card-brand", ""),
+                            "card_type": raw.get("card-type", ""),
+                            "card_category": raw.get("card-category", ""),
+                            "country": raw.get("country", ""),
+                            "country_code": raw.get("country-code", ""),
+                            "currency_code": raw.get("currency-code", ""),
+                            "issuer": raw.get("issuer", ""),
+                            "is_prepaid": raw.get("is-prepaid"),
+                            "is_commercial": raw.get("is-commercial"),
+                        },
+                        "source": "dy"
+                    }
+                    await cache_manager.save_cache(cache_key, converted, subdirectory="bin")
+                    return converted
                 else:
-                    logging.warning(f"DY API 返回空数据: {data}")
-            elif response.status_code == 400:
-                logging.warning(f"DY API 请求参数错误: {bin_number}, response: {response.text}")
-            elif response.status_code == 401:
-                logging.warning(f"DY API 认证失败, response: {response.text}")
+                    logging.warning(f"DY API 返回空数据: {raw}")
             elif response.status_code == 429:
                 logging.warning(f"DY API 请求频率超限, response: {response.text}")
             else:
                 logging.warning(f"DY API 请求失败: HTTP {response.status_code}, response: {response.text}")
         except Exception as e:
             logging.error(f"DY API 请求异常: {e}")
+    else:
+        logging.debug("BIN_API_URL 未配置，跳过 DY API")
 
     # 2. Fallback 到 Bincheck
     logging.info(f"尝试使用 Bincheck 查询BIN: {bin_number}")
