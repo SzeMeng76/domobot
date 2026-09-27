@@ -130,13 +130,23 @@ async def _download_kugou_file(url: str, path: Path, timeout: int = 60) -> bool:
     proxy = (config.kugou_download_proxy or "").strip() or None
 
     # 构造 client(代理参数无法用全局 _httpx_client,所以单独建)
+    # 增加连接超时和更长的总超时
+    timeout_config = httpx.Timeout(timeout=timeout, connect=10.0)
     if proxy:
-        client = httpx.AsyncClient(timeout=timeout, proxy=proxy)
+        client = httpx.AsyncClient(timeout=timeout_config, proxy=proxy)
     else:
-        client = _httpx_client or httpx.AsyncClient(timeout=timeout)
+        client = _httpx_client or httpx.AsyncClient(timeout=timeout_config)
+
+    # 添加浏览器 User-Agent 和其他必要的请求头
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "*/*",
+        "Accept-Encoding": "identity",
+        "Connection": "keep-alive",
+    }
 
     try:
-        async with client.stream("GET", url) as resp:
+        async with client.stream("GET", url, headers=headers, follow_redirects=True) as resp:
             resp.raise_for_status()
             with open(path, "wb") as f:
                 async for chunk in resp.aiter_bytes(8192):

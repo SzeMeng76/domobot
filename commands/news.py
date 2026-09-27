@@ -314,9 +314,9 @@ async def get_news(source_id: str, count: int = 10) -> List[Dict]:
     # 原有的NewsNow API逻辑
     # 映射到实际的API源名称
     actual_source_id = get_actual_source_name(source_id)
-    
+
     httpx_client = get_http_client()
-    base_url = "https://news.smone.us"
+    base_url = "https://newsnowsm.vercel.app"
     url = f"{base_url}/api/s?id={actual_source_id}"
     
     # 检查缓存
