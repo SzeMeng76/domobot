@@ -519,7 +519,7 @@ class InlineQueryHandler:
 
 **📱 社交媒体解析:**
 • 直接输入链接(无需$符号) - 解析视频/图片/图文
-• 支持抖音、B站、YouTube、TikTok、小红书、Twitter等20+平台
+• 支持抖音、B站、YouTube、TikTok、小红书、Twitter、今日头条、Medium、Bangumi等20+平台
 • 视频/图片会直接显示在聊天中
 
 **🔴 Reddit:**

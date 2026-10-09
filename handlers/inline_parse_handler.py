@@ -204,7 +204,7 @@ async def handle_inline_parse_query(
                 title="❌ 不支持的平台",
                 description=f"URL: {query[:50]}...",
                 input_message_content=InputTextMessageContent(
-                    message_text=f"❌ 不支持的平台\n\n支持：抖音、B站、YouTube、TikTok、小红书、Twitter等20+平台"
+                    message_text=f"❌ 不支持的平台\n\n支持：抖音、B站、YouTube、TikTok、小红书、Twitter、今日头条、Medium、Bangumi等20+平台"
                 ),
             )
         ]

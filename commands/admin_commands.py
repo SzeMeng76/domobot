@@ -621,7 +621,7 @@ class AdminPanelHandler:
         text += f"🆔 ID: `{selected_group_id}`\n\n"
         text += f"🌐 *功能说明:*\n"
         text += f"• 启用后，群组成员发送支持的社交媒体链接时，Bot会自动解析并发送内容\n"
-        text += f"• 支持: 抖音、B站、YouTube、TikTok、小红书、Twitter等20\\+平台\n"
+        text += f"• 支持: 抖音、B站、YouTube、TikTok、小红书、Twitter、今日头条、Medium、Bangumi等20\\+平台\n"
         text += f"• 成员仍可使用 /parse 命令手动解析\n"
 
         # 构建按钮

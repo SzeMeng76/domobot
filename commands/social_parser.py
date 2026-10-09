@@ -430,7 +430,7 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "• `/parse <链接>` \\- 解析指定链接\n"
             "• 回复一条消息并输入 `/parse` \\- 解析被回复消息中的链接\n\n"
             "🌐 *支持的平台：*\n"
-            "抖音、快手、B站、YouTube、TikTok、小红书、Twitter/X、Instagram、Facebook、微博等20\\+平台"
+            "抖音、快手、B站、YouTube、TikTok、小红书、Twitter/X、Instagram、Facebook、微博、今日头条、Medium、Bangumi等20\\+平台"
         )
         await context.bot.send_message(
             chat_id=chat_id,
@@ -456,7 +456,7 @@ async def parse_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await send_error(
             context,
             chat_id,
-            "❌ 未检测到支持的平台链接\n\n支持：抖音、B站、YouTube、TikTok、小红书、Twitter、Reddit等20+平台"
+            "❌ 未检测到支持的平台链接\n\n支持：抖音、B站、YouTube、TikTok、小红书、Twitter、Reddit、今日头条、Medium、Bangumi等20+平台"
         )
         if update.message:
             await delete_user_command(context, chat_id, update.message.message_id)
