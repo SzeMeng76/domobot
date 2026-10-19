@@ -641,23 +641,23 @@ class ConfigManager:
 
         self.config.douyin_cookie = os.getenv("DOUYIN_COOKIE", None)
         if self.config.douyin_cookie:
-            logger.info(f"✅ Douyin cookie配置: {self.config.douyin_cookie[:50]}...")
+            logger.info(f"✅ Douyin cookie配置")
 
         self.config.tiktok_cookie = os.getenv("TIKTOK_COOKIE", None)
         if self.config.tiktok_cookie:
-            logger.info(f"✅ TikTok cookie配置: {self.config.tiktok_cookie[:50]}...")
+            logger.info(f"✅ TikTok cookie配置")
 
         self.config.xhs_cookie = os.getenv("XHS_COOKIE", None)
         if self.config.xhs_cookie:
-            logger.info(f"✅ XHS cookie配置: {self.config.xhs_cookie[:50]}...")
+            logger.info(f"✅ XHS cookie配置")
 
         self.config.zhihu_cookie = os.getenv("ZHIHU_COOKIE", None)
         if self.config.zhihu_cookie:
-            logger.info(f"✅ Zhihu cookie配置: {self.config.zhihu_cookie[:50]}...")
+            logger.info(f"✅ Zhihu cookie配置")
 
         self.config.threads_cookie = os.getenv("THREADS_COOKIE", None)
         if self.config.threads_cookie:
-            logger.info(f"✅ Threads cookie配置: {self.config.threads_cookie[:50]}...")
+            logger.info(f"✅ Threads cookie配置")
 
         # YouTube Cookie: 保持Netscape文件路径字符串（不解析，直接传给yt-dlp）
         self.config.youtube_cookie = os.getenv("YOUTUBE_COOKIE", None)

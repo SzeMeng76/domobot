@@ -220,34 +220,34 @@ class ParseHubAdapter:
                 logger.info(f"🔍 平台: {platform_id}")
                 if platform_id == 'twitter' and self.config.twitter_cookie:
                     platform_cookie = self.config.twitter_cookie
-                    logger.info(f"✅ 使用Twitter cookie: {platform_cookie[:50]}...")
+                    logger.info(f"✅ 使用Twitter cookie")
                 elif platform_id == 'instagram' and self.config.instagram_cookie:
                     platform_cookie = self.config.instagram_cookie
-                    logger.info(f"✅ 使用Instagram cookie: {platform_cookie[:50]}...")
+                    logger.info(f"✅ 使用Instagram cookie")
                 elif platform_id == 'bilibili' and self.config.bilibili_cookie:
                     platform_cookie = self.config.bilibili_cookie
-                    logger.info(f"✅ 使用Bilibili cookie: {platform_cookie[:50]}...")
+                    logger.info(f"✅ 使用Bilibili cookie")
                 elif platform_id == 'kuaishou' and self.config.kuaishou_cookie:
                     platform_cookie = self.config.kuaishou_cookie
                     logger.info(f"✅ 使用Kuaishou cookie")
                 elif platform_id == 'douyin' and self.config.douyin_cookie:
                     platform_cookie = self.config.douyin_cookie
-                    logger.info(f"✅ 使用Douyin cookie: {platform_cookie[:50]}...")
+                    logger.info(f"✅ 使用Douyin cookie")
                 elif platform_id == 'tiktok' and self.config.tiktok_cookie:
                     platform_cookie = self.config.tiktok_cookie
-                    logger.info(f"✅ 使用TikTok cookie: {platform_cookie[:50]}...")
+                    logger.info(f"✅ 使用TikTok cookie")
                 elif platform_id == 'tieba' and self.config.tieba_cookie:
                     platform_cookie = self.config.tieba_cookie
-                    logger.info(f"✅ 使用Tieba cookie (绕过安全验证): {platform_cookie[:50]}...")
+                    logger.info(f"✅ 使用Tieba cookie (绕过安全验证)")
                 elif platform_id in ('xiaohongshu', 'xhs') and self.config.xhs_cookie:
                     platform_cookie = self.config.xhs_cookie
-                    logger.info(f"✅ 使用XHS cookie: {platform_cookie[:50]}...")
+                    logger.info(f"✅ 使用XHS cookie")
                 elif platform_id == 'zhihu' and self.config.zhihu_cookie:
                     platform_cookie = self.config.zhihu_cookie
-                    logger.info(f"✅ 使用Zhihu cookie: {platform_cookie[:50]}...")
+                    logger.info(f"✅ 使用Zhihu cookie")
                 elif platform_id == 'threads' and self.config.threads_cookie:
                     platform_cookie = self.config.threads_cookie
-                    logger.info(f"✅ 使用Threads cookie: {platform_cookie[:50]}...")
+                    logger.info(f"✅ 使用Threads cookie")
                 elif platform_id == 'youtube' and self.config.youtube_cookie:
                     # YouTube cookie是文件路径，不能传给ParseConfig（会被解析成dict）
                     # 直接在parsehub_patch.py中通过环境变量 YOUTUBE_COOKIE 读取
@@ -294,8 +294,7 @@ class ParseHubAdapter:
 
             # 创建ParseHub实例并直接传入proxy和cookie
             if platform_cookie:
-                cookie_preview = str(platform_cookie)[:100] if not isinstance(platform_cookie, dict) else f"dict with {len(platform_cookie)} keys"
-                logger.info(f"🍪 传递给ParseHub的cookie - 类型: {type(platform_cookie)}, 预览: {cookie_preview}")
+                logger.info(f"🍪 传递给ParseHub的cookie - 类型: {type(platform_cookie).__name__}（内容已隐藏）")
             else:
                 logger.info(f"⚠️ 未传递cookie给ParseHub")
 
@@ -346,6 +345,14 @@ class ParseHubAdapter:
 
             if not result:
                 return None, None, None, 0, last_error or "解析失败，未返回结果"
+
+            # ParseHub 2.3+: 解析成功但某个回退层失败时，若该层实际用了 cookie，说明 cookie 可能已失效
+            for fb in getattr(result, 'fallback_errors', None) or []:
+                if getattr(fb.error, 'cookie', None):
+                    logger.warning(
+                        f"⚠️ [{platform_id}] 使用 cookie 的「{fb.name}」解析失败（已回退成功），cookie 可能已失效: "
+                        f"{getattr(fb.error, 'message', fb.error)}"
+                    )
 
             # 下载媒体（30分钟超时保护，防止CDN卡死导致流程挂起）
             try:
