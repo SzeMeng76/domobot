@@ -148,7 +148,7 @@ def patch_parsehub_yt_dlp():
 
         original_yt_video_download = YtVideoParseResult._do_download
 
-        async def patched_yt_video_download(self, *, output_dir, callback=None, callback_args=(), callback_kwargs=None, proxy=None, headers=None, connections=4):
+        async def patched_yt_video_download(self, *, output_dir, callback=None, callback_args=(), callback_kwargs=None, proxy=None, headers=None, connections=4, concurrency=4):
             """Patched _do_download that uses yt-dlp for YouTube (with pytubefix fallback)"""
             # 2.0.1: YtVideoParseResult.video (VideoRef) 存储在 self.media 中
             # 优先使用 self.dl.url (原始YouTube URL)，fallback 到 self.media.url 或 self.raw_url
@@ -165,7 +165,7 @@ def patch_parsehub_yt_dlp():
                 # Try yt-dlp first (primary method)
                 try:
                     logger.info(f"🎬 [yt-dlp] Attempting download with yt-dlp...")
-                    result = await original_yt_video_download(self, output_dir=output_dir, callback=callback, callback_args=callback_args, callback_kwargs=callback_kwargs, proxy=proxy, headers=headers, connections=connections)
+                    result = await original_yt_video_download(self, output_dir=output_dir, callback=callback, callback_args=callback_args, callback_kwargs=callback_kwargs, proxy=proxy, headers=headers, connections=connections, concurrency=concurrency)
                     logger.info(f"✅ [Patch] yt-dlp download completed successfully")
                     return result
                 except Exception as e:
@@ -258,7 +258,7 @@ def patch_parsehub_yt_dlp():
                         raise DownloadError(f"YouTube download failed: yt-dlp error: {e}, pytubefix error: {pytubefix_error}")
             else:
                 # Not a YouTube URL, use original yt-dlp download
-                return await original_yt_video_download(self, output_dir=output_dir, callback=callback, callback_args=callback_args, callback_kwargs=callback_kwargs, proxy=proxy, headers=headers, connections=connections)
+                return await original_yt_video_download(self, output_dir=output_dir, callback=callback, callback_args=callback_args, callback_kwargs=callback_kwargs, proxy=proxy, headers=headers, connections=connections, concurrency=concurrency)
 
         YtVideoParseResult._do_download = patched_yt_video_download
         logger.info("✅ YtVideoParseResult._do_download patched: use yt-dlp for YouTube (pytubefix fallback)")
@@ -690,34 +690,17 @@ def patch_parsehub_yt_dlp():
         DouyinParser._do_parse = patched_douyin_parse
         logger.info("✅ DouyinParser patched: use TikHub as fallback when official parser fails")
 
-        # Patch TikTokParser: try official App API first, fall back to TikHub
+        # Patch TikTokParser: try official web parser first, fall back to TikHub
         from parsehub.parsers.parser.tiktok import TikTokParser
 
         original_tiktok_do_parse = TikTokParser._do_parse
-        original_tiktok_fetch_api = TikTokParser._fetch_api_result
-
-        async def patched_tiktok_fetch_api(self, url: str):
-            """Override to use max_retries=1 so fallback to TikHub is fast."""
-            from parsehub.provider_api.tiktok import TikTokWebCrawler
-            from parsehub.parsers.parser.tiktok import TikTokApiResult
-            from parsehub.errors import ParseError
-            crawler = TikTokWebCrawler(proxy=self.proxy, cookie=self.cookie, max_retries=1)
-            try:
-                response = await crawler.parse(url)
-                return TikTokApiResult.parse(response)
-            except ParseError:
-                raise
-            except Exception as e:
-                raise ParseError(f"TikTok 解析失败: {e}") from e
-
-        TikTokParser._fetch_api_result = patched_tiktok_fetch_api
 
         async def patched_tiktok_parse(self, url: str):
             """Try official TikTokParser first, fall back to TikHub on failure."""
             from parsehub.types import VideoParseResult, ImageParseResult
             from parsehub.errors import ParseError
 
-            # Try official parser (new App API, max_retries=1 for fast fallback)
+            # Try official parser (web page + WAF challenge solving)
             try:
                 return await original_tiktok_do_parse(self, url)
             except (ParseError, Exception) as e:
@@ -835,7 +818,7 @@ def patch_parsehub_yt_dlp():
                 raise ParseError(f"TikTok官方和TikHub都失败: {e}")
 
         TikTokParser._do_parse = patched_tiktok_parse
-        logger.info("✅ TikTokParser patched: official App API first, TikHub fallback")
+        logger.info("✅ TikTokParser patched: official web parser first, TikHub fallback")
 
         # Note: TieBa API in ParseHub 2.0.15+ doesn't require Cookie
         # The new fetch_post_data method uses API endpoint which works without authentication
@@ -844,57 +827,11 @@ def patch_parsehub_yt_dlp():
         # Note: ParseHub 2.0.34+ removed instaloader entirely and rewrote Instagram
         # parsing on top of a self-hosted InstagramAPI (GraphQL/v1). __match__ now
         # natively supports reels/username paths, so that regex patch is no longer needed.
-        from parsehub.parsers.parser.instagram import InstagramParser
-        from parsehub.provider_api.instagram import InstagramAPI, InstagramMediaType
+        from parsehub.provider_api.instagram import InstagramAPI
 
-        # Patch Instagram parse method to pass cookie to _parse
-        # (ParseHub 2.0.39's official _do_parse still doesn't forward self.cookie to _parse)
-        original_instagram_parse = InstagramParser._do_parse
-
-        async def patched_instagram_parse(self, url: str):
-            """Patched _do_parse that passes cookie to _parse method"""
-            from parsehub.types import VideoParseResult, ImageParseResult, MultimediaParseResult
-            from parsehub.types import VideoRef, ImageRef
-            from parsehub.errors import ParseError
-
-            shortcode = self.get_short_code(url)
-            if not shortcode:
-                raise ValueError("Instagram帖子链接无效")
-
-            # Pass cookie to _parse (FIX: original code doesn't pass cookie)
-            logger.info(f"✅ [Instagram] Passing cookie to _parse: {bool(self.cookie)}")
-            post = await self._parse(url, shortcode, self.cookie)
-
-            width, height = post.width, post.height
-
-            k = {"title": post.title, "content": post.caption}
-            match post.typename:
-                case InstagramMediaType.SIDECAR:
-                    media = [
-                        VideoRef(url=i.video_url, thumb_url=i.display_url, width=i.width, height=i.height)
-                        if i.is_video and i.video_url
-                        else ImageRef(url=i.display_url, width=i.width, height=i.height)
-                        for i in post.get_sidecar_nodes()
-                    ]
-                    return MultimediaParseResult(media=media, **k)
-                case InstagramMediaType.IMAGE:
-                    return ImageParseResult(photo=[ImageRef(url=post.url, width=width, height=height)], **k)
-                case InstagramMediaType.VIDEO:
-                    return VideoParseResult(
-                        video=VideoRef(
-                            url=post.video_url or post.url,
-                            thumb_url=post.url,
-                            duration=int(post.video_duration or 0),
-                            width=width,
-                            height=height,
-                        ),
-                        **k,
-                    )
-                case _:
-                    raise ParseError("不支持的类型")
-
-        InstagramParser._do_parse = patched_instagram_parse
-        logger.info("✅ InstagramParser patched: Fix cookie passing to _parse method")
+        # Note: ParseHub 2.3.x InstagramParser._parse(shortcode) natively does
+        # "anonymous first, then cookie" fallback and explains restricted content,
+        # so the old _do_parse patch (calling _parse with 3 args) was removed.
 
         # Patch InstagramAPI's HTTP client to use randomized UA + more anti-crawler headers
         # (replaces the old MyInstaloaderContext header patch, removed with instaloader in 2.0.34+)
@@ -916,14 +853,8 @@ def patch_parsehub_yt_dlp():
         InstagramAPI._new_client = patched_instagram_new_client
         logger.info("✅ InstagramAPI patched: Enhanced headers for better compatibility")
 
-        # Patch BiliParse to support bangumi/play/ URL format (番剧/影视)
-        from parsehub.parsers.parser.bilibili import BiliParse
-
-        # Original regex: r"^(http(s)?://)?((((w){3}.|(m).|(t).)?bilibili\.com)/(video|opus|\b\d{18,19}\b)|b23.tv|bili2233.cn).*"
-        # Problem: bangumi/play/epXXX URLs (番剧) are not matched
-        # Fix: Add bangumi/play to the path alternatives
-        BiliParse.__match__ = r"^(http(s)?://)?((((w){3}.|(m).|(t).)?bilibili\.com)/(video|opus|bangumi/play|\b\d{18,19}\b)|b23.tv|bili2233.cn).*"
-        logger.info("✅ BiliParse patched: Support bangumi/play/ URL format (番剧/影视)")
+        # Note: ParseHub 2.3.5+ explicitly rejects bangumi/movies ("not supported"),
+        # so the old BiliParse.__match__ bangumi/play patch was removed.
 
         # Patch FacebookParse to support watch/?v= URL format (with optional slash)
         from parsehub.parsers.parser.facebook import FacebookParse
@@ -948,75 +879,8 @@ def patch_parsehub_yt_dlp():
         FacebookParse.cli_args = property(patched_facebook_cli_args)
         logger.info("✅ FacebookParse.cli_args patched: Use compatible format selector (best[res<=1080]/best)")
 
-        # Patch ParseHub.parse to skip get_raw_url for Facebook watch/?v= URLs
-        # Root cause: ParseHub.parse() calls get_raw_url() BEFORE calling parser.parse()
-        # This strips query parameters from Facebook URLs
-        from parsehub import ParseHub
-        original_parsehub_parse = ParseHub.parse
-
-        async def patched_parsehub_parse(self, url: str, *, proxy: str | None = None, cookie: str | dict | None = None):
-            """Patched ParseHub.parse that skips get_raw_url for Facebook watch/?v= URLs"""
-            from parsehub.utils.helpers import SecretCookie
-
-            parser = self._select_parser(url)
-            if not parser:
-                raise ValueError("不支持的平台")
-
-            # BUG FIX: must wrap raw cookie in SecretCookie like the official implementation does
-            # (parsehub/__init__.py: `parser(proxy=proxy, cookie=SecretCookie(cookie))`).
-            # Passing the raw str/dict/None value directly sets self.cookie to that raw value,
-            # and every parser's .params/._parse calls self.cookie.get_value() expecting a
-            # SecretCookie object — when cookie=None (e.g. YouTube, which intentionally passes
-            # None here since its cookie goes through a separate cookiefile/env-var path), this
-            # crashes with "'NoneType' object has no attribute 'get_value'".
-            p = parser(proxy=proxy, cookie=SecretCookie(cookie))
-
-            # Check if this is a Facebook watch/?v= URL
-            if isinstance(p, FacebookParse) and "?v=" in url:
-                logger.info(f"✅ [ParseHub] Detected Facebook watch/?v= URL, skipping get_raw_url")
-                logger.info(f"✅ [ParseHub] Calling _do_parse directly to preserve query parameters: {url}")
-                # Skip parse() method entirely to preserve query parameters
-                # Call _do_parse directly and set platform manually
-                result = await p._do_parse(url)
-                result.platform = p.__platform__
-                return result
-            else:
-                # Use original implementation (calls get_raw_url first)
-                return await p.parse(url)
-
-        ParseHub.parse = patched_parsehub_parse
-        logger.info("✅ ParseHub.parse patched: Skip get_raw_url for Facebook watch/?v= URLs")
-
-        # Also patch FacebookParse.parse to skip its internal get_raw_url call
-        original_facebook_parse = FacebookParse._do_parse
-
-        async def patched_facebook_parse(self, url: str):
-            """Patched FacebookParse._do_parse that skips get_raw_url for watch/?v= URLs"""
-            if "?v=" in url:
-                logger.info(f"✅ [Facebook] Detected ?v= parameter, calling _parse directly (skip get_raw_url)")
-                # Skip all get_raw_url calls and call _parse directly
-                # YtParser.parse also calls get_raw_url, so we bypass it too
-                from parsehub.parsers.base.ytdlp import YtVideoParseResult
-                from parsehub.types import VideoRef
-                video_info = await self._parse(url)
-                return YtVideoParseResult(
-                    video=VideoRef(
-                        url=video_info.url,
-                        thumb_url=video_info.thumbnail,
-                        width=video_info.width,
-                        height=video_info.height,
-                        duration=video_info.duration,
-                    ),
-                    title=video_info.title,
-                    content=video_info.description,
-                    dl=video_info,
-                )
-            else:
-                # Use original implementation for other Facebook URLs
-                return await original_facebook_parse(self, url)
-
-        FacebookParse._do_parse = patched_facebook_parse
-        logger.info("✅ FacebookParse._do_parse patched: Skip internal get_raw_url for watch/?v= URLs")
+        # Note: ParseHub 2.3.x FacebookParse sets __reserved_parameters__ = ["v"], so the
+        # query parameter survives get_raw_url; ParseHub.parse/_do_parse patches were removed.
 
         return True
 

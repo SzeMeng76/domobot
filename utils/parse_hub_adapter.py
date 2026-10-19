@@ -18,7 +18,7 @@ from typing import Optional, List, Tuple, Dict, Any
 from utils.parsehub_patch import patch_parsehub_yt_dlp
 patch_parsehub_yt_dlp()
 
-from parsehub import ParseHub
+from parsehub import ParseHub, ContentUnavailableError
 from parsehub.types import ParseResult, VideoParseResult, ImageParseResult, MultimediaParseResult, RichTextParseResult
 from parsehub.utils.helpers import UA
 
@@ -316,6 +316,11 @@ class ParseHubAdapter:
                         logger.warning(f"⚠️ 解析返回空结果 (尝试 {attempt}/{max_retries})")
                         last_error = "解析失败，未返回结果"
                 except Exception as parse_error:
+                    # 作品已删除/不可见：重试没有意义，直接上报
+                    if isinstance(parse_error, ContentUnavailableError):
+                        logger.warning(f"⚠️ 作品不可用，不再重试: {parse_error}")
+                        raise
+
                     # 获取完整的异常链文本（ParseHub会多层包装错误信息）
                     full_error = str(parse_error)
                     cause = parse_error.__cause__
@@ -715,18 +720,29 @@ class ParseHubAdapter:
 
     def _format_error_message(self, error: Exception) -> str:
         """格式化错误信息，使其对用户更友好"""
-        error_str = str(error)
+        # ParseHub 2.3+ 会在报错里追加「使用的 Cookie: xxx***xxx」行（已打码）。
+        # 去掉这些行，避免下面的 "cookie" 关键字分支误判，也避免把 Cookie 信息发到聊天里。
+        error_str = "\n".join(
+            line for line in str(error).splitlines() if "使用的 Cookie:" not in line
+        ).strip()
+
+        # 作品已删除/不可见：ParseHub 已给出明确原因，直接展示
+        if isinstance(error, ContentUnavailableError):
+            return error_str if len(error_str) <= 300 else error_str[:300] + "..."
 
         # Bilibili相关错误
         if "412" in error_str or "Precondition Failed" in error_str:
             return "Bilibili风控限制（412错误），请检查cookie配置或稍后重试"
-        if "Bilibili解析失败" in error_str:
-            return "Bilibili解析失败，可能是链接失效或需要登录"
         if self._is_geo_restriction_error(error_str):
             geo_proxy = self.config.bilibili_geo_proxy if self.config else None
             if not geo_proxy:
                 return "该内容受地区限制，请配置 BILIBILI_GEO_PROXY 环境变量以使用大陆代理"
             return "该内容受地区限制，地区代理也无法访问，请检查代理配置"
+        # ParseHub 2.3+ B站回退链（API → yt-dlp）全部失败时的聚合报错
+        if "- API:" in error_str and "- yt-dlp:" in error_str:
+            return "Bilibili解析失败，可能是链接失效或需要登录"
+        if "不支持解析番剧和影视" in error_str:
+            return "暂不支持解析B站番剧和影视链接"
 
         # YouTube相关错误
         if "Sign in to confirm" in error_str or "not a bot" in error_str:

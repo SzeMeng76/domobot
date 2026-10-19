@@ -66,7 +66,7 @@ yfinance[repair]==1.7.0  # 最新版本，repair extra 启用价格异常修复�
 pandas==3.0.6
 
 # Social Media Parser (ParseHub) - 社交媒体解析功能
-parsehub~=2.3.0  # 社交媒体聚合解析器，支持20+平台 (2.3.0: 新增 Bangumi/Medium/今日头条 支持)
+parsehub~=2.3.11  # 社交媒体聚合解析器，支持20+平台 (2.3.x: 回退链错误聚合、并发下载、XHS 游客 session(xhshow)、视频号；B站番剧/影视已不支持)
 socksio>=1.0.0  # httpx SOCKS5 代理支持 (parsehub 2.2.1+ 依赖 httpx[socks])
 cryptography>=50.0.2  # ParseHub依赖：用于小黑盒动态加密算法（RSA/AES/3DES）
 SignerPy>=0.12.0  # ParseHub依赖：抖音日常/Story移动端API签名
