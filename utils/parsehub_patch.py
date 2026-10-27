@@ -659,7 +659,7 @@ def patch_parsehub_yt_dlp():
                 if not url_list:
                     raise ParseError("TikHub返回数据中没有下载URL")
 
-                download_url = url_list[0]
+                download_url, *backup_urls = dict.fromkeys(url_list)
                 title = aweme_detail.get("desc", "")
 
                 # Get video metadata
@@ -677,6 +677,7 @@ def patch_parsehub_yt_dlp():
                     content=title,
                     video=VideoRef(
                         url=download_url,
+                        backup_urls=backup_urls,
                         width=width,
                         height=height,
                         duration=duration,
@@ -774,9 +775,12 @@ def patch_parsehub_yt_dlp():
                     duration = video.get("duration", 0) // 1000
                     logger.info(f"✅ [TikHub] Got TikTok video (H.264, {width}x{height}, {duration}s)")
                     from parsehub.types import VideoRef
+                    video_url, *backup_urls = dict.fromkeys(url_list_h264)
                     return VideoParseResult(
                         title=desc,
-                        video=VideoRef(url=url_list_h264[0], width=width, height=height, duration=duration),
+                        video=VideoRef(
+                            url=video_url, backup_urls=backup_urls, width=width, height=height, duration=duration
+                        ),
                     )
 
                 # Fallback: best quality from bit_rate list
@@ -792,9 +796,12 @@ def patch_parsehub_yt_dlp():
                         duration = video.get("duration", 0) // 1000
                         logger.info(f"✅ [TikHub] Got TikTok video ({best.get('gear_name', 'unknown')}, {width}x{height}, {duration}s)")
                         from parsehub.types import VideoRef
+                        video_url, *backup_urls = dict.fromkeys(url_list)
                         return VideoParseResult(
                             title=desc,
-                            video=VideoRef(url=url_list[0], width=width, height=height, duration=duration),
+                            video=VideoRef(
+                                url=video_url, backup_urls=backup_urls, width=width, height=height, duration=duration
+                            ),
                         )
 
                 # Last resort: play_addr directly
@@ -804,9 +811,10 @@ def patch_parsehub_yt_dlp():
                     duration = video.get("duration", 0) // 1000
                     logger.info(f"✅ [TikHub] Got TikTok video (play_addr fallback)")
                     from parsehub.types import VideoRef
+                    video_url, *backup_urls = dict.fromkeys(url_list)
                     return VideoParseResult(
                         title=desc,
-                        video=VideoRef(url=url_list[0], duration=duration),
+                        video=VideoRef(url=video_url, backup_urls=backup_urls, duration=duration),
                     )
 
                 raise ParseError("TikHub返回数据中没有可用的视频或图片")
