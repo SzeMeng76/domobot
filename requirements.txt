@@ -10,10 +10,10 @@ python-dotenv>=1.2.4  # ParseHub requires >=1.0.1
 
 # HTTP Requests
 httpx==0.28.1
-brotli==1.2.0  # Required for Brotli decompression (App Store uses br encoding)
+brotli==1.2.1  # Required for Brotli decompression (App Store uses br encoding)
 
 # OpenAI API (for AI Anti-Spam)
-openai==3.26.1
+openai==3.39.0
 
 # Web Scraping
 beautifulsoup4>=4.15.0  # ParseHub requires >=4.12.3, yfinance requires >=4.11.1
@@ -38,7 +38,7 @@ Babel>=2.18.0
 simple-justwatch-python-api==1.4.0
 
 # Timezone Support
-tzlocal==5.4.4
+tzlocal==5.4.5
 tzdata==2026.5
 backports.zoneinfo==0.2.1; python_version<"3.9"
 
@@ -63,27 +63,27 @@ googletrans==4.0.2
 
 # Yahoo Finance API
 yfinance[repair]==1.7.0  # 最新版本，repair extra 启用价格异常修复（scipy>=1.6.3）
-pandas==3.0.6
+pandas==3.1.0
 
 # Social Media Parser (ParseHub) - 社交媒体解析功能
-parsehub~=2.3.11  # 社交媒体聚合解析器，支持20+平台 (2.3.x: 回退链错误聚合、并发下载、XHS 游客 session(xhshow)、视频号；B站番剧/影视已不支持)
+parsehub~=2.3.15  # 社交媒体聚合解析器，支持20+平台 (2.3.15: 下载备用链接回退(抖音保留同画质全部CDN节点)、DownloadFallbackError 错误聚合、XHS 图片CDN新地址new Set兼容、B站多P时长修复、最右短链；B站番剧/影视已不支持)
 socksio>=1.0.0  # httpx SOCKS5 代理支持 (parsehub 2.2.1+ 依赖 httpx[socks])
 cryptography>=50.0.2  # ParseHub依赖：用于小黑盒动态加密算法（RSA/AES/3DES）
 SignerPy>=0.12.0  # ParseHub依赖：抖音日常/Story移动端API签名
-yt-dlp>=2026.8.19   # 2026.8.19: 最新稳定版
-pytubefix>=11.2.0  # YouTube 下载库
+yt-dlp==2026.10.26.220202.dev0  # parsehub 2.3.15 要求 >= 此 dev 版（比稳定版 2026.10.26 更新）
+pytubefix>=11.2.1  # YouTube 下载库
 ytmusicapi>=1.12.3  # YouTube Music API（搜索、排行榜、歌词）1.12.3: 最新稳定版
-pillow>=12.3.0  # 图像处理库 (12.3.0: security fixes, WebP improvements)
-pillow-heif>=1.8.0  # HEIF/HEIC 图片格式支持
-lxml-html-clean>=0.4.5  # HTML 清理工具
-markdown>=3.11  # Markdown 转换器
+pillow>=13.0.0  # 图像处理库 (13.x: 最新主版本)
+pillow-heif>=1.8.1  # HEIF/HEIC 图片格式支持
+lxml-html-clean>=0.4.6  # HTML 清理工具
+markdown>=3.11.2  # Markdown 转换器
 pyyaml>=6.0.3  # YAML配置文件解析
 tenacity>=9.2.1  # 重试机制（用于图床上传）
 telegraph>=2.2.0  # Telegraph API 库（用于发布长文本）
 
 # NetEase Cloud Music (ID3/FLAC tag embedding, Rust-powered)
 mutagen-rs>=0.2.7
-pycryptodome>=3.24.0  # AES encryption for NetEase WeAPI
+pycryptodome>=4.2.0  # AES encryption for NetEase WeAPI
 
 # AI Summary - Audio/Video Processing
 pydub>=0.25.1  # 音频切片（Whisper转录大文件）
@@ -92,7 +92,7 @@ aiofiles>=25.1.0  # 异步文件读取（图片base64转换）
 
 # Reddit API (使用 httpx，原生支持 SOCKS5 代理)
 # curl-cffi for TLS fingerprinting (JSON endpoint bypass)
-curl-cffi==0.16.3  # v0.16.3: 最新稳定版，改进HTTP/3支持和TLS指纹
+curl-cffi==0.17.0  # v0.17.0: 最新稳定版，改进HTTP/3支持和TLS指纹
 
 # Weather Visualization (天气图表可视化)
 matplotlib>=3.11.2  # 图表绘制库
