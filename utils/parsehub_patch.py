@@ -843,23 +843,31 @@ def patch_parsehub_yt_dlp():
 
         # Patch InstagramAPI's HTTP client to use randomized UA + more anti-crawler headers
         # (replaces the old MyInstaloaderContext header patch, removed with instaloader in 2.0.34+)
-        original_instagram_new_client = InstagramAPI._new_client
+        #
+        # ParseHub 2.3.16+ rewrote InstagramAPI on curl_cffi (impersonate="chrome"), which
+        # fakes the TLS/HTTP2 fingerprint itself and dropped _new_client / the user_agent
+        # arg entirely. The header patch is obsolete there, so skip it instead of raising
+        # AttributeError — an exception here aborts the remaining patches further down.
+        if hasattr(InstagramAPI, '_new_client'):
+            original_instagram_new_client = InstagramAPI._new_client
 
-        def patched_instagram_new_client(self):
-            from yt_dlp.utils.networking import random_user_agent
+            def patched_instagram_new_client(self):
+                from yt_dlp.utils.networking import random_user_agent
 
-            client = original_instagram_new_client(self)
-            client.headers.update({
-                'User-Agent': random_user_agent(),
-                'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7',
-                'Sec-Fetch-Dest': 'empty',
-                'Sec-Fetch-Mode': 'cors',
-                'Sec-Fetch-Site': 'same-origin',
-            })
-            return client
+                client = original_instagram_new_client(self)
+                client.headers.update({
+                    'User-Agent': random_user_agent(),
+                    'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+                    'Sec-Fetch-Dest': 'empty',
+                    'Sec-Fetch-Mode': 'cors',
+                    'Sec-Fetch-Site': 'same-origin',
+                })
+                return client
 
-        InstagramAPI._new_client = patched_instagram_new_client
-        logger.info("✅ InstagramAPI patched: Enhanced headers for better compatibility")
+            InstagramAPI._new_client = patched_instagram_new_client
+            logger.info("✅ InstagramAPI patched: Enhanced headers for better compatibility")
+        else:
+            logger.info("ℹ️ InstagramAPI: no _new_client (2.3.16+ uses curl_cffi), header patch skipped")
 
         # Note: ParseHub 2.3.5+ explicitly rejects bangumi/movies ("not supported"),
         # so the old BiliParse.__match__ bangumi/play patch was removed.

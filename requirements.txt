@@ -66,11 +66,12 @@ yfinance[repair]==1.7.0  # 最新版本，repair extra 启用价格异常修复�
 pandas==3.1.0
 
 # Social Media Parser (ParseHub) - 社交媒体解析功能
-parsehub~=2.3.15  # 社交媒体聚合解析器，支持20+平台 (2.3.15: 下载备用链接回退(抖音保留同画质全部CDN节点)、DownloadFallbackError 错误聚合、XHS 图片CDN新地址new Set兼容、B站多P时长修复、最右短链；B站番剧/影视已不支持)
+parsehub~=2.3.17  # 社交媒体聚合解析器，支持20+平台 (2.3.17: Instagram 匿名改用新版 GraphQL + embed 兜底补齐视频直链/时长、单视频优先 yt-dlp 最高画质；2.3.16 InstagramAPI 改用 curl_cffi，_new_client 已移除；最右读取 videos[id].dur 补齐时长；B站番剧/影视已不支持)
 socksio>=1.0.0  # httpx SOCKS5 代理支持 (parsehub 2.2.1+ 依赖 httpx[socks])
+curl-cffi>=0.13  # parsehub 2.3.16+ 依赖：Instagram 接口改用 curl_cffi 模拟浏览器 TLS 指纹
 cryptography>=50.0.2  # ParseHub依赖：用于小黑盒动态加密算法（RSA/AES/3DES）
 SignerPy>=0.12.0  # ParseHub依赖：抖音日常/Story移动端API签名
-yt-dlp==2026.10.26.220202.dev0  # parsehub 2.3.15 要求 >= 此 dev 版（比稳定版 2026.10.26 更新）
+yt-dlp==2026.10.26.220202.dev0  # parsehub 2.3.17 要求 >= 此 dev 版（比稳定版 2026.10.26 更新）
 pytubefix>=11.2.1  # YouTube 下载库
 ytmusicapi>=1.12.3  # YouTube Music API（搜索、排行榜、歌词）1.12.3: 最新稳定版
 pillow>=13.0.0  # 图像处理库 (13.x: 最新主版本)
