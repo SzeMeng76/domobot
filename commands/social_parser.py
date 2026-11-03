@@ -15,7 +15,7 @@ from telegram.ext import ContextTypes
 from PIL import Image as PILImage
 import pillow_heif
 
-from parsehub.types import VideoFile, ImageFile, AniFile, LivePhotoFile, VideoParseResult, ImageParseResult, MultimediaParseResult, RichTextParseResult
+from parsehub.types import VideoFile, ImageFile, AniFile, LivePhotoFile, VideoParseResult, ImageParseResult, MultimediaParseResult, RichTextParseResult, MusicParseResult
 from utils.command_factory import command_factory
 from utils.converter import clean_article_html
 from utils.error_handling import with_error_handling, with_telegram_retry
@@ -856,6 +856,9 @@ async def _send_media(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
         elif isinstance(pr, MultimediaParseResult):
             # 发送混合媒体
             return await _send_multimedia(context, chat_id, download_result, caption, reply_parameters, reply_markup, parse_result=pr)
+        elif isinstance(pr, MusicParseResult):
+            # 发送音频（parsehub 2.4.0+ B站音频）
+            return await _send_audio(context, chat_id, download_result, caption, reply_parameters, reply_markup, parse_result=pr)
         else:
             # 只发送文本
             @with_telegram_retry(max_retries=5)
@@ -1224,6 +1227,86 @@ async def _send_video(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
             reply_markup=reply_markup
         )
         return [fail_msg]
+
+
+async def _send_audio(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_parameters: ReplyParameters = None, reply_markup=None, parse_result=None):
+    """发送音频（parsehub 2.4.0+ B站音频），返回发送的消息列表"""
+    media = getattr(download_result, "media", None) if download_result else None
+    if isinstance(media, list):
+        media = media[0] if media else None
+
+    # 无本地文件（下载被跳过或失败）→ 退化为文本，至少把链接发出去
+    if not media or not hasattr(media, "path") or not media.path:
+        @with_telegram_retry(max_retries=5)
+        async def _send_text():
+            return await context.bot.send_message(
+                chat_id=chat_id,
+                text=caption,
+                parse_mode="MarkdownV2",
+                reply_parameters=reply_parameters,
+                disable_web_page_preview=True,
+                reply_markup=reply_markup
+            )
+
+        return [await _send_text()]
+
+    audio_path = Path(media.path)
+    # 文件名尽量用原曲标题，下载文件名来自 URL，可读性差
+    title = (getattr(parse_result, "title", "") or "").strip()[:64]
+    ext = getattr(media, "ext", "") or audio_path.suffix.lstrip(".")
+    # 文件名不是 MarkdownV2 正文，不能转义，只需去掉文件系统非法字符
+    safe_title = "".join(ch for ch in title if ch not in '\\/:*?"<>|').strip() or audio_path.stem
+    filename = f"{safe_title}.{ext}"
+
+    thumb_file = None
+    thumb_url = getattr(getattr(parse_result, "media", None), "thumb_url", None)
+    if thumb_url:
+        thumb_path = await _download_audio_thumb(thumb_url)
+        if thumb_path:
+            thumb_file = open(thumb_path, "rb")
+
+    try:
+        @with_telegram_retry(max_retries=5)
+        async def _send():
+            return await context.bot.send_audio(
+                chat_id=chat_id,
+                audio=audio_path,
+                caption=caption,
+                parse_mode="MarkdownV2",
+                duration=getattr(media, "duration", 0) or 0,
+                title=title or None,
+                filename=filename,
+                thumbnail=thumb_file,
+                reply_parameters=reply_parameters,
+                reply_markup=reply_markup,
+                read_timeout=300,
+                write_timeout=300,
+                connect_timeout=30
+            )
+
+        msg = await _send()
+        logger.info(f"✅ 音频发送成功: {audio_path.name}")
+        return [msg]
+    finally:
+        if thumb_file:
+            thumb_file.close()
+
+
+async def _download_audio_thumb(thumb_url: str) -> Path | None:
+    """下载音频封面到临时目录，失败返回 None（封面只是锦上添花，不该阻断发送）"""
+    try:
+        import httpx
+        import tempfile
+
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+            resp = await client.get(thumb_url, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://www.bilibili.com/"})
+            resp.raise_for_status()
+            thumb_path = Path(tempfile.gettempdir()) / f"parse_thumb_{hashlib.md5(thumb_url.encode()).hexdigest()}.jpg"
+            thumb_path.write_bytes(resp.content)
+            return thumb_path
+    except Exception as e:
+        logger.warning(f"⚠️ 音频封面下载失败，跳过: {e}")
+        return None
 
 
 async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download_result, caption: str, reply_parameters: ReplyParameters = None, reply_markup=None, parse_result=None):

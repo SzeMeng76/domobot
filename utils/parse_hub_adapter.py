@@ -19,7 +19,7 @@ from utils.parsehub_patch import patch_parsehub_yt_dlp
 patch_parsehub_yt_dlp()
 
 from parsehub import ParseHub, ContentUnavailableError
-from parsehub.types import ParseResult, VideoParseResult, ImageParseResult, MultimediaParseResult, RichTextParseResult
+from parsehub.types import ParseResult, VideoParseResult, ImageParseResult, MultimediaParseResult, RichTextParseResult, MusicParseResult
 from parsehub.utils.helpers import UA
 
 logger = logging.getLogger(__name__)
@@ -840,6 +840,8 @@ class ParseHubAdapter:
             return "multimedia"
         elif isinstance(result, RichTextParseResult):
             return "richtext"
+        elif isinstance(result, MusicParseResult):
+            return "music"
         else:
             return "unknown"
 

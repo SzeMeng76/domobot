@@ -303,7 +303,7 @@ async def handle_inline_parse_query(
         logger.info(f"[Inline Parse] display_url: {display_url[:80]}...")
 
         # 构建 inline 结果
-        from parsehub.types import VideoParseResult, ImageParseResult, RichTextParseResult, MultimediaParseResult
+        from parsehub.types import VideoParseResult, ImageParseResult, RichTextParseResult, MultimediaParseResult, MusicParseResult
 
         title = ((parse_result.title or "").strip() or "无标题")[:60]  # Telegram限制64字符
         description = ((parse_result.content or "").strip() or "点击下载")[:100]  # description字段限制
@@ -314,7 +314,12 @@ async def handle_inline_parse_query(
             thumb_url = getattr(parse_result.media, 'thumb_url', None)
         elif isinstance(parse_result, ImageParseResult) and parse_result.media:
             if isinstance(parse_result.media, list) and len(parse_result.media) > 0:
-                thumb_url = str(parse_result.media[0].path) if hasattr(parse_result.media[0], 'path') else None
+                first_path = getattr(parse_result.media[0], 'path', None)
+                if first_path:
+                    thumb_url = str(first_path)
+        elif isinstance(parse_result, MusicParseResult) and parse_result.media:
+            # 音频用封面图作为缩略图
+            thumb_url = getattr(parse_result.media, 'thumb_url', None)
 
         # InlineQueryResultPhoto 的 photo_url 不支持 WebP，跳过使用默认图片
         if thumb_url and thumb_url.endswith('.webp'):
@@ -504,6 +509,43 @@ async def handle_inline_parse_query(
                         reply_markup=keyboard,
                     )
                 ]
+        elif isinstance(parse_result, MusicParseResult):
+            # 音频（parsehub 2.4.0+）→ 用户选择后下载并以 send_audio 发送
+            result_id = f"parse_audio_{uuid4()}"
+            caption_parts = []
+            if parse_result.title:
+                caption_parts.append(parse_result.title)
+            if parse_result.content:
+                caption_parts.append(parse_result.content[:100])
+            caption_text = "\n\n".join(caption_parts) if caption_parts else "⏳ 下载中..."
+
+            buttons = [[InlineKeyboardButton("🔗 原链接", url=display_url)]]
+            keyboard = InlineKeyboardMarkup(buttons)
+
+            _parse_cache[result_id] = {
+                "url": url,
+                "display_url": display_url,
+                "parse_result": parse_result,
+                "query": query,
+                "is_article": True,  # 音频没有预览媒体，走 edit_message_text
+            }
+            _cache_timestamps[result_id] = time.time()
+
+            logger.info(f"[Inline Parse] 构建音频结果: title={title[:30]}")
+
+            return [
+                raw_link_result,
+                InlineQueryResultArticle(
+                    id=result_id,
+                    title=f"🎵 音频 {title}",
+                    description=description,
+                    thumbnail_url=thumb_url or "https://img.icons8.com/color/96/000000/music.png",
+                    input_message_content=InputTextMessageContent(
+                        message_text=caption_text or "⏳ 下载中..."
+                    ),
+                    reply_markup=keyboard,
+                )
+            ]
         elif isinstance(parse_result, (ImageParseResult, MultimediaParseResult)):
             # 图片/混合媒体 → 返回多个结果（每个媒体一个）
             results = []
@@ -838,8 +880,17 @@ async def handle_inline_parse_chosen(
     inline_message_id = chosen_result.inline_message_id
     result_id = chosen_result.result_id
 
-    # 只处理视频和富文本，图片直接用 URL 不需要下载
-    if not (result_id.startswith("parse_video_") or result_id.startswith("parse_richtext_")):
+    # 只处理视频、富文本和音频，图片直接用 URL 不需要下载
+    if not (
+        result_id.startswith("parse_video_")
+        or result_id.startswith("parse_richtext_")
+        or result_id.startswith("parse_audio_")
+    ):
+        return
+
+    # 没有 inline_message_id 就无法编辑这条消息（chosen result 理论上总有，稳妥起见）
+    if not inline_message_id:
+        logger.warning("[Inline Parse] chosen_inline_result 缺少 inline_message_id，跳过")
         return
 
     # 从缓存中获取解析结果（使用 result_id）
@@ -888,7 +939,7 @@ async def handle_inline_parse_chosen(
         return
 
     try:
-        from parsehub.types import VideoParseResult, ImageParseResult, RichTextParseResult, MultimediaParseResult
+        from parsehub.types import VideoParseResult, ImageParseResult, RichTextParseResult, MultimediaParseResult, MusicParseResult
         from commands.social_parser import _escape_markdown, _format_text
 
         # 构建 caption（使用 HTML 格式）
@@ -941,6 +992,11 @@ async def handle_inline_parse_chosen(
             # 视频/混合媒体中的视频
             await _handle_video_inline(
                 context, inline_message_id, parse_result, parse_adapter, caption, url, display_url, media_index, is_article, result_id, reply_markup
+            )
+        elif isinstance(parse_result, MusicParseResult):
+            # 音频 → 下载后以 send_audio 发送
+            await _handle_audio_inline(
+                context, inline_message_id, parse_result, parse_adapter, caption, url, display_url, result_id, reply_markup
             )
         else:
             # 其他类型（不应该到这里，因为前面已经过滤了）
@@ -1280,6 +1336,127 @@ async def _handle_video_inline(
         logger.error(f"视频 inline 处理失败: {e}", exc_info=True)
         try:
             await _update_status(f"**❌ 视频处理失败:**\n```\n{str(e)}\n```")
+        except Exception:
+            pass
+
+
+async def _handle_audio_inline(
+    context: ContextTypes.DEFAULT_TYPE,
+    inline_message_id: str,
+    parse_result,
+    parse_adapter,
+    caption: str,
+    url: str,
+    display_url: str = None,
+    result_id: str = None,
+    reply_markup = None
+) -> None:
+    """处理音频 inline 结果（parsehub 2.4.0+ B站音频）"""
+    from html import escape as html_escape
+
+    if not display_url:
+        display_url = url
+
+    # 音频没有预览媒体，始终是 Article 类型
+    async def _update_status(text: str):
+        await context.bot.edit_message_text(
+            inline_message_id=inline_message_id,
+            text=text,
+            parse_mode=ParseMode.HTML
+        )
+
+    try:
+        await _update_status("📥 下载中...")
+
+        download_result = await parse_result.download(
+            path=parse_adapter.temp_dir,
+            proxy=parse_adapter.config.downloader_proxy if parse_adapter.config else None
+        )
+
+        media = getattr(download_result, "media", None) if download_result else None
+        if isinstance(media, list):
+            media = media[0] if media else None
+
+        if not media or not getattr(media, "path", None):
+            await _update_status(f"{caption}\n\n❌ 下载失败")
+            return
+
+        # 缓存 download_result 到内存（用于AI总结）
+        from handlers.ai_summary_callback_handler import cache_download_result
+        url_hash = get_url_hash(display_url)
+        cache_download_result(url_hash, download_result)
+
+        audio_path = Path(media.path)
+        title = (parse_result.title or "").strip()[:64]
+        ext = getattr(media, "ext", "") or audio_path.suffix.lstrip(".")
+        safe_title = "".join(ch for ch in title if ch not in '\\/:*?"<>|').strip() or audio_path.stem
+        filename = f"{safe_title}.{ext}"
+
+        # 临时频道方案：先上传拿到 file_id，再用 file_id 编辑 inline 消息
+        config_manager = ConfigManager()
+        temp_channel_id = config_manager.config.inline_parse_temp_channel
+
+        if not temp_channel_id:
+            logger.error("INLINE_PARSE_TEMP_CHANNEL not configured")
+            await _update_status(f"{caption}\n\n❌ 配置错误：未设置临时存储频道")
+            return
+
+        # 封面（可选，失败不影响发送）
+        thumb_file = None
+        try:
+            thumb_url = getattr(getattr(parse_result, "media", None), "thumb_url", None)
+            if thumb_url:
+                from commands.social_parser import _download_audio_thumb
+                thumb_path = await _download_audio_thumb(thumb_url)
+                if thumb_path:
+                    thumb_file = open(thumb_path, "rb")
+
+            await _update_status("📤 上传中...")
+            with open(audio_path, 'rb') as audio_file:
+                sent_message = await context.bot.send_audio(
+                    chat_id=temp_channel_id,
+                    audio=audio_file,
+                    title=title or None,
+                    filename=filename,
+                    duration=getattr(media, "duration", 0) or 0,
+                    thumbnail=thumb_file,
+                    read_timeout=300,
+                    write_timeout=300,
+                    connect_timeout=30
+                )
+        finally:
+            if thumb_file:
+                thumb_file.close()
+
+        from telegram import InputMediaAudio
+
+        await context.bot.edit_message_media(
+            inline_message_id=inline_message_id,
+            media=InputMediaAudio(
+                media=sent_message.audio.file_id,
+                caption=caption,
+                parse_mode=ParseMode.HTML,
+                duration=getattr(media, "duration", 0) or 0,
+            ),
+            reply_markup=reply_markup
+        )
+
+        # 上传成功 → 清理缓存
+        if result_id:
+            _remove_cache_entry(result_id)
+
+        try:
+            await context.bot.delete_message(chat_id=temp_channel_id, message_id=sent_message.message_id)
+        except Exception:
+            pass
+
+        logger.info(f"[Inline Parse] 音频 inline 发送成功: {audio_path.name}")
+
+        # 不立即清理临时文件，保留供 AI 总结使用
+    except Exception as e:
+        logger.error(f"音频 inline 处理失败: {e}", exc_info=True)
+        try:
+            await _update_status(f"<b>❌ 音频处理失败:</b>\n<pre>{html_escape(str(e))}</pre>")
         except Exception:
             pass
 

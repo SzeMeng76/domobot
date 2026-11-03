@@ -66,7 +66,7 @@ yfinance[repair]==1.7.0  # 最新版本，repair extra 启用价格异常修复�
 pandas==3.1.0
 
 # Social Media Parser (ParseHub) - 社交媒体解析功能
-parsehub~=2.3.17  # 社交媒体聚合解析器，支持20+平台 (2.3.17: Instagram 匿名改用新版 GraphQL + embed 兜底补齐视频直链/时长、单视频优先 yt-dlp 最高画质；2.3.16 InstagramAPI 改用 curl_cffi，_new_client 已移除；最右读取 videos[id].dur 补齐时长；B站番剧/影视已不支持)
+parsehub~=2.4.0  # 社交媒体聚合解析器，支持20+平台 (2.4.0: 新增 B站音频 bilibili.com/audio/au<ID> 解析，返回 MusicParseResult；2.3.17: Instagram 匿名改用新版 GraphQL + embed 兜底补齐视频直链/时长、单视频优先 yt-dlp 最高画质；2.3.16 InstagramAPI 改用 curl_cffi，_new_client 已移除；最右读取 videos[id].dur 补齐时长；B站番剧/影视已不支持)
 socksio>=1.0.0  # httpx SOCKS5 代理支持 (parsehub 2.2.1+ 依赖 httpx[socks])
 curl-cffi>=0.13  # parsehub 2.3.16+ 依赖：Instagram 接口改用 curl_cffi 模拟浏览器 TLS 指纹
 cryptography>=50.0.2  # ParseHub依赖：用于小黑盒动态加密算法（RSA/AES/3DES）
