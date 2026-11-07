@@ -8,6 +8,70 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
+def convert_reply_markup(reply_markup):
+    """
+    把 python-telegram-bot 的 InlineKeyboardMarkup 转成 Pyrogram 格式。
+
+    除了 url / callback_data，还保留 ``style`` 与 ``icon_custom_emoji_id``，
+    否则经 Pyrogram 发出的按钮会丢掉语义颜色。
+
+    Args:
+        reply_markup: PTB 的 InlineKeyboardMarkup，或 None
+
+    Returns:
+        Pyrogram 的 InlineKeyboardMarkup，转换失败或无按钮时返回 None
+    """
+    if not reply_markup or not getattr(reply_markup, "inline_keyboard", None):
+        return None
+
+    try:
+        from pyrogram import enums
+        from pyrogram.types import InlineKeyboardButton as PyrogramButton
+        from pyrogram.types import InlineKeyboardMarkup as PyrogramMarkup
+    except ImportError:
+        logger.warning("Pyrogram 未安装，无法转换按钮")
+        return None
+
+    _STYLE_MAP = {
+        "primary": enums.ButtonStyle.PRIMARY,
+        "success": enums.ButtonStyle.SUCCESS,
+        "danger": enums.ButtonStyle.DANGER,
+        "link": enums.ButtonStyle.LINK,
+    }
+
+    keyboard = []
+    for row in reply_markup.inline_keyboard:
+        button_row = []
+        for button in row:
+            style = _STYLE_MAP.get(getattr(button, "style", None) or "")
+
+            # LINK 只对富文本消息的按钮有效，普通键盘上会被服务端拒绝
+            if style is enums.ButtonStyle.LINK:
+                style = None
+
+            kwargs = {"text": button.text}
+            if style is not None:
+                kwargs["style"] = style
+
+            icon = getattr(button, "icon_custom_emoji_id", None)
+            if icon:
+                kwargs["icon_custom_emoji_id"] = str(icon)
+
+            if button.url:
+                kwargs["url"] = button.url
+            elif button.callback_data:
+                kwargs["callback_data"] = button.callback_data
+            else:
+                continue
+
+            button_row.append(PyrogramButton(**kwargs))
+
+        if button_row:
+            keyboard.append(button_row)
+
+    return PyrogramMarkup(keyboard) if keyboard else None
+
+
 class PyrogramHelper:
     """
     Pyrogram 辅助类
@@ -501,26 +565,8 @@ class PyrogramHelper:
                 else:
                     logger.debug(f"缩略图是URL，忽略（Pyrogram不支持URL）: {thumb}")
 
-            # 转换reply_markup: python-telegram-bot → Pyrogram格式
-            pyrogram_reply_markup = None
-            if reply_markup:
-                from pyrogram.types import InlineKeyboardMarkup as PyrogramInlineKeyboardMarkup
-                from pyrogram.types import InlineKeyboardButton as PyrogramInlineKeyboardButton
-
-                # 转换按钮格式
-                keyboard = []
-                for row in reply_markup.inline_keyboard:
-                    button_row = []
-                    for button in row:
-                        if button.url:
-                            button_row.append(PyrogramInlineKeyboardButton(button.text, url=button.url))
-                        elif button.callback_data:
-                            button_row.append(PyrogramInlineKeyboardButton(button.text, callback_data=button.callback_data))
-                    if button_row:
-                        keyboard.append(button_row)
-
-                if keyboard:
-                    pyrogram_reply_markup = PyrogramInlineKeyboardMarkup(keyboard)
+            # 转换reply_markup: python-telegram-bot → Pyrogram格式（保留 style）
+            pyrogram_reply_markup = convert_reply_markup(reply_markup)
 
             # 转换parse_mode: MarkdownV2 → markdown (Pyrogram不支持MarkdownV2)
             from pyrogram import enums
@@ -648,25 +694,8 @@ class PyrogramHelper:
                 else:
                     logger.debug(f"缩略图是URL，忽略: {thumb}")
 
-            # 转换reply_markup: python-telegram-bot → Pyrogram格式
-            pyrogram_reply_markup = None
-            if reply_markup:
-                from pyrogram.types import InlineKeyboardMarkup as PyrogramInlineKeyboardMarkup
-                from pyrogram.types import InlineKeyboardButton as PyrogramInlineKeyboardButton
-
-                keyboard = []
-                for row in reply_markup.inline_keyboard:
-                    button_row = []
-                    for button in row:
-                        if button.url:
-                            button_row.append(PyrogramInlineKeyboardButton(button.text, url=button.url))
-                        elif button.callback_data:
-                            button_row.append(PyrogramInlineKeyboardButton(button.text, callback_data=button.callback_data))
-                    if button_row:
-                        keyboard.append(button_row)
-
-                if keyboard:
-                    pyrogram_reply_markup = PyrogramInlineKeyboardMarkup(keyboard)
+            # 转换reply_markup: python-telegram-bot → Pyrogram格式（保留 style）
+            pyrogram_reply_markup = convert_reply_markup(reply_markup)
 
             # 转换parse_mode
             from pyrogram import enums
@@ -972,3 +1001,106 @@ class PyrogramHelper:
         except Exception as e:
             logger.debug(f"Failed to get message {message_id} from chat {chat_id}: {e}")
             return None
+
+    async def send_rich_message(
+        self,
+        chat_id: int,
+        html: str | None = None,
+        blocks: list | None = None,
+        reply_markup=None,
+        reply_to_message_id: int | None = None,
+        disable_notification: bool | None = None,
+    ):
+        """
+        发送富文本消息（Rich Message）。
+
+        这是 MTProto 侧的能力，PTB 22.8 尚未封装。相比普通 sendMessage，
+        富文本支持表格、标题层级、列表、折叠块等排版元素。
+
+        注意：不支持 Rich Message 的老客户端可能无法渲染，调用方应做好
+        降级处理（捕获异常后回退到普通文本发送）。
+
+        Args:
+            chat_id: 聊天ID
+            html: 富文本 HTML（支持 ``<table>`` 等标签）
+            blocks: 结构化 block 列表（与 html 二选一）
+            reply_markup: PTB 的 InlineKeyboardMarkup，会自动转换
+            reply_to_message_id: 回复的消息ID
+            disable_notification: 静默发送
+
+        Returns:
+            发送的消息对象
+
+        Raises:
+            RuntimeError: client 未启动
+            ValueError: html 与 blocks 都没提供
+        """
+        if not self.is_started or not self.client:
+            raise RuntimeError("Pyrogram client not started")
+
+        if not html and not blocks:
+            raise ValueError("必须提供 html 或 blocks 之一")
+
+        from pyrogram.types import InputRichMessage
+
+        rich = InputRichMessage(html=html) if html else InputRichMessage(blocks=blocks)
+
+        message = await self.client.send_rich_message(
+            chat_id=chat_id,
+            rich_message=rich,
+            reply_markup=convert_reply_markup(reply_markup),
+            reply_to_message_id=reply_to_message_id,
+            disable_notification=disable_notification,
+        )
+
+        logger.info("✅ 富文本消息已发送: chat=%s", chat_id)
+        return message
+
+    async def send_rich_or_fallback(
+        self,
+        chat_id: int,
+        html: str | None = None,
+        blocks: list | None = None,
+        fallback_text: str = "",
+        reply_markup=None,
+        reply_to_message_id: int | None = None,
+    ):
+        """
+        发送富文本消息，失败时降级为普通文本。
+
+        老客户端、或服务端不支持时不会抛给调用方，而是自动回退，
+        保证用户至少能看到内容。
+
+        Args:
+            chat_id: 聊天ID
+            html: 富文本 HTML
+            blocks: 结构化 block 列表
+            fallback_text: 降级时发送的纯文本
+            reply_markup: 按钮
+            reply_to_message_id: 回复的消息ID
+
+        Returns:
+            发送的消息对象；两条路都失败时返回 None
+        """
+        try:
+            return await self.send_rich_message(
+                chat_id=chat_id,
+                html=html,
+                blocks=blocks,
+                reply_markup=reply_markup,
+                reply_to_message_id=reply_to_message_id,
+            )
+        except Exception as e:
+            logger.warning("富文本发送失败，降级为普通消息: %s", e)
+            if not fallback_text:
+                return None
+            try:
+                return await self.client.send_message(
+                    chat_id=chat_id,
+                    text=fallback_text,
+                    reply_markup=convert_reply_markup(reply_markup),
+                    reply_to_message_id=reply_to_message_id,
+                )
+            except Exception as fallback_error:
+                logger.error("降级发送也失败: %s", fallback_error)
+                return None
