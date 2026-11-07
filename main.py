@@ -130,6 +130,7 @@ from utils.redis_message_delete_scheduler import get_message_delete_scheduler
 from utils.redis_stats_manager import RedisStatsManager
 from utils.redis_task_scheduler import init_task_scheduler as redis_init_task_scheduler
 from utils.script_loader import init_script_loader
+from utils.ui import build_styled_bot
 
 
 @with_error_handling
@@ -1210,12 +1211,18 @@ def main() -> None:
     import os
     os.makedirs("data", exist_ok=True)
 
+    # StyledBot 在发送前统一给按钮补语义颜色。ApplicationBuilder 的 token 与
+    # bot 参数互斥、超时参数也只能在未传 bot 时设置，所以超时在构造时一并传入。
     application = (
         Application.builder()
-        .token(bot_token)
-        .read_timeout(60)  # 增加读取超时到60秒（发送大图片/视频时需要）
-        .write_timeout(60)  # 增加写入超时到60秒
-        .media_write_timeout(120)  # 上传媒体文件（视频/图片）的写入超时120秒
+        .bot(
+            build_styled_bot(
+                bot_token,
+                read_timeout=60,  # 发送大图片/视频时需要
+                write_timeout=60,
+                media_write_timeout=120,  # 上传媒体文件的写入超时
+            )
+        )
         .concurrent_updates(True)  # 允许并发处理update，上传大文件时不阻塞其他命令
         .build()
     )

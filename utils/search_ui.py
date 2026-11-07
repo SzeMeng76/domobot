@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
+from utils import ui
 from utils.country_data import SUPPORTED_COUNTRIES, get_country_flag
 
 logger = logging.getLogger(__name__)
@@ -187,12 +188,7 @@ class SearchUIBuilder:
             callback_data = f"{prefix}_select_{i}_{pagination.current_page}"
 
             keyboard.append(
-                [
-                    InlineKeyboardButton(
-                        f"{i + 1}. {icon} {display_name}",
-                        callback_data=callback_data,
-                    )
-                ]
+                [ui.btn(f"{i + 1}. {icon} {display_name}", callback_data)]
             )
 
         # 分页导航
@@ -204,15 +200,10 @@ class SearchUIBuilder:
         action_row = []
         if show_region_button:
             action_row.append(
-                InlineKeyboardButton(
-                    "🌍 更改搜索地区",
-                    callback_data=f"{prefix}_change_region",
-                )
+                ui.btn("🌍 更改搜索地区", f"{prefix}_change_region", style=ui.PRIMARY)
             )
         if show_close_button:
-            action_row.append(
-                InlineKeyboardButton("❌ 关闭", callback_data=f"{prefix}_close")
-            )
+            action_row.append(ui.close_row(f"{prefix}_close")[0])
         if action_row:
             keyboard.append(action_row)
 
@@ -226,32 +217,11 @@ class SearchUIBuilder:
         self, pagination: PaginationInfo
     ) -> list[InlineKeyboardButton]:
         """创建分页导航行"""
-        nav_row = []
-        prefix = self.callback_prefix
-        current = pagination.current_page
-        total = pagination.total_pages
-
-        if current > 1:
-            nav_row.append(
-                InlineKeyboardButton(
-                    "⬅️ 上一页", callback_data=f"{prefix}_page_{current - 1}"
-                )
-            )
-
-        nav_row.append(
-            InlineKeyboardButton(
-                f"📄 {current}/{total}", callback_data=f"{prefix}_page_info"
-            )
+        return ui.page_nav_row(
+            self.callback_prefix,
+            pagination.current_page,
+            pagination.total_pages,
         )
-
-        if current < total:
-            nav_row.append(
-                InlineKeyboardButton(
-                    "下一页 ➡️", callback_data=f"{prefix}_page_{current + 1}"
-                )
-            )
-
-        return nav_row
 
     def create_region_keyboard(
         self,
@@ -280,8 +250,10 @@ class SearchUIBuilder:
             label = f"{'✓ ' if is_current else ''}{flag} {region.upper()}"
 
             row.append(
-                InlineKeyboardButton(
-                    label, callback_data=f"{prefix}_region_{region.lower()}"
+                ui.btn(
+                    label,
+                    f"{prefix}_region_{region.lower()}",
+                    style=ui.SUCCESS if is_current else None,
                 )
             )
 
@@ -293,9 +265,7 @@ class SearchUIBuilder:
             keyboard.append(row)
 
         # 返回按钮
-        keyboard.append(
-            [InlineKeyboardButton("🔙 返回", callback_data=f"{prefix}_back")]
-        )
+        keyboard.append(ui.back_row(f"{prefix}_back"))
 
         return InlineKeyboardMarkup(keyboard)
 

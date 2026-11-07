@@ -5,7 +5,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from utils.command_factory import command_factory
-from utils.formatter import foldable_text_with_markdown_v2
+from utils.formatter import foldable_text_with_markdown_html
 from utils.message_manager import delete_user_command, send_help
 
 # 导入权限相关模块
@@ -168,7 +168,7 @@ Inline: `@bot netease 关键词$` - Inline搜索(有缓存直接发音频)
 
 📞 如有问题请联系管理员"""
 
-    await send_help(context, update.message.chat_id, foldable_text_with_markdown_v2(help_text), parse_mode="MarkdownV2")
+    await send_help(context, update.message.chat_id, foldable_text_with_markdown_html(help_text), parse_mode="HTML")
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
