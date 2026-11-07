@@ -486,12 +486,7 @@ def make_styled_bot_class() -> type:
 # 自动表格识别
 # ---------------------------------------------------------------------------
 
-# 价格模块统一输出形如：
-#   📍 国家/地区: 马来西亚 (MY) 🇲🇾
-#     • 移动版：MYR 19.90 ≈ CNY 32.65
-#   🥇 巴基斯坦 (PK) 🇵🇰
-#   💰 高级版: PKR 1100 ≈ ¥26.50
-# 在富文本通道里把列表转成真表格，其余行各自成段。
+# 项目符号列表：• 移动版：MYR 19.90
 _BULLET_RE = re.compile(r"^\s*[•·]\s*(.+?)\s*[：:]\s*(.+?)\s*$")
 # 排行榜条目：🥇 巴基斯坦 (PK) 🇵🇰
 _RANK_RE = re.compile(r"^(\S{1,3})\s+(.+?)\s*\(([A-Za-z]{2})\)\s*(.*)$")
@@ -499,6 +494,43 @@ _RANK_RE = re.compile(r"^(\S{1,3})\s+(.+?)\s*\(([A-Za-z]{2})\)\s*(.*)$")
 #   💰 高级版: PKR 1100 ≈ ¥26.50   （Netflix/Spotify/Xbox 等）
 #   💰 JPY 4800 ≈ ¥230.00          （Nintendo，无冒号）
 _PRICE_LINE_RE = re.compile(r"^[💰💵💴💶💷]\s*(?:(.+?)\s*[：:]\s*)?(.+)$")
+# 通用「标签: 值」行。为避免误判，规则收紧为：
+#   * 全角冒号 `：` 直接视为分隔符
+#   * 半角冒号 `:` 后面必须跟空白，借此排除 URL（https://a.com:8080）、
+#     时间（16:56:13）、比例（1:2:3）等
+#   * 标签里不允许出现 "//"（协议、路径）或换行
+_GENERIC_KV_RE = re.compile(
+    r"^(?P<label>[^\n：:/]{1,30}?)\s*(?P<sep>[：:])\s*(?P<value>\S.*)$"
+)
+
+# 标签里出现这些内容说明不是键值对
+_KV_LABEL_BLOCKLIST = ("http", "https", "ftp", "www", "mailto")
+
+
+def _match_kv(line: str):
+    """匹配「标签: 值」，返回 (label, value) 或 None。"""
+    m = _GENERIC_KV_RE.match(line)
+    if not m:
+        return None
+
+    label = m.group("label").strip()
+    value = m.group("value").strip()
+    if not label or not value:
+        return None
+
+    # 半角冒号后面必须有空白，否则多半是 URL / 时间 / 比例
+    if m.group("sep") == ":":
+        rest = line[m.end("sep") :]
+        if not rest[:1].isspace():
+            return None
+
+    lowered = label.lower()
+    if any(token in lowered for token in _KV_LABEL_BLOCKLIST):
+        return None
+    if "//" in label:
+        return None
+
+    return label, value
 
 
 def _paragraph(text: str):
@@ -703,6 +735,33 @@ def extract_table_blocks(html: str) -> list | None:
 
             if len(rows) >= 2:
                 blocks.append(make_table(rows, ("项目", "数值")))
+                used_table = True
+            else:
+                for a, b in rows:
+                    blocks.append(_paragraph(f"{a}: {b}"))
+            continue
+
+        # --- 通用「标签: 值」块 ---
+        # 连续两行以上都是这个结构就成表，不限于特定模块的格式。
+        if _match_kv(plain):
+            rows = []
+            while i < len(lines):
+                cur = _strip_rich_tags(lines[i]).strip()
+                kv = _match_kv(cur)
+                if not kv:
+                    break
+                rows.append(kv)
+                i += 1
+            while i < len(lines):
+                cur = _strip_rich_tags(lines[i]).strip()
+                m_kv = _GENERIC_KV_RE.match(cur)
+                if not m_kv:
+                    break
+                rows.append((m_kv.group("label").strip(), m_kv.group("value").strip()))
+                i += 1
+
+            if len(rows) >= 2:
+                blocks.append(make_table(rows, ("项目", "内容")))
                 used_table = True
             else:
                 for a, b in rows:
