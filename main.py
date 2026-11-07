@@ -368,6 +368,28 @@ async def setup_application(application: Application, config) -> None:
             )
             await pyrogram_helper.start()
             logger.info("✅ Pyrogram客户端初始化完成")
+
+            # 注册富文本通道：所有 sendMessage 会先尝试走 Kurigram，
+            # 失败自动回退到 Bot API，调用点无需改动。
+            from utils.ui import set_rich_sender
+
+            async def _rich_sender(
+                chat_id,
+                html,
+                reply_markup=None,
+                reply_to_message_id=None,
+                disable_notification=None,
+            ):
+                return await pyrogram_helper.send_rich_message(
+                    chat_id=chat_id,
+                    html=html,
+                    reply_markup=reply_markup,
+                    reply_to_message_id=reply_to_message_id,
+                    disable_notification=disable_notification,
+                )
+
+            set_rich_sender(_rich_sender)
+            logger.info("✅ 富文本消息通道已启用（Kurigram）")
         except ImportError:
             logger.warning("⚠️ Pyrogram未安装，DC ID检测功能将不可用。安装方法: pip install pyrogram tgcrypto")
         except Exception as e:

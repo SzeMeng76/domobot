@@ -76,6 +76,60 @@ def _build_table(
     return InputRichBlockTable(cells=cells, is_bordered=bordered, is_striped=striped)
 
 
+def build_rich_buttons(
+    rows: Sequence[Sequence[tuple[str, str, str]]] | None = None,
+    *,
+    align: str = "center",
+) -> list:
+    """
+    构造富文本消息里的按钮行。
+
+    注意：富文本按钮是**消息内容的一部分**（``InputRichBlockButtons``，
+    对应 ``<tg-button-row>``），不是 ``reply_markup``。这是它和普通按钮
+    最大的区别，也是能用 ``ButtonStyle.LINK``（无边框链接样式）的原因。
+
+    Args:
+        rows: 每行是一组 ``(文字, callback_data 或 url, 样式)`` 元组。
+              样式可选 ``primary`` / ``success`` / ``danger`` / ``link`` /
+              ``None``（默认）。每行最多 8 个按钮。
+        align: 整行对齐，``left`` / ``center`` / ``right``
+
+    Returns:
+        block 列表，可直接追加到 ``build_price_card`` 的结果里
+    """
+    from pyrogram import enums
+    from pyrogram.types import InputRichBlockButtons, RichMessageButton
+
+    if not rows:
+        return []
+
+    style_map = {
+        "primary": enums.ButtonStyle.PRIMARY,
+        "success": enums.ButtonStyle.SUCCESS,
+        "danger": enums.ButtonStyle.DANGER,
+        "link": enums.ButtonStyle.LINK,
+    }
+
+    blocks: list = []
+    for row in rows:
+        buttons = []
+        for text, target, style_name in row:
+            kwargs = {
+                "text": text,
+                "style": style_map.get((style_name or "").lower(), enums.ButtonStyle.DEFAULT),
+            }
+            if target.startswith(("http://", "https://", "tg://")):
+                kwargs["url"] = target
+            else:
+                kwargs["callback_data"] = target
+            buttons.append(RichMessageButton(**kwargs))
+
+        if buttons:
+            blocks.append(InputRichBlockButtons(buttons=buttons, align=align))
+
+    return blocks
+
+
 def build_price_card(
     *,
     title: str,
@@ -84,11 +138,12 @@ def build_price_card(
     header: Sequence[str] | None = None,
     note: str | None = None,
     footer: str | None = None,
+    buttons: Sequence[Sequence[tuple[str, str, str]]] | None = None,
 ) -> list:
     """
     组装价格类卡片的 block 列表。
 
-    结构：标题 -> 副标题 -> 表格 -> 备注 -> 页脚。
+    结构：标题 -> 副标题 -> 表格 -> 备注 -> 页脚 -> 按钮行。
 
     Args:
         title: 标题
@@ -97,6 +152,7 @@ def build_price_card(
         header: 表头
         note: 备注（引用块）
         footer: 页脚
+        buttons: 按钮行，见 :func:`build_rich_buttons`
 
     Returns:
         block 列表，可直接传给 send_rich_message(blocks=...)
@@ -127,6 +183,8 @@ def build_price_card(
         )
     if footer:
         blocks.append(InputRichBlockFooter(text=footer))
+    if buttons:
+        blocks.extend(build_rich_buttons(buttons))
 
     return blocks
 
@@ -194,6 +252,7 @@ async def send_price_card(
     header: Sequence[str] | None = None,
     note: str | None = None,
     footer: str | None = None,
+    buttons: Sequence[Sequence[tuple[str, str, str]]] | None = None,
     reply_markup=None,
     reply_to_message_id: int | None = None,
     parse_mode: str = "HTML",
@@ -210,7 +269,8 @@ async def send_price_card(
         header: 表头
         note: 备注
         footer: 页脚
-        reply_markup: PTB 的 InlineKeyboardMarkup
+        buttons: 富文本按钮行（消息内嵌按钮，支持 LINK 无边框样式）
+        reply_markup: 普通按钮（仅降级路径使用）
         reply_to_message_id: 回复的消息ID
         parse_mode: 降级消息使用的解析模式
 
@@ -242,6 +302,7 @@ async def send_price_card(
             header=header,
             note=note,
             footer=footer,
+            buttons=buttons,
         )
         return await helper.send_rich_message(
             chat_id=chat_id,

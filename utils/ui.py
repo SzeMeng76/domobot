@@ -421,6 +421,14 @@ def make_styled_bot_class() -> type:
         "off",
     )
 
+    # 富文本通道：需要 Kurigram 已启动，运行时通过 set_rich_sender 注入
+    auto_rich = os.getenv("RICH_TEXT_AUTO_RICH", "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+        "off",
+    )
+
     class StyledBot(ExtBot):  # type: ignore[misc]
         async def _send_message(self, endpoint: str, data: dict, **kwargs: Any) -> Any:
             kwargs["reply_markup"] = style_markup(kwargs.get("reply_markup"))
@@ -446,9 +454,119 @@ def make_styled_bot_class() -> type:
                 kwargs["parse_mode"] = "HTML"
                 data.pop("parse_mode", None)
 
+            # 富文本通道：文本消息优先经 Kurigram 发送，失败自动回退
+            if auto_rich and endpoint == "sendMessage":
+                text = kwargs.get("text") or data.get("text")
+                if isinstance(text, str) and text:
+                    sent = await _try_rich_send(
+                        chat_id=data.get("chat_id"),
+                        html=text,
+                        reply_markup=kwargs.get("reply_markup"),
+                        reply_to_message_id=kwargs.get("reply_to_message_id"),
+                        disable_notification=kwargs.get("disable_notification"),
+                    )
+                    if sent is not None:
+                        return sent
+
             return await super()._send_message(endpoint, data, **kwargs)
 
     return StyledBot
+
+
+# ---------------------------------------------------------------------------
+# 富文本通道（Kurigram / MTProto）
+# ---------------------------------------------------------------------------
+
+# 由 main.py 在 Pyrogram 初始化后注入，签名为
+#   async (chat_id, html, reply_markup, reply_to_message_id, disable_notification)
+#   -> pyrogram Message | None
+_rich_sender: Any = None
+
+
+def set_rich_sender(sender: Any) -> None:
+    """注册富文本发送函数（通常是 PyrogramHelper 的包装）。"""
+    global _rich_sender
+    _rich_sender = sender
+
+
+def clear_rich_sender() -> None:
+    """注销富文本发送函数，恢复正常 Bot API 发送。"""
+    global _rich_sender
+    _rich_sender = None
+
+
+async def _try_rich_send(
+    *,
+    chat_id: Any,
+    html: str,
+    reply_markup: Any,
+    reply_to_message_id: Any,
+    disable_notification: Any,
+) -> Any:
+    """
+    尝试经富文本通道发送，成功返回等价的 PTB Message，失败返回 None。
+
+    调用方拿到 None 时会回退到普通 Bot API 发送，因此任何异常都不上抛。
+    """
+    if _rich_sender is None or chat_id is None:
+        return None
+
+    try:
+        message = await _rich_sender(
+            chat_id=chat_id,
+            html=html,
+            reply_markup=reply_markup,
+            reply_to_message_id=reply_to_message_id,
+            disable_notification=disable_notification,
+        )
+    except Exception as e:
+        logger.debug("富文本发送失败，回退 Bot API: %s", e)
+        return None
+
+    if message is None:
+        return None
+
+    return _to_ptb_message(message, chat_id=chat_id, text=html)
+
+
+def _to_ptb_message(message: Any, *, chat_id: Any, text: str) -> Any:
+    """
+    把 pyrogram 的 Message 转成等价的 PTB Message。
+
+    调用点普遍使用 ``sent.message_id`` 做定时删除，因此必须返回结构一致
+    的对象；转换失败时退化为最小可用的 Message。
+    """
+    import time
+
+    from telegram import Chat, Message
+
+    try:
+        message_id = getattr(message, "id", None) or getattr(
+            message, "message_id", None
+        )
+        if message_id is None:
+            return None
+
+        payload = {
+            "message_id": int(message_id),
+            "date": int(time.time()),
+            "chat": {
+                "id": int(chat_id) if str(chat_id).lstrip("-").isdigit() else chat_id,
+                "type": "private",
+            },
+            "text": _strip_rich_tags(text),
+        }
+        return Message.de_json(payload, None)
+    except Exception as e:
+        logger.debug("富文本返回对象转换失败: %s", e)
+        return None
+
+
+def _strip_rich_tags(html: str) -> str:
+    """粗略去掉 HTML 标签，作为 Message.text 的占位内容。"""
+    import re
+
+    return re.sub(r"<[^>]+>", "", html or "").strip()
 
 
 def _is_markdown_v2(parse_mode: Any) -> bool:
