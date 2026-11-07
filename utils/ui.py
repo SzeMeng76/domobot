@@ -489,34 +489,142 @@ def make_styled_bot_class() -> type:
 # 价格模块统一输出形如：
 #   📍 国家/地区: 马来西亚 (MY) 🇲🇾
 #     • 移动版：MYR 19.90 ≈ CNY 32.65
-#     • 基础版：MYR 33.90 ≈ CNY 55.61
-# 在富文本通道里把它转成真表格，其他行保持原样。
+#   🥇 巴基斯坦 (PK) 🇵🇰
+#   💰 高级版: PKR 1100 ≈ ¥26.50
+# 在富文本通道里把列表转成真表格，其余行各自成段。
 _BULLET_RE = re.compile(r"^\s*[•·]\s*(.+?)\s*[：:]\s*(.+?)\s*$")
-_COUNTRY_RE = re.compile(r"^[^\n]*国家/地区\s*[：:]\s*(.+?)\s*$")
+# 排行榜条目：🥇 巴基斯坦 (PK) 🇵🇰
+_RANK_RE = re.compile(r"^(\S{1,3})\s+(.+?)\s*\(([A-Za-z]{2})\)\s*(.*)$")
+# 紧随其后的价格行：💰 高级版: PKR 1100 ≈ ¥26.50
+_PRICE_LINE_RE = re.compile(r"^[💰💵💴💶💷]?\s*(.+?)\s*[：:]\s*(.+?)\s*$")
+
+
+def _paragraph(text: str):
+    """
+    构造一个富文本段落块。
+
+    RichText 收到纯字符串时按 TextPlain 处理，**不会解析 HTML 标签**，
+    所以这里先把行内标签转成 RichText 实体对象，保住加粗/斜体/代码。
+    """
+    from pyrogram.types import InputRichBlockParagraph
+
+    return InputRichBlockParagraph(text=_html_to_rich_text(text))
+
+
+# 行内标签 -> RichText 实体
+_INLINE_TAG_RE = re.compile(
+    r"<(b|strong|i|em|u|s|del|code|span[^>]*)>(.*?)</\1>", re.S
+)
+
+
+def _html_to_rich_text(text: str):
+    """
+    把一段行内 HTML 转成 pyrogram 的 RichText 结构。
+
+    只处理本项目会产生的标签：粗体、斜体、下划线、删除线、剧透、代码。
+    其余内容按纯文本处理，标签本身被去掉。
+
+    Args:
+        text: 含行内 HTML 标签的字符串
+
+    Returns:
+        ``str`` 或 ``list``（RichText 可接受的两种形式）
+    """
+    if not text:
+        return ""
+
+    try:
+        from pyrogram.types import (
+            RichTextBold,
+            RichTextCode,
+            RichTextItalic,
+            RichTextSpoiler,
+            RichTextStrikethrough,
+            RichTextUnderline,
+        )
+    except ImportError:
+        return _strip_rich_tags(text)
+
+    # 没有标签时直接返回纯文本，走最快路径
+    if "<" not in text:
+        return _unescape_basic(text)
+
+    parts: list = []
+    pos = 0
+    for m in _INLINE_TAG_RE.finditer(text):
+        tag, inner = m.group(1), m.group(2)
+
+        before = text[pos : m.start()]
+        if before:
+            parts.append(_unescape_basic(before))
+
+        inner_text = _unescape_basic(_strip_rich_tags(inner))
+        if not inner_text:
+            pos = m.end()
+            continue
+
+        if tag in ("b", "strong"):
+            parts.append(RichTextBold(text=inner_text))
+        elif tag in ("i", "em"):
+            parts.append(RichTextItalic(text=inner_text))
+        elif tag == "u":
+            parts.append(RichTextUnderline(text=inner_text))
+        elif tag in ("s", "del"):
+            parts.append(RichTextStrikethrough(text=inner_text))
+        elif tag == "code":
+            parts.append(RichTextCode(text=inner_text))
+        elif tag.startswith("span") and "tg-spoiler" in tag:
+            parts.append(RichTextSpoiler(text=inner_text))
+        else:
+            parts.append(inner_text)
+
+        pos = m.end()
+
+    tail = text[pos:]
+    if tail:
+        parts.append(_unescape_basic(tail))
+
+    # 全部是纯文本时合并成一个字符串，避免无谓的实体数组
+    if all(isinstance(p, str) for p in parts):
+        return "".join(parts)
+
+    return parts or ""
+
+
+def _unescape_basic(text: str) -> str:
+    """还原 HTML 基础实体。"""
+    return (
+        text.replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", '"')
+        .replace("&#x27;", "'")
+        .replace("&amp;", "&")
+    )
 
 
 def extract_table_blocks(html: str) -> list | None:
     """
-    从已渲染的 HTML 文本里识别「• 名称：值」列表，转成富文本表格 block。
+    把纯文本消息转换成富文本 block 列表。
 
-    只有当连续的分组行数达到 2 行以上时才转换，避免把零散的单行
-    误判成表格。识别失败返回 None，调用方保持原文本发送。
+    Rich Message 的 HTML 是文档语义，普通换行会被折叠成空格，导致多行
+    文本挤成一段。因此这里按行拆成独立段落。
+
+    同时识别两类结构化数据并转成真表格：
+
+    * ``• 名称：值`` —— 汇率平台对比等
+    * ``🥇 国家 (代码)`` + 下一行 ``💰 套餐: 价格`` —— 全球价格排行榜
 
     Args:
         html: 已经过 HTML 转换的文本
 
     Returns:
-        block 列表（段落 + 表格），或 None 表示不适用
+        block 列表；内容不适合转换时返回 None（调用方按原文本发送）
     """
-    if not html or "•" not in html:
+    if not html or not html.strip():
         return None
 
     try:
-        from pyrogram.types import (
-            InputRichBlockParagraph,
-            InputRichBlockTable,
-            RichBlockTableCell,
-        )
+        from pyrogram.types import InputRichBlockTable, RichBlockTableCell
     except ImportError:
         return None
 
@@ -529,46 +637,81 @@ def extract_table_blocks(html: str) -> list | None:
         ]
         cells.extend(
             [
-                RichBlockTableCell(text=name),
-                RichBlockTableCell(text=value),
+                RichBlockTableCell(text=a),
+                RichBlockTableCell(text=b),
             ]
-            for name, value in rows
+            for a, b in rows
         )
         return InputRichBlockTable(cells=cells, is_bordered=True, is_striped=True)
 
     blocks: list = []
-    pending: list[tuple[str, str]] = []
     used_table = False
 
-    def flush() -> None:
-        nonlocal used_table
-        # 单行不值得做成表格，还原成原始文本
-        if len(pending) >= 2:
-            blocks.append(make_table(list(pending), ("项目", "数值")))
-            used_table = True
-        else:
-            for name, value in pending:
-                blocks.append(InputRichBlockParagraph(text=f"{name}: {value}"))
-        pending.clear()
+    lines = [ln for ln in html.split("\n") if ln.strip()]
 
-    for line in html.split("\n"):
-        plain = _strip_rich_tags(line).strip()
+    i = 0
+    while i < len(lines):
+        plain = _strip_rich_tags(lines[i]).strip()
         if not plain:
+            i += 1
             continue
 
+        # --- 排行行：🥇 巴基斯坦 (PK) 🇵🇰 / 💰 高级版: PKR 1100 ≈ ¥26.50 ---
+        rank = _RANK_RE.match(plain)
+        if rank and i + 1 < len(lines):
+            nxt = _strip_rich_tags(lines[i + 1]).strip()
+            price = _PRICE_LINE_RE.match(nxt)
+            if price:
+                rows: list[tuple[str, str]] = []
+                while i < len(lines):
+                    head = _strip_rich_tags(lines[i]).strip()
+                    r = _RANK_RE.match(head)
+                    if not r or i + 1 >= len(lines):
+                        break
+                    body = _strip_rich_tags(lines[i + 1]).strip()
+                    p = _PRICE_LINE_RE.match(body)
+                    if not p:
+                        break
+                    rows.append(
+                        (f"{r.group(1)} {r.group(2)} ({r.group(3)})", p.group(2))
+                    )
+                    i += 2
+
+                if len(rows) >= 2:
+                    blocks.append(make_table(rows, ("排名", "价格")))
+                    used_table = True
+                    continue
+                # 不足两行，退回普通段落
+                for a, b in rows:
+                    blocks.append(_paragraph(a))
+                    blocks.append(_paragraph(b))
+                continue
+
+        # --- 列表行：• Coinbase: ¥ 16.44 ---
         bullet = _BULLET_RE.match(plain)
         if bullet:
-            pending.append((bullet.group(1), bullet.group(2)))
+            rows = []
+            while i < len(lines):
+                cur = _strip_rich_tags(lines[i]).strip()
+                b = _BULLET_RE.match(cur)
+                if not b:
+                    break
+                rows.append((b.group(1), b.group(2)))
+                i += 1
+
+            if len(rows) >= 2:
+                blocks.append(make_table(rows, ("项目", "数值")))
+                used_table = True
+            else:
+                for a, b in rows:
+                    blocks.append(_paragraph(f"{a}: {b}"))
             continue
 
-        # 遇到非列表行，先把累积的列表结算掉，保证表格留在原位
-        flush()
-        blocks.append(InputRichBlockParagraph(text=plain))
+        # --- 普通行 ---
+        blocks.append(_paragraph(plain))
+        i += 1
 
-    flush()
-
-    # 一条表格都没有就交回原文本，避免把消息结构改乱
-    return blocks if used_table else None
+    return blocks if blocks else None
 
 
 # ---------------------------------------------------------------------------
