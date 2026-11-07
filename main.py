@@ -61,6 +61,8 @@ logging.basicConfig(
 
 # 设置第三方库日志级别
 logging.getLogger("httpx").setLevel(logging.WARNING)
+# pyrogram 的 DEBUG 日志包含每次心跳收发的完整报文，会淹没业务日志
+logging.getLogger("pyrogram").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
@@ -375,7 +377,8 @@ async def setup_application(application: Application, config) -> None:
 
             async def _rich_sender(
                 chat_id,
-                html,
+                html=None,
+                blocks=None,
                 reply_markup=None,
                 reply_to_message_id=None,
                 disable_notification=None,
@@ -383,6 +386,7 @@ async def setup_application(application: Application, config) -> None:
                 return await pyrogram_helper.send_rich_message(
                     chat_id=chat_id,
                     html=html,
+                    blocks=blocks,
                     reply_markup=reply_markup,
                     reply_to_message_id=reply_to_message_id,
                     disable_notification=disable_notification,

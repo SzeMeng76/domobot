@@ -1041,15 +1041,22 @@ class PyrogramHelper:
         if not html and not blocks:
             raise ValueError("必须提供 html 或 blocks 之一")
 
-        from pyrogram.types import InputRichMessage
+        from pyrogram.types import InputRichMessage, ReplyParameters
 
         rich = InputRichMessage(html=html) if html else InputRichMessage(blocks=blocks)
+
+        # Kurigram 的参数名是 reply_parameters（不是 PTB 的 reply_to_message_id）
+        reply_params = (
+            ReplyParameters(message_id=int(reply_to_message_id))
+            if reply_to_message_id
+            else None
+        )
 
         message = await self.client.send_rich_message(
             chat_id=chat_id,
             rich_message=rich,
             reply_markup=convert_reply_markup(reply_markup),
-            reply_to_message_id=reply_to_message_id,
+            reply_parameters=reply_params,
             disable_notification=disable_notification,
         )
 

@@ -429,6 +429,14 @@ def make_styled_bot_class() -> type:
         "off",
     )
 
+    # 自动表格：把「• 名称：值」列表转成富文本表格
+    auto_table = os.getenv("RICH_TEXT_AUTO_TABLE", "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+        "off",
+    )
+
     class StyledBot(ExtBot):  # type: ignore[misc]
         async def _send_message(self, endpoint: str, data: dict, **kwargs: Any) -> Any:
             kwargs["reply_markup"] = style_markup(kwargs.get("reply_markup"))
@@ -474,6 +482,96 @@ def make_styled_bot_class() -> type:
 
 
 # ---------------------------------------------------------------------------
+# 自动表格识别
+# ---------------------------------------------------------------------------
+
+# 价格模块统一输出形如：
+#   📍 国家/地区: 马来西亚 (MY) 🇲🇾
+#     • 移动版：MYR 19.90 ≈ CNY 32.65
+#     • 基础版：MYR 33.90 ≈ CNY 55.61
+# 在富文本通道里把它转成真表格，其他行保持原样。
+_BULLET_RE = re.compile(r"^\s*[•·]\s*(.+?)\s*[：:]\s*(.+?)\s*$")
+_COUNTRY_RE = re.compile(r"^[^\n]*国家/地区\s*[：:]\s*(.+?)\s*$")
+
+
+def extract_table_blocks(html: str) -> list | None:
+    """
+    从已渲染的 HTML 文本里识别「• 名称：值」列表，转成富文本表格 block。
+
+    只有当连续的分组行数达到 2 行以上时才转换，避免把零散的单行
+    误判成表格。识别失败返回 None，调用方保持原文本发送。
+
+    Args:
+        html: 已经过 HTML 转换的文本
+
+    Returns:
+        block 列表（段落 + 表格），或 None 表示不适用
+    """
+    if not html or "•" not in html:
+        return None
+
+    try:
+        from pyrogram.types import (
+            InputRichBlockParagraph,
+            InputRichBlockTable,
+            RichBlockTableCell,
+        )
+    except ImportError:
+        return None
+
+    lines = html.split("\n")
+    header_line: str | None = None
+    table_rows: list[tuple[str, str]] = []
+    rest: list[str] = []
+
+    for line in lines:
+        plain = _strip_rich_tags(line).strip()
+        bullet = _BULLET_RE.match(plain)
+        if bullet:
+            table_rows.append((bullet.group(1), bullet.group(2)))
+            continue
+
+        country = _COUNTRY_RE.match(plain)
+        if country and header_line is None:
+            header_line = plain
+            continue
+
+        rest.append(line)
+
+    # 少于两行不值得做表格
+    if len(table_rows) < 2:
+        return None
+
+    blocks: list = []
+    if header_line:
+        blocks.append(InputRichBlockParagraph(text=header_line))
+
+    for line in rest:
+        text = _strip_rich_tags(line).strip()
+        if text:
+            blocks.append(InputRichBlockParagraph(text=text))
+
+    cells = [
+        [
+            RichBlockTableCell(text="套餐", is_header=True),
+            RichBlockTableCell(text="价格", is_header=True),
+        ]
+    ]
+    cells.extend(
+        [
+            RichBlockTableCell(text=name),
+            RichBlockTableCell(text=value),
+        ]
+        for name, value in table_rows
+    )
+
+    blocks.append(
+        InputRichBlockTable(cells=cells, is_bordered=True, is_striped=True)
+    )
+    return blocks
+
+
+# ---------------------------------------------------------------------------
 # 富文本通道（Kurigram / MTProto）
 # ---------------------------------------------------------------------------
 
@@ -481,6 +579,9 @@ def make_styled_bot_class() -> type:
 #   async (chat_id, html, reply_markup, reply_to_message_id, disable_notification)
 #   -> pyrogram Message | None
 _rich_sender: Any = None
+
+# 富文本失败计数，用于限流日志（避免每次发送都刷同样的错误）
+_rich_failure_count = 0
 
 
 def set_rich_sender(sender: Any) -> None:
@@ -493,6 +594,33 @@ def clear_rich_sender() -> None:
     """注销富文本发送函数，恢复正常 Bot API 发送。"""
     global _rich_sender
     _rich_sender = None
+
+
+def _log_rich_failure(error: Exception) -> None:
+    """
+    记录富文本发送失败的原因。
+
+    用 WARNING 而不是 DEBUG：失败会回退到 Bot API，功能不受影响，
+    但如果一直失败（例如参数不匹配），用户需要能在日志里看到原因。
+    同类错误只记录前几次，避免刷屏。
+    """
+    global _rich_failure_count
+    _rich_failure_count += 1
+
+    if _rich_failure_count <= 3:
+        logger.warning("富文本发送失败，回退 Bot API: %s: %s", type(error).__name__, error)
+    elif _rich_failure_count == 4:
+        logger.warning("富文本连续失败，后续同类错误不再重复记录（回退 Bot API 仍生效）")
+
+
+def _auto_table_enabled() -> bool:
+    """读取 RICH_TEXT_AUTO_TABLE，默认开启。"""
+    return os.getenv("RICH_TEXT_AUTO_TABLE", "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+        "off",
+    )
 
 
 async def _try_rich_send(
@@ -512,15 +640,25 @@ async def _try_rich_send(
         return None
 
     try:
+        # 「• 名称：值」列表在富文本里可以变成真表格，识别不出来就按原文本发
+        blocks = None
+        if _auto_table_enabled():
+            try:
+                blocks = extract_table_blocks(html)
+            except Exception as e:  # pragma: no cover - 防御性
+                logger.debug("表格识别失败，按原文本发送: %s", e)
+                blocks = None
+
         message = await _rich_sender(
             chat_id=chat_id,
-            html=html,
+            html=html if blocks is None else None,
+            blocks=blocks,
             reply_markup=reply_markup,
             reply_to_message_id=reply_to_message_id,
             disable_notification=disable_notification,
         )
     except Exception as e:
-        logger.debug("富文本发送失败，回退 Bot API: %s", e)
+        _log_rich_failure(e)
         return None
 
     if message is None:
