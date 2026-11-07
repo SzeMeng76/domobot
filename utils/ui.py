@@ -472,6 +472,7 @@ def make_styled_bot_class() -> type:
                         reply_markup=kwargs.get("reply_markup"),
                         reply_to_message_id=kwargs.get("reply_to_message_id"),
                         disable_notification=kwargs.get("disable_notification"),
+                        bot=self,
                     )
                     if sent is not None:
                         return sent
@@ -519,56 +520,55 @@ def extract_table_blocks(html: str) -> list | None:
     except ImportError:
         return None
 
-    lines = html.split("\n")
-    header_line: str | None = None
-    table_rows: list[tuple[str, str]] = []
-    rest: list[str] = []
-
-    for line in lines:
-        plain = _strip_rich_tags(line).strip()
-        bullet = _BULLET_RE.match(plain)
-        if bullet:
-            table_rows.append((bullet.group(1), bullet.group(2)))
-            continue
-
-        country = _COUNTRY_RE.match(plain)
-        if country and header_line is None:
-            header_line = plain
-            continue
-
-        rest.append(line)
-
-    # 少于两行不值得做表格
-    if len(table_rows) < 2:
-        return None
+    def make_table(rows: list[tuple[str, str]], header: tuple[str, str]):
+        cells = [
+            [
+                RichBlockTableCell(text=header[0], is_header=True),
+                RichBlockTableCell(text=header[1], is_header=True),
+            ]
+        ]
+        cells.extend(
+            [
+                RichBlockTableCell(text=name),
+                RichBlockTableCell(text=value),
+            ]
+            for name, value in rows
+        )
+        return InputRichBlockTable(cells=cells, is_bordered=True, is_striped=True)
 
     blocks: list = []
-    if header_line:
-        blocks.append(InputRichBlockParagraph(text=header_line))
+    pending: list[tuple[str, str]] = []
+    used_table = False
 
-    for line in rest:
-        text = _strip_rich_tags(line).strip()
-        if text:
-            blocks.append(InputRichBlockParagraph(text=text))
+    def flush() -> None:
+        nonlocal used_table
+        # 单行不值得做成表格，还原成原始文本
+        if len(pending) >= 2:
+            blocks.append(make_table(list(pending), ("项目", "数值")))
+            used_table = True
+        else:
+            for name, value in pending:
+                blocks.append(InputRichBlockParagraph(text=f"{name}: {value}"))
+        pending.clear()
 
-    cells = [
-        [
-            RichBlockTableCell(text="套餐", is_header=True),
-            RichBlockTableCell(text="价格", is_header=True),
-        ]
-    ]
-    cells.extend(
-        [
-            RichBlockTableCell(text=name),
-            RichBlockTableCell(text=value),
-        ]
-        for name, value in table_rows
-    )
+    for line in html.split("\n"):
+        plain = _strip_rich_tags(line).strip()
+        if not plain:
+            continue
 
-    blocks.append(
-        InputRichBlockTable(cells=cells, is_bordered=True, is_striped=True)
-    )
-    return blocks
+        bullet = _BULLET_RE.match(plain)
+        if bullet:
+            pending.append((bullet.group(1), bullet.group(2)))
+            continue
+
+        # 遇到非列表行，先把累积的列表结算掉，保证表格留在原位
+        flush()
+        blocks.append(InputRichBlockParagraph(text=plain))
+
+    flush()
+
+    # 一条表格都没有就交回原文本，避免把消息结构改乱
+    return blocks if used_table else None
 
 
 # ---------------------------------------------------------------------------
@@ -630,6 +630,7 @@ async def _try_rich_send(
     reply_markup: Any,
     reply_to_message_id: Any,
     disable_notification: Any,
+    bot: Any = None,
 ) -> Any:
     """
     尝试经富文本通道发送，成功返回等价的 PTB Message，失败返回 None。
@@ -664,19 +665,20 @@ async def _try_rich_send(
     if message is None:
         return None
 
-    return _to_ptb_message(message, chat_id=chat_id, text=html)
+    return _to_ptb_message(message, chat_id=chat_id, text=html, bot=bot)
 
 
-def _to_ptb_message(message: Any, *, chat_id: Any, text: str) -> Any:
+def _to_ptb_message(message: Any, *, chat_id: Any, text: str, bot: Any = None) -> Any:
     """
     把 pyrogram 的 Message 转成等价的 PTB Message。
 
-    调用点普遍使用 ``sent.message_id`` 做定时删除，因此必须返回结构一致
-    的对象；转换失败时退化为最小可用的 Message。
+    调用点普遍使用 ``sent.message_id`` 做定时删除，也有直接调
+    ``sent.delete()`` 的，因此必须把 bot 实例挂上去——否则 PTB 的快捷
+    方法会抛 "This object has no bot associated with it"。
     """
     import time
 
-    from telegram import Chat, Message
+    from telegram import Message
 
     try:
         message_id = getattr(message, "id", None) or getattr(
@@ -694,7 +696,8 @@ def _to_ptb_message(message: Any, *, chat_id: Any, text: str) -> Any:
             },
             "text": _strip_rich_tags(text),
         }
-        return Message.de_json(payload, None)
+        # 传入 bot 实例后，sent.delete() / sent.edit_text() 等快捷方法才可用
+        return Message.de_json(payload, bot)
     except Exception as e:
         logger.debug("富文本返回对象转换失败: %s", e)
         return None
