@@ -18,6 +18,8 @@ Telegram 按钮 UI 原语
 from __future__ import annotations
 
 import logging
+import os
+import re
 from collections.abc import Iterable, Sequence
 from typing import Any
 
@@ -28,6 +30,28 @@ logger = logging.getLogger(__name__)
 PRIMARY = "primary"
 SUCCESS = "success"
 DANGER = "danger"
+
+# 未命中任何语义规则时使用的默认色，让所有可点击按钮都有统一观感。
+# 可通过环境变量 UI_BUTTON_FALLBACK_STYLE 调整：
+#   primary/success/danger -> 指定颜色
+#   none/off/0             -> 未识别就不上色（旧行为）
+FALLBACK_STYLE: str | None = PRIMARY
+
+
+def _resolve_fallback_style() -> str | None:
+    """读取 UI_BUTTON_FALLBACK_STYLE，未设置时用模块默认值。"""
+    raw = os.getenv("UI_BUTTON_FALLBACK_STYLE")
+    if raw is None:
+        return FALLBACK_STYLE
+    value = raw.strip().lower()
+    if value in ("none", "off", "0", "false", "no", ""):
+        return None
+    if value in (PRIMARY, SUCCESS, DANGER):
+        return value
+    if value in ("blue", "green", "red"):
+        return {"blue": PRIMARY, "green": SUCCESS, "red": DANGER}[value]
+    logger.warning("未知的 UI_BUTTON_FALLBACK_STYLE=%r，按默认处理", raw)
+    return FALLBACK_STYLE
 
 # 颜色别名，读代码时更直观
 BLUE = PRIMARY
@@ -149,38 +173,134 @@ def rows(*items: Iterable[InlineKeyboardButton]) -> list[list[InlineKeyboardButt
 # 全局样式注入
 # ---------------------------------------------------------------------------
 
-# 按文案关键字推断按钮语义。顺序有意义，先匹配更具体的规则。
-# 只做"锦上添花"：没命中任何规则的按钮保持原样（跟随客户端主题）。
-_DANGER_WORDS = ("关闭", "删除", "取消", "清除", "退出", "移除", "重置")
-_SUCCESS_WORDS = ("确认", "已选", "✓", "✅", "确定", "启用")
-_PRIMARY_WORDS = ("返回", "🔙", "上一页", "下一页", "⬅️", "➡️", "刷新", "🔄")
+# 按文案关键字推断按钮语义。顺序有意义：先匹配更具体的规则。
+# 目标是让绝大多数按钮都有颜色，同时避免整屏一色。
+_DANGER_WORDS = (
+    "关闭", "删除", "取消", "清除", "清理", "清空", "退出", "移除", "重置",
+    "禁用", "解绑", "撤销", "停止", "拒绝", "标记满员", "销毁", "注销",
+)
+_SUCCESS_WORDS = (
+    "确认", "确定", "已选", "启用", "解禁", "加入", "上车", "订阅",
+    "保存", "提交", "生成", "开始", "开启", "✅", "✓",
+)
+_PRIMARY_WORDS = (
+    "返回", "🔙", "上一页", "下一页", "上页", "下页", "⬅️", "➡️", "◀️", "▶️",
+    "刷新", "🔄", "重新", "重试", "切换", "加载更多", "查看", "详情",
+    "更多", "显示", "展开", "获取", "下载", "打开",
+)
+# 纯展示类、不该染色的（页码、统计、标题栏）
+_NEUTRAL_PATTERNS = (
+    "📄", "ℹ️", "📊", "━━", "第 ", "页", "/",
+)
 
 
 def infer_style(text: str) -> str | None:
     """
     按按钮文案推断语义颜色。
 
-    这只是给已有 979 个按钮一个统一的默认观感，不是精确分类。
-    需要精确控制的地方请显式传 ``style=``，显式值永远优先。
+    规则按优先级匹配：危险操作 > 确认类 > 导航类 > 默认。
 
     Args:
         text: 按钮文字
 
     Returns:
-        PRIMARY / SUCCESS / DANGER 或 None（不染色）
+        PRIMARY / SUCCESS / DANGER，无法判断时返回 None（跟随客户端主题）
     """
     if not text:
         return None
-    # 页码/纯信息按钮不染色
-    if text in ("📄", "ℹ️", "❌"):
+
+    t = text.strip()
+
+    # 页码、进度、纯统计这类不染色
+    if t in ("📄", "ℹ️", "❌", "📊"):
         return None
-    if text.startswith("❌") or any(w in text for w in _DANGER_WORDS):
+    if re.fullmatch(r"[📄ℹ️]?\s*\d+\s*/\s*\d+", t):
+        return None
+
+    if t.startswith("❌") or any(w in t for w in _DANGER_WORDS):
         return DANGER
-    if any(w in text for w in _SUCCESS_WORDS):
+    if any(w in t for w in _SUCCESS_WORDS):
         return SUCCESS
-    if any(w in text for w in _PRIMARY_WORDS):
+    if any(w in t for w in _PRIMARY_WORDS):
         return PRIMARY
     return None
+
+
+# 带国旗/图标的地区选择按钮优先用 PRIMARY，避免满屏彩色
+def infer_style_with_context(
+    text: str, callback_data: str | None = None
+) -> str | None:
+    """
+    结合 callback_data 推断颜色，比纯文案更准。
+
+    项目里的 callback_data 有稳定后缀规律（``news_close``、``news_back``），
+    用它判断可以覆盖文案里看不出来的语义。
+
+    最后回退到 :data:`FALLBACK_STYLE`，使所有可点击按钮都有颜色；
+    页码、分隔标题等纯展示行保持中性（见 :func:`is_neutral_button`）。
+
+    Args:
+        text: 按钮文字
+        callback_data: 按钮的回调数据
+
+    Returns:
+        PRIMARY / SUCCESS / DANGER，纯展示行返回 None
+    """
+    if is_neutral_button(text, callback_data):
+        return None
+
+    if callback_data:
+        data = str(callback_data).lower()
+        # 末尾是动作名（可能带序号），取最后一个字母片段
+        action = re.sub(r"[\d_]+$", "", data).rsplit("_", 1)[-1]
+        if action in ("close", "cancel", "delete", "remove", "del", "clear"):
+            return DANGER
+        if action in ("back", "main", "menu", "prev", "next", "page", "refresh"):
+            return PRIMARY
+        if action in ("ok", "confirm", "select", "add", "enable", "submit"):
+            return SUCCESS
+
+    explicit = infer_style(text)
+    if explicit:
+        return explicit
+
+    return _resolve_fallback_style()
+
+
+def is_neutral_button(text: str, callback_data: str | None = None) -> bool:
+    """
+    判断按钮是否属于"纯展示行"，不应上色。
+
+    包括页码（``📄 1/5``）、统计数字、以及只作标题分隔的分组行
+    （``📂 科技类``），给它们上色会造成整屏同色的观感噪音。
+
+    Args:
+        text: 按钮文字
+        callback_data: 按钮的回调数据
+
+    Returns:
+        True 表示保持中性（不上色）
+    """
+    t = (text or "").strip()
+    if not t:
+        return True
+
+    # 页码 / 进度
+    if re.fullmatch(r"[📄ℹ️]?\s*\d+\s*/\s*\d+", t):
+        return True
+
+    # 回调里能看出是信息行
+    if callback_data:
+        data = str(callback_data).lower()
+        action = re.sub(r"[\d_]+$", "", data).rsplit("_", 1)[-1]
+        if action in ("page_info", "info", "noop", "none"):
+            return True
+
+    # 不带具体动作的分组标题（只有分类名 + 图标）
+    if t.startswith("📂"):
+        return True
+
+    return False
 
 
 # InlineKeyboardButton 的全部字段（PTB 对象不可变，改样式必须重建）。
@@ -243,7 +363,9 @@ def style_markup(markup: Any) -> Any:
                 new_row.append(button)
                 continue
 
-            style = infer_style(button.text or "")
+            style = infer_style_with_context(
+                button.text or "", getattr(button, "callback_data", None)
+            )
             if style:
                 new_row.append(_clone_button_with_style(button, style))
                 changed = True
