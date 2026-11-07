@@ -282,6 +282,7 @@ COUNTRY_CODES_CN = {
     "MY": "马来西亚",
     "MV": "马尔代夫",
     "MN": "蒙古",
+    "MM": "缅甸",
     "NP": "尼泊尔",
     "OM": "阿曼",
     "PK": "巴基斯坦",
@@ -397,6 +398,25 @@ COUNTRY_CODES_CN = {
     "TV": "图瓦卢",
     "VU": "瓦努阿图",
 }
+
+
+def _has_chinese(text) -> bool:
+    """判断字符串里是否含中文字符。"""
+    if not text:
+        return False
+    return any("一" <= ch <= "鿿" for ch in str(text))
+
+
+def _prefer_chinese(name, country_code: str):
+    """
+    数据源的 country_name_cn 有时直接塞英文（如 Pakistan/Bangladesh），
+    这种情况下返回 None，让调用方继续往后面的静态中文映射里找。
+    """
+    if _has_chinese(name):
+        return name
+    return None
+
+
 class MaxPriceBot(PriceQueryService):
     PRICE_URL = (
         "https://raw.githubusercontent.com/SzeMeng76/hbo-max-global-prices/refs/heads/main/max_prices_cny_sorted.json"
@@ -474,9 +494,9 @@ class MaxPriceBot(PriceQueryService):
         # 5. From price_info country_name as fallback
         # 6. Use country_code as last resort
         country_name_cn = (
-            country_info.get("name_cn")
+            country_info.get("name")
             or COUNTRY_CODES_CN.get(country_code.upper())
-            or price_info.get("country_name_cn")
+            or _prefer_chinese(price_info.get("country_name_cn"), country_code)
             or COUNTRY_CODES.get(country_code.upper())
             or price_info.get("country_name", country_code)
         )
@@ -717,7 +737,9 @@ class MaxPriceBot(PriceQueryService):
                 # 4. From our static COUNTRY_CODES mapping (reliable English names)
                 # 5. From the item's country_name as fallback
                 country_name_cn = (
-                    item.get("country_name_cn")
+                    _prefer_chinese(
+                        item.get("country_name_cn"), country_code
+                    )
                     or SUPPORTED_COUNTRIES.get(country_code, {}).get("name_cn")
                     or COUNTRY_CODES_CN.get(country_code)
                     or COUNTRY_CODES.get(country_code)
@@ -811,7 +833,7 @@ class MaxPriceBot(PriceQueryService):
                 # 3. From our static COUNTRY_CODES mapping (reliable English names)
                 # 4. From the item's country_name as fallback
                 country_name_cn = (
-                    country_info.get("name_cn")
+                    country_info.get("name")
                     or COUNTRY_CODES_CN.get(country_code)
                     or COUNTRY_CODES.get(country_code)
                     or item.get("country_name", country_code)
