@@ -495,8 +495,10 @@ def make_styled_bot_class() -> type:
 _BULLET_RE = re.compile(r"^\s*[•·]\s*(.+?)\s*[：:]\s*(.+?)\s*$")
 # 排行榜条目：🥇 巴基斯坦 (PK) 🇵🇰
 _RANK_RE = re.compile(r"^(\S{1,3})\s+(.+?)\s*\(([A-Za-z]{2})\)\s*(.*)$")
-# 紧随其后的价格行：💰 高级版: PKR 1100 ≈ ¥26.50
-_PRICE_LINE_RE = re.compile(r"^[💰💵💴💶💷]?\s*(.+?)\s*[：:]\s*(.+?)\s*$")
+# 紧随其后的价格行。两种写法都要兼容：
+#   💰 高级版: PKR 1100 ≈ ¥26.50   （Netflix/Spotify/Xbox 等）
+#   💰 JPY 4800 ≈ ¥230.00          （Nintendo，无冒号）
+_PRICE_LINE_RE = re.compile(r"^[💰💵💴💶💷]\s*(?:(.+?)\s*[：:]\s*)?(.+)$")
 
 
 def _paragraph(text: str):
