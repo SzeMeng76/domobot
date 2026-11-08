@@ -552,9 +552,20 @@ def _paragraph(text: str):
 
 
 # 行内标签 -> RichText 实体
+#
+# 用命名分组分开「标签名」和「属性」：之前把 ``span class="tg-spoiler"`` 整段
+# 当标签名，闭合标签 ``</span>`` 对不上，剧透永远匹配不到。
 _INLINE_TAG_RE = re.compile(
-    r"<(b|strong|i|em|u|s|del|code|span[^>]*)>(.*?)</\1>", re.S
+    r"<(?P<tag>b|strong|i|em|u|s|del|code|a|span)(?P<attrs>\s[^>]*)?>"
+    r"(?P<inner>.*?)</(?P=tag)>",
+    re.S,
 )
+_HREF_RE = re.compile(r'href\s*=\s*"([^"]*)"')
+
+
+def _drop_tags(text: str) -> str:
+    """去掉未被识别的标签（如 blockquote），但保留两侧空白。"""
+    return re.sub(r"<[^>]+>", "", text)
 
 
 def _html_to_rich_text(text: str):
@@ -581,6 +592,7 @@ def _html_to_rich_text(text: str):
             RichTextSpoiler,
             RichTextStrikethrough,
             RichTextUnderline,
+            RichTextUrl,
         )
     except ImportError:
         return _strip_rich_tags(text)
@@ -592,9 +604,10 @@ def _html_to_rich_text(text: str):
     parts: list = []
     pos = 0
     for m in _INLINE_TAG_RE.finditer(text):
-        tag, inner = m.group(1), m.group(2)
+        tag, inner = m.group("tag"), m.group("inner")
+        attrs = m.group("attrs") or ""
 
-        before = text[pos : m.start()]
+        before = _drop_tags(text[pos : m.start()])
         if before:
             parts.append(_unescape_basic(before))
 
@@ -613,14 +626,20 @@ def _html_to_rich_text(text: str):
             parts.append(RichTextStrikethrough(text=inner_text))
         elif tag == "code":
             parts.append(RichTextCode(text=inner_text))
-        elif tag.startswith("span") and "tg-spoiler" in tag:
+        elif tag == "span" and "tg-spoiler" in attrs:
             parts.append(RichTextSpoiler(text=inner_text))
+        elif tag == "a":
+            href = _HREF_RE.search(attrs)
+            if href and href.group(1):
+                parts.append(RichTextUrl(text=inner_text, url=_unescape_basic(href.group(1))))
+            else:
+                parts.append(inner_text)
         else:
             parts.append(inner_text)
 
         pos = m.end()
 
-    tail = text[pos:]
+    tail = _drop_tags(text[pos:])
     if tail:
         parts.append(_unescape_basic(tail))
 
@@ -664,7 +683,13 @@ def extract_table_blocks(html: str) -> list | None:
         return None
 
     try:
-        from pyrogram.types import InputRichBlockTable, RichBlockTableCell
+        from pyrogram.types import (
+            InputRichBlockDivider,
+            InputRichBlockFooter,
+            InputRichBlockSectionHeading,
+            InputRichBlockTable,
+            RichBlockTableCell,
+        )
     except ImportError:
         return None
 
@@ -696,8 +721,21 @@ def extract_table_blocks(html: str) -> list | None:
             return ""
         return _plain_text(lines[idx])
 
+    # 末尾的来源信息（🔗 原链接 / 📱 平台 / 🤖 自动解析）不属于正文，
+    # 用分隔线隔开并以页脚样式呈现，避免和正文挤在同一排版层级。
+    meta_start = _find_meta_start(lines, line_at)
+
     i = 0
     while i < len(lines):
+        if meta_start is not None and i >= meta_start:
+            blocks.append(InputRichBlockDivider())
+            for raw_line in lines[i:]:
+                if _plain_text(raw_line):
+                    blocks.append(
+                        InputRichBlockFooter(text=_html_to_rich_text(raw_line.strip()))
+                    )
+            break
+
         plain = line_at(i)
         if not plain:
             i += 1
@@ -781,11 +819,59 @@ def extract_table_blocks(html: str) -> list | None:
                 blocks.append(_paragraph(plain))
             continue
 
-        # --- 普通行 ---
-        blocks.append(_paragraph(plain))
+        # --- 整行加粗：当作小节标题 ---
+        raw_line = lines[i].strip()
+        bold = _BOLD_LINE_RE.match(raw_line)
+        if bold:
+            blocks.append(
+                InputRichBlockSectionHeading(
+                    text=_html_to_rich_text(bold.group(1)), size=2
+                )
+            )
+            i += 1
+            continue
+
+        # --- 普通行：保留行内加粗/链接等格式 ---
+        blocks.append(_paragraph(raw_line))
         i += 1
 
     return blocks if blocks else None
+
+
+# 整行被一对 <b> 包住（标题），中间不能再出现 <b>
+_BOLD_LINE_RE = re.compile(r"^<b>((?:(?!</?b>).)+)</b>$")
+
+# 末尾来源信息行的前缀
+_META_PREFIXES = ("🔗", "📱 平台", "🤖 自动解析")
+# 至少出现其中一个才认定为来源信息，避免误伤普通的「🔗 链接」结尾
+_META_MARKERS = ("📱 平台", "🤖 自动解析")
+
+
+def _find_meta_start(lines: list[str], line_at) -> int | None:
+    """
+    找到末尾「来源信息」区的起始行号，找不到返回 None。
+
+    从最后一行往上，连续（可夹空行）以 🔗 / 📱 平台 / 🤖 自动解析 开头的
+    行都算来源信息；并且至少包含 📱 平台 或 🤖 自动解析 之一才成立，
+    同时要求它前面还有正文，否则整条消息就只剩页脚没意义。
+    """
+    start = None
+    has_marker = False
+    for idx in range(len(lines) - 1, -1, -1):
+        text = line_at(idx)
+        if not text:
+            continue
+        if not text.startswith(_META_PREFIXES):
+            break
+        start = idx
+        if text.startswith(_META_MARKERS):
+            has_marker = True
+
+    if start is None or not has_marker:
+        return None
+    if not any(line_at(k) for k in range(start)):
+        return None
+    return start
 
 
 # ---------------------------------------------------------------------------
