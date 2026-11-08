@@ -9,7 +9,7 @@ from utils.constants import (
     DEFAULT_LANGUAGE_CODE,
     GOOGLE_PLAY_DEFAULT_COUNTRIES,
 )
-from utils.formatter import foldable_text_v2
+from utils.formatter import foldable_text_v2, foldable_text_with_markdown_v2
 from utils.message_manager import delete_user_command, send_help
 from utils.permissions import Permission
 

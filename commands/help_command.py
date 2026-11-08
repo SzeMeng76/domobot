@@ -258,7 +258,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 🌟 40+国家 | CNY转换 | 智能缓存 | 表达式计算 | 时区转换 | 新闻聚合 | 1000+中文菜谱 | 股市数据 | 163国燃油价格"""
 
-    await send_help(context, update.message.chat_id, foldable_text_with_markdown_v2(welcome_text), parse_mode="MarkdownV2")
+    await send_help(context, update.message.chat_id, foldable_text_with_markdown_html(welcome_text), parse_mode="HTML")
 
 
 # Register commands
