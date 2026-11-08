@@ -35,7 +35,7 @@ TELEGRAPH_API_URL = "https://api.telegra.ph"
 class TLDManager:
     """TLD数据管理器 - 直接从GitHub获取数据"""
     
-    TLD_URL = "https://cdn.jsdelivr.net/gh/SzeMeng76/iana_tld_list@master/data/tld.json"
+    TLD_URL = "https://raw.githubusercontent.com/SzeMeng76/iana_tld_list/refs/heads/master/data/tld.json"
     
     def __init__(self):
         self._tld_data = None
@@ -79,7 +79,7 @@ class TLDManager:
         if tld_clean in self._tld_data:
             item = self._tld_data[tld_clean]
             logger.debug(f"找到TLD数据: {item}")
-            return {
+            info = {
                 '类型': self._map_tld_type(item.get('tldType')),
                 '管理机构': self._extract_nic_name(item.get('nic')),
                 '创建时间': item.get('registration'),
@@ -87,6 +87,8 @@ class TLDManager:
                 'WHOIS服务器': self._clean_whois_server(item.get('whois')),
                 '国际化域名': '是' if item.get('isIDN') == 'True' else '否'
             }
+            # IANA新版页面不再提供注册日期等字段，数据中为NULL，不显示
+            return {k: v for k, v in info.items() if v not in (None, 'NULL', '')}
         else:
             logger.debug(f"未找到TLD '{tld_clean}' 在数据中")
             return None
