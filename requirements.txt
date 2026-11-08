@@ -13,7 +13,7 @@ httpx==0.28.1
 brotli==1.2.1  # Required for Brotli decompression (App Store uses br encoding)
 
 # OpenAI API (for AI Anti-Spam)
-openai==3.39.0
+openai==3.46.0
 
 # Web Scraping
 beautifulsoup4>=4.15.0  # ParseHub requires >=4.12.3, yfinance requires >=4.11.1
@@ -39,7 +39,7 @@ simple-justwatch-python-api==1.4.0
 
 # Timezone Support
 tzlocal==5.4.5
-tzdata==2026.5
+tzdata==2026.6
 backports.zoneinfo==0.2.1; python_version<"3.9"
 
 # WHOIS Query Libraries
@@ -50,7 +50,7 @@ asyncwhois>=1.1.15
 whodap>=0.2.1  # RDAP support for asyncwhois
 
 # DNS Query Library
-dnspython==2.9.0
+dnspython==2.9.2
 
 # Data Validation and Settings Management
 pydantic~=2.14.0
@@ -62,8 +62,8 @@ feedparser==6.0.14
 googletrans==4.0.2
 
 # Yahoo Finance API
-yfinance[repair]==1.7.0  # 最新版本，repair extra 启用价格异常修复（scipy>=1.6.3）
-pandas==3.1.0
+yfinance[repair]==1.8.0  # 最新版本，repair extra 启用价格异常修复（scipy>=1.6.3）；1.8.0 需要 curl-cffi>=0.17（已固定）
+pandas==3.1.1
 
 # Social Media Parser (ParseHub) - 社交媒体解析功能
 parsehub~=2.4.0  # 社交媒体聚合解析器，支持20+平台 (2.4.0: 新增 B站音频 bilibili.com/audio/au<ID> 解析，返回 MusicParseResult；2.3.17: Instagram 匿名改用新版 GraphQL + embed 兜底补齐视频直链/时长、单视频优先 yt-dlp 最高画质；2.3.16 InstagramAPI 改用 curl_cffi，_new_client 已移除；最右读取 videos[id].dur 补齐时长；B站番剧/影视已不支持)
