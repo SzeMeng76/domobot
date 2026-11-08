@@ -168,7 +168,19 @@ Inline: `@bot netease 关键词$` - Inline搜索(有缓存直接发音频)
 
 📞 如有问题请联系管理员"""
 
-    await send_help(context, update.message.chat_id, foldable_text_with_markdown_html(help_text), parse_mode="HTML")
+    help_html = foldable_text_with_markdown_html(help_text)
+
+    # 帮助内容是小节 + 条目的结构，用富文本排版统一成「标题 / 列表 / 段落」，
+    # 避免像「影视查询」那样同样结构的小节被单独识别成表格。
+    from utils.ui import build_help_blocks
+
+    await send_help(
+        context,
+        update.message.chat_id,
+        help_html,
+        parse_mode="HTML",
+        rich_blocks=build_help_blocks(help_html),
+    )
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

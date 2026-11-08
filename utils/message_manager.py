@@ -54,12 +54,27 @@ async def send_message_with_auto_delete(
         from utils.guest_bot_wrapper import inject_guest_context_to_kwargs
         inject_guest_context_to_kwargs(kwargs, context)
 
-        # 发送消息
-        sent_message = await context.bot.send_message(
-            chat_id=chat_id,
-            text=text,
-            **kwargs
-        )
+        # 富文本：调用方已构造好 block 时经 MTProto 发送，失败自动回退
+        rich_blocks = kwargs.pop("rich_blocks", None)
+        sent_message = None
+        if rich_blocks:
+            from utils.ui import send_rich_blocks
+
+            sent_message = await send_rich_blocks(
+                chat_id=chat_id,
+                blocks=rich_blocks,
+                text=text,
+                reply_markup=kwargs.get("reply_markup"),
+                bot=context.bot,
+            )
+
+        # 发送消息（富文本失败或未提供 block 时走原路径）
+        if sent_message is None:
+            sent_message = await context.bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                **kwargs
+            )
 
         # Guest Bot模式下，answer_guest_query不支持自动删除，直接返回
         if context.user_data.get('is_guest_bot_call'):

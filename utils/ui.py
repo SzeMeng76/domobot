@@ -539,6 +539,18 @@ def _match_kv(line: str):
     return label, value
 
 
+def _spacer():
+    """
+    段落之间的空行占位。
+
+    富文本没有「显式换行」块，段落间距由客户端决定；用空段落做间隔是
+    最接近原文排版的做法，客户端若忽略也不会出岔子。
+    """
+    from pyrogram.types import InputRichBlockParagraph
+
+    return InputRichBlockParagraph(text="")
+
+
 def _paragraph(text: str):
     """
     构造一个富文本段落块。
@@ -734,10 +746,19 @@ def extract_table_blocks(html: str) -> list | None:
                     blocks.append(
                         InputRichBlockFooter(text=_html_to_rich_text(raw_line.strip()))
                     )
+                i += 1
             break
 
         plain = line_at(i)
         if not plain:
+            # 空行是原文的段落间隔。之前直接跳过，导致正文挤成一片；
+            # 这里补一个空段落，让段落之间恢复视觉间隔。开头和结尾的空行、
+            # 以及紧邻来源信息（已有分隔线）的空行都不补。
+            nxt = next(
+                (k for k in range(i + 1, len(lines)) if line_at(k)), None
+            )
+            if blocks and nxt is not None and (meta_start is None or nxt < meta_start):
+                blocks.append(_spacer())
             i += 1
             continue
 
@@ -840,6 +861,117 @@ def extract_table_blocks(html: str) -> list | None:
 
 # 整行被一对 <b> 包住（标题），中间不能再出现 <b>
 _BOLD_LINE_RE = re.compile(r"^<b>((?:(?!</?b>).)+)</b>$")
+
+# 整行是「emoji + 加粗标题」，即小节标题
+_HEADING_LINE_RE = re.compile(
+    r"^(?P<prefix>(?:\S{1,3}\s+)?)<b>(?P<title>(?:(?!</?b>).)+)</b>$"
+)
+
+# 帮助文本里的「标签: 值」。直接在 HTML 上匹配：
+# 标签部分不允许出现标签符号，值部分原样保留（可能含 <code> 等行内标签），
+# 这样命令行里的代码样式才不会在成表时丢掉。
+_HELP_KV_RE = re.compile(
+    r"^(?P<label>[^\n：:<]{1,24}?)\s*(?P<sep>[：:])\s*(?P<value>\S.*)$"
+)
+
+
+def build_help_blocks(html: str) -> list | None:
+    """
+    把帮助文本转换成结构统一的 block 列表。
+
+    帮助内容天然是「小节标题 + 若干条目」的结构，但通用表格识别只会把
+    形如「标签: 值」的连续行变成表格，导致同样结构的小节有的成表、有的
+    仍是段落，读起来很乱。这里统一按小节排版：
+
+    * 整行加粗 -> 小节标题（首个标题用一级，其余二级）
+    * 连续「标签: 值」-> 一个列表，标签加粗
+    * 其它行 -> 段落
+
+    Args:
+        html: 已经过 HTML 转换的帮助文本
+
+    Returns:
+        block 列表；无法构造时返回 None（调用方回退纯文本发送）
+    """
+    if not html or not html.strip():
+        return None
+
+    # 超过折叠阈值的帮助文本整体被 <blockquote expandable> 包住。
+    # 这里解析的是结构，外层折叠不参与排版，因此先剥掉外壳。
+    stripped = html.strip()
+    wrapper = re.match(r"^<blockquote[^>]*>(.*)</blockquote>$", stripped, re.S)
+    if wrapper:
+        stripped = wrapper.group(1)
+
+    try:
+        from pyrogram.types import (
+            InputRichBlockList,
+            InputRichBlockListItem,
+            InputRichBlockParagraph,
+            InputRichBlockSectionHeading,
+            RichTextBold,
+        )
+    except ImportError:
+        return None
+
+    def paragraph(raw: str):
+        return InputRichBlockParagraph(text=_html_to_rich_text(raw.strip()))
+
+    def kv_item(match) -> "InputRichBlockListItem":
+        label = _unescape_basic(match.group("label")).strip()
+        value_html = _html_to_rich_text(match.group("value").strip())
+        text: list = [RichTextBold(text=label), "："]
+        if isinstance(value_html, list):
+            text.extend(value_html)
+        else:
+            text.append(value_html)
+        return InputRichBlockListItem(blocks=[InputRichBlockParagraph(text=text)])
+
+    blocks: list = []
+    heading_count = 0
+    i = 0
+    lines = stripped.split("\n")
+
+    while i < len(lines):
+        raw = lines[i]
+        plain = _plain_text(raw)
+        if not plain:
+            i += 1
+            continue
+
+        heading = _HEADING_LINE_RE.match(raw.strip())
+        if heading:
+            heading_count += 1
+            blocks.append(
+                InputRichBlockSectionHeading(
+                    text=heading.group("prefix") + _unescape_basic(heading.group("title")),
+                    size=1 if heading_count == 1 else 2,
+                )
+            )
+            i += 1
+            continue
+
+        kv = _HELP_KV_RE.match(raw.strip())
+        if kv:
+            items = []
+            while i < len(lines):
+                cur = lines[i].strip()
+                cur_match = _HELP_KV_RE.match(cur) if cur else None
+                if not cur_match:
+                    break
+                items.append(kv_item(cur_match))
+                i += 1
+
+            if len(items) >= 2:
+                blocks.append(InputRichBlockList(items=items))
+            else:
+                blocks.append(paragraph(raw))
+            continue
+
+        blocks.append(paragraph(raw))
+        i += 1
+
+    return blocks or None
 
 # 末尾来源信息行的前缀
 _META_PREFIXES = ("🔗", "📱 平台", "🤖 自动解析")
