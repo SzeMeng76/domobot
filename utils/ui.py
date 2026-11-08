@@ -494,8 +494,24 @@ _BULLET_RE = re.compile(r"^\s*[•·]\s*(.+?)\s*[：:]\s*(.+?)\s*$")
 # 排行条目，把下一行的套餐吞进表格。
 _RANK_EMOJI = r"(?:🥇|🥈|🥉|[1-9]️⃣|🔟|\d{1,2}\.)"
 _RANK_RE = re.compile(
-    rf"^{_RANK_EMOJI}\s+(?P<name>[^：:\n]+?)\s*\((?P<code>[A-Za-z]{{2}})\)\s*(?P<flag>.*)$"
+    rf"^(?P<rank>{_RANK_EMOJI})\s+(?P<name>[^：:\n]+?)\s*\((?P<code>[A-Za-z]{{2}})\)\s*(?P<flag>.*)$"
 )
+# 价格行之后紧跟的补充行，如「🎯 +扩展包: TWD 1279.00 ≈ ¥260.48」。
+# 提取「标签」作为额外一列的表头，「值」作为单元格内容。
+_EXTRA_LINE_RE = re.compile(
+    r"^(?:\S{1,3}\s+)?(?P<label>[^：:]{1,12}?)\s*[：:]\s*(?P<value>\S.*)$"
+)
+# 出现在排行榜末尾的页脚行，不能被当成最后一个条目的补充行
+_RANK_TRAILER_PREFIXES = ("⏱", "🔗", "📱 平台", "🤖 自动解析")
+
+
+def _split_extra(line: str) -> tuple[str, str]:
+    """把补充行拆成 (列名, 值)；拆不出来时归到「备注」列。"""
+    m = _EXTRA_LINE_RE.match(line)
+    if not m:
+        return "备注", line
+    label = m.group("label").lstrip("+＋ ").strip() or "备注"
+    return label, m.group("value").strip()
 # 紧随其后的价格行。两种写法都要兼容：
 #   💰 高级版: PKR 1100 ≈ ¥26.50   （Netflix/Spotify/Xbox 等）
 #   💰 JPY 4800 ≈ ¥230.00          （Nintendo，无冒号）
@@ -782,15 +798,18 @@ def extract_table_blocks(html: str) -> list | None:
     except ImportError:
         return None
 
-    def make_table(rows: list[tuple[str, str]], header: tuple[str, str]):
-        """rows 里的值可能带行内标签（如链接），转成 RichText 才能保住。"""
+    def make_table(rows: list[tuple[str, ...]], header: tuple[str, ...]):
+        """
+        rows 的每一行与 header 等宽（支持 2 列以上）。
+        值里可能带行内标签（如链接），转成 RichText 才能保住。
+        """
 
         def cell(raw: str, is_header: bool = False):
             text = _unescape_basic(_drop_tags(raw)) if is_header else _html_to_rich_text(raw)
             return RichBlockTableCell(text=text, is_header=is_header or None)
 
-        cells = [[cell(header[0], True), cell(header[1], True)]]
-        cells.extend([cell(a), cell(b)] for a, b in rows)
+        cells = [[cell(h, True) for h in header]]
+        cells.extend([cell(c) for c in row] for row in rows)
         return InputRichBlockTable(cells=cells, is_bordered=True, is_striped=True)
 
     blocks: list = []
@@ -839,7 +858,10 @@ def extract_table_blocks(html: str) -> list | None:
         if rank:
             nxt = line_at(i + 1)
             if nxt and _PRICE_LINE_RE.match(nxt):
-                rows: list[tuple[str, str]] = []
+                # 每个条目 = 排名行 + 价格行 + 0~N 条补充行（如 🎯 +扩展包）。
+                # 补充行的「标签」变成额外的列，没有该补充项的条目留空。
+                entries: list[dict] = []
+                extra_cols: list[str] = []
                 # 排行条目之间通常有空行，因此允许跨过空行继续匹配；
                 # 一旦遇到既不是排行行也不是价格行的内容就收尾。
                 while i < len(lines):
@@ -857,21 +879,54 @@ def extract_table_blocks(html: str) -> list | None:
                     p = _PRICE_LINE_RE.match(body) if body else None
                     if not p:
                         break
-                    rows.append(
-                        (
-                            f"{r.group('name')} ({r.group('code')}) {r.group('flag')}".strip(),
-                            p.group(2),
-                        )
-                    )
-                    i = j + 1
 
-                if len(rows) >= 2:
-                    blocks.append(make_table(rows, ("排名", "价格")))
+                    extras: dict[str, str] = {}
+                    k = j + 1
+                    # 补充行必须紧挨着价格行（中间不能有空行），
+                    # 且不能是下一条排名或页脚。
+                    while k < len(lines):
+                        cur = line_at(k)
+                        if (
+                            not cur
+                            or _RANK_RE.match(cur)
+                            or cur.startswith(_RANK_TRAILER_PREFIXES)
+                        ):
+                            break
+                        label, value = _split_extra(cur)
+                        extras[label] = value
+                        if label not in extra_cols:
+                            extra_cols.append(label)
+                        k += 1
+
+                    entries.append(
+                        {
+                            "rank": r.group("rank"),
+                            "name": f"{r.group('name')} ({r.group('code')}) {r.group('flag')}".strip(),
+                            "price": p.group(2),
+                            "extras": extras,
+                        }
+                    )
+                    i = k
+
+                if len(entries) >= 2:
+                    header = ("排名", "国家/地区", "价格", *extra_cols)
+                    table_rows = [
+                        (
+                            e["rank"],
+                            e["name"],
+                            e["price"],
+                            *(e["extras"].get(c, "") for c in extra_cols),
+                        )
+                        for e in entries
+                    ]
+                    blocks.append(make_table(table_rows, header))
                     continue
-                # 不足两行，退回普通段落
-                for a, b in rows:
-                    blocks.append(_paragraph(a))
-                    blocks.append(_paragraph(b))
+                # 不足两条，退回普通段落
+                for e in entries:
+                    blocks.append(_paragraph(f"{e['rank']} {e['name']}"))
+                    blocks.append(_paragraph(e["price"]))
+                    for lab, val in e["extras"].items():
+                        blocks.append(_paragraph(f"{lab}: {val}"))
                 continue
 
         # --- 列表行：• Coinbase: ¥ 16.44 ---
