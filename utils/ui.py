@@ -563,29 +563,111 @@ def _paragraph(text: str):
     return InputRichBlockParagraph(text=_html_to_rich_text(text))
 
 
-# 行内标签 -> RichText 实体
+# 行内标签的开/闭标记。
 #
 # 用命名分组分开「标签名」和「属性」：之前把 ``span class="tg-spoiler"`` 整段
 # 当标签名，闭合标签 ``</span>`` 对不上，剧透永远匹配不到。
-_INLINE_TAG_RE = re.compile(
-    r"<(?P<tag>b|strong|i|em|u|s|del|code|a|span)(?P<attrs>\s[^>]*)?>"
-    r"(?P<inner>.*?)</(?P=tag)>",
-    re.S,
+_TAG_RE = re.compile(
+    r"<(?P<closing>/)?(?P<tag>b|strong|i|em|u|s|del|code|a|span)"
+    r"(?P<attrs>\s[^>]*?)?\s*/?>",
+    re.I,
 )
 _HREF_RE = re.compile(r'href\s*=\s*"([^"]*)"')
+_BR_RE = re.compile(r"<br\s*/?>", re.I)
+
+# 与 _TAG_RE 的标签集合一致；用于判断内层是否还有嵌套
+_FORMAT_TAGS = ("b", "strong", "i", "em", "u", "s", "del", "code", "a", "span")
+
+# 递归深度上限，防止异常输入构造出极深的嵌套
+_MAX_TAG_DEPTH = 8
 
 
 def _drop_tags(text: str) -> str:
-    """去掉未被识别的标签（如 blockquote），但保留两侧空白。"""
-    return re.sub(r"<[^>]+>", "", text)
+    """去掉未被识别/无意义的标签，但保留两侧空白。"""
+    return re.sub(r"<[^>]+>", "", _BR_RE.sub("\n", text))
 
 
-def _html_to_rich_text(text: str):
+def _find_matching_close(text: str, tag: str, start: int):
+    """
+    从 ``start``（内层起点）找与 ``<tag>`` 配对的闭合标签。
+
+    用深度计数而不是非贪婪正则，``<b>a<b>b</b>c</b>`` 这种同名嵌套才能
+    正确配对；找不到返回 None。
+
+    Returns:
+        ``(内层结束位置, 闭合标签之后的位置)`` 或 None
+    """
+    depth = 1
+    for m in _TAG_RE.finditer(text, start):
+        if m.group("tag").lower() != tag:
+            continue
+        if m.group("closing"):
+            depth -= 1
+            if depth == 0:
+                return m.start(), m.end()
+        else:
+            depth += 1
+    return None
+
+
+def _wrap_rich(tag: str, attrs: str, inner: str, depth: int):
+    """
+    把 ``<tag>inner</tag>`` 包成对应的 RichText 实体。
+
+    内层递归解析，因此「加粗里套链接」「加粗里套斜体」都不会再丢格式；
+    ``<code>`` 例外——它内部是字面量，不解析标签。
+
+    Returns:
+        RichText 实体；内容为空时返回 None
+    """
+    from pyrogram.types import (
+        RichTextBold,
+        RichTextCode,
+        RichTextItalic,
+        RichTextSpoiler,
+        RichTextStrikethrough,
+        RichTextUnderline,
+        RichTextUrl,
+    )
+
+    if tag == "code":
+        inner_rich = _unescape_basic(_drop_tags(inner))
+    else:
+        inner_rich = _html_to_rich_text(inner, depth + 1)
+
+    if inner_rich in ("", [], None):
+        return None
+
+    if tag in ("b", "strong"):
+        return RichTextBold(text=inner_rich)
+    if tag in ("i", "em"):
+        return RichTextItalic(text=inner_rich)
+    if tag == "u":
+        return RichTextUnderline(text=inner_rich)
+    if tag in ("s", "del"):
+        return RichTextStrikethrough(text=inner_rich)
+    if tag == "code":
+        return RichTextCode(text=inner_rich)
+    if tag == "span" and "tg-spoiler" in attrs:
+        return RichTextSpoiler(text=inner_rich)
+    if tag == "a":
+        href = _HREF_RE.search(attrs)
+        if href and href.group(1):
+            return RichTextUrl(text=inner_rich, url=_unescape_basic(href.group(1)))
+        return inner_rich
+    # 未识别的标签（如 blockquote）：保留内部内容
+    return inner_rich
+
+
+def _html_to_rich_text(text: str, _depth: int = 0):
     """
     把一段行内 HTML 转成 pyrogram 的 RichText 结构。
 
-    只处理本项目会产生的标签：粗体、斜体、下划线、删除线、剧透、代码。
-    其余内容按纯文本处理，标签本身被去掉。
+    只处理本项目会产生的标签：粗体、斜体、下划线、删除线、剧透、代码、链接；
+    其余标签按纯文本处理，标签本身被去掉。
+
+    递归解析嵌套：``<b>看这里 <a href="...">点我</a></b>`` 会得到
+    ``RichTextBold([RichTextUrl(...)])``，链接不会因为外层加粗而丢失。
 
     Args:
         text: 含行内 HTML 标签的字符串
@@ -597,15 +679,7 @@ def _html_to_rich_text(text: str):
         return ""
 
     try:
-        from pyrogram.types import (
-            RichTextBold,
-            RichTextCode,
-            RichTextItalic,
-            RichTextSpoiler,
-            RichTextStrikethrough,
-            RichTextUnderline,
-            RichTextUrl,
-        )
+        from pyrogram.types import RichTextBold  # noqa: F401  （探测依赖可用性）
     except ImportError:
         return _strip_rich_tags(text)
 
@@ -613,43 +687,46 @@ def _html_to_rich_text(text: str):
     if "<" not in text:
         return _unescape_basic(text)
 
+    # 嵌套过深或已到末尾：退化为纯文本，避免无限递归
+    if _depth > _MAX_TAG_DEPTH:
+        return _unescape_basic(_drop_tags(text))
+
     parts: list = []
     pos = 0
-    for m in _INLINE_TAG_RE.finditer(text):
-        tag, inner = m.group("tag"), m.group("inner")
-        attrs = m.group("attrs") or ""
+
+    while pos < len(text):
+        m = _TAG_RE.search(text, pos)
+        if not m:
+            break
+
+        # 孤立的闭合标签：丢掉标签本身，前面的文字照常保留
+        if m.group("closing"):
+            before = _drop_tags(text[pos : m.start()])
+            if before:
+                parts.append(_unescape_basic(before))
+            pos = m.end()
+            continue
+
+        tag = m.group("tag").lower()
+        match = _find_matching_close(text, tag, m.end())
+        if not match:
+            # 未闭合：把开标签当普通文本丢掉，继续往后找
+            before = _drop_tags(text[pos : m.start()])
+            if before:
+                parts.append(_unescape_basic(before))
+            pos = m.end()
+            continue
+
+        inner_end, close_end = match
 
         before = _drop_tags(text[pos : m.start()])
         if before:
             parts.append(_unescape_basic(before))
 
-        inner_text = _unescape_basic(_strip_rich_tags(inner))
-        if not inner_text:
-            pos = m.end()
-            continue
-
-        if tag in ("b", "strong"):
-            parts.append(RichTextBold(text=inner_text))
-        elif tag in ("i", "em"):
-            parts.append(RichTextItalic(text=inner_text))
-        elif tag == "u":
-            parts.append(RichTextUnderline(text=inner_text))
-        elif tag in ("s", "del"):
-            parts.append(RichTextStrikethrough(text=inner_text))
-        elif tag == "code":
-            parts.append(RichTextCode(text=inner_text))
-        elif tag == "span" and "tg-spoiler" in attrs:
-            parts.append(RichTextSpoiler(text=inner_text))
-        elif tag == "a":
-            href = _HREF_RE.search(attrs)
-            if href and href.group(1):
-                parts.append(RichTextUrl(text=inner_text, url=_unescape_basic(href.group(1))))
-            else:
-                parts.append(inner_text)
-        else:
-            parts.append(inner_text)
-
-        pos = m.end()
+        entity = _wrap_rich(tag, m.group("attrs") or "", text[m.end() : inner_end], _depth)
+        if entity is not None:
+            parts.append(entity)
+        pos = close_end
 
     tail = _drop_tags(text[pos:])
     if tail:
@@ -706,19 +783,14 @@ def extract_table_blocks(html: str) -> list | None:
         return None
 
     def make_table(rows: list[tuple[str, str]], header: tuple[str, str]):
-        cells = [
-            [
-                RichBlockTableCell(text=header[0], is_header=True),
-                RichBlockTableCell(text=header[1], is_header=True),
-            ]
-        ]
-        cells.extend(
-            [
-                RichBlockTableCell(text=a),
-                RichBlockTableCell(text=b),
-            ]
-            for a, b in rows
-        )
+        """rows 里的值可能带行内标签（如链接），转成 RichText 才能保住。"""
+
+        def cell(raw: str, is_header: bool = False):
+            text = _unescape_basic(_drop_tags(raw)) if is_header else _html_to_rich_text(raw)
+            return RichBlockTableCell(text=text, is_header=is_header or None)
+
+        cells = [[cell(header[0], True), cell(header[1], True)]]
+        cells.extend([cell(a), cell(b)] for a, b in rows)
         return InputRichBlockTable(cells=cells, is_bordered=True, is_striped=True)
 
     blocks: list = []
