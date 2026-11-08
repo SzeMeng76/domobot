@@ -489,7 +489,13 @@ def make_styled_bot_class() -> type:
 # 项目符号列表：• 移动版：MYR 19.90
 _BULLET_RE = re.compile(r"^\s*[•·]\s*(.+?)\s*[：:]\s*(.+?)\s*$")
 # 排行榜条目：🥇 巴基斯坦 (PK) 🇵🇰
-_RANK_RE = re.compile(r"^(\S{1,3})\s+(.+?)\s*\(([A-Za-z]{2})\)\s*(.*)$")
+# 首位必须是排名 emoji（🥇🥈🥉 / 1️⃣-🔟 / 11. 这类），否则像
+# 「📍 国家/地区： 马来西亚 (MY) 🇲🇾」这种带括号地区码的行会被误判成
+# 排行条目，把下一行的套餐吞进表格。
+_RANK_EMOJI = r"(?:🥇|🥈|🥉|[1-9]️⃣|🔟|\d{1,2}\.)"
+_RANK_RE = re.compile(
+    rf"^{_RANK_EMOJI}\s+(?P<name>[^：:\n]+?)\s*\((?P<code>[A-Za-z]{{2}})\)\s*(?P<flag>.*)$"
+)
 # 紧随其后的价格行。两种写法都要兼容：
 #   💰 高级版: PKR 1100 ≈ ¥26.50   （Netflix/Spotify/Xbox 等）
 #   💰 JPY 4800 ≈ ¥230.00          （Nintendo，无冒号）
@@ -679,41 +685,57 @@ def extract_table_blocks(html: str) -> list | None:
         return InputRichBlockTable(cells=cells, is_bordered=True, is_striped=True)
 
     blocks: list = []
-    used_table = False
 
-    lines = [ln for ln in html.split("\n") if ln.strip()]
+    # 空行是分块边界：保留下来用于切断表格，避免把不同语义的内容
+    # （例如套餐列表和数据更新时间）串成同一张表。
+    lines = html.split("\n")
+
+    def line_at(idx: int) -> str:
+        """取第 idx 行的纯文本（已还原实体），越界返回空串。"""
+        if idx < 0 or idx >= len(lines):
+            return ""
+        return _plain_text(lines[idx])
 
     i = 0
     while i < len(lines):
-        plain = _strip_rich_tags(lines[i]).strip()
+        plain = line_at(i)
         if not plain:
             i += 1
             continue
 
         # --- 排行行：🥇 巴基斯坦 (PK) 🇵🇰 / 💰 高级版: PKR 1100 ≈ ¥26.50 ---
         rank = _RANK_RE.match(plain)
-        if rank and i + 1 < len(lines):
-            nxt = _strip_rich_tags(lines[i + 1]).strip()
-            price = _PRICE_LINE_RE.match(nxt)
-            if price:
+        if rank:
+            nxt = line_at(i + 1)
+            if nxt and _PRICE_LINE_RE.match(nxt):
                 rows: list[tuple[str, str]] = []
+                # 排行条目之间通常有空行，因此允许跨过空行继续匹配；
+                # 一旦遇到既不是排行行也不是价格行的内容就收尾。
                 while i < len(lines):
-                    head = _strip_rich_tags(lines[i]).strip()
+                    head = line_at(i)
+                    if not head:  # 空行：跳过，但记住位置以便收尾
+                        i += 1
+                        continue
                     r = _RANK_RE.match(head)
-                    if not r or i + 1 >= len(lines):
+                    if not r:
                         break
-                    body = _strip_rich_tags(lines[i + 1]).strip()
-                    p = _PRICE_LINE_RE.match(body)
+                    j = i + 1
+                    while j < len(lines) and not line_at(j):
+                        j += 1
+                    body = line_at(j)
+                    p = _PRICE_LINE_RE.match(body) if body else None
                     if not p:
                         break
                     rows.append(
-                        (f"{r.group(1)} {r.group(2)} ({r.group(3)})", p.group(2))
+                        (
+                            f"{r.group('name')} ({r.group('code')}) {r.group('flag')}".strip(),
+                            p.group(2),
+                        )
                     )
-                    i += 2
+                    i = j + 1
 
                 if len(rows) >= 2:
                     blocks.append(make_table(rows, ("排名", "价格")))
-                    used_table = True
                     continue
                 # 不足两行，退回普通段落
                 for a, b in rows:
@@ -722,12 +744,10 @@ def extract_table_blocks(html: str) -> list | None:
                 continue
 
         # --- 列表行：• Coinbase: ¥ 16.44 ---
-        bullet = _BULLET_RE.match(plain)
-        if bullet:
+        if _BULLET_RE.match(plain):
             rows = []
             while i < len(lines):
-                cur = _strip_rich_tags(lines[i]).strip()
-                b = _BULLET_RE.match(cur)
+                b = _BULLET_RE.match(line_at(i))
                 if not b:
                     break
                 rows.append((b.group(1), b.group(2)))
@@ -735,37 +755,30 @@ def extract_table_blocks(html: str) -> list | None:
 
             if len(rows) >= 2:
                 blocks.append(make_table(rows, ("项目", "数值")))
-                used_table = True
             else:
-                for a, b in rows:
-                    blocks.append(_paragraph(f"{a}: {b}"))
+                blocks.append(_paragraph(plain))
             continue
 
         # --- 通用「标签: 值」块 ---
         # 连续两行以上都是这个结构就成表，不限于特定模块的格式。
-        if _match_kv(plain):
-            rows = []
+        kv = _match_kv(plain)
+        if kv:
+            rows = [kv]
+            i += 1
             while i < len(lines):
-                cur = _strip_rich_tags(lines[i]).strip()
-                kv = _match_kv(cur)
-                if not kv:
+                cur = line_at(i)
+                if not cur:
                     break
-                rows.append(kv)
-                i += 1
-            while i < len(lines):
-                cur = _strip_rich_tags(lines[i]).strip()
-                m_kv = _GENERIC_KV_RE.match(cur)
+                m_kv = _match_kv(cur)
                 if not m_kv:
                     break
-                rows.append((m_kv.group("label").strip(), m_kv.group("value").strip()))
+                rows.append(m_kv)
                 i += 1
 
             if len(rows) >= 2:
                 blocks.append(make_table(rows, ("项目", "内容")))
-                used_table = True
             else:
-                for a, b in rows:
-                    blocks.append(_paragraph(f"{a}: {b}"))
+                blocks.append(_paragraph(plain))
             continue
 
         # --- 普通行 ---
@@ -872,6 +885,43 @@ async def _try_rich_send(
     return _to_ptb_message(message, chat_id=chat_id, text=html, bot=bot)
 
 
+async def send_rich_blocks(
+    *,
+    chat_id: Any,
+    blocks: list,
+    text: str = "",
+    reply_markup: Any = None,
+    bot: Any = None,
+) -> Any:
+    """
+    用调用方构造好的 block 列表直接发送富文本消息。
+
+    和自动识别不同，这里不再从文本猜结构，适合需要精确控制排版的消息
+    （例如带表格和小节标题的日报）。通道未启用或发送失败时返回 None，
+    调用方应回退到普通发送。
+    """
+    if _rich_sender is None or chat_id is None or not blocks:
+        return None
+
+    try:
+        message = await _rich_sender(
+            chat_id=chat_id,
+            html=None,
+            blocks=blocks,
+            reply_markup=style_markup(reply_markup),
+            reply_to_message_id=None,
+            disable_notification=None,
+        )
+    except Exception as e:
+        _log_rich_failure(e)
+        return None
+
+    if message is None:
+        return None
+
+    return _to_ptb_message(message, chat_id=chat_id, text=text, bot=bot)
+
+
 def _to_ptb_message(message: Any, *, chat_id: Any, text: str, bot: Any = None) -> Any:
     """
     把 pyrogram 的 Message 转成等价的 PTB Message。
@@ -912,6 +962,17 @@ def _strip_rich_tags(html: str) -> str:
     import re
 
     return re.sub(r"<[^>]+>", "", html or "").strip()
+
+
+def _plain_text(html_line: str) -> str:
+    """
+    取一行 HTML 的纯文本：去标签 + 还原实体。
+
+    富文本 block 的 ``text`` 是纯文本字段，不会被当作 HTML 解析，
+    所以 ``&amp;`` 这类实体必须先还原，否则界面上会显示字面量的
+    ``&amp;``（例如「& Viu Bundle」）。
+    """
+    return _unescape_basic(_strip_rich_tags(html_line)).strip()
 
 
 def _is_markdown_v2(parse_mode: Any) -> bool:

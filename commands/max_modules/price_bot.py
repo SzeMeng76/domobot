@@ -547,7 +547,10 @@ class MaxPriceBot(PriceQueryService):
         }
 
         # Group plans by billing cycle for better organization
+        # bundle 是独立的一类（如马来西亚的「& Viu Bundle」），之前被归进
+        # other 排到最后，看起来像是乱序；这里给它单独一组。
         monthly_plans = []
+        bundle_plans = []
         yearly_plans = []
         other_plans = []
 
@@ -555,13 +558,27 @@ class MaxPriceBot(PriceQueryService):
             plan_group = plan.get("plan_group", "unknown")
             if plan_group == "monthly":
                 monthly_plans.append(plan)
+            elif plan_group == "bundle":
+                bundle_plans.append(plan)
             elif plan_group == "yearly":
                 yearly_plans.append(plan)
             else:
                 other_plans.append(plan)
 
-        # Display monthly plans first, then yearly, then others
-        sorted_plans = monthly_plans + yearly_plans + other_plans
+        # 组内按人民币价格升序，同价位保持数据源原有顺序
+        def _price_key(plan: dict) -> float:
+            try:
+                return float(plan.get("price_cny") or 0)
+            except (TypeError, ValueError):
+                return 0.0
+
+        monthly_plans.sort(key=_price_key)
+        bundle_plans.sort(key=_price_key)
+        yearly_plans.sort(key=_price_key)
+        other_plans.sort(key=_price_key)
+
+        # 月付 -> 套餐包 -> 年付 -> 其他
+        sorted_plans = monthly_plans + bundle_plans + yearly_plans + other_plans
 
         for i, plan in enumerate(sorted_plans):
             plan_name = plan.get("plan_name", "未知套餐")
