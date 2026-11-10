@@ -1258,6 +1258,7 @@ async def _send_audio(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
     safe_title = "".join(ch for ch in title if ch not in '\\/:*?"<>|').strip() or audio_path.stem
     filename = f"{safe_title}.{ext}"
 
+    thumb_path = None
     thumb_file = None
     thumb_url = getattr(getattr(parse_result, "media", None), "thumb_url", None)
     if thumb_url:
@@ -1266,46 +1267,96 @@ async def _send_audio(context: ContextTypes.DEFAULT_TYPE, chat_id: int, download
             thumb_file = open(thumb_path, "rb")
 
     try:
-        @with_telegram_retry(max_retries=5)
-        async def _send():
-            return await context.bot.send_audio(
-                chat_id=chat_id,
-                audio=audio_path,
-                caption=caption,
-                parse_mode="MarkdownV2",
-                duration=getattr(media, "duration", 0) or 0,
-                title=title or None,
-                filename=filename,
-                thumbnail=thumb_file,
-                reply_parameters=reply_parameters,
-                reply_markup=reply_markup,
-                read_timeout=300,
-                write_timeout=300,
-                connect_timeout=30
-            )
+        try:
+            @with_telegram_retry(max_retries=5)
+            async def _send():
+                return await context.bot.send_audio(
+                    chat_id=chat_id,
+                    audio=audio_path,
+                    caption=caption,
+                    parse_mode="MarkdownV2",
+                    duration=getattr(media, "duration", 0) or 0,
+                    title=title or None,
+                    filename=filename,
+                    thumbnail=thumb_file,
+                    reply_parameters=reply_parameters,
+                    reply_markup=reply_markup,
+                    read_timeout=300,
+                    write_timeout=300,
+                    connect_timeout=30
+                )
 
-        msg = await _send()
-        logger.info(f"✅ 音频发送成功: {audio_path.name}")
-        return [msg]
+            msg = await _send()
+            logger.info(f"✅ 音频发送成功: {audio_path.name}")
+            return [msg]
+        except Exception as e:
+            # Telegram 对音频容器/编码有额外限制（B站音源常见 m4a 变体、超长音频），
+            # send_audio 被拒时降级为 document，至少保证文件送达而不是只发个错误
+            logger.warning(f"⚠️ 音频上传失败，降级为 document: {e}")
+            # 失败的 send_audio 可能已把文件流读到 EOF，重新打开再给 document 用
+            if thumb_file:
+                thumb_file.close()
+                thumb_file = None
+            if thumb_path:
+                try:
+                    thumb_file = open(thumb_path, "rb")
+                except Exception:
+                    thumb_file = None
+
+            @with_telegram_retry(max_retries=5)
+            async def _send_doc():
+                return await context.bot.send_document(
+                    chat_id=chat_id,
+                    document=audio_path,
+                    filename=filename,
+                    caption=caption,
+                    parse_mode="MarkdownV2",
+                    thumbnail=thumb_file,
+                    reply_parameters=reply_parameters,
+                    reply_markup=reply_markup,
+                    read_timeout=300,
+                    write_timeout=300,
+                    connect_timeout=30
+                )
+
+            msg = await _send_doc()
+            logger.info(f"✅ 音频降级为文件发送成功: {audio_path.name}")
+            return [msg]
     finally:
         if thumb_file:
             thumb_file.close()
+        # 封面是临时文件，不清理会一直堆在系统临时目录
+        if thumb_path:
+            try:
+                Path(thumb_path).unlink(missing_ok=True)
+            except Exception:
+                pass
 
 
 async def _download_audio_thumb(thumb_url: str) -> Path | None:
-    """下载音频封面到临时目录，失败返回 None（封面只是锦上添花，不该阻断发送）"""
+    """下载音频封面并压到 Telegram thumb 规格（≤320px JPEG），失败返回 None
+
+    封面只是锦上添花，任何异常都不该阻断音频发送。
+    注意：Telegram 对 thumbnail 有尺寸/体积限制，超限会直接拒绝整条 send_audio
+    并触发降级为 document，所以必须先缩放再上传，不能直接透传原图。
+    """
     try:
         import httpx
         import tempfile
+        import io
 
-        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
             resp = await client.get(thumb_url, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://www.bilibili.com/"})
             resp.raise_for_status()
-            thumb_path = Path(tempfile.gettempdir()) / f"parse_thumb_{hashlib.md5(thumb_url.encode()).hexdigest()}.jpg"
-            thumb_path.write_bytes(resp.content)
-            return thumb_path
+
+        thumb_path = Path(tempfile.gettempdir()) / f"parse_thumb_{hashlib.md5(thumb_url.encode()).hexdigest()}.jpg"
+        with PILImage.open(io.BytesIO(resp.content)) as img:
+            thumb = img.convert("RGB")
+            thumb.thumbnail((320, 320))
+            thumb.save(thumb_path, "JPEG", quality=85)
+        return thumb_path
     except Exception as e:
-        logger.warning(f"⚠️ 音频封面下载失败，跳过: {e}")
+        logger.warning(f"⚠️ 音频封面下载/处理失败，跳过: {e}")
         return None
 
 

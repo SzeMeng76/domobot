@@ -2,7 +2,7 @@
 python-telegram-bot[all]==22.8
 
 # Kurigram (actively maintained Pyrogram fork, for MTProto API: DC ID detection, large file upload, inline media edit)
-kurigram>=2.2.26
+kurigram>=2.2.27
 tgcrypto>=1.2.5  # Speeds up Kurigram
 
 # Environment Configuration
@@ -13,7 +13,7 @@ httpx==0.28.1
 brotli==1.2.1  # Required for Brotli decompression (App Store uses br encoding)
 
 # OpenAI API (for AI Anti-Spam)
-openai==3.46.0
+openai==3.49.0
 
 # Web Scraping
 beautifulsoup4>=4.15.0  # ParseHub requires >=4.12.3, yfinance requires >=4.11.1
@@ -66,12 +66,12 @@ yfinance[repair]==1.8.0  # 最新版本，repair extra 启用价格异常修复�
 pandas==3.1.1
 
 # Social Media Parser (ParseHub) - 社交媒体解析功能
-parsehub~=2.4.0  # 社交媒体聚合解析器，支持20+平台 (2.4.0: 新增 B站音频 bilibili.com/audio/au<ID> 解析，返回 MusicParseResult；2.3.17: Instagram 匿名改用新版 GraphQL + embed 兜底补齐视频直链/时长、单视频优先 yt-dlp 最高画质；2.3.16 InstagramAPI 改用 curl_cffi，_new_client 已移除；最右读取 videos[id].dur 补齐时长；B站番剧/影视已不支持)
+parsehub~=2.4.1  # 社交媒体聚合解析器，支持20+平台 (2.4.1: Instagram yt-dlp 下载优先选 h264 (-S vcodec:h264)，减少一次转码；2.4.0: 新增 B站音频 bilibili.com/audio/au<ID> 解析，返回 MusicParseResult；2.3.17: Instagram 匿名改用新版 GraphQL + embed 兜底补齐视频直链/时长、单视频优先 yt-dlp 最高画质；2.3.16 InstagramAPI 改用 curl_cffi，_new_client 已移除；最右读取 videos[id].dur 补齐时长；B站番剧/影视已不支持)
 socksio>=1.0.0  # httpx SOCKS5 代理支持 (parsehub 2.2.1+ 依赖 httpx[socks])
 curl-cffi>=0.13  # parsehub 2.3.16+ 依赖：Instagram 接口改用 curl_cffi 模拟浏览器 TLS 指纹
 cryptography>=50.0.2  # ParseHub依赖：用于小黑盒动态加密算法（RSA/AES/3DES）
 SignerPy>=0.12.0  # ParseHub依赖：抖音日常/Story移动端API签名
-yt-dlp==2026.10.26.220202.dev0  # parsehub 2.3.17 要求 >= 此 dev 版（比稳定版 2026.10.26 更新）
+yt-dlp>=2026.11.4.232659.dev0  # parsehub 2.4.1 要求 >= 此 dev 版（用 >= 而非 ==，避免锁死导致 pip 回溯到旧版 parsehub）
 pytubefix>=11.2.1  # YouTube 下载库
 ytmusicapi>=1.12.3  # YouTube Music API（搜索、排行榜、歌词）1.12.3: 最新稳定版
 pillow>=13.0.0  # 图像处理库 (13.x: 最新主版本)
@@ -84,7 +84,7 @@ telegraph>=2.2.0  # Telegraph API 库（用于发布长文本）
 
 # NetEase Cloud Music (ID3/FLAC tag embedding, Rust-powered)
 mutagen-rs>=0.2.7
-pycryptodome>=4.2.0  # AES encryption for NetEase WeAPI
+pycryptodome>=4.4.0  # AES encryption for NetEase WeAPI
 
 # AI Summary - Audio/Video Processing
 pydub>=0.25.1  # 音频切片（Whisper转录大文件）
@@ -92,8 +92,7 @@ opencv-python-headless>=5.0.0.93  # 视频截图（转录失败时的fallback）
 aiofiles>=25.1.0  # 异步文件读取（图片base64转换）
 
 # Reddit API (使用 httpx，原生支持 SOCKS5 代理)
-# curl-cffi for TLS fingerprinting (JSON endpoint bypass)
-curl-cffi==0.17.0  # v0.17.0: 最新稳定版，改进HTTP/3支持和TLS指纹
+# curl-cffi 已在 ParseHub 段声明（>=0.17.0），此处不再重复
 
 # Weather Visualization (天气图表可视化)
 matplotlib>=3.11.2  # 图表绘制库
