@@ -898,6 +898,32 @@ def patch_parsehub_yt_dlp():
         # Note: ParseHub 2.3.x FacebookParse sets __reserved_parameters__ = ["v"], so the
         # query parameter survives get_raw_url; ParseHub.parse/_do_parse patches were removed.
 
+        # Patch Jandan's markdown converter to fall back to lazy-load attributes.
+        # ParseHub 2.4.2 only reads img[src]; if jandan switches to lazy loading the real
+        # URL moves to data-src/data-original and every image would be dropped.
+        try:
+            from parsehub.provider_api.jandan import _JandanMarkdownConverter
+
+            _JANDAN_LAZY_ATTRS = ("data-src", "data-original", "data-lazy-src")
+            original_jandan_convert_img = _JandanMarkdownConverter.convert_img
+
+            def patched_jandan_convert_img(self, el, text, parent_tags):
+                source = str(el.attrs.get("src") or "").strip()
+                if not source or source.startswith("data:"):
+                    for attr in _JANDAN_LAZY_ATTRS:
+                        candidate = str(el.attrs.get(attr) or "").strip()
+                        if candidate and not candidate.startswith("data:"):
+                            el.attrs["src"] = candidate
+                            break
+                return original_jandan_convert_img(self, el, text, parent_tags)
+
+            _JandanMarkdownConverter.convert_img = patched_jandan_convert_img
+            logger.info("✅ Jandan markdown converter patched: fall back to lazy-load image attributes")
+        except ImportError:
+            logger.info("ℹ️ Jandan parser not available (parsehub < 2.4.2), lazy-load patch skipped")
+        except Exception as e:
+            logger.warning(f"⚠️ Jandan lazy-load patch failed: {e}")
+
         return True
 
     except Exception as e:

@@ -17,7 +17,7 @@ import pillow_heif
 
 from parsehub.types import VideoFile, ImageFile, AniFile, LivePhotoFile, VideoParseResult, ImageParseResult, MultimediaParseResult, RichTextParseResult, MusicParseResult
 from utils.command_factory import command_factory
-from utils.converter import clean_article_html
+from utils.converter import clean_article_html, rewrite_image_hosts
 from utils.error_handling import with_error_handling, with_telegram_retry
 
 
@@ -1371,16 +1371,17 @@ async def _send_images(context: ContextTypes.DEFAULT_TYPE, chat_id: int, downloa
         if isinstance(parse_result, RichTextParseResult) and hasattr(parse_result, 'markdown_content'):
             try:
                 raw_url = getattr(parse_result, 'raw_url', '') or ''
-                is_twitter = 'twitter.com' in raw_url or 'x.com' in raw_url
-                source_label = "Twitter Article" if is_twitter else "微信文章"
+                platform_id = getattr(getattr(parse_result, 'platform', None), 'id', '') or ''
+                source_label = {
+                    'twitter': "Twitter Article",
+                    'weixin': "微信文章",
+                    'douban': "豆瓣",
+                    'jandan': "煎蛋",
+                }.get(platform_id, "富文本文章")
                 logger.info(f"检测到{source_label}，自动发布到Telegraph")
                 if parse_result.markdown_content:
                     from markdown import markdown
-                    import re
-                    md_content = parse_result.markdown_content.replace("mmbiz.qpic.cn", "qpic.cn.in/mmbiz.qpic.cn")
-                    # 豆瓣图片分片域名 img1~imgN.doubanio.com
-                    if 'douban' in raw_url:
-                        md_content = re.sub(r"img\d+\.doubanio\.com", r"qpic.cn.in/\g<0>", md_content)
+                    md_content = rewrite_image_hosts(parse_result.markdown_content, platform_id, raw_url)
                     html_content = markdown(md_content)
                     html_content = clean_article_html(html_content)  # 清理 HTML
                     telegraph_url = await _adapter.publish_to_telegraph(parse_result, html_content)

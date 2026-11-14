@@ -36,6 +36,47 @@ telegram_embed_script_re = re.compile(
     r"""<script(?=[^>]+\sdata-telegram-post=['"]([^'"]+))[^<]+</script>""",
     re.IGNORECASE,
 )
+
+# 国内图床直连 Telegraph 常被拦，统一改写走 qpic.cn.in 反代
+# platform_id -> [(正则, 替换)]
+IMAGE_PROXY_REWRITES: dict[str, list[tuple[str, str]]] = {
+    "weixin": [(r"mmbiz\.qpic\.cn", "qpic.cn.in/mmbiz.qpic.cn")],
+    "coolapk": [(r"image\.coolapk\.com", "qpic.cn.in/image.coolapk.com")],
+    # 豆瓣图片分片域名 img1~imgN.doubanio.com
+    "douban": [(r"(img\d+\.doubanio\.com)", r"qpic.cn.in/\1")],
+    # 煎蛋：文章页 img.wangmoyu.com，话题页 img.toto.im
+    "jandan": [
+        (r"img\.toto\.im", "qpic.cn.in/img.toto.im"),
+        (r"img\.wangmoyu\.com", "qpic.cn.in/img.wangmoyu.com"),
+    ],
+}
+
+
+def rewrite_image_hosts(markdown_content: str, platform_id: str = "", raw_url: str = "") -> str:
+    """把 markdown 正文里的国内图床域名改写成 qpic.cn.in 反代地址
+
+    只改写 IMAGE_PROXY_REWRITES 里登记过的平台，其它内容原样返回。
+    拿不到 platform 时按 raw_url 兜底匹配。
+
+    Args:
+        markdown_content: markdown 原文
+        platform_id: 平台 id（Platform.id），如 "jandan"
+        raw_url: 原始链接，platform_id 缺失时用于兜底判断
+
+    Returns:
+        改写后的 markdown
+    """
+    if not markdown_content:
+        return markdown_content
+
+    platform_id = (platform_id or "").lower()
+    if not platform_id and raw_url:
+        lowered = raw_url.lower()
+        platform_id = next((pid for pid in IMAGE_PROXY_REWRITES if pid in lowered), "")
+
+    for pattern, repl in IMAGE_PROXY_REWRITES.get(platform_id, ()):
+        markdown_content = re.sub(pattern, repl, markdown_content)
+    return markdown_content
 pre_content_re = re.compile(r"<(pre|code)(>|\s[^>]*>)[\s\S]*?</\1>")
 line_breaks_inside_pre = re.compile(r"<br(/?>|\s[^<>]*>)")
 line_breaks_and_empty_strings = re.compile(r"(\s{2,}|\s*\r?\n\s*)")

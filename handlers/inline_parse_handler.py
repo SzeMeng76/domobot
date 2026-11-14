@@ -1050,16 +1050,14 @@ async def _handle_richtext_inline(
             text="📰 发布到 Telegraph 中..."
         )
 
-        # 转换为 HTML
-        md_content = parse_result.markdown_content
-        if parse_result.platform.id == 'weixin':
-            md_content = md_content.replace("mmbiz.qpic.cn", "qpic.cn.in/mmbiz.qpic.cn")
-        elif parse_result.platform.id == 'coolapk':
-            md_content = md_content.replace("image.coolapk.com", "qpic.cn.in/image.coolapk.com")
-        elif parse_result.platform.id == 'douban':
-            # 豆瓣图片分片域名 img1~imgN.doubanio.com
-            import re
-            md_content = re.sub(r"img\d+\.doubanio\.com", r"qpic.cn.in/\g<0>", md_content)
+        # 转换为 HTML（国内图床统一改写走 qpic.cn.in 反代）
+        from utils.converter import rewrite_image_hosts
+
+        md_content = rewrite_image_hosts(
+            parse_result.markdown_content,
+            getattr(parse_result.platform, 'id', ''),
+            getattr(parse_result, 'raw_url', '') or url,
+        )
 
         html_content = markdown(md_content)
 
