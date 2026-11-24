@@ -23,6 +23,8 @@ cache_manager = None
 httpx_client = None
 _api_key_index = 0  # AbuseIPDB API Key 轮询索引
 _ipdata_key_index = 0  # ipdata.co API Key 轮询索引
+_cleanip_key_index = 0  # cleanip.io API Key 轮询索引
+_cleanip_key_cooldown = {}  # cleanip.io 额度耗尽的 Key -> 解冻时间戳
 
 def escape_markdown(text: str) -> str:
     """转义 Telegram Markdown 特殊字符（仅转义基础 Markdown 模式需要的字符）"""
@@ -67,6 +69,26 @@ def get_next_ipdata_key() -> Optional[str]:
     _ipdata_key_index += 1
 
     return api_key
+
+
+def get_next_cleanip_key() -> Optional[str]:
+    """获取下一个可用的 cleanip.io API Key（轮询，跳过额度冷却中的 Key）"""
+    global _cleanip_key_index
+    config = get_config()
+
+    if not config.cleanip_api_keys:
+        return None
+
+    import time
+
+    now = time.time()
+    for _ in range(len(config.cleanip_api_keys)):
+        api_key = config.cleanip_api_keys[_cleanip_key_index % len(config.cleanip_api_keys)]
+        _cleanip_key_index += 1
+        if _cleanip_key_cooldown.get(api_key, 0) <= now:
+            return api_key
+
+    return None
 
 
 def detect_input_type(input_str: str) -> Tuple[str, str]:
@@ -170,6 +192,63 @@ async def get_ipdata_info(ip_address: str) -> Optional[Dict]:
     except Exception as e:
         logger.error(f"ipdata.co 查询失败: {e}", exc_info=True)
         return None
+
+
+async def get_cleanip_info(ip_address: str) -> Optional[Dict]:
+    """从 cleanip.io 获取 IP 类型信息（带缓存、多 Key 轮询与额度冷却）"""
+    cache_key = f"cleanip_{ip_address}"
+    cached_data = await cache_manager.load_cache(cache_key, subdirectory="cleanip")
+    if cached_data:
+        logger.info(f"使用缓存的 cleanip.io 数据: {ip_address}")
+        return cached_data
+
+    if not httpx_client:
+        logger.error("httpx_client 未初始化")
+        return None
+
+    import time
+
+    api_key = get_next_cleanip_key()
+    while api_key:
+        try:
+            url = f"https://api.cleanip.io/api/v2/{ip_address}"
+            headers = {
+                "X-API-Key": api_key,
+                "User-Agent": "DomoBot/1.0",
+                "Accept": "application/json",
+            }
+
+            logger.info(f"查询 cleanip.io 信息: {ip_address}")
+
+            response = await httpx_client.get(url, headers=headers, timeout=15.0)
+
+            # 免费额度用尽：冷却该 Key 24 小时，换下一个继续
+            if response.status_code in (402, 429) or (
+                response.status_code == 403
+                and any(word in response.text.lower() for word in ("quota", "api_key", "limit"))
+            ):
+                logger.warning("cleanip.io Key 额度耗尽，冷却 24 小时")
+                _cleanip_key_cooldown[api_key] = time.time() + 86400
+                api_key = get_next_cleanip_key()
+                continue
+
+            response.raise_for_status()
+
+            data = response.json()
+            if data and data.get("ok"):
+                # 免费档按「新 IP」计费，同一 IP 重复查询不扣额度，缓存 7 天
+                await cache_manager.save_cache(cache_key, data, subdirectory="cleanip")
+                logger.info(f"✅ cleanip.io 查询成功并缓存: {ip_address}")
+                return data
+
+            return None
+
+        except Exception as e:
+            logger.error(f"cleanip.io 查询失败: {e}", exc_info=True)
+            return None
+
+    logger.warning("cleanip.io 无可用 API Key（额度均已用尽）")
+    return None
 
 
 async def get_abuseipdb_score(ip_address: str) -> Optional[Dict]:
@@ -774,19 +853,32 @@ async def handle_ip_query(update: Update, context: ContextTypes.DEFAULT_TYPE, ip
         )
 
     try:
-        # 优先使用 ipdata.co，失败时fallback到 ipapi.is
+        # 优先使用 ipdata.co（地理/威胁）+ cleanip.io（IP 类型主源），失败时 fallback 到 ipapi.is
         import asyncio
 
-        ipdata_data = await get_ipdata_info(ip_address)
+        cleanip_data, ipdata_data = await asyncio.gather(
+            get_cleanip_info(ip_address),
+            get_ipdata_info(ip_address),
+            return_exceptions=True,
+        )
+        if isinstance(cleanip_data, Exception):
+            logger.error(f"cleanip.io 查询异常: {cleanip_data}")
+            cleanip_data = None
+        if isinstance(ipdata_data, Exception):
+            logger.error(f"ipdata.co 查询异常: {ipdata_data}")
+            ipdata_data = None
 
         if ipdata_data:
-            # 使用 ipdata.co 数据 + AbuseIPDB 补充
+            # 使用 ipdata.co 数据 + cleanip.io 类型 + AbuseIPDB 补充
             logger.info(f"使用 ipdata.co 数据: {ip_address}")
             abuseipdb_data = await get_abuseipdb_score(ip_address)
             if isinstance(abuseipdb_data, Exception):
                 logger.error(f"AbuseIPDB 查询异常: {abuseipdb_data}")
                 abuseipdb_data = None
-            await _handle_ip_query_with_ipdata(update, context, ip_address, ipdata_data, abuseipdb_data, domain, status_msg)
+            await _handle_ip_query_with_ipdata(
+                update, context, ip_address, ipdata_data, abuseipdb_data, domain, status_msg,
+                cleanip_data=cleanip_data,
+            )
         else:
             # Fallback 到 ipapi.is + AbuseIPDB
             logger.info(f"Fallback 到 ipapi.is: {ip_address}")
@@ -822,8 +914,8 @@ async def handle_ip_query(update: Update, context: ContextTypes.DEFAULT_TYPE, ip
         await delete_user_command(context, chat_id, update.message.message_id)
 
 
-async def _handle_ip_query_with_ipdata(update: Update, context: ContextTypes.DEFAULT_TYPE, ip_address: str, ipdata_data: Dict, abuseipdb_data: Optional[Dict], domain: Optional[str] = None, status_msg = None) -> None:
-    """使用 ipdata.co + AbuseIPDB 数据处理 IP 查询"""
+async def _handle_ip_query_with_ipdata(update: Update, context: ContextTypes.DEFAULT_TYPE, ip_address: str, ipdata_data: Dict, abuseipdb_data: Optional[Dict], domain: Optional[str] = None, status_msg = None, cleanip_data: Optional[Dict] = None) -> None:
+    """使用 ipdata.co + cleanip.io + AbuseIPDB 数据处理 IP 查询"""
     config = get_config()
     chat_id = update.effective_chat.id
 
@@ -854,6 +946,18 @@ async def _handle_ip_query_with_ipdata(update: Update, context: ContextTypes.DEF
     is_threat = threat_data.get("is_threat", False)
     blocklists = threat_data.get("blocklists", [])
 
+    # cleanip.io 类型（主源）：usage = datacenter / residential / business / mobile
+    cleanip_info = cleanip_data or {}
+    cleanip_type = str(((cleanip_info.get("ip_type") or {}).get("usage") or "")).lower()
+    cleanip_risk = cleanip_info.get("risk") or {}
+    cleanip_purity = (cleanip_info.get("score") or {}).get("value")
+    cleanip_is_tor = bool(cleanip_risk.get("tor"))
+    cleanip_is_proxy = bool(
+        cleanip_risk.get("proxy")
+        or cleanip_risk.get("vpn")
+        or cleanip_risk.get("residential_proxy")
+    )
+
     # 获取 scores（如果有的话，付费版才有；可能显式为 null）
     scores = threat_data.get("scores") or {}
     vpn_score = scores.get("vpn_score", 0)
@@ -883,19 +987,32 @@ async def _handle_ip_query_with_ipdata(update: Update, context: ContextTypes.DEF
         # trust_score 是 0-100，100最安全，转换为风险分数（100-trust_score）
         risk_score = 100 - trust_score
 
-    # 判断 IP 类型
+    # cleanip.io 的 score 是纯净度（越高越干净），换算成风险分合并
+    if cleanip_purity is not None:
+        try:
+            risk_score = max(risk_score, 100 - int(cleanip_purity))
+        except (TypeError, ValueError):
+            pass
+
+    # 判断 IP 类型（cleanip.io 为准，ipdata.co 只作兜底）
     native_emoji = "❓"
     native_text = "未知"
 
-    if is_tor:
+    if is_tor or cleanip_is_tor:
         native_emoji = "🧅"
         native_text = "Tor 节点"
-    elif is_proxy:
+    elif is_proxy or cleanip_is_proxy:
         native_emoji = "🔒"
         native_text = "代理/VPN"
-    elif is_datacenter:
+    elif is_datacenter or cleanip_type == "datacenter":
         native_emoji = "🏢"
         native_text = "数据中心"
+    elif cleanip_type == "business":
+        native_emoji = "🏢"
+        native_text = "商业网络"
+    elif cleanip_type in ("residential", "mobile"):
+        native_emoji = "✅"
+        native_text = "住宅 IP"
     elif asn_type == "isp":
         native_emoji = "✅"
         native_text = "原生 IP (ISP)"
@@ -933,6 +1050,10 @@ async def _handle_ip_query_with_ipdata(update: Update, context: ContextTypes.DEF
 
     # 显示风险分数
     result_text += f"🎯 *风险分数*: {risk_emoji} *{risk_score}/100* ({risk_level})\n"
+
+    # cleanip.io 纯净度（越高越干净）
+    if cleanip_purity is not None:
+        result_text += f"💎 *纯净度*: {cleanip_purity}/100\n"
 
     # 如果有详细的 scores，也显示
     if trust_score is not None:

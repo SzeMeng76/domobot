@@ -27,6 +27,7 @@ class BotConfig:
         self.bincheck_rapidapi_keys: list = []  # 支持多个 API Key 轮询
         self.abuseipdb_api_keys: list = []  # 支持多个 API Key 轮询
         self.ipdata_api_keys: list = []  # ipdata.co API Keys 轮询
+        self.cleanip_api_keys: list = []  # cleanip.io API Keys 轮询
 
         # 电影信息API配置
         self.tmdb_api_key: str = ""
@@ -554,6 +555,10 @@ class ConfigManager:
         # ipdata.co API Keys（支持多个，逗号分隔）
         ipdata_keys_str = os.getenv("IPDATA_API_KEYS", os.getenv("IPDATA_API_KEY", ""))
         self.config.ipdata_api_keys = [key.strip() for key in ipdata_keys_str.split(",") if key.strip()]
+
+        # cleanip.io API Keys（支持多个，逗号分隔；免费档每个 Key 每天 20 个新 IP）
+        cleanip_keys_str = os.getenv("CLEANIP_API_KEYS", os.getenv("CLEANIP_API_KEY", ""))
+        self.config.cleanip_api_keys = [key.strip() for key in cleanip_keys_str.split(",") if key.strip()]
 
         # 电影信息 API 配置
         self.config.tmdb_api_key = os.getenv("TMDB_API_KEY", "")
