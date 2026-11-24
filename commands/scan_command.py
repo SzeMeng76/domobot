@@ -987,12 +987,8 @@ async def _handle_ip_query_with_ipdata(update: Update, context: ContextTypes.DEF
         # trust_score 是 0-100，100最安全，转换为风险分数（100-trust_score）
         risk_score = 100 - trust_score
 
-    # cleanip.io 的 score 是纯净度（越高越干净），换算成风险分合并
-    if cleanip_purity is not None:
-        try:
-            risk_score = max(risk_score, 100 - int(cleanip_purity))
-        except (TypeError, ValueError):
-            pass
+    # 注意：cleanip.io 的 score 是纯净度，不是风险分。
+    # 它反映网络类型/画像一致性，与滥用、攻击记录无关，因此只单独展示，不参与风险分计算。
 
     # 判断 IP 类型（cleanip.io 为准，ipdata.co 只作兜底）
     native_emoji = "❓"
