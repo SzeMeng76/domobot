@@ -72,7 +72,7 @@ curl-cffi>=0.13  # parsehub 2.3.16+ 依赖：Instagram 接口改用 curl_cffi �
 cryptography>=50.0.2  # ParseHub依赖：用于小黑盒动态加密算法（RSA/AES/3DES）
 SignerPy>=0.12.0  # ParseHub依赖：抖音日常/Story移动端API签名
 yt-dlp>=2026.11.4.232659.dev0  # parsehub 2.4.1 要求 >= 此 dev 版（用 >= 而非 ==，避免锁死导致 pip 回溯到旧版 parsehub）
-pytubefix>=11.2.1  # YouTube 下载库
+pytubefix==11.2.1  # YouTube 下载库；11.2.2 的 nodejs-wheel-binaries 依赖用了 platform_release marker，Linux 内核版本(如 7.0.0-1017-azure)会让 pip wheel 解析失败
 ytmusicapi>=1.12.3  # YouTube Music API（搜索、排行榜、歌词）1.12.3: 最新稳定版
 pillow>=13.0.0  # 图像处理库 (13.x: 最新主版本)
 pillow-heif>=1.8.1  # HEIF/HEIC 图片格式支持
